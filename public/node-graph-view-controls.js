@@ -3008,6 +3008,126 @@ function nodeGraphMidiKeyboardSignalFromMidi(midiValue, velocity01 = 0, gateValu
   });
 }
 
+function nodeGraphIsPlayKeysPort(port) {
+  const name = String(port || "").trim();
+  return name === "Play Keys" || name === "Polyphony" || name === "Monophony";
+}
+
+/**
+ * Keyboard ids a MIDI module plays: MIDI Play Keys -> Keyboard Play Keys, and
+ * on through Keyboard Play Keys -> Keyboard Play Keys.
+ */
+function nodeGraphKeyboardsPlayedByMidi() {
+  const patch = nodeGraphMvp?.patch;
+  const nodes = Array.isArray(patch?.nodes) ? patch.nodes : [];
+  const connections = Array.isArray(patch?.connections) ? patch.connections : [];
+  const typeById = new Map(nodes.map((node) => [String(node?.id || ""), String(node?.type || "")]));
+  const fed = new Set();
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const connection of connections) {
+      if (!connection
+        || !nodeGraphIsPlayKeysPort(connection.sourcePort)
+        || !nodeGraphIsPlayKeysPort(connection.destinationPort)) {
+        continue;
+      }
+      const source = String(connection.sourceNode || "");
+      const destination = String(connection.destinationNode || "");
+      if (fed.has(destination) || typeById.get(destination) !== "keyboard") continue;
+      if (typeById.get(source) === "keyboardController" || fed.has(source)) {
+        fed.add(destination);
+        grew = true;
+      }
+    }
+  }
+  return Array.from(fed);
+}
+
+/**
+ * A MIDI note plays every Keyboard wired from the MIDI module's Play Keys: the
+ * Keyboard takes the note as its own signal (same path as a click on that
+ * key), so all of its outs follow. Velocity is the MIDI velocity.
+ */
+function nodeGraphPlayKeyboardsFromMidi(midi, velocity01, gate, pulse) {
+  if (typeof renderNodeGraphKeyboardSignal !== "function") return;
+  const fed = nodeGraphKeyboardsPlayedByMidi();
+  if (!(nodeGraphMvp.midiPlayedKeyboardIds instanceof Set)) {
+    nodeGraphMvp.midiPlayedKeyboardIds = new Set();
+  }
+  const playing = nodeGraphMvp.midiPlayedKeyboardIds;
+  // Cable pulled while a note was held: let go of that keyboard.
+  for (const id of Array.from(playing)) {
+    if (fed.includes(id)) continue;
+    playing.delete(id);
+    if (!nodeGraphKeyboardPatchNode(id)) continue;
+    const signal = nodeGraphKeyboardRuntime(id).signal;
+    if (signal && signal.source === "playKeys" && Number(signal.gate) > 0) {
+      renderNodeGraphKeyboardSignal(id, { ...signal, gate: 0, gatePulse: 0 });
+    }
+  }
+  for (const id of fed) {
+    const previous = nodeGraphKeyboardRuntime(id).signal;
+    renderNodeGraphKeyboardSignal(id, nodeGraphKeyboardSignalFromRaw(id, midi, {
+      source: "playKeys",
+      gate: gate ? 1 : 0,
+      gatePulse: pulse ? 1 : 0,
+      y: previous?.y ?? 0,
+      velocity: velocity01,
+    }));
+    if (gate) playing.add(id);
+    else playing.delete(id);
+  }
+}
+
+/** One MIDI note state: the MIDI module's signal, and every Keyboard it plays. */
+function nodeGraphApplyMidiNoteSignal(midi, velocity01, gate, pulse) {
+  nodeGraphMvp.midiKeyboardSignal = nodeGraphMidiKeyboardSignalFromMidi(midi, velocity01, gate, pulse);
+  if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function") {
+    sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
+  }
+  nodeGraphPlayKeyboardsFromMidi(midi, velocity01, gate, pulse);
+}
+
+/**
+ * Plugin host: the held-note set as the native engine has it (four 32-bit
+ * words, bit n = MIDI note n) plus the last struck key. The page sees host
+ * MIDI at display rate, so it follows this set instead of counting events.
+ */
+function syncNodeGraphMidiHeldNotesFromHost(heldWords, lastKey, lastVelocity01) {
+  const words = Array.isArray(heldWords) ? heldWords : [];
+  const isHeld = (midi) => ((Number(words[midi >> 5]) >>> (midi & 31)) & 1) === 1;
+  const previous = nodeGraphMvp.midiKeyboardHeldNotes instanceof Map
+    ? nodeGraphMvp.midiKeyboardHeldNotes
+    : new Map();
+  const last = Math.max(0, Math.min(127, Math.round(nodeGraphFiniteNumber(lastKey))));
+  const velocity = Math.max(0, Math.min(1, nodeGraphFiniteNumber(lastVelocity01)));
+  const next = new Map();
+  for (let midi = 0; midi < 128; midi += 1) {
+    if (midi !== last && isHeld(midi)) {
+      next.set(midi, previous.has(midi) ? previous.get(midi) : velocity);
+    }
+  }
+  const lastHeld = isHeld(last);
+  if (lastHeld) next.set(last, velocity);
+  const struck = lastHeld && !previous.has(last);
+  const changed = next.size !== previous.size || Array.from(next.keys()).some((midi) => !previous.has(midi));
+  nodeGraphMvp.midiKeyboardHeldNotes = next;
+  const signal = nodeGraphMvp.midiKeyboardSignal;
+  const gateNow = Number(signal?.gate) > 0;
+  if (next.size) {
+    const note = lastHeld ? last : Array.from(next.keys()).at(-1);
+    if (struck || !gateNow || Math.round(Number(signal?.midi)) !== note) {
+      nodeGraphApplyMidiNoteSignal(note, next.get(note), 1, struck || !gateNow ? 1 : 0);
+    }
+  } else if (gateNow) {
+    nodeGraphApplyMidiNoteSignal(Number.isFinite(Number(signal?.midi)) ? Number(signal.midi) : last, 0, 0, 0);
+  }
+  if (changed && typeof syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes === "function") {
+    syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes();
+  }
+}
+
 function nodeGraphKeyboardHeldPointerSignal(nodeId) {
   const held = nodeGraphKeyboardRuntime(nodeId).pointerHeldSignal;
   return held && typeof held === "object" ? { ...held, gate: 1, source: "pointerHold" } : null;
@@ -3095,6 +3215,11 @@ function clearNodeGraphKeyboardPulseDisplay(nodeId, serial) {
  */
 function nodeGraphKeyboardSoundingSignalForOctave(nodeId, signal) {
   if (!signal || typeof signal !== "object") {
+    return signal;
+  }
+  // A note from a Play Keys cable keeps its own pitch, also outside this
+  // keyboard's key window (keyIndex is clamped; do not retune to the edge key).
+  if (signal.source === "playKeys") {
     return signal;
   }
   const octave = nodeGraphKeyboardOctaveFor(nodeId);
@@ -4260,12 +4385,7 @@ function ingestNodeGraphHostMidiBytes(status, data1, data2, count, value, highRe
     if (noteOn) {
       nodeGraphMvp.midiKeyboardHeldNotes.set(midi, velocity01);
       nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${typeof nodeGraphKeyboardPitchLabel === "function" ? nodeGraphKeyboardPitchLabel(midi) : midi} vel ${velocity01.toFixed(4)}`;
-      nodeGraphMvp.midiKeyboardSignal = typeof nodeGraphMidiKeyboardSignalFromMidi === "function"
-        ? nodeGraphMidiKeyboardSignalFromMidi(midi, velocity01, 1, 1)
-        : nodeGraphMvp.midiKeyboardSignal;
-      if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function" && nodeGraphMvp.midiKeyboardSignal) {
-        sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
-      }
+      nodeGraphApplyMidiNoteSignal(midi, velocity01, 1, 1);
       if (typeof syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes === "function") {
         syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes();
       }
@@ -4274,6 +4394,13 @@ function ingestNodeGraphHostMidiBytes(status, data1, data2, count, value, highRe
     nodeGraphMvp.midiKeyboardHeldNotes.delete(midi);
     if (typeof syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes === "function") {
       syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes();
+    }
+    // Note-off: fall back to the last note still held, else close the gate.
+    const held = Array.from(nodeGraphMvp.midiKeyboardHeldNotes.entries()).at(-1);
+    if (held) {
+      nodeGraphApplyMidiNoteSignal(held[0], held[1], 1, 0);
+    } else {
+      nodeGraphApplyMidiNoteSignal(midi, 0, 0, 0);
     }
   }
 }
@@ -4308,11 +4435,8 @@ function handleNodeGraphMidiKeyboardMessage(event) {
   if (noteOn) {
     nodeGraphMvp.midiKeyboardHeldNotes.set(midi, velocity01);
     nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${nodeGraphKeyboardPitchLabel(midi)} vel ${velocity01.toFixed(4)}`;
-    // Hardware MIDI → MIDI module signal only (does not drive Keyboard face/outs).
-    nodeGraphMvp.midiKeyboardSignal = nodeGraphMidiKeyboardSignalFromMidi(midi, velocity01, 1, 1);
-    if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function") {
-      sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
-    }
+    // Hardware MIDI → MIDI module signal, and any Keyboard wired from its Play Keys.
+    nodeGraphApplyMidiNoteSignal(midi, velocity01, 1, 1);
     if (typeof syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes === "function") {
       syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes();
     }
@@ -4326,17 +4450,11 @@ function handleNodeGraphMidiKeyboardMessage(event) {
   if (held) {
     const [heldMidi, heldVelocity] = held;
     nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${nodeGraphKeyboardPitchLabel(heldMidi)} vel ${Number(heldVelocity).toFixed(4)}`;
-    nodeGraphMvp.midiKeyboardSignal = nodeGraphMidiKeyboardSignalFromMidi(heldMidi, heldVelocity, 1);
-    if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function") {
-      sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
-    }
+    nodeGraphApplyMidiNoteSignal(heldMidi, heldVelocity, 1, 0);
     return;
   }
   nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${nodeGraphKeyboardPitchLabel(midi)} off`;
-  nodeGraphMvp.midiKeyboardSignal = nodeGraphMidiKeyboardSignalFromMidi(midi, 0, 0);
-  if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function") {
-    sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
-  }
+  nodeGraphApplyMidiNoteSignal(midi, 0, 0, 0);
 }
 
 function bindNodeGraphKeyboardControllerModuleEvents() {

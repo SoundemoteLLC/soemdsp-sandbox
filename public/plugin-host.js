@@ -431,10 +431,22 @@
 
   function receiveHostMidi(msg) {
     if (!msg || typeof msg !== "object") return false;
-    if (typeof global.ingestNodeGraphHostMidiBytes === "function") {
+    // msg is only the latest host message, sent at display rate. When the
+    // plugin also sends its held-note set, notes follow that set (no stuck
+    // or missed notes); the message itself still feeds the MIDI monitor.
+    var heldSync = Array.isArray(msg.held) && typeof global.syncNodeGraphMidiHeldNotesFromHost === "function";
+    var command = Number(msg.status) & 0xf0;
+    if (heldSync && (command === 0x80 || command === 0x90)) {
+      if (typeof global.recordNodeGraphLastMidiMessage === "function") {
+        global.recordNodeGraphLastMidiMessage(msg.status, msg.data1, msg.data2, msg.count, msg.value, msg.highRes);
+      }
+    } else if (typeof global.ingestNodeGraphHostMidiBytes === "function") {
       global.ingestNodeGraphHostMidiBytes(msg.status, msg.data1, msg.data2, msg.count, msg.value, msg.highRes);
     } else if (typeof global.recordNodeGraphLastMidiMessage === "function") {
       global.recordNodeGraphLastMidiMessage(msg.status, msg.data1, msg.data2, msg.count, msg.value, msg.highRes);
+    }
+    if (heldSync) {
+      global.syncNodeGraphMidiHeldNotesFromHost(msg.held, msg.lastKey, msg.lastVelocity);
     }
     return true;
   }
@@ -576,33 +588,19 @@
           result = undefined;
         }
         try {
-          postKeyboard(nodeId, signal);
-        } catch (error) {
-          console.warn("soemdspPluginHost: keyboard failed", error);
-        }
-        return result;
-      };
-    });
-    // Hardware / host MIDI last-note CV belongs only to the MIDI module
-    // (type keyboardController), never the on-screen Keyboard / Grid Keyboard.
-    wrapOnce("sendNodeGraphLiveMidiKeyboardSignal", function (original) {
-      return function (signal) {
-        var result;
-        try {
-          result = original.apply(this, arguments);
-        } catch (error) {
-          result = undefined;
-        }
-        try {
-          var nodes = patchNodes();
-          var sig = signal && typeof signal === "object" ? signal : arguments[0];
-          for (var i = 0; i < nodes.length; i += 1) {
-            if (nodes[i] && nodes[i].type === "keyboardController") {
-              postKeyboard(nodes[i].id, sig);
-            }
+          // Host MIDI is the native engine's job: it writes the MIDI module's
+          // outs, and the outs of a Keyboard played through a Play Keys cable,
+          // on the audio thread. The page only mirrors those notes on the
+          // face, so it must not post them back (late, and at display rate).
+          // A remembered note (patch load, gate low, not being played) still posts.
+          var played = global.nodeGraphMvp && global.nodeGraphMvp.midiPlayedKeyboardIds;
+          var hostPlayed = signal && signal.source === "playKeys"
+            && (Number(signal.gate) > 0 || (played instanceof Set && played.has(String(nodeId || ""))));
+          if (!hostPlayed) {
+            postKeyboard(nodeId, signal);
           }
         } catch (error) {
-          console.warn("soemdspPluginHost: midi portal cv failed", error);
+          console.warn("soemdspPluginHost: keyboard failed", error);
         }
         return result;
       };
