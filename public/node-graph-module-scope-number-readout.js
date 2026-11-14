@@ -1303,8 +1303,8 @@ function nodeGraphNumberReadoutUsesFixedBudget(settings = null) {
  */
 function nodeGraphNumberReadoutPadValueToBins(valueText, digits, decimals, options = null) {
   const total = nodeGraphNumberReadoutSafeDigits(digits);
-  const d = Math.min(nodeGraphNumberReadoutSafeDecimals(decimals), Math.max(0, total - 1));
-  const ints = Math.max(1, total - d);
+  let d = Math.min(nodeGraphNumberReadoutSafeDecimals(decimals), Math.max(0, total - 1));
+  let ints = Math.max(1, total - d);
   const showMinus = options?.showMinus === true;
   const showPlus = options?.showPlus === true;
   let reserveSign;
@@ -1331,6 +1331,13 @@ function nodeGraphNumberReadoutPadValueToBins(valueText, digits, decimals, optio
   let intPart = dot >= 0 ? raw.slice(0, dot) : raw;
   let fracPart = dot >= 0 ? raw.slice(dot + 1) : "";
   intPart = String(intPart || "0").replace(/\D/g, "") || "0";
+  // A whole part wider than its places takes places from the decimals (the
+  // point moves right): 5 digits, 4 decimals shows 120 as "120.00". It used to
+  // keep only the last whole digit, so 120 read "0.0000" and 12 read "2.0000".
+  if (intPart.length > ints) {
+    d = Math.max(0, Math.min(d, total - intPart.length));
+    ints = Math.max(1, total - d);
+  }
   if (intPart.length > ints) {
     intPart = intPart.slice(-ints);
   } else {
