@@ -1164,6 +1164,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "pitch" || p === "♯/♭") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
     if (p === "beat") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "phase") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (p === "t" || p === "trigger" || p === "pulse") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
   }
   if (t === "transport") {
     if (
@@ -10249,6 +10250,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
   if (portId === P.NATIVE_GRAPH_PORT_TRI) {
     if (type === "rmsMeter") return ["Env Inverted R"];
     if (type === "transport") return ["Click R", "Click Right"];
+    if (type === "hostBpm") return ["T", "Trigger", "Pulse"];
     if (type === "phoneTone") return ["Digital Thru"];
     if (type === "comparator") return ["Steady"];
     if (type === "logic") return ["XNOR"];

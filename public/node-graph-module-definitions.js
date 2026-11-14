@@ -7587,7 +7587,9 @@ const nodeGraphModuleDefinitions = (
   // out comes from the shared project beat position, so a tempo change never
   // jumps it and several Host BPMs stay in sync. 120 BPM when there is no tempo.
   // Outs: BPM and ƒ are raw numbers (white), ♯/♭ is ƒ as a pitch, Beat is a
-  // gate (high the first half of each division), Phase 0..1 in the division.
+  // gate (high the first half of each division), Phase 0..1 in the division,
+  // T is one sample on every division line of the beat grid (plugin: the
+  // host's grid, silent while the host is stopped).
   hostBpm: {
     planRole: "source",
     planFreeRun: true,
@@ -7599,11 +7601,12 @@ const nodeGraphModuleDefinitions = (
       { kind: "fraction", num: "timeNumerator", den: "timeDenominator", mode: "timingMode",
         modeLabels: ["Normal", "Dotted", "Triplet"], h: 52 },
     ],
-    outputs: ["BPM", "f", "pitch", "Beat", "Phase"],
+    // T: one sample on every division line of the project / host beat grid.
+    outputs: ["BPM", "f", "pitch", "Beat", "Phase", "T"],
     // Old patches: the single "Out" was the BPM.
-    outputAliases: { Out: "BPM", Mono: "BPM", "ƒ": "f", Pitch: "pitch" },
-    outputLabels: { f: "ƒ", pitch: "♯/♭" },
-    digitalOutputs: ["BPM", "f", "Beat", "Phase"],
+    outputAliases: { Out: "BPM", Mono: "BPM", "ƒ": "f", Pitch: "pitch", Trigger: "T", Pulse: "T" },
+    outputLabels: { f: "ƒ", pitch: "♯/♭", T: "⎍" },
+    digitalOutputs: ["BPM", "f", "Beat", "Phase", "T"],
     parameters: [
       {
         control: "number",
