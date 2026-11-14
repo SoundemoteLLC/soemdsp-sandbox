@@ -188,6 +188,9 @@ Paste raw notes here. An agent will promote them to `B-xxx` on the next pass.
 - 2026-09-30: User - Longer sequencer clips get cut short when a patch has two or more sequencers. Promoted -> **B-087** (`docs/B-087_LONG_SEQUENCER_CLIPS_CUT_SHORT.md`).
 - 2026-10-05: User (ArchIV) - Intermittently all slider positions on a module show at 0 (visual/render); suspected race; repositioning the module forces an update and corrects. Logged only, do not tackle. Promoted -> **B-089** (`docs/B-089_MODULE_SLIDERS_ALL_ZERO_RENDER.md`).
 - 2026-10-05: User (ArchIV) - Keypad: latch on, press a key, turn latch off — latch does not end; key stays latched. Logged only, do not tackle. Promoted -> **B-090** (`docs/B-090_KEYPAD_LATCH_OFF_DOES_NOT_END.md`).
+- 2026-11-13: User (REAPER plugin) - Spectrogram loses its display after an undo. Not investigated.
+- 2026-11-13: User (REAPER plugin, patch `patches/bugs/midi no work in REAPER.json`) - displays blank on Additive Generator, Blaster, NoisyPan, Additive Out, Hyperbolic, MIDI, 1D Waterfall; Clock and Slew displays work. Seen again in the standalone build of the same code (frame batches arrive and are accepted, no console errors, Graph data ports arrive for Additive Generator and Additive Out only; Blaster and NoisyPan are not in the plan's scope capture list). Additive Generator and Blaster faces were also blank in the browser on the v0.15.0 release commit 941c3001, so this predates the MIDI Play Keys fix (browser check was in a background pane). Cause not found.
+- 2026-11-13: User (REAPER plugin) - stuttering; asked whether the new Sandbox.log lines cause it. Not measured. The log is four lines every 5 s on the message thread. The same log shows the display feed sending about 30 MB of frame data to the page per 5 s, before and after the log lines were added.
 ---
 
 ## Open bugs
