@@ -24020,6 +24020,23 @@ button[data-transport-action="stop"]:disabled {
   display: none !important;
 }
 
+/* Input, Output and MIDI on/off are browser switches: they ask the browser
+   for the microphone or for the computer's MIDI devices. In a DAW the host
+   delivers audio in, audio out and MIDI to the plugin directly, always on,
+   so the switches are not shown. Only the two volume sliders stay. */
+.soemdsp-plugin-host #nodeLiveInputButton,
+.soemdsp-plugin-host #nodeLiveOutputButton,
+.soemdsp-plugin-host #nodeLiveMidiButton {
+  display: none !important;
+}
+
+/* The palette is a fixed grid sized for the switches. Without them it wraps
+   the two sliders. */
+.soemdsp-plugin-host #nodePalette {
+  display: flex;
+  width: max-content;
+}
+
 /* With the rest hidden, the row is not a full-width strip any more. It sits
    over the bottom left corner of the canvas, as wide as its controls, so the
    canvas gets the height back. */
