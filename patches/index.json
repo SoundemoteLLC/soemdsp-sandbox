@@ -49,6 +49,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/midi no work in REAPER",
+      "label": "midi no work in REAPER",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/midi%20no%20work%20in%20REAPER.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/need better volume curve for resonance",
       "label": "need better volume curve for resonance",
       "name": "",
@@ -80,6 +89,15 @@
       "label": "scangrid",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/scangrid.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
+      "slug": "bugs/thumper",
+      "label": "thumper",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/thumper.json",
       "author": "",
       "emoji": "",
       "folder": "bugs"
@@ -1014,6 +1032,14 @@
       "emoji": ""
     },
     {
+      "slug": "midi no work in REAPER",
+      "label": "midi no work in REAPER",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/midi%20no%20work%20in%20REAPER.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "motm485",
       "label": "motm485",
       "name": "",
@@ -1506,6 +1532,14 @@
       "label": "synthlead2_make_filters_track_better",
       "name": "",
       "url": "/soemdsp-sandbox/patches/synthlead2_make_filters_track_better.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "thumper",
+      "label": "thumper",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/thumper.json",
       "author": "",
       "emoji": ""
     },
