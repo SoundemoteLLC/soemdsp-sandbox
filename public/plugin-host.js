@@ -113,6 +113,13 @@
       return originalFetch(input, init);
     }
     var method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+    // Reads go to the plugin as ordinary requests (it answers /api GETs like
+    // files). The native-function route below is for writes only: its reply
+    // time grows steeply with size (the 169 KB module list took 5 s and froze
+    // the page load).
+    if (method === "GET" || method === "HEAD") {
+      return originalFetch(input, init);
+    }
     var bodyPromise = init && init.body != null
       ? bodyText(init.body)
       : (input && typeof input.text === "function" && method !== "GET" ? input.text() : Promise.resolve(""));
