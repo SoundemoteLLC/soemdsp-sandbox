@@ -23,7 +23,35 @@ async function bindNodeGraphMvpEvents() {
     // already prevents this for events that reach it, but a focused scrollable
     // element can scroll first -- so guard Space in the capture phase too,
     // except inside real text-editing fields where a space is legitimate.
+    let pluginSpaceForwarded = false;
+    window.addEventListener("blur", () => {
+      if (pluginSpaceForwarded) {
+        pluginSpaceForwarded = false;
+        window.soemdspPluginHostApi?.forwardHostSpace("up");
+      }
+    });
     const preventSpaceDefault = (event) => {
+      if (typeof window !== "undefined" && window.soemdspPluginHost) {
+        if (event.code !== "Space" && event.key !== " ") {
+          return;
+        }
+        if (event.type === "keyup" && pluginSpaceForwarded) {
+          pluginSpaceForwarded = false;
+          window.soemdspPluginHostApi?.forwardHostSpace("up");
+        } else if (event.type === "keydown"
+          && !pluginSpaceForwarded
+          && !event.repeat
+          && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+          && !nodeGraphEventTargetIsTextEditable(event.target)) {
+          pluginSpaceForwarded = true;
+          window.soemdspPluginHostApi?.forwardHostSpace("down");
+        } else if (!pluginSpaceForwarded) {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
       if (typeof nodeGraphAppHotkeysLocked === "function" && nodeGraphAppHotkeysLocked()) {
         return;
       }

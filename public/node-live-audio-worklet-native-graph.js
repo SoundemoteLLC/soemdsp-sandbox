@@ -2052,6 +2052,17 @@ NodeLiveAudioProcessor.prototype.applyNativeGraphPitchReference = function apply
   );
 };
 
+NodeLiveAudioProcessor.prototype.pushNativeGraphMidiCcMessage = function pushNativeGraphMidiCcMessage(message) {
+  const native = this.nativeGraph;
+  const handle = this.nativeGraphHandle;
+  if (!handle || !native) return;
+  if (Number.isFinite(message.highResValue)) {
+    native.soemdsp_graph_push_midi_hr?.(handle, message.status, message.data1, message.highResValue);
+  } else {
+    native.soemdsp_graph_push_midi?.(handle, message.status, message.data1, message.data2);
+  }
+};
+
 /** Push project Speed Limit (Hz) into the native graph (Robin voice ceiling, etc.). */
 NodeLiveAudioProcessor.prototype.applyNativeGraphSpeedLimit = function applyNativeGraphSpeedLimit() {
   const native = this.nativeGraph;

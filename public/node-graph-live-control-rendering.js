@@ -639,6 +639,9 @@ function bindNodeGraphLiveVolumeControls() {
 
 function nodeGraphTransportHandleAction(action, button) {
   const key = String(action || "").trim();
+  if ((key === "pause" || key === "playpause") && typeof window !== "undefined" && window.soemdspPluginHost) {
+    return;
+  }
   if (key === "play") {
     // Play only starts or resumes. Never pauses.
     // Never re-call enable while already starting — that bumps

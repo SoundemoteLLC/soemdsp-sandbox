@@ -25,6 +25,7 @@ if (version < 320) {
 
 const kTypeMidiLag = 242;
 const kPortMono = 0;
+const kPortChanged = 4;
 const kParamAmplitude = 12;
 const kParamWaveform = 11;
 const kParamMode = 21;
@@ -60,6 +61,12 @@ function outNow(handle) {
   return new Float64Array(graph.memory.buffer, ptr, BLOCK)[BLOCK - 1];
 }
 
+function changedNow(handle) {
+  const ptr = graph.soemdsp_graph_node_port_ptr(handle, ID_CC, kPortChanged);
+  if (!ptr) throw new Error("null Changed ptr");
+  return new Float64Array(graph.memory.buffer, ptr, BLOCK)[BLOCK - 1];
+}
+
 function close(actual, expected, label, eps = 1e-9) {
   if (!(Math.abs(actual - expected) <= eps)) {
     throw new Error(`${label}: got ${actual}, expected ${expected}`);
@@ -75,9 +82,14 @@ close(outNow(handle), highCc, "32-bit CC 1 at 0x80000000");
 
 graph.soemdsp_graph_push_midi(handle, 0xB0, 1, 64);
 close(outNow(handle), 64 / 128, "7-bit CC 1 = 64 still /128");
+graph.soemdsp_graph_set_param(handle, ID_CC, kParamAttOffset, 0.125);
+close(outNow(handle), 64 / 128 + 0.125, "Bias adds without replacing CC");
+close(changedNow(handle), 0, "Bias edit does not emit Changed");
+graph.soemdsp_graph_push_midi(handle, 0xB0, 1, 96);
+close(outNow(handle), 96 / 128 + 0.125, "next CC retains Bias");
 
 graph.soemdsp_graph_push_midi_hr(handle, 0xB0, 2, 0.75); // wrong CC, should not change
-close(outNow(handle), 64 / 128, "unmatched high-res CC ignored");
+close(outNow(handle), 96 / 128 + 0.125, "unmatched high-res CC ignored");
 
 graph.soemdsp_graph_destroy(handle);
 
@@ -100,7 +112,7 @@ graph.soemdsp_graph_destroy(handle);
 handle = setup();
 graph.soemdsp_graph_set_param(handle, ID_CC, kParamLfoStyle, 1); // Learn
 graph.soemdsp_graph_push_midi_hr(handle, 0xB5, 74, 0.333);
-// After learn, channel=6, cc=74, offset=0.333, learn off; next process should show 0.333
+// After learn, channel=6, cc=74, captured value=0.333, learn off.
 close(outNow(handle), Math.fround(0.333), "Learn from MIDI 2.0 CC", 1e-7);
 graph.soemdsp_graph_destroy(handle);
 

@@ -4169,7 +4169,8 @@ function routeNodeGraphMidiCcBytes(status, data1, data2) {
   if (!Array.isArray(nodes)) {
     return;
   }
-  let changed = false;
+  let handled = false;
+  let paramsChanged = false;
   for (const node of nodes) {
     if (!node || (node.type !== "midiCc" && node.type !== "midiLag")) {
       continue;
@@ -4185,21 +4186,23 @@ function routeNodeGraphMidiCcBytes(status, data1, data2) {
     if (!result.handled) {
       continue;
     }
-    changed = true;
+    handled = true;
     if (result.learned) {
       params.channel = result.channel;
       params.cc = result.cc;
       params.learn = 0;
+      paramsChanged = true;
     }
-    if (Number.isFinite(Number(result.value))) {
-      params.offset = Number(result.value);
-    }
+    if (Number.isFinite(Number(result.value))) node.midiCcState.value = Number(result.value);
   }
-  if (!changed) {
+  if (!handled) {
     return;
   }
-  if (typeof sendNodeGraphLiveParameterUpdate === "function") {
+  if (paramsChanged && typeof sendNodeGraphLiveParameterUpdate === "function") {
     sendNodeGraphLiveParameterUpdate();
+  }
+  if (typeof sendNodeGraphLiveMidiCcMessage === "function") {
+    sendNodeGraphLiveMidiCcMessage(status, data1, data2);
   }
 }
 
@@ -4321,7 +4324,8 @@ function routeNodeGraphMidiCcHighRes(status, index, value) {
   if (!Array.isArray(nodes)) {
     return;
   }
-  let changed = false;
+  let handled = false;
+  let paramsChanged = false;
   for (const node of nodes) {
     if (!node || (node.type !== "midiCc" && node.type !== "midiLag")) {
       continue;
@@ -4337,21 +4341,23 @@ function routeNodeGraphMidiCcHighRes(status, index, value) {
     if (!result.handled) {
       continue;
     }
-    changed = true;
+    handled = true;
     if (result.learned) {
       params.channel = result.channel;
       params.cc = result.cc;
       params.learn = 0;
+      paramsChanged = true;
     }
-    if (Number.isFinite(Number(result.value))) {
-      params.offset = Number(result.value);
-    }
+    if (Number.isFinite(Number(result.value))) node.midiCcState.value = Number(result.value);
   }
-  if (!changed) {
+  if (!handled) {
     return;
   }
-  if (typeof sendNodeGraphLiveParameterUpdate === "function") {
+  if (paramsChanged && typeof sendNodeGraphLiveParameterUpdate === "function") {
     sendNodeGraphLiveParameterUpdate();
+  }
+  if (typeof sendNodeGraphLiveMidiCcMessage === "function") {
+    sendNodeGraphLiveMidiCcMessage(status, index, 0, value);
   }
 }
 

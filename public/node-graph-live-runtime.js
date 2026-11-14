@@ -535,7 +535,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=subpw-1-hostt-1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.14.3";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -2909,6 +2909,25 @@ function sendNodeGraphLiveMidiKeyboardSignal(signal = nodeGraphMvp.midiKeyboardS
   }
 }
 
+function sendNodeGraphLiveMidiCcMessage(status, data1, data2, highResValue) {
+  // The plugin host already delivers MIDI to its native graph. Browser Web MIDI
+  // needs this bridge so incoming CC never has to overwrite the Bias parameter.
+  if (typeof window !== "undefined" && window.soemdspPluginHost) return;
+  const message = {
+    type: "midiCcMessage",
+    status: Number(status) & 255,
+    data1: Number(data1) & 127,
+    data2: Number(data2) & 127,
+  };
+  if (Number.isFinite(Number(highResValue))) message.highResValue = Number(highResValue);
+  if (nodeGraphMvp.live.runtime?.handleMessage) {
+    nodeGraphMvp.live.runtime.handleMessage(message);
+  }
+  if (nodeGraphMvp.live.usesWorklet && nodeGraphMvp.live.node?.port) {
+    nodeGraphMvp.live.node.port.postMessage(message);
+  }
+}
+
 /** One Keyboard / Grid Keyboard's face pointer signal (not hardware MIDI). null = keyboard gone. */
 function sendNodeGraphLiveKeyboardModuleSignal(nodeId, signal) {
   const payload = signal && typeof signal === "object" ? { ...signal } : null;
@@ -3442,11 +3461,11 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=rect-1-sg-overhaul-1-amp-linexp-subpw-scrubglide-1-hostt-1",
+  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.14.3",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=step-register-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
-  "./public/node-live-audio-worklet-handle-message.js?v=kbd-trig-1samp-20261013",
+  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.14.3",
   "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015",
   "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-db-1",
   "./public/modules/_shared/output-amplitude.js?v=output-amp-1",

@@ -2753,9 +2753,10 @@ struct Node {
   // native instance is created before params arrive, so the first process
   // call applies the saved Seed; later changes re-seed (node_take_seed).
   double appliedSeed;
-  // MIDI CC: 14-bit pair memory and last raw target (Changed edge).
+  // MIDI CC's live value is separate from the user-owned Bias parameter.
+  double midiCcValue;
   double midiLagLastRaw;
-  // Independent lag for smooth(Bias/CC); In is added after, unsmoothed. Not a user-facing param.
+  // Independent lag for CC + Bias; In is added after, unsmoothed.
   Control midiLagSum;
   // Vactrol: Amp latched with the other knobs on a rising Retrigger (Latch).
   double vactrolAmp;
@@ -4664,6 +4665,7 @@ static void init_node_defaults(Node& n, int typeId) {
   n.singleActive = false;
   n.singleAcc = 0.0;
   n.appliedSeed = -1.0;
+  n.midiCcValue = 0.0;
   n.midiLagLastRaw = 0.0;
   init_control(n.midiLagSum, 0.0, false);
   n.robinDitherRng = 0xE11D51AAu ^ (unsigned int)(typeId * 747796405u + 1u);
@@ -15547,12 +15549,12 @@ static void midi_lag_apply_value(Circuit& g, Node& n, int channel, int msgCc, do
     control_set_target(g, n.mode, (double)channel);
     control_set_target(g, n.waveform, (double)msgCc);
     control_set_target(g, n.lfoStyle, 0.0);
-    control_set_target(g, n.offset, value);
+    n.midiCcValue = value;
     return;
   }
   if (listen > 0 && listen != channel) return;
   if (msgCc != want) return;
-  control_set_target(g, n.offset, value);
+  n.midiCcValue = value;
 }
 
 static double midi_lag_clamp01(double v) {
@@ -15624,8 +15626,8 @@ static void process_midi_lag(Circuit& g, Node& node, int frames) {
   // Without a per-block reset, control_ensure_stepped stops after the first
   // block (or after the first sample in a 1-sample feedback quantum). Out
   // then freezes while the Bias slider jumps in zipper steps.
-  // Copy Bias smoother settings once per quantum and chase Bias/CC per sample.
-  // Cabled In is added after the lag, unsmoothed: Out = smooth(Bias)*Amp + In.
+  // Copy Bias smoother settings once per quantum and chase CC + Bias per sample.
+  // Cabled In is added after the lag, unsmoothed: Out = smooth(CC + Bias)*Amp + In.
   node.midiLagSum.type = node.offset.type;
   node.midiLagSum.mode = node.offset.mode;
   node.midiLagSum.timeSamples = node.offset.timeSamples;
@@ -15643,35 +15645,33 @@ static void process_midi_lag(Circuit& g, Node& node, int frames) {
       if (node.amplitude.active && !node.amplitude.snap) control_ensure_stepped(g, node.amplitude, f);
     }
     const double thru = g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
-    // Instant Bias (MIDI/knob target) plus any Bias MOD. Lag is applied to
-    // Bias/CC only; In is summed after the smoother.
-    const double biasTarget = node.offset.target;
-    const double biasMod = control_effective(node.offset) - node.offset.out;
-    const double bias = biasTarget + biasMod;
+    const double bias = node.offset.target + control_effective(node.offset) - node.offset.out;
+    const double raw = node.midiCcValue;
+    const double target = raw + bias;
     // Retarget only when Bias changes. control_set_target always sets
     // dirty, and Linear then recomputes coeff = (target-out)/t, which would
     // turn a constant-rate ramp into an exponential that never lands.
-    if (dsp_fabs(bias - node.midiLagSum.target) > kPlanck) {
-      control_set_target(g, node.midiLagSum, bias);
+    if (dsp_fabs(target - node.midiLagSum.target) > kPlanck) {
+      control_set_target(g, node.midiLagSum, target);
     }
     if (node.midiLagSum.active && !node.midiLagSum.snap) {
       control_ensure_stepped(g, node.midiLagSum, f);
     }
     const double smooth = (node.midiLagSum.snap || node.midiLagSum.type == kSmoothTypeNone
         || node.midiLagSum.mode == kSmoothModeOff)
-      ? bias
+      ? target
       : node.midiLagSum.out;
     const double amp = control_audio(g, node.amplitude, f);
     const double main = smooth * amp + thru;
     double changed = 0.0;
-    if (dsp_fabs(biasTarget - node.midiLagLastRaw) > 1.0e-15) {
+    if (dsp_fabs(raw - node.midiLagLastRaw) > 1.0e-15) {
       changed = 1.0;
-      node.midiLagLastRaw = biasTarget;
+      node.midiLagLastRaw = raw;
     }
     node.buf[kPortMono][f] = main;
     node.buf[kPortLeft][f] = main * 128.0;
     node.buf[kPortRight][f] = smooth;
-    node.buf[kPortSaw][f] = thru + bias;
+    node.buf[kPortSaw][f] = raw;
     node.buf[kPortRamp][f] = changed;
   }
 }

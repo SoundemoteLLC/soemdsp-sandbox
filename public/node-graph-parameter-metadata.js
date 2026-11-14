@@ -395,6 +395,11 @@ function refreshNodeGraphModuleParameterVisibilityBody(element, patchNode) {
   if (typeof nodeGraphModuleGeometryPublishFromDom === "function") {
     nodeGraphModuleGeometryPublishFromDom(patchNode.id);
   }
+  // Inside a whole-patch apply the rebuild and present run once, at its end.
+  if (typeof nodeGraphPatchDomApplyBatch === "object" && nodeGraphPatchDomApplyBatch.depth > 0) {
+    nodeGraphPatchDomApplyBatch.pending = true;
+    return;
+  }
   if (typeof nodeGraphGlGraphRebuildPlates === "function") {
     nodeGraphGlGraphRebuildPlates();
   }

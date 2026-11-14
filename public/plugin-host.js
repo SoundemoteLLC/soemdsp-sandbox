@@ -676,7 +676,17 @@
       isActive: function () { return true; },
     };
   }
-  global.soemdspPluginHostApi = { loadPatch: loadPatch, receiveFrameBatch: receiveFrameBatch, receiveHostMidi: receiveHostMidi, resendPatch: function () { lastSentSignature = null; afterCommit({ status: "resend" }); } };
+  global.soemdspPluginHostApi = {
+    loadPatch: loadPatch,
+    receiveFrameBatch: receiveFrameBatch,
+    receiveHostMidi: receiveHostMidi,
+    forwardHostSpace: function (phase) {
+      if (phase === "down" || phase === "up") {
+        postToHost({ event: "hostShortcut", key: "Space", phase: phase });
+      }
+    },
+    resendPatch: function () { lastSentSignature = null; afterCommit({ status: "resend" }); },
+  };
 
   function autoStartBoot() {
     if (document.body && document.body.dataset.nodeBootStarted === "1") return;

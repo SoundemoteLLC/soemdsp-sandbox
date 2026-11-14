@@ -1421,7 +1421,24 @@ function flushNodeGraphViewportImmediate(options = {}) {
     zoom: options.zoom !== false,
     pan: options.pan !== false,
   });
-  flushNodeGraphViewportHeavyChrome({ full: true });
+  if (nodeGraphViewportPerf.holdHeavyDepth > 0) {
+    // Inside commitNodeGraphPatch: one heavy pass runs when the commit ends.
+    nodeGraphViewportPerf.heldHeavy = true;
+  } else if (globalThis.nodeSandboxInterfaceReady !== true) {
+    // Startup sets view mode, chrome bars, zoom and pan back to back, and each
+    // one lands here. Until the interface is ready the heavy pass (cull,
+    // geometry publish, full wire redraw) runs once at the end of the current
+    // task instead of once per call.
+    if (!nodeGraphViewportPerf.bootHeavyQueued) {
+      nodeGraphViewportPerf.bootHeavyQueued = true;
+      queueMicrotask(() => {
+        nodeGraphViewportPerf.bootHeavyQueued = false;
+        flushNodeGraphViewportHeavyChrome({ full: true });
+      });
+    }
+  } else {
+    flushNodeGraphViewportHeavyChrome({ full: true });
+  }
   if (options.persist !== false) {
     scheduleNodeGraphWorkspaceViewPersist();
   }

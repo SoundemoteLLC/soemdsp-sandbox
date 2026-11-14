@@ -1803,7 +1803,35 @@ function applyNodeGraphChromeNodesToDom(nodeIds = []) {
   return elements;
 }
 
+// While a patch is being applied to the DOM, the per-parameter visibility
+// refresh (refreshNodeGraphModuleParameterVisibilityBody) does not rebuild and
+// present the GL graph each time. It sets `pending`, and one rebuild + present
+// runs here when the apply is done. A 16-module patch used to rebuild the
+// plates and present once per parameter of every module.
+const nodeGraphPatchDomApplyBatch = { depth: 0, pending: false };
+
 function applyNodeGraphPatchToDom(options = {}) {
+  nodeGraphPatchDomApplyBatch.depth += 1;
+  try {
+    return applyNodeGraphPatchToDomBody(options);
+  } finally {
+    nodeGraphPatchDomApplyBatch.depth -= 1;
+    if (nodeGraphPatchDomApplyBatch.depth === 0 && nodeGraphPatchDomApplyBatch.pending) {
+      nodeGraphPatchDomApplyBatch.pending = false;
+      if (typeof nodeGraphGlGraphRebuildPlates === "function") {
+        nodeGraphGlGraphRebuildPlates();
+      }
+      if (typeof nodeGraphGlGraphPresent === "function") {
+        nodeGraphGlGraphPresent();
+      }
+      if (typeof markNodeGraphRenderPending === "function") {
+        markNodeGraphRenderPending();
+      }
+    }
+  }
+}
+
+function applyNodeGraphPatchToDomBody(options = {}) {
   if (typeof nodeGraphRepairMetamoduleOwnership === "function") {
     nodeGraphRepairMetamoduleOwnership(nodeGraphMvp?.patch);
   }
@@ -1975,7 +2003,31 @@ function nodeGraphTypeNeedsLiveCircuit(type) {
   return true;
 }
 
+// One commit sets zoom, pan and several view toggles, and each asked for a
+// full viewport pass (cull, geometry publish, complete wire redraw): about six
+// per patch load. During a commit those requests are held
+// (flushNodeGraphViewportImmediate) and one pass runs when the commit is done.
 function commitNodeGraphPatch(patch, options = {}) {
+  const perf = typeof nodeGraphViewportPerf === "object" ? nodeGraphViewportPerf : null;
+  if (perf) {
+    perf.holdHeavyDepth = (perf.holdHeavyDepth || 0) + 1;
+  }
+  try {
+    return commitNodeGraphPatchBody(patch, options);
+  } finally {
+    if (perf) {
+      perf.holdHeavyDepth -= 1;
+      if (perf.holdHeavyDepth === 0 && perf.heldHeavy) {
+        perf.heldHeavy = false;
+        if (typeof flushNodeGraphViewportHeavyChrome === "function") {
+          flushNodeGraphViewportHeavyChrome({ full: true });
+        }
+      }
+    }
+  }
+}
+
+function commitNodeGraphPatchBody(patch, options = {}) {
   if (typeof nodeGraphClearParameterMetadataCache === "function") {
     nodeGraphClearParameterMetadataCache();
   }

@@ -49,7 +49,9 @@ page.setDefaultTimeout(120000);
 await page.goto(`${base}?boot=1`, { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => typeof handleNodeGraphMidiKeyboardMessage === "function"
   && typeof createNodeGraphPatchNode === "function"
-  && typeof routeNodeGraphMidiCcBytes === "function" && typeof SoemdspMidiCc !== "undefined", null, { timeout: 180000 });
+  && typeof routeNodeGraphMidiCcBytes === "function"
+  && typeof sendNodeGraphLiveMidiCcMessage === "function"
+  && typeof SoemdspMidiCc !== "undefined", null, { timeout: 180000 });
 
 await page.waitForFunction(() => Array.isArray(window.nodeGraphMvp?.patch?.nodes), null, { timeout: 60000 });
 const result = await page.evaluate(() => {
@@ -83,6 +85,7 @@ const result = await page.evaluate(() => {
 
   routeNodeGraphMidiCcBytes(0xB0, 1, 64);
   const offset = Number(ccNode?.params?.offset);
+  const ccValue = Number(ccNode?.midiCcState?.value);
 
   // high-res ingest path (plugin/host), should keep a non-7-bit value
   if (typeof ingestNodeGraphHostMidiBytes === "function") {
@@ -93,13 +96,32 @@ const result = await page.evaluate(() => {
     routeNodeGraphMidiCcHighRes(0xB0, 1, 0x80000000 / 0xFFFFFFFF);
   }
   const hrOffset = Number(ccNode?.params?.offset);
+  const hrValue = Number(ccNode?.midiCcState?.value);
+
+  const live = window.nodeGraphMvp.live;
+  const previousNode = live.node;
+  const previousUsesWorklet = live.usesWorklet;
+  const sent = [];
+  try {
+    live.node = { port: { postMessage: (payload) => sent.push(payload) } };
+    live.usesWorklet = true;
+    routeNodeGraphMidiCcBytes(0xB0, 1, 32);
+  } finally {
+    live.node = previousNode;
+    live.usesWorklet = previousUsesWorklet;
+  }
 
   return {
     vel,
     held,
     offset,
+    ccValue,
     hrVel,
     hrOffset,
+    hrValue,
+    liveMessages: sent.map((item) => item.type),
+    liveCcValue: sent.find((item) => item.type === "midiCcMessage")?.data2,
+    ccValueAfterBridge: Number(ccNode?.midiCcState?.value),
     hasApi: typeof SoemdspMidiCc !== "undefined",
     ccType: ccNode && ccNode.type,
     ccParams: ccNode && ccNode.params,
@@ -122,7 +144,12 @@ console.log(JSON.stringify(result, null, 2));
 if (!result.midiNode || !result.ccNode) throw new Error("failed to add MIDI / MIDI CC modules: " + JSON.stringify(result));
 close(result.vel, result.expectedVel, "web midi velocity 100/127");
 close(result.held, result.expectedVel, "held note 0-1");
-close(result.offset, result.expectedOffset, "web midi CC 64/128");
+close(result.offset, 0, "web midi leaves Bias unchanged");
+close(result.ccValue, result.expectedOffset, "web midi CC 64/128");
 close(result.hrVel, result.expectedHrVel, "host high-res velocity");
-close(result.hrOffset, result.expectedHrOffset, "host high-res CC");
+close(result.hrOffset, 0, "host high-res leaves Bias unchanged");
+close(result.hrValue, result.expectedHrOffset, "host high-res CC");
+if (result.liveMessages.join(",") !== "midiCcMessage" || result.liveCcValue !== 32) {
+  throw new Error("CC should reach native graph without a parameter refresh: " + JSON.stringify(result.liveMessages));
+}
 console.log("ok browser Web MIDI 7-bit and high-res ingest", result);

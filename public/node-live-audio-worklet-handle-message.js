@@ -67,6 +67,10 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
       this.setMidiKeyboardSignal(message.signal, message.atFrame);
       return;
     }
+    if (message.type === "midiCcMessage") {
+      this.pushNativeGraphMidiCcMessage(message);
+      return;
+    }
     if (message.type === "setKeyboardModuleSignal") {
       this.setKeyboardModuleSignal(message.nodeId, message.signal, message.atFrame);
       return;

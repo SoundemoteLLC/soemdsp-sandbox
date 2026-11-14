@@ -440,6 +440,9 @@ function handleNodeGraphKeydown(event) {
   // Space toggles simulation play/pause when not typing.
   // Text inputs are excluded above so module search and name fields can take spaces.
   if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.code === "Space") {
+    if (typeof window !== "undefined" && window.soemdspPluginHost) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     // If Input/Output (or another toolbar toggle) still has focus after a click,
