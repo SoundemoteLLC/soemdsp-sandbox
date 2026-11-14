@@ -12959,6 +12959,16 @@ body .gl-face-host.node-screen-solo-face > canvas.node-gl-face-host-canvas {
   border-width: 0;
 }
 
+/* A face box is an empty div: unlike the canvas it replaced it has no
+   intrinsic height, so one with no size rule of its own collapsed to 0 and was
+   never composited (Additive Generator, Blaster). Default: fill the face
+   section. Zero specificity, so any face's own rule still wins. */
+:where(.node-module-face) > :where(.node-display-face) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* The workspace scope overlay keeps its own webgl2 context; the GPU graph owns
    the picture while it is on. */
 .node-graph-workspace.gl-graph-on #nodeModuleScopeCanvas {
@@ -25285,7 +25295,8 @@ code {
   min-height: calc(var(--node-grid-height) * 2);
   align-self: stretch;
   overflow: hidden;
-  background: #050508;
+  /* No background: this box sits over the GL face picture and an opaque fill
+     hides it. The face painter clears its own texture to the plate colour. */
   pointer-events: none;
 }
 .node-midi-monitor-canvas,
