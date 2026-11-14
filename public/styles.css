@@ -24035,6 +24035,35 @@ button[data-transport-action="stop"]:disabled {
 .soemdsp-plugin-host #nodePalette {
   display: flex;
   width: max-content;
+  /* Same height the grid row had. The sliders are height: 100%. */
+  height: 45px;
+}
+
+/* Online, each slider sits beside its Input / Output switch, which names it.
+   Here the switches are gone, so the sliders carry the names themselves. */
+.soemdsp-plugin-host #nodePalette .node-volume-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  width: auto;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 3px 8px;
+}
+
+.soemdsp-plugin-host #nodePalette .node-volume-control::before {
+  font: 700 13px/1 Arial, Helvetica, sans-serif;
+  color: #e8eef2;
+  white-space: nowrap;
+}
+
+.soemdsp-plugin-host #nodePalette .node-live-input-volume::before {
+  content: "Input";
+}
+
+.soemdsp-plugin-host #nodePalette .node-live-output-volume::before {
+  content: "Output";
 }
 
 /* With the rest hidden, the row is not a full-width strip any more. It sits
