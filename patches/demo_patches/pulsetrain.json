@@ -419,21 +419,12 @@
         },
         "antialiasing": {
           "alias": "",
-          "choices": [
-            "Quant",
-            "Rand",
-            "Dither"
-          ],
-          "choiceOriginMin": 0,
           "curveAmount": 0,
-          "def": 0,
           "displayChoices": true,
           "divideChoicesVisibly": true,
           "kind": "decimal",
           "bipolar": false,
-          "max": 2,
           "maxDigits": 3,
-          "mid": 1,
           "min": 0,
           "reverse": false,
           "nonlinearSlider": false,

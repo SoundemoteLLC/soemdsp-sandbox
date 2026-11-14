@@ -1647,10 +1647,8 @@
       "gx": -6,
       "gy": -6,
       "id": "ampCurve-1",
-      "paramMeta": {
-        
-      },
-            "params": {
+      "paramMeta": {},
+      "params": {
         "shape": "Linear",
         "skew": 0
       },

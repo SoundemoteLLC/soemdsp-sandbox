@@ -2995,10 +2995,8 @@
       "gx": 10,
       "gy": -10,
       "id": "ampCurve-1",
-      "paramMeta": {
-        
-      },
-            "params": {
+      "paramMeta": {},
+      "params": {
         "shape": "Exponential",
         "skew": -0.6625295074459036
       },

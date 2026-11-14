@@ -1031,7 +1031,7 @@
       },
       "params": {
         "recalculateOnTrigger": 0,
-        "attack": 5.9157552681636645e-05,
+        "attack": 0.000059157552681636645,
         "release": 4.413287691159282,
         "curve": 0.16170079503702822,
         "amplitude": 1,
@@ -4436,7 +4436,7 @@
           "alias": "",
           "choices": [],
           "curveAmount": 0,
-          "def": 1e-06,
+          "def": 0.000001,
           "displayChoices": false,
           "divideChoicesVisibly": false,
           "kind": "decimal",
@@ -4470,7 +4470,7 @@
       "params": {
         "division": 5,
         "timing": 1,
-        "changeThreshold": 1e-06
+        "changeThreshold": 0.000001
       },
       "type": "timeQuantizer",
       "widthGu": 7,
