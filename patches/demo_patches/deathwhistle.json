@@ -148,41 +148,6 @@
       "gy": -16,
       "id": "output",
       "paramMeta": {
-        "volume": {
-          "alias": "Volume🐞",
-          "choices": [],
-          "curveAmount": 0.5,
-          "def": 0.1,
-          "displayChoices": false,
-          "divideChoicesVisibly": false,
-          "kind": "decimal",
-          "bipolar": false,
-          "max": 11,
-          "maxDigits": 4,
-          "mid": 0.1,
-          "min": 0,
-          "reverse": false,
-          "nonlinearSlider": true,
-          "sliderCurve": "skew",
-          "showSign": false,
-          "removeTrailingZeros": false,
-          "smoothingMode": "internal",
-          "smoothingSeconds": 0.0333,
-          "smoothingType": "linear",
-          "step": 0,
-          "tooltip": "",
-          "modClamp": false,
-          "hardClamp": false,
-          "modMultiply": false,
-          "vca": false,
-          "constraint": "",
-          "unit": "",
-          "wraparound": false,
-          "visible": true,
-          "linearSmoothing": true,
-          "outputDomain": false,
-          "domainOffset": 0
-        },
         "pan": {
           "alias": "",
           "choices": [],
@@ -217,10 +182,13 @@
           "linearSmoothing": true,
           "outputDomain": false,
           "domainOffset": 0
+        },
+        "volume": {
+          "kind": "decibels"
         }
       },
       "params": {
-        "volume": 1,
+        "volume": 0,
         "pan": 0
       },
       "type": "output",

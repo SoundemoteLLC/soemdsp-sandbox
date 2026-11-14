@@ -8364,7 +8364,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "dB",
-        tooltip: "Master gain (−∞…+12 dB) applied to Mono/Left/Right. 0 dB is unity. Old patches that stored linear Amplitude are converted on load."
+        tooltip: "Master gain (−∞…+12 dB) applied to Mono/Left/Right. 0 dB is unity."
       },
     ]
   },
@@ -8451,7 +8451,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "dB",
-        tooltip: "Master gain (−∞…+12 dB) applied to Mono/Left/Right. 0 dB is unity. Old patches that stored linear Amplitude are converted on load."
+        tooltip: "Master gain (−∞…+12 dB) applied to Mono/Left/Right. 0 dB is unity."
       },
     ]
   },
@@ -22544,7 +22544,7 @@ const nodeGraphModuleDefinitions = (
         smoothingSeconds: 0.0333,
         step: "any",
         unit: "dB",
-        tooltip: "Speaker level (−∞…0 dB, slider −120…0 dB with −18 dB at the middle). 0 dB is unity. Default −3 dB. Old patches that stored 0…1 linear Volume are converted on load. Type a dB value (or −inf)."
+        tooltip: "Speaker level (−∞…0 dB, slider −120…0 dB with −18 dB at the middle). 0 dB is unity. Default −3 dB. Type a dB value (or −inf)."
       },
       {
         defaultValue: "0",
