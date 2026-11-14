@@ -24010,66 +24010,99 @@ button[data-transport-action="stop"]:disabled {
   z-index: 2;
 }
 
-/* Inside a DAW (plugin host) the host owns play, stop, record and rendering.
-   The bottom row keeps only the live toggles and the volume controls.
-   Transport, Render Sample, Download, Start/End and the rendered-sample
-   player are not shown. */
-.soemdsp-plugin-host #nodeTransportGroup,
-.soemdsp-plugin-host #nodeRenderDurationControl,
-.soemdsp-plugin-host .node-patch-audio-player-row {
+/* The bottom row is a small corner panel, online and in the plugin alike:
+   the labelled Input and Output volume sliders, and online the Input /
+   Output / MIDI on/off switches underneath. The row's transport, Render
+   Sample, Download, Start/End and the rendered-sample player are not shown
+   (the Command Center keeps its own transport). */
+#nodeTransportGroup,
+#nodeRenderDurationControl,
+.node-bottom-stack .node-patch-audio-player-row {
   display: none !important;
 }
 
 /* Input, Output and MIDI on/off are browser switches: they ask the browser
    for the microphone or for the computer's MIDI devices. In a DAW the host
    delivers audio in, audio out and MIDI to the plugin directly, always on,
-   so the switches are not shown. Only the two volume sliders stay. */
+   so the switches are not shown there. */
 .soemdsp-plugin-host #nodeLiveInputButton,
 .soemdsp-plugin-host #nodeLiveOutputButton,
 .soemdsp-plugin-host #nodeLiveMidiButton {
   display: none !important;
 }
 
-/* The palette is a fixed grid sized for the switches. Without them it wraps
-   the two sliders. */
-.soemdsp-plugin-host #nodePalette {
-  display: flex;
+/* Row 1: the two labelled sliders. Row 2 (online only): the three switches. */
+#nodePalette {
+  display: grid;
+  grid-auto-flow: row;
+  grid-template-columns: repeat(6, auto);
+  grid-template-rows: 45px;
+  grid-auto-rows: 36px;
   width: max-content;
-  /* Same height the grid row had. The sliders are height: 100%. */
-  height: 45px;
+  height: auto;
+  max-height: none;
 }
 
-/* Online, each slider sits beside its Input / Output switch, which names it.
-   Here the switches are gone, so the sliders carry the names themselves. */
-.soemdsp-plugin-host #nodePalette .node-volume-control {
+#nodeBottomStack,
+#nodeBottomStack > .node-graph-controls {
+  height: auto;
+  max-height: none;
+}
+
+#nodePalette .node-volume-control {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 0 0 auto;
+  grid-row: 1;
   width: auto;
   height: 100%;
   box-sizing: border-box;
   padding: 3px 8px;
 }
 
-.soemdsp-plugin-host #nodePalette .node-volume-control::before {
+#nodePalette .node-live-input-volume {
+  grid-column: 1 / 4;
+  border-left: 1px solid var(--line);
+}
+
+#nodePalette .node-live-output-volume {
+  grid-column: 4 / 7;
+}
+
+#nodePalette .node-volume-control::before {
   font: 700 13px/1 Arial, Helvetica, sans-serif;
   color: #e8eef2;
   white-space: nowrap;
 }
 
-.soemdsp-plugin-host #nodePalette .node-live-input-volume::before {
+#nodePalette .node-live-input-volume::before {
   content: "Input";
 }
 
-.soemdsp-plugin-host #nodePalette .node-live-output-volume::before {
+#nodePalette .node-live-output-volume::before {
   content: "Output";
 }
 
-/* With the rest hidden, the row is not a full-width strip any more. It sits
-   over the bottom left corner of the canvas, as wide as its controls, so the
-   canvas gets the height back. */
-.soemdsp-plugin-host #nodeBottomStack {
+#nodePalette .node-live-toggle {
+  grid-row: 2;
+  border-radius: 0;
+}
+
+#nodeLiveInputButton {
+  grid-column: 1 / 3;
+}
+
+#nodeLiveOutputButton {
+  grid-column: 3 / 5;
+}
+
+#nodeLiveMidiButton {
+  grid-column: 5 / 7;
+}
+
+/* The row is not a full-width strip. It sits over the bottom left corner of
+   the canvas, as wide as its controls, so the canvas gets the height. */
+#nodeBottomStack {
   position: absolute;
   left: 0;
   bottom: 0;
@@ -24078,7 +24111,7 @@ button[data-transport-action="stop"]:disabled {
   z-index: 30;
 }
 
-.soemdsp-plugin-host #nodeBottomStack > .node-graph-controls {
+#nodeBottomStack > .node-graph-controls {
   width: max-content;
 }
 
