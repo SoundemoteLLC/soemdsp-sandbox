@@ -24010,6 +24010,32 @@ button[data-transport-action="stop"]:disabled {
   z-index: 2;
 }
 
+/* Inside a DAW (plugin host) the host owns play, stop, record and rendering.
+   The bottom row keeps only the live toggles and the volume controls.
+   Transport, Render Sample, Download, Start/End and the rendered-sample
+   player are not shown. */
+.soemdsp-plugin-host #nodeTransportGroup,
+.soemdsp-plugin-host #nodeRenderDurationControl,
+.soemdsp-plugin-host .node-patch-audio-player-row {
+  display: none !important;
+}
+
+/* With the rest hidden, the row is not a full-width strip any more. It sits
+   over the bottom left corner of the canvas, as wide as its controls, so the
+   canvas gets the height back. */
+.soemdsp-plugin-host #nodeBottomStack {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: max-content;
+  max-width: 100%;
+  z-index: 30;
+}
+
+.soemdsp-plugin-host #nodeBottomStack > .node-graph-controls {
+  width: max-content;
+}
+
 /* Render Sample + the Start/End range fields read as ONE segmented control:
    the button is rounded on the left, the last field on the right, and the
    fields share the button's border so there is no visual gap between them.
