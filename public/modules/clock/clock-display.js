@@ -84,6 +84,42 @@ function nodeGraphClockFaceParam(node, key, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/** True when a cable is plugged into this clock's ƒ input. */
+function nodeGraphClockFaceFJackWired(nodeId) {
+  const connections = Array.isArray(nodeGraphMvp?.patch?.connections) ? nodeGraphMvp.patch.connections : [];
+  return connections.some((c) => c.destinationNode === nodeId && (c.destinationPort === "f" || c.destinationPort === "ƒ"));
+}
+
+/**
+ * The speed the engine's clock is really running at, in cycles per second
+ * (negative = backwards), or NaN when it cannot be read. It is the step
+ * between the last two entries of the engine's phase history times how many
+ * entries that history holds per second.
+ */
+function nodeGraphClockFaceEngineRate(section, contextTime) {
+  const buffer = nodeGraphModuleScopeState?.buffers?.get(`${section.dataset.node}:__Phase`);
+  const n = buffer?.length || 0;
+  if (n < 2) return Number.NaN;
+  // Entries per second is counted, not taken from the history's own label
+  // (which says 30 while the engine writes one entry per audio block): how
+  // far its running entry count moved over at least a second of audio time.
+  const count = Number(buffer.nodeGraphScopeTotalSampleCount);
+  if (!Number.isFinite(count)) return Number.NaN;
+  const cal = section._clockRateCal;
+  if (!cal || count < cal.count || contextTime < cal.time) {
+    section._clockRateCal = { count, time: contextTime, perSecond: cal?.perSecond };
+  } else if (contextTime - cal.time >= 1) {
+    section._clockRateCal = { count, time: contextTime, perSecond: (count - cal.count) / (contextTime - cal.time) };
+  }
+  const perSecond = Number(section._clockRateCal.perSecond);
+  const a = Number(buffer[n - 2]);
+  const b = Number(buffer[n - 1]);
+  if (!(perSecond > 0) || !Number.isFinite(a) || !Number.isFinite(b)) return Number.NaN;
+  let step = b - a;
+  step -= Math.floor(step + 0.5); // shortest way round the cycle, either direction
+  return step * perSecond;
+}
+
 /**
  * Heard phase 0..1, or NaN when the engine is not publishing. Each new engine
  * value is anchored at the context time it arrived; the phase is then advanced
@@ -107,7 +143,14 @@ function nodeGraphClockFacePhase(section, node) {
   }
   const stamp = ctx.getOutputTimestamp();
   const heard = stamp.contextTime + (performance.now() - stamp.performanceTime) / 1000;
-  const rate = Math.max(0, nodeGraphClockFaceParam(node, "rate", 2));
+  // A wired ƒ replaces Rate in the engine, so the Rate knob is not the speed
+  // any more. Then the speed is read from the engine's own phase history.
+  // Not readable yet: hold the engine value instead of guessing.
+  let rate = Math.max(0, nodeGraphClockFaceParam(node, "rate", 2));
+  if (nodeGraphClockFaceFJackWired(section.dataset.node)) {
+    const engineRate = nodeGraphClockFaceEngineRate(section, ctx.currentTime);
+    rate = Number.isFinite(engineRate) ? engineRate : 0;
+  }
   const p = live + rate * (heard - section._clockAnchorTime);
   return p - Math.floor(p);
 }
