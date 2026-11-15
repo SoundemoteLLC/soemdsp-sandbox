@@ -278,7 +278,7 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
     freezePlay = midi;
     stickyPlay = midi;
     lastSig = "";
-    try { canvas.setPointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
+    try { section.setPointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
     // Left click on the already-lit step does not retrigger. Drag stays legato.
     const alreadyLit = midi === shownPlay;
     const leftBang = event.button === 0 && pressArmed && !alreadyLit;
@@ -311,17 +311,17 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
     pressArmed = true;
     heldButton = -1;
     lastSig = "";
-    try { canvas.releasePointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
+    try { section.releasePointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
     sendOverride(-1);
     event.preventDefault();
     event.stopPropagation();
   }
 
-  canvas.addEventListener("pointerdown", onPointerDown);
-  canvas.addEventListener("pointermove", onPointerMove);
-  canvas.addEventListener("pointerup", onPointerUp);
-  canvas.addEventListener("pointercancel", onPointerUp);
-  canvas.addEventListener("contextmenu", (event) => {
+  section.addEventListener("pointerdown", onPointerDown);
+  section.addEventListener("pointermove", onPointerMove);
+  section.addEventListener("pointerup", onPointerUp);
+  section.addEventListener("pointercancel", onPointerUp);
+  section.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     event.stopPropagation();
   });

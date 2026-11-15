@@ -18283,7 +18283,8 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   // MIDI CC — hardware CC / pitch bend / aftertouch to signals (Controllers).
-  // Out is smoothed×Amp + In; White is Out×128. 7-bit CC (no coarse/fine pairs); Pitch Bend is 14-bit.
+  // Out = clamp(smooth(clamp(CC + Bias)) * Amp + In, 0, 1); In stays unsmoothed.
+  // White scales Out to 0..127. Pitch Bend is 14-bit, mapped to 0..1.
 
   midiCc: {
     planRole: "processor",

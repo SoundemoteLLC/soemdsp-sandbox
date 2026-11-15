@@ -1449,7 +1449,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   midiCc: {
     category: "controller",
-    description: "Smooth a MIDI CC, pitch bend, or aftertouch. Out is smooth(Bias) times Amp plus raw In (unsmoothed thru). White is Out times 128.",
+    description: "CC and Bias are added, limited to 0..1, then smoothed. Amp scales that result; In is added without smoothing. Out stays within 0..1, and White scales it to 0..127.",
     label: "MIDI CC",
     notes: ["midi", "cc", "pitch bend", "aftertouch", "learn", "14-bit", "smoothing", "controller"],
   },

@@ -1,6 +1,6 @@
 // MIDI CC helpers — 7-bit is cc/128 so main*128 equals the 0..127 value.
 // 14-bit is (MSB<<7|LSB)/16384 so *128 stays on the same scale.
-// Pitch bend is (raw-8192)/8192 (-1..+1). Pressure is value/128.
+// Pitch bend is raw/16384 (0..1). Pressure is value/128.
 (function (root) {
   const CC_PITCH_BEND = 128;
   const CC_CHANNEL_PRESSURE = 129;
@@ -25,7 +25,7 @@
   function clampBend(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return 0;
-    return Math.max(-1, Math.min(1, n));
+    return Math.max(0, Math.min(1, (n + 1) * 0.5));
   }
 
   function fourteenBit(msb, lsb) {
@@ -36,7 +36,7 @@
 
   function pitchBend(raw14) {
     const raw = Math.max(0, Math.min(16383, Math.round(Number(raw14) || 0)));
-    return (raw - 8192) / 8192;
+    return raw / 16384;
   }
 
   function decodeMessage(status, data1, data2) {

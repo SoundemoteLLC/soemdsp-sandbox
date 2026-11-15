@@ -111,6 +111,12 @@ const result = await page.evaluate(() => {
     live.usesWorklet = previousUsesWorklet;
   }
 
+  const ccValueAfterBridge = Number(ccNode?.midiCcState?.value);
+  const defaultFacePolarity = nodeGraphModuleDefinitions?.midiCc?.defaultDisplaySettings?.facePolarity;
+  ccNode.params.cc = 128;
+  routeNodeGraphMidiCcHighRes(0xE0, 0, 0);
+  const bendCenter = Number(ccNode?.midiCcState?.value);
+
   return {
     vel,
     held,
@@ -121,7 +127,9 @@ const result = await page.evaluate(() => {
     hrValue,
     liveMessages: sent.map((item) => item.type),
     liveCcValue: sent.find((item) => item.type === "midiCcMessage")?.data2,
-    ccValueAfterBridge: Number(ccNode?.midiCcState?.value),
+    ccValueAfterBridge,
+    defaultFacePolarity,
+    bendCenter,
     hasApi: typeof SoemdspMidiCc !== "undefined",
     ccType: ccNode && ccNode.type,
     ccParams: ccNode && ccNode.params,
@@ -149,6 +157,8 @@ close(result.ccValue, result.expectedOffset, "web midi CC 64/128");
 close(result.hrVel, result.expectedHrVel, "host high-res velocity");
 close(result.hrOffset, 0, "host high-res leaves Bias unchanged");
 close(result.hrValue, result.expectedHrOffset, "host high-res CC");
+if (result.defaultFacePolarity !== "unipolar") throw new Error("MIDI CC face must default to unipolar");
+close(result.bendCenter, 0.5, "browser pitch bend center");
 if (result.liveMessages.join(",") !== "midiCcMessage" || result.liveCcValue !== 32) {
   throw new Error("CC should reach native graph without a parameter refresh: " + JSON.stringify(result.liveMessages));
 }
