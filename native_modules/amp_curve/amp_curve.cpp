@@ -22,7 +22,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const int kMaxBlockFrames = 128;
 // 10^(5*(x-1)): x=1 → 1, x=0 → 1e-5 (~−100 dB). Exact 0 forced at x≤0.
 static const double kExpDbSpan = 5.0;

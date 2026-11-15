@@ -14,7 +14,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 384;
 static const int kMaxBands = 8;
 static const int kMaxCascade = 4;
 static const double kLn2 = 0.6931471805599453;

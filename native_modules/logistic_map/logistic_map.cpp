@@ -16,7 +16,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kMaxIterationsPerSample = 4096;
 
 struct LogisticMapState {

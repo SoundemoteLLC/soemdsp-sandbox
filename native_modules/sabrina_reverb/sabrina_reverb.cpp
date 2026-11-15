@@ -9,13 +9,14 @@
 #include <wasm_simd128.h>
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
 using namespace soemdsp_maths;
 constexpr int kDelayCount = 14;
 constexpr int kDiffusionCount = 12;
-constexpr int kMaxInstances = 4;
+constexpr int kMaxInstances = 128; // tiny slots; the delay lines come from the shared memory pool
 constexpr int kMaxDelaySamples = 192000;
 // Internal per-sample ramp time for delay-line geometry (offset/LFO speed).
 // This runs independent of whatever smoothing the JS caller applies, so a
@@ -66,7 +67,7 @@ double expApprox(double x) {
 }
 
 struct SabrinaDelay {
-  float buffer[kMaxDelaySamples];
+  float* buffer; // kMaxDelaySamples floats, in the instance's pool block
   int driver;
   int rndNext;
   double feedback;
@@ -84,6 +85,7 @@ struct SabrinaDelay {
 
 struct SabrinaState {
   SabrinaDelay delays[kDelayCount];
+  void* poolBlock; // one shared-pool block holding all kDelayCount delay lines
   bool active;
   double sampleRate;
   double ch0;
@@ -726,6 +728,12 @@ SabrinaState* stateForHandle(int handle) {
 extern "C" int soemdsp_sabrina_reverb_create(double sampleRate) {
   for (int index = 0; index < kMaxInstances; index += 1) {
     if (!states[index].active) {
+      void* blk = soemdsp::memory_pool::alloc(sizeof(float) * (unsigned long)kDelayCount * (unsigned long)kMaxDelaySamples);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      states[index].poolBlock = blk;
+      for (int d = 0; d < kDelayCount; d += 1) {
+        states[index].delays[d].buffer = (float*)blk + (unsigned long)d * (unsigned long)kMaxDelaySamples;
+      }
       states[index].speedVariant = 0;
       resetState(states[index], sampleRate);
       return index + 1;
@@ -739,6 +747,9 @@ extern "C" void soemdsp_sabrina_reverb_destroy(int handle) {
   if (!state) {
     return;
   }
+  soemdsp::memory_pool::release(state->poolBlock);
+  state->poolBlock = nullptr;
+  for (int d = 0; d < kDelayCount; d += 1) state->delays[d].buffer = nullptr;
   state->active = false;
 }
 

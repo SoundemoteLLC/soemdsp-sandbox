@@ -13,7 +13,7 @@ namespace {
 using namespace soemdsp_maths;
 
 // Match graph_engine node capacity so efficient-mode graphs can own every osc.
-constexpr int kMaxInstances = 64;
+constexpr int kMaxInstances = 128;
 // Slot 0 is the currently-selected waveform (driven by the Waveform
 // parameter); slots 1-5 are the always-on Saw/Ramp/Square/Tri/Sine taps.
 // Waveform indices 0-5 stay stable for saved patches; 6-9 are PWM/center-family.

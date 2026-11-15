@@ -9,7 +9,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 8;
+constexpr int kMaxInstances = 128;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 

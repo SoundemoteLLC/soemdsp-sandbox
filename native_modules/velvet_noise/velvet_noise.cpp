@@ -34,10 +34,13 @@
 // and wet are already time-aligned.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
-static const int kMaxInstances = 8;
+// Slots are tiny now: the big buffers (tap tables and delay lines, ~8.8 MB per instance) come
+// from the shared memory pool when an instance is created and go back when it is destroyed.
+static const int kMaxInstances = 128;
 // Physical limits only. Tap Count and Darkness ranges belong to the parameters;
 // the DSP follows whatever they allow up to what fits in memory / the delay line.
 static const int kMaxTaps = 4096;
@@ -79,7 +82,7 @@ struct VelvetNoiseState {
   bool active;
 
   // Tap tables: `cur` is audible; during a fade the other one fades in.
-  TapTable tables[2];
+  TapTable* tables; // two tables, in the pool block
   int cur;
   bool fading;
   double fade; // 0 .. 1 toward the other table
@@ -101,8 +104,9 @@ struct VelvetNoiseState {
   int writeIdx;
   unsigned int countL;
   unsigned int countR;
-  Cell delayL[kDelaySize];
-  Cell delayR[kDelaySize];
+  Cell* delayL;     // kDelaySize cells each, in the pool block
+  Cell* delayR;
+  void* block;      // the one pool block that holds tables and both delay lines
 
   // Generator
   unsigned int rngL;
@@ -122,6 +126,8 @@ struct VelvetNoiseState {
 };
 
 static VelvetNoiseState gPool[kMaxInstances];
+
+static const unsigned long kBlockBytes = 2UL * sizeof(TapTable) + 2UL * (unsigned long)kDelaySize * sizeof(Cell);
 
 static inline unsigned int next_rand(unsigned int& state) {
   state ^= state << 13;
@@ -297,7 +303,13 @@ extern "C" {
 int soemdsp_velvet_noise_create() {
   for (int i = 0; i < kMaxInstances; ++i) {
     if (!gPool[i].active) {
+      void* block = soemdsp::memory_pool::alloc(kBlockBytes);
+      if (!block) return 0; // out of memory budget: the engine reports it
       VelvetNoiseState& s = gPool[i];
+      s.block = block;
+      s.tables = (TapTable*)block;
+      s.delayL = (Cell*)((unsigned char*)block + 2UL * sizeof(TapTable));
+      s.delayR = s.delayL + kDelaySize;
       s.active = true;
       s.seed = 1u;
       s.rngL = seed_left(s.seed);
@@ -326,7 +338,13 @@ int soemdsp_velvet_noise_create() {
 
 void soemdsp_velvet_noise_destroy(int handle) {
   if (handle <= 0 || handle > kMaxInstances) return;
-  gPool[handle - 1].active = false;
+  VelvetNoiseState& s = gPool[handle - 1];
+  if (s.active) soemdsp::memory_pool::release(s.block);
+  s.block = nullptr;
+  s.tables = nullptr;
+  s.delayL = nullptr;
+  s.delayR = nullptr;
+  s.active = false;
 }
 
 void soemdsp_velvet_noise_reset(int handle) {

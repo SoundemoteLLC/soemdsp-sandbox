@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 4;
+constexpr int kMaxInstances = 128;
 constexpr int kMaxWindow = 4096;
 constexpr int kMinWindow = 128;
 constexpr int kDefaultWindow = 512;

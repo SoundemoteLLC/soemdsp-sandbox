@@ -19,6 +19,7 @@ NodeLiveAudioProcessor.prototype.applyNativeModuleExports = function applyNative
           name: "graph_engine",
           status: this.nativeGraphReady ? "ready" : "missing exports",
         });
+        if (this.nativeGraphReady) { this.applyMemoryBudget?.(); this.postNativeGraphLimits?.(); }
         // Flush plan/connections that arrived during async wasm instantiate.
         if (this._pendingSetPlan) {
           const pending = this._pendingSetPlan;

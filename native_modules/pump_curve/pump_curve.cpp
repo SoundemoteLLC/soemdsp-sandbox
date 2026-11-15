@@ -15,7 +15,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 64;
+constexpr int kMaxInstances = 128;
 constexpr int kLawLin = 0;
 constexpr int kLawDb = 1;
 constexpr int kLawOpto = 2;

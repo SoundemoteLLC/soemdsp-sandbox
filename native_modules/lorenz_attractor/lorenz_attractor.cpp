@@ -30,7 +30,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 // Local name (not the shared soemdsp_maths::dsp_ceil) -- this is
 // truncation-based rather than floor-based, only equivalent for x >= 0
 // (dt/0.0007 below is always positive), so kept distinct rather than

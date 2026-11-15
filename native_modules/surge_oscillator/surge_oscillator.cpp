@@ -46,7 +46,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 16;
+constexpr int kMaxInstances = 128;
 
 double sinApprox(double value) {
   const double x = wrap_radians(value);

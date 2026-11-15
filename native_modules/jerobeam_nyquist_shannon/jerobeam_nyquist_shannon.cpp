@@ -21,7 +21,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 static const double kMinRate = 1.0e-9;
 
 struct NyquistShannonState {

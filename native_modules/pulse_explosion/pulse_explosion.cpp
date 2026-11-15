@@ -18,6 +18,7 @@
 // at every burst. Trigger height (0..1) scales that burst's radius.
 
 #include <soemdsp/math/scalar_helpers.h>
+#include <soemdsp/utility/memory_pool.h>
 #include <soemdsp/math/seed.h>
 #include <soemdsp/trigger/trigger.h>
 using soemdsp_maths::clamp;
@@ -36,7 +37,7 @@ enum : unsigned int {
   kSeedBurst = 1u,
 };
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 static const int kMaxPulses = 16384;
 static const int kMaxRejectionAttempts = 200;
 
@@ -58,7 +59,8 @@ struct PulseExplosionState {
   double sparkY;
   double lastLeft;
   double lastRight;
-  ScheduledPulse pulses[kMaxPulses];
+  void* poolBlock; // one shared-pool block with all the buffers of this instance
+  ScheduledPulse* pulses; // in the pool block
   unsigned int rngState;
 };
 
@@ -191,6 +193,11 @@ extern "C" int soemdsp_pulse_explosion_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       PulseExplosionState& s = gPool[i];
+      unsigned long bytes = sizeof(ScheduledPulse) * (unsigned long)(kMaxPulses);
+      void* blk = soemdsp::memory_pool::alloc(bytes);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      s.poolBlock = blk;
+      s.pulses = (ScheduledPulse*)blk;
       s.lastTrigger = 0.0;
       s.exploding = false;
       s.elapsed = 0.0;
@@ -211,6 +218,11 @@ extern "C" int soemdsp_pulse_explosion_create() {
 
 extern "C" void soemdsp_pulse_explosion_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
+    gPool[handle - 1].poolBlock = nullptr;
+    gPool[handle - 1].pulses = nullptr;
+  }
   gPool[handle - 1].active = false;
 }
 

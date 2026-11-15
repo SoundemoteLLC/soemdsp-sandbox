@@ -222,6 +222,9 @@ function bindNodeGraphSceneMenuEvents() {
   if (typeof syncNodeGraphGlobalSmoothingControl === "function") {
     syncNodeGraphGlobalSmoothingControl({ force: true });
   }
+  bindNodeGraphSceneElementEvent("nodeSceneMemoryBudgetMb", "change", handleNodeGraphMemoryBudgetChange);
+  bindNodeGraphSceneElementEvent("nodeSceneMemoryBudgetMb", "keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget?.blur?.(); } event.stopPropagation(); });
+  syncNodeGraphMemoryBudgetControl();
   bindNodeGraphSceneElementEvent("nodeSceneWidthDecrease", "click", () => adjustNodeGraphModuleWidthFromContext(-1));
   bindNodeGraphSceneElementEvent("nodeSceneWidthIncrease", "click", () => adjustNodeGraphModuleWidthFromContext(1));
   bindNodeGraphSceneElementEvent("nodeSceneDisplayHeightDecrease", "click", () => adjustNodeGraphModuleDisplayHeightFromContext(-1));

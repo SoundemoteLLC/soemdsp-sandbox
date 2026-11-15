@@ -254,6 +254,43 @@ function bindNodeUiDevPixelateWireDotsOnZoom() {
   syncNodeUiDevPixelateWireDotsOnZoom();
 }
 
+function nodeGraphWireDotShadows() {
+  if (typeof nodeGraphMvp === "object" && nodeGraphMvp && typeof nodeGraphMvp.wireDotShadows === "boolean") {
+    return nodeGraphMvp.wireDotShadows;
+  }
+  const input = typeof document !== "undefined"
+    ? document.getElementById("nodeUiDevWireDotShadows")
+    : null;
+  return input ? Boolean(input.checked) : true;
+}
+
+function syncNodeUiDevWireDotShadows() {
+  const input = document.getElementById("nodeUiDevWireDotShadows");
+  const on = input ? Boolean(input.checked) : true;
+  if (typeof nodeGraphMvp === "object" && nodeGraphMvp) {
+    nodeGraphMvp.wireDotShadows = on;
+  }
+  // Re-bake the dot pictures (they hold the edge) and redraw: no reload.
+  if (typeof nodeGraphGlGraphDotBakeDrop === "function") nodeGraphGlGraphDotBakeDrop();
+  if (typeof drawNodeGraphWires === "function") {
+    drawNodeGraphWires();
+  }
+}
+
+function bindNodeUiDevWireDotShadows() {
+  const input = document.getElementById("nodeUiDevWireDotShadows");
+  if (input && input.dataset.wireDotShadowsBound !== "true") {
+    input.dataset.wireDotShadowsBound = "true";
+    input.addEventListener("change", () => {
+      syncNodeUiDevWireDotShadows();
+      if (typeof scheduleNodeUiDevSettingsAutosave === "function") {
+        scheduleNodeUiDevSettingsAutosave();
+      }
+    });
+  }
+  syncNodeUiDevWireDotShadows();
+}
+
 function bindNodeUiDevSliderFillColorControls() {
   for (const target of nodeUiDevSliderFillColorTargets) {
     for (const suffix of ["Hue", "Saturation", "Lightness", "Alpha"]) {
@@ -290,6 +327,7 @@ function bindNodeUiDevSliderFillColorControls() {
   bindNodeUiDevFullyOpaqueWires();
   bindNodeUiDevPixelateWiresOnZoom();
   bindNodeUiDevPixelateWireDotsOnZoom();
+  bindNodeUiDevWireDotShadows();
 }
 
 // Unselected plate outline. CSS-only — do not fold into the header sync
@@ -794,6 +832,9 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (typeof syncNodeUiDevPixelateWireDotsOnZoom === "function") {
     syncNodeUiDevPixelateWireDotsOnZoom();
   }
+  if (typeof syncNodeUiDevWireDotShadows === "function") {
+    syncNodeUiDevWireDotShadows();
+  }
   syncNodeUiDevGridDivisionMultiply();
   syncNodeUiDevModuleLightGridControls();
   const settingsView = document.getElementById("nodeSettingsView");
@@ -1031,7 +1072,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (sliderTextLineValue) sliderTextLineValue.textContent = String(sliderTextLine);
   if (sliderTextPadValue) sliderTextPadValue.textContent = `${sliderTextPad}px`;
   // Signal wires (jack to jack) width and end-dot diameter.
-  const wireThick = Math.max(0.5, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWireThickness")?.value, 3.46)));
+  const wireThick = Math.max(0.5, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWireThickness")?.value, 3)));
   sliderTextHost?.style.setProperty("--node-wire-thickness", `${wireThick}px`);
   const wireThickValue = document.getElementById("nodeUiDevWireThicknessValue");
   if (wireThickValue) wireThickValue.textContent = `${wireThick}px`;
@@ -1048,8 +1089,8 @@ function syncNodeUiDevSettingsHeaderControls() {
     if (out) out.textContent = String(v);
   }
   // Param wires (ending on a rail IO box) keep their own width and end dot.
-  const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 1.08)));
-  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 3.64)));
+  const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 1)));
+  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 3.3)));
   sliderTextHost?.style.setProperty("--node-param-wire-thickness", `${paramWireThick}px`);
   sliderTextHost?.style.setProperty("--node-param-wire-dot-size", `${paramWireDot}px`);
   const paramWireThickValue = document.getElementById("nodeUiDevParamWireThicknessValue");

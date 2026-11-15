@@ -27,7 +27,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-constexpr int kMaxInstances = 32;
+constexpr int kMaxInstances = 128;
 constexpr int kMaxBlockFrames = 2048;
 constexpr int kRenormInterval = 64;
 constexpr double kOmegaEps = 1.0e-12;

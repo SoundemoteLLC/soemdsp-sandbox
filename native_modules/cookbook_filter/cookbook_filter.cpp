@@ -15,7 +15,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 static const int kMaxStages = 5;
 
 // RS-MET modes: Bypass, LP, HP, BP skirt, BP peak, BR, AP, Peak, LS, HS.

@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 
 struct TiltState {
   bool active;

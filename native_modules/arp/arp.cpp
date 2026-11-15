@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kKeyCount = 128;
 static const double kFlag1 = 562949953421312.0;  // 2^49
 static const double kFlag2 = 1125899906842624.0; // 2^50
@@ -52,6 +52,12 @@ struct State {
   bool holdClickedPitch;
   bool faceBang;
   bool faceGate;
+  // Gate Length: samples since the last step and the step period it is a
+  // fraction of (free run: sr / rate; Trigger clock: gap between the last two
+  // clock edges; 0 = not known yet, gate stays open until the next step).
+  double samplesSinceStep;
+  double stepPeriod;
+  bool hasStepped;
 };
 
 static State gPool[kMaxInstances];
@@ -202,6 +208,9 @@ extern "C" int soemdsp_arp_create() {
       s.holdClickedPitch = false;
       s.faceBang = false;
       s.faceGate = false;
+      s.samplesSinceStep = 0.0;
+      s.stepPeriod = 0.0;
+      s.hasStepped = false;
       s.active = true;
       return i + 1;
     }
@@ -287,6 +296,7 @@ extern "C" double soemdsp_arp_sample(
   double seedIn,
   double octaveOffsetIn,
   double sequenceOffsetIn,
+  double gateLengthIn,
   double sampleRate
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
@@ -322,10 +332,13 @@ extern "C" double soemdsp_arp_sample(
     const bool trigHigh = safe(trigger) > 0.0;
     const bool clockRise = rising_edge_bool(trigHigh, &s.clockWasHigh);
     if (s.noteCount > 0 && clockRise) {
+      // Clock gap = step period for Gate Length (unknown on the first edge).
+      s.stepPeriod = s.hasStepped ? s.samplesSinceStep : 0.0;
       do_step(s, mode, steps, seed, octaveOffset, sequenceOffset);
       trigOut = 1.0;
     }
   } else if (rate > 0.0) {
+    s.stepPeriod = sr / rate; // follows Rate / the f jack live
     // Free-run phasor when Trigger is unconnected. rateHz is Internal Clock
     // unless the host passes the f jack (cable present → internal ignored).
     // Keep the phasor running with no notes so a later latch stays on the
@@ -368,15 +381,32 @@ extern "C" double soemdsp_arp_sample(
   if (s.overridePrevMidi >= 0) s.overridePrevMidi = -1;
   if (trigOut > 0.0) s.holdClickedPitch = false;
 
+  if (trigOut > 0.0) {
+    s.samplesSinceStep = 0.0;
+    s.hasStepped = true;
+  }
+
   if (s.noteCount <= 0) {
     s.lastGate = 0.0;
     s.lastTrigger = 0.0;
     if (!s.holdClickedPitch) s.lastMidi = -1;
+    s.samplesSinceStep += 1.0;
     return s.lastPitch;
   }
 
-  s.lastGate = 1.0;
+  // Gate Length: fraction of the step period the gate stays high. 1 (or more)
+  // = legato, the gate never drops between steps (the old behaviour). Below 1
+  // the gate drops after that fraction; at least one sample per step, so 0 is
+  // a one-sample gate. Period not known yet (first Trigger-clocked step): open.
+  const double gateLength = safe(gateLengthIn);
+  double gate = 1.0;
+  if (gateLength < 1.0 && s.stepPeriod > 0.0) {
+    const double open = gateLength > 0.0 ? gateLength * s.stepPeriod : 0.0;
+    gate = (s.samplesSinceStep < (open > 1.0 ? open : 1.0)) ? 1.0 : 0.0;
+  }
+  s.lastGate = gate;
   s.lastTrigger = trigOut;
+  s.samplesSinceStep += 1.0;
   return s.lastPitch;
 }
 
@@ -423,5 +453,5 @@ extern "C" int soemdsp_arp_play_midi(int handle) {
 }
 
 extern "C" int soemdsp_arp_version() {
-  return 16; // left-click bang; hold silent; right-click pitch only
+  return 17; // Gate Length (fraction of the step period)
 }

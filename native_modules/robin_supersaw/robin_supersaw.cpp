@@ -20,7 +20,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 8;
+constexpr int kMaxInstances = 128;
 constexpr int kMaxVoices = 128;
 constexpr int kMaxBlockFrames = 2048;
 constexpr double kFaceHalfOctaveCents = 600.0; // ±0.5 octave face span

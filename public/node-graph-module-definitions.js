@@ -308,7 +308,7 @@ const nodeGraphNodeLabels = Object.freeze({
   rmsMeter: "RMS Meter",
   exponentialSkew: "Exp Skew",
   hyperbolicDecay: "Hyperbolic",
-  robinLeakyEnvelope: "Robin Leaky Envelope",
+  robinLeakyEnvelope: "Decay Deceleration",
   exponentialMix: "Exponential Mix",
   ellipsoidDecay: "EllipsoidDecay",
   vactrol: "Vactrol",
@@ -1104,6 +1104,8 @@ const nodeGraphModuleDefinitions = (
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
+        // Hidden on spawn; the parameter's Show toggle brings it back.
+        hidden: true,
         key: "cycleMode",
         label: "Cycle",
         linearSmoothing: false,
@@ -14055,7 +14057,7 @@ const nodeGraphModuleDefinitions = (
         defaultValue: "8",
         key: "rate",
         kind: "frequency",
-        label: "Frequency",
+        label: "Rate",
         max: "64",
         maxDigits: 5,
         mid: "8",
@@ -14118,6 +14120,21 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         tooltip:
           "Rotate the pattern (including Random) by this many steps. Same seed, different offset → a shifted sequence."
+      },
+      {
+        defaultValue: "1",
+        key: "gateLength",
+        label: "Gate Length",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        unit: "%",
+        tooltip:
+          "How long Gate stays high, as a share of one step. 100% = legato (Gate never drops between steps). "
+          + "Lower = shorter notes; 0% = a one-sample gate. Step length comes from Rate / the f jack, "
+          + "or from the gap between Trigger edges when Trigger is patched (the first clocked step stays open)."
       },
     ]
   },

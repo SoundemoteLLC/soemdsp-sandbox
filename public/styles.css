@@ -7450,13 +7450,13 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   --node-wire-patch-point-size-ratio: 0.54;
   --node-wire-patch-point-size: 7.86px;
   /* Zoom-1 cable and trace widths. Both scale with the camera. */
-  --node-wire-thickness: 3.46px;
+  --node-wire-thickness: 3px;
   --node-wire-dip: 0.35;
   --node-wire-dip-width: 0.5;
   --node-trace-wire-thickness: 1px;
   /* Param wires (ending on a rail IO box): UIDEV param wire thickness / end dot. */
-  --node-param-wire-thickness: 1.08px;
-  --node-param-wire-dot-size: 3.64px;
+  --node-param-wire-thickness: 1px;
+  --node-param-wire-dot-size: 3.3px;
   /*
    * Signal jack cell:
    *   width  = half-slot (inward half fits)

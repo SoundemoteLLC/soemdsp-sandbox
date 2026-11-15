@@ -26,7 +26,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 
 // Local name (not the shared soemdsp_maths::dsp_sin) because this wraps
 // via truncation instead of dsp_floor -- equivalent only because the sole

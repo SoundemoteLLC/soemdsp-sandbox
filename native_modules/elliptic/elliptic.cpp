@@ -14,7 +14,7 @@ namespace {
 using namespace soemdsp_maths;
 using namespace soemdsp_maths::scientific_iir;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 struct State {
   Cascade cascade;

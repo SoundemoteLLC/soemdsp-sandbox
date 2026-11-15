@@ -40,7 +40,7 @@ using soemdsp_maths::kPi;
 using soemdsp_maths::kTwoPi;
 using soemdsp_maths::kHalfPi;
 using soemdsp_maths::sqrt_newton;
-constexpr int kMaxInstances = 16;
+constexpr int kMaxInstances = 128;
 
 // ---- Local transcendental helpers (freestanding, no libm) ------------------
 double absD(double v) { return v < 0.0 ? -v : v; }

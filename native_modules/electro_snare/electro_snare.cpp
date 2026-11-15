@@ -63,7 +63,7 @@ namespace {
 using namespace soemdsp_maths;
 using namespace soemdsp::drum;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const unsigned int kNoiseSeed = 0x5eed5a7eu;  // L (original); R = hash_noise_seed(kNoiseSeed, 1)
 // Odd angular order (11, 31, 12): opposite pickup sees the mode inverted.
 static const bool kModeOdd[6] = {false, true, false, false, true, true};

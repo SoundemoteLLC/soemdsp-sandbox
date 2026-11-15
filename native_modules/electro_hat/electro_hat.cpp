@@ -34,7 +34,7 @@ namespace {
 using namespace soemdsp_maths;
 using namespace soemdsp::drum;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const int kOsc = 6;
 static const unsigned int kNoiseSeed = 0x4a7e5eedu;
 enum { kAlg808 = 0, kAlg606 = 1, kAlgFm = 2, kAlgNoise = 3 };

@@ -16,7 +16,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const double kDbFloor = -120.0;
 static const double kLn10 = 2.302585092994046;
 

@@ -2559,7 +2559,7 @@
     },
     {
       "name": "robin_leaky_envelope",
-      "label": "Robin Leaky Envelope",
+      "label": "Decay Deceleration",
       "targetType": "robinLeakyEnvelope",
       "kind": "envelope",
       "source": "native_modules/robin_leaky_envelope/robin_leaky_envelope.cpp",

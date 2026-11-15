@@ -95,6 +95,18 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
       this.setPolyphonyVelocities(message.source, message.velocities);
       return;
     }
+    if (message.type === "setMemoryBudget") {
+      this.setMemoryBudgetMb?.(message.mb);
+      return;
+    }
+    if (message.type === "queryMemory") {
+      this.answerMemory?.();
+      return;
+    }
+    if (message.type === "queryTypeCapacity") {
+      this.answerTypeCapacity?.(message.types);
+      return;
+    }
     if (message.type === "setMetaView") {
       // The host re-sends the open Meta view after every plan send. Same view
       // = nothing to do; recompiling here ran soemdsp_graph_clear and reset

@@ -15,6 +15,7 @@
 // (seed_mix(Seed, part)), passed in as a plain uint32. 0 is a valid seed.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
@@ -40,7 +41,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 8;
+static const int kMaxInstances = 128;
 static const double kMaxDelaySeconds = 4.25;
 // 4.25s @ 192kHz -- comfortably above any realistic Web Audio sample rate.
 static const int kMaxDelaySamples = 816002;
@@ -51,7 +52,8 @@ static double delay_parabol_sample(double phase) {
 }
 
 struct DelayState {
-  float  buffer[kMaxDelaySamples];
+  void* poolBlock; // one shared-pool block with all the buffers of this instance
+  float* buffer; // in the pool block
   int    bufferSize;
   int    position;
   double lfoPhase;
@@ -81,6 +83,11 @@ extern "C" int soemdsp_delay_effect_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       DelayState& s = gPool[i];
+      unsigned long bytes = sizeof(float) * (unsigned long)(kMaxDelaySamples);
+      void* blk = soemdsp::memory_pool::alloc(bytes);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      s.poolBlock = blk;
+      s.buffer = (float*)blk;
       reset_delay(s, 2);
       s.outOut = 0.0;
       s.outWet = 0.0;
@@ -93,6 +100,11 @@ extern "C" int soemdsp_delay_effect_create() {
 
 extern "C" void soemdsp_delay_effect_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
+    gPool[handle - 1].poolBlock = nullptr;
+    gPool[handle - 1].buffer = nullptr;
+  }
   gPool[handle - 1].active = false;
 }
 

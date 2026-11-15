@@ -29,7 +29,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 // state: 0=off, 1=delay, 2=attack, 3=decay, 4=sustain, 5=release
 enum EnvelopeStage { STAGE_OFF = 0, STAGE_DELAY = 1, STAGE_ATTACK = 2, STAGE_DECAY = 3, STAGE_SUSTAIN = 4, STAGE_RELEASE = 5 };

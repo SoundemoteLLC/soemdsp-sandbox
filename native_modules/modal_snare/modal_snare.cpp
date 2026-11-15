@@ -34,7 +34,7 @@ namespace {
 using namespace soemdsp_maths;
 using namespace soemdsp::drum;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const unsigned int kNoiseSeed = 0x5eed5a7eu;  // same as Electro Snare
 static const int kModes = 6;
 static const double kModeRatio[kModes] = {1.0, 1.593, 2.136, 2.295, 2.653, 2.917};

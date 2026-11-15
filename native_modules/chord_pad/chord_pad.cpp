@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 
 // Major / natural minor: [semitone offset, quality] quality 0=maj 1=min 2=dim
 static const int kMajorDegrees[7][2] = {

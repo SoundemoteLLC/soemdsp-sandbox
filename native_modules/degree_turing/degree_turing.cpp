@@ -14,7 +14,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 
 // Fixed seed components (never reorder; append new parts at the end).
 enum : unsigned int {

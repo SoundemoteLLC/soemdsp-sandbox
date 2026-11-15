@@ -8,7 +8,7 @@
 #include <soemdsp/soemdsp.hpp>
 
 namespace {
-constexpr int kMaxInstances = 32;
+constexpr int kMaxInstances = 128;
 constexpr int kIntervals = 7;
 
 struct EdgeState {

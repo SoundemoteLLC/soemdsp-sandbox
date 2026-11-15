@@ -7,17 +7,18 @@
 // FBM delay-time modulation. No vibrato generator.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 384;
 static const int kMaxVoices = 16;
 static const int kMaxDelaySamples = 16384;
 
 struct Voice {
-  float buffer[kMaxDelaySamples];
+  float* buffer; // kMaxDelaySamples floats, in the instance's pool block
   int writeIndex;
   unsigned int fbmSeed;
   double fbmTime;
@@ -25,6 +26,7 @@ struct Voice {
 
 struct EnsembleState {
   bool active;
+  void* poolBlock; // one shared-pool block: kMaxVoices delay buffers
   Voice voices[kMaxVoices];
   double hpLpL;
   double hpLpR;
@@ -89,6 +91,11 @@ extern "C" int soemdsp_ensemble_create() {
   for (int i = 0; i < kMaxInstances; i += 1) {
     if (!gPool[i].active) {
       EnsembleState& s = gPool[i];
+      unsigned long bytes = sizeof(float) * (unsigned long)kMaxVoices * (unsigned long)kMaxDelaySamples;
+      void* blk = soemdsp::memory_pool::alloc(bytes);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      s.poolBlock = blk;
+      for (int v = 0; v < kMaxVoices; v += 1) s.voices[v].buffer = (float*)blk + (unsigned long)v * (unsigned long)kMaxDelaySamples;
       s.hpLpL = 0.0;
       s.hpLpR = 0.0;
       s.lpL = 0.0;
@@ -111,6 +118,11 @@ extern "C" int soemdsp_ensemble_create() {
 
 extern "C" void soemdsp_ensemble_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
+    gPool[handle - 1].poolBlock = nullptr;
+    for (int v = 0; v < kMaxVoices; v += 1) gPool[handle - 1].voices[v].buffer = nullptr;
+  }
   gPool[handle - 1].active = false;
 }
 

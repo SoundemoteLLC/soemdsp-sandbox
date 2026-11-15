@@ -136,7 +136,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 static const double kReleaseRefLevel = 0.25;
 static const double kSnapFloor = 1.0e-6;

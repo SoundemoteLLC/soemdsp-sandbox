@@ -14,7 +14,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const double kTol = 1.0e-8;
 static const double kInfDistance = 1.0e30;
 

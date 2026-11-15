@@ -59,7 +59,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 
 static inline double jmapGeneral(double v, double srcMin, double srcMax, double dstMin, double dstMax) {
   return dstMin + (dstMax - dstMin) * (v - srcMin) / (srcMax - srcMin);

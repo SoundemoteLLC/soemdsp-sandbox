@@ -7,12 +7,13 @@
 // Matches public/modules/combResonator/comb-resonator-math.js.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 48;  // 3 per graph node (Mono / Left / Right lanes)
+static const int kMaxInstances = 384;  // 3 per graph node (Mono / Left / Right lanes)
 static const double kMinHz = 10.0;
 static const double kMaxSeconds = 0.12;
 // 0.12s @ 192 kHz + headroom
@@ -20,7 +21,8 @@ static const int kMaxCapacity = 23048;
 
 struct State {
   bool active;
-  float buffer[kMaxCapacity];
+  void* poolBlock; // one shared-pool block with all the buffers of this instance
+  float* buffer; // in the pool block
   int capacity;
   int writeIndex;
   int filled;
@@ -136,6 +138,11 @@ extern "C" int soemdsp_comb_resonator_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       State& s = gPool[i];
+      unsigned long bytes = sizeof(float) * (unsigned long)(kMaxCapacity);
+      void* blk = soemdsp::memory_pool::alloc(bytes);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      s.poolBlock = blk;
+      s.buffer = (float*)blk;
       s.capacity = 0;
       s.writeIndex = 0;
       s.filled = 0;
@@ -151,6 +158,11 @@ extern "C" int soemdsp_comb_resonator_create() {
 
 extern "C" void soemdsp_comb_resonator_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
+    gPool[handle - 1].poolBlock = nullptr;
+    gPool[handle - 1].buffer = nullptr;
+  }
   gPool[handle - 1].active = false;
 }
 

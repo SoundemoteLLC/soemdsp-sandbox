@@ -43,7 +43,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 
 static inline double dsp_trunc(double x) {
   return (double)(long long)x;

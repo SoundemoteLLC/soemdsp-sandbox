@@ -5,7 +5,7 @@
 
 namespace {
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 
 struct PitchQuantizerState {
   bool active;

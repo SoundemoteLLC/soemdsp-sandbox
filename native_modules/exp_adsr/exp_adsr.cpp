@@ -22,7 +22,7 @@ static const char kMetadataJson[] =
     "\"kind\":\"envelope\""
   "}";
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 enum AdsrStage {
   STAGE_OFF = 0,

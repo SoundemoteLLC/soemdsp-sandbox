@@ -7,18 +7,20 @@
 // Control coeffs (db→gain, attack/release exp) rebuild only when inputs change.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 static const int kMaxSamples = 16384;
 
 struct State {
   bool active;
-  float delayL[kMaxSamples];
-  float delayR[kMaxSamples];
+  void* poolBlock; // one shared-pool block with all the buffers of this instance
+  float* delayL; // in the pool block
+  float* delayR; // in the pool block
   int pos;
   int cap;
   double gain;
@@ -123,6 +125,12 @@ extern "C" int soemdsp_lookahead_limiter_create() {
   for (int i = 0; i < kMaxInstances; i += 1) {
     if (!gPool[i].active) {
       State& s = gPool[i];
+      unsigned long bytes = sizeof(float) * (unsigned long)(kMaxSamples) + sizeof(float) * (unsigned long)(kMaxSamples);
+      void* blk = soemdsp::memory_pool::alloc(bytes);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      s.poolBlock = blk;
+      s.delayL = (float*)blk;
+      s.delayR = s.delayL + (kMaxSamples);
       for (int n = 0; n < kMaxSamples; n += 1) {
         s.delayL[n] = 0.0f;
         s.delayR[n] = 0.0f;
@@ -151,6 +159,12 @@ extern "C" int soemdsp_lookahead_limiter_create() {
 
 extern "C" void soemdsp_lookahead_limiter_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
+    gPool[handle - 1].poolBlock = nullptr;
+    gPool[handle - 1].delayL = nullptr;
+    gPool[handle - 1].delayR = nullptr;
+  }
   gPool[handle - 1].active = false;
 }
 

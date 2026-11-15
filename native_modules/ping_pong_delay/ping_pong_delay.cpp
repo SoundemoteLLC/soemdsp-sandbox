@@ -38,7 +38,7 @@ using namespace soemdsp_maths;
 
 // Small state-slot pool only (no delay audio in BSS — §2b). Rings come from
 // memory.grow, sized to each instance's live delay need.
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kMaxBlockFrames = 128;
 static const double kMaxDelaySeconds = 8.0;
 static const int kMaxDelaySamples = 1536002; // hard cap @ 192 kHz × 8 s

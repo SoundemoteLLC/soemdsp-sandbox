@@ -34,7 +34,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const int kFbDelaySamples = 1;
 static const double kExpDbSpan = 5.0;
 static const double kLn10 = 2.302585092994046;
@@ -187,6 +187,7 @@ extern "C" double soemdsp_pluck_envelope_fb_sample(
       s.latchRelease = rel;
       s.latchReleaseShape = relShape;
       s.latchInputMode = mode;
+      s.latchAmplitude = amp;
       s.hasLatch = true;
     }
     atk = s.latchAttack;
@@ -194,6 +195,7 @@ extern "C" double soemdsp_pluck_envelope_fb_sample(
     rel = s.latchRelease;
     relShape = s.latchReleaseShape;
     mode = s.latchInputMode;
+    amp = s.latchAmplitude; // the header promised this; it was declared but never latched
   } else {
     s.hasLatch = false;
   }
@@ -230,6 +232,6 @@ extern "C" double soemdsp_pluck_envelope_fb_sample(
   return (out * 0.0 == 0.0) ? out : 0.0;
 }
 
-extern "C" int soemdsp_pluck_envelope_fb_version() { return 4; }
+extern "C" int soemdsp_pluck_envelope_fb_version() { return 5; }
 extern "C" const char* soemdsp_pluck_envelope_fb_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_pluck_envelope_fb_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

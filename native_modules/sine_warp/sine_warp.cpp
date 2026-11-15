@@ -30,7 +30,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-constexpr int kMaxInstances = 64;
+constexpr int kMaxInstances = 128;
 
 struct SineWarpState {
   bool active;

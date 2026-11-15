@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 enum Phase { PHASE_IDLE = 0, PHASE_ATTACK = 1, PHASE_HOLD = 2, PHASE_RELEASE = 3 };
 

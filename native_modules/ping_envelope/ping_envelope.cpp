@@ -18,7 +18,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const double kLongFeedbackAmp = 0.7718;
 static const double kLongReleaseHzMax = 1000.0;
 static const double kShortReleaseHzMax = 10.0;

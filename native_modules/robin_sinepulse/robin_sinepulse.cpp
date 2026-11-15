@@ -43,7 +43,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const int kMaxVoices = 8;    // Voices choice 1..8
 static const int kSlots = 16;       // voices + fading copies of stolen voices
 static const double kRefFreq = 50.0;              // rsFreqSweeper::refFreq

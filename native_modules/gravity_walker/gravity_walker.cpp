@@ -14,7 +14,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kKeyCount = 128;
 static const int kMaxPool = 256;
 static const double kFlag1 = 562949953421312.0;  // 2^49

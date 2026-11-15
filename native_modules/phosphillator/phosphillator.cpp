@@ -24,7 +24,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 8;
+static const int kMaxInstances = 128;
 static const int kMaxPathPoints = 8192;
 
 struct PhosphillatorState {

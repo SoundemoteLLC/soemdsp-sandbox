@@ -68,7 +68,7 @@ $modules = @(
     "soemdsp_graph_set_host_playing",
     "soemdsp_graph_set_node_scope_taps",
     "soemdsp_graph_add_node", "soemdsp_graph_connect",
-    "soemdsp_graph_disconnect", "soemdsp_graph_disconnect_param_mod", "soemdsp_graph_connect_live", "soemdsp_graph_overflow", "soemdsp_graph_limit",
+    "soemdsp_graph_disconnect", "soemdsp_graph_disconnect_param_mod", "soemdsp_graph_connect_live", "soemdsp_graph_overflow", "soemdsp_graph_limit", "soemdsp_graph_type_capacity", "soemdsp_memory_stat", "soemdsp_memory_set_budget_mb", "soemdsp_graph_type_uses_pool",
     "soemdsp_graph_set_param",
     "soemdsp_graph_push_midi",
     "soemdsp_graph_push_midi_hr",
@@ -674,7 +674,7 @@ Set-Content -LiteralPath $responseFile -Value $responseLines -Encoding ascii
 $ldArgs = @(
   "--no-entry",
   "--export-memory",
-  "--max-memory=1073741824",
+  "--max-memory=4294967296",
   "@$responseFile",
   "-o", "$combinedDir\soemdsp_combined.wasm"
 ) + $objFiles

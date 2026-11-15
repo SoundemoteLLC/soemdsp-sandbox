@@ -15,7 +15,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 
 
 // 2-node EXPONENTIAL curve, built directly as a Graph (graph.h) instead of

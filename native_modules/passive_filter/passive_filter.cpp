@@ -13,7 +13,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 static const int kMaxStages = 4;
 
 struct Pole {

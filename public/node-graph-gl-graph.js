@@ -1756,7 +1756,18 @@ function nodeGraphGlGraphWireBakeUpdate(p) {
     nodeGraphGlGraphWireBakeDrop();
     return null;
   }
-  // Same strokes as the vector path, in zoom-1 world px (camera uniform).
+  nodeGraphGlGraphWireBakeStroke(batch, list, p);
+  if (nodeGraphGlLinesEnd(batch, "alpha") === false) {
+    nodeGraphGlGraphWireBakeDrop();
+    return null;
+  }
+  st.wireBake = { canvas, x: rx0, y: ry0, w: pw / scale, h: ph / scale, scale, sig: h };
+  return st.wireBake;
+}
+
+/** Same strokes as the vector path, in zoom-1 world px (camera uniform). list: [{ wire, picked }]. */
+function nodeGraphGlGraphWireBakeStroke(batch, list, p) {
+  const st = nodeGraphGlGraphState;
   for (let i = 0; i < list.length; i += 1) {
     const { wire, picked } = list[i];
     const style = wire.style === "trace" ? "trace" : "ribbon";
@@ -1779,12 +1790,78 @@ function nodeGraphGlGraphWireBakeUpdate(p) {
       nodeGraphGlLinesRibbon(batch, pts, stroke, feather, rgba, wire.param && !picked ? (st.wireDip ?? 0.35) : 0, st.wireDipWidth ?? 0.5);
     }
   }
-  if (nodeGraphGlLinesEnd(batch, "alpha") === false) {
-    nodeGraphGlGraphWireBakeDrop();
+}
+
+function nodeGraphGlGraphWireLiveBakeDrop() {
+  const bake = nodeGraphGlGraphState.wireLiveBake;
+  nodeGraphGlGraphState.wireLiveBake = null;
+  if (bake?.canvas) {
+    bake.canvas.width = 1;
+    bake.canvas.height = 1;
+  }
+}
+
+/**
+ * Live wires (drag / port-connection preview) under UIDEV pixelate wires:
+ * rasterized at zoom 1 into their own small picture every present, so a
+ * cable being dragged gets the same pixels as the baked ones instead of a
+ * smooth vector stroke. Drawn on top of the patch-cable bake. Same p as
+ * nodeGraphGlGraphWireBakeUpdate. Returns the picture, or null (none live).
+ */
+function nodeGraphGlGraphWireLiveBakeUpdate(p) {
+  const st = nodeGraphGlGraphState;
+  const list = [];
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let i = 0; i < st.wires.length; i += 1) {
+    const wire = st.wires[i];
+    if (!nodeGraphGlGraphWireIsLive(wire)) continue;
+    const xy = wire.xy;
+    if (!xy || xy.length < 4) continue;
+    list.push({ wire, picked: false });
+    for (let q = 0; q < xy.length; q += 2) {
+      const x = xy[q];
+      const y = xy[q + 1];
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  if (!list.length || !Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) {
+    nodeGraphGlGraphWireLiveBakeDrop();
     return null;
   }
-  st.wireBake = { canvas, x: rx0, y: ry0, w: pw / scale, h: ph / scale, scale, sig: h };
-  return st.wireBake;
+  const edge = Math.ceil(Math.max(p.halfWorld, p.traceHalf, p.paramHalf) + p.feather + 4);
+  const max = NODE_GRAPH_WIRE_BAKE_MAX;
+  const rx0 = Math.floor(x0) - edge;
+  const ry0 = Math.floor(y0) - edge;
+  const spanW = Math.ceil(x1) + edge - rx0;
+  const spanH = Math.ceil(y1) + edge - ry0;
+  // Same rule as the patch bake: 1 px per world px, below that only when
+  // the cable is longer than the cap.
+  const scale = Math.min(1, max / Math.max(1, spanW), max / Math.max(1, spanH));
+  const pw = Math.max(1, Math.min(max, Math.ceil(spanW * scale)));
+  const ph = Math.max(1, Math.min(max, Math.ceil(spanH * scale)));
+  const canvas = st.wireLiveBake?.canvas || document.createElement("canvas");
+  if (canvas.width !== pw) canvas.width = pw;
+  if (canvas.height !== ph) canvas.height = ph;
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { scale: 1, transparent: true, camera: { x: rx0, y: ry0, zoom: scale } })
+    : null;
+  if (!batch) {
+    nodeGraphGlGraphWireLiveBakeDrop();
+    return null;
+  }
+  nodeGraphGlGraphWireBakeStroke(batch, list, p);
+  if (nodeGraphGlLinesEnd(batch, "alpha") === false) {
+    nodeGraphGlGraphWireLiveBakeDrop();
+    return null;
+  }
+  st.wireLiveBake = { canvas, x: rx0, y: ry0, w: pw / scale, h: ph / scale, scale };
+  return st.wireLiveBake;
 }
 
 // UIDEV "pixelate wire dots on zoom" (off by default; off = the live vector
@@ -1923,7 +2000,8 @@ function nodeGraphGlGraphDotBakeUpdate(p) {
 /** The baked cables, under whatever the wire batch just presented (live drag strokes stay on top). */
 function nodeGraphGlGraphWireBakeDraw(wireCanvas, cam, zoom, backing) {
   const bake = nodeGraphGlGraphState.wireBake;
-  if (!bake?.canvas || !wireCanvas || !cam || !(zoom > 0)) return;
+  const live = nodeGraphGlGraphState.wireLiveBake;
+  if ((!bake?.canvas && !live?.canvas) || !wireCanvas || !cam || !(zoom > 0)) return;
   if (typeof nodeGraphSharedGlFaceTextureOnly === "function" && nodeGraphSharedGlFaceTextureOnly(wireCanvas)) return;
   const ctx = wireCanvas.getContext("2d");
   if (!ctx) return;
@@ -1931,10 +2009,17 @@ function nodeGraphGlGraphWireBakeDraw(wireCanvas, cam, zoom, backing) {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = "destination-over";
   // Same filter rule as the module pictures: nearest-neighbour above 2.5x.
   ctx.imageSmoothingEnabled = !(zoom > 2.5);
-  ctx.drawImage(bake.canvas, (bake.x - cam.x) * k, (bake.y - cam.y) * k, bake.w * k, bake.h * k);
+  if (bake?.canvas) {
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.drawImage(bake.canvas, (bake.x - cam.x) * k, (bake.y - cam.y) * k, bake.w * k, bake.h * k);
+  }
+  // A cable being dragged: its own zoom-1 picture, on top of the patch cables.
+  if (live?.canvas) {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(live.canvas, (live.x - cam.x) * k, (live.y - cam.y) * k, live.w * k, live.h * k);
+  }
   ctx.restore();
 }
 
@@ -2313,16 +2398,16 @@ function nodeGraphGlGraphPresent(options = {}) {
   if (nodeGraphGlGraphState.thickGen !== nodeGraphGlGraphState.gen || !(thick > 0)) {
     nodeGraphGlGraphState.thickGen = nodeGraphGlGraphState.gen;
     const style = getComputedStyle(host);
-    thick = Number.parseFloat(style.getPropertyValue("--node-wire-thickness")) || 3.46;
+    thick = Number.parseFloat(style.getPropertyValue("--node-wire-thickness")) || 3;
     const parsedDot = Number.parseFloat(style.getPropertyValue("--node-wire-patch-point-size"));
     // Same default as UIDEV nodeUiDevWirePatchPointSize (locked 7.86).
     dotSize = Number.isFinite(parsedDot) ? parsedDot : 7.86;
     nodeGraphGlGraphState.thick = thick;
     nodeGraphGlGraphState.dotSize = dotSize;
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
-    nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 1.08;
+    nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 1;
     const paramDot = Number.parseFloat(style.getPropertyValue("--node-param-wire-dot-size"));
-    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 3.64;
+    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 3.3;
     const wireDip = Number.parseFloat(style.getPropertyValue("--node-wire-dip"));
     nodeGraphGlGraphState.wireDip = Number.isFinite(wireDip) ? Math.min(1, Math.max(0, wireDip)) : 0.35;
     const wireDipWidth = Number.parseFloat(style.getPropertyValue("--node-wire-dip-width"));
@@ -2358,6 +2443,12 @@ function nodeGraphGlGraphPresent(options = {}) {
     })
     : null;
   if (!wireBake && !view && nodeGraphGlGraphState.wireBake) nodeGraphGlGraphWireBakeDrop();
+  // The cable being dragged follows the same pixels (its own picture, every
+  // present), also when no patch cable exists yet to make the main bake.
+  const wireLiveBake = nodeGraphGlGraphWireBakeWanted(view, frameCamera, wireCanvas)
+    ? nodeGraphGlGraphWireLiveBakeUpdate({ halfWorld, traceHalf, paramHalf, feather: wireFeather, railEnds, railEnd })
+    : null;
+  if (!wireLiveBake && !view && nodeGraphGlGraphState.wireLiveBake) nodeGraphGlGraphWireLiveBakeDrop();
   // Wire end dots by module id: drawn in the module's stack below, so a
   // module in front hides the dots of the one behind (cables stay under).
   const stackedIds = new Set((nodeGraphGlGraphState.stack?.entries || []).map((entry) => entry.plate.id));
@@ -2418,8 +2509,10 @@ function nodeGraphGlGraphPresent(options = {}) {
         rgba = [0.95, 0.86, 0.45, 1];
       }
     }
-    // Baked cables are already in the zoom-1 picture; live ones stroke here.
-    if (!wireBake || nodeGraphGlGraphWireIsLive(wire)) {
+    // Baked cables are already in the zoom-1 picture, and so is a live one
+    // whenever its own picture was made; otherwise it strokes here.
+    const isLive = nodeGraphGlGraphWireIsLive(wire);
+    if (isLive ? !wireLiveBake : !wireBake) {
       const stroke = frameCamera ? strokeWorld : strokeWorld * zoom;
       let pts = frameCamera ? src : screen.subarray(0, src.length);
       if (wire.param && railEnds.length) {
@@ -2560,12 +2653,21 @@ function nodeGraphGlGraphPresent(options = {}) {
         if (inks) for (let i = 0; i < group.displays.length; i += 1) inks.set(group.displays[i].canvas, { layer: ink, group });
       }
       if (endsByNode.size || dotBake) {
+        // UIDEV wire dot shadows off: the dots' soft edge lands unmultiplied
+        // where nothing is under it on this canvas, so it reads as part of the
+        // cable below instead of a dim ring (see "straight" in gl-line-renderer).
+        const dotsStraight = typeof nodeGraphWireDotShadows === "function" && !nodeGraphWireDotShadows();
         let endsLayer = null;
+        const newEndsLayer = () => {
+          const layer = nodeGraphGlLinesLayer(batch);
+          if (layer && dotsStraight) layer.quadBlend = "straight";
+          return layer;
+        };
         for (let i = 0; i < group.plates.length; i += 1) {
           const bakedDots = dotBake ? dotBake.byNode.get(group.plates[i].id) : null;
           if (bakedDots) {
             // This module's baked dots, in its own stack (front modules cover them).
-            endsLayer = endsLayer || nodeGraphGlLinesLayer(batch);
+            endsLayer = endsLayer || newEndsLayer();
             const picture = nodeGraphGlLinesImage(endsLayer, bakedDots.canvas, bakedDots.x, bakedDots.y, bakedDots.w, bakedDots.h, {
               nearest: pixelated,
               cache: true,
@@ -2573,12 +2675,13 @@ function nodeGraphGlGraphPresent(options = {}) {
             });
             if (picture) {
               picture.pin = "";
+              if (dotsStraight) picture.blend = "straight";
               pictures.push(picture);
             }
           }
           const own = endsByNode.get(group.plates[i].id);
           if (!own) continue;
-          endsLayer = endsLayer || nodeGraphGlLinesLayer(batch);
+          endsLayer = endsLayer || newEndsLayer();
           for (let d = 0; d < own.length; d += 1) nodeGraphGlGraphDrawWireEnd(endsLayer, own[d], wireFeather);
         }
       }
@@ -2605,7 +2708,7 @@ function nodeGraphGlGraphPresent(options = {}) {
   veilBatch._blend = "alpha";
   const platesOk = nodeGraphGlLinesEnd(batch, "alpha") !== false;
   const wiresOk = nodeGraphGlLinesEnd(wireBatch, "alpha") !== false;
-  if (wireBake) nodeGraphGlGraphWireBakeDraw(wireCanvas, frameCamera, zoom, scale);
+  if (wireBake || wireLiveBake) nodeGraphGlGraphWireBakeDraw(wireCanvas, frameCamera, zoom, scale);
   const contactOk = nodeGraphGlLinesEnd(contactBatch, "max") !== false;
   const veilOk = nodeGraphGlLinesEnd(veilBatch, "alpha") !== false;
   // "max" stores straight coverage. SRC_ALPHA on this premultipliedAlpha:false
@@ -2620,7 +2723,7 @@ function nodeGraphGlGraphPresent(options = {}) {
       h: canvas.height,
       cam: frameCamera ? { x: frameCamera.x, y: frameCamera.y, zoom: frameCamera.zoom } : null,
       batches: [batch, wireBatch, contactBatch, veilBatch, trailBatch],
-      wireBake: Boolean(wireBake),
+      wireBake: Boolean(wireBake || wireLiveBake),
       wireScale: scale,
       pictures,
       inks,

@@ -13,7 +13,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 static const int kMaxVoices = 32;
 static const int kMidiNotes = 128;
 

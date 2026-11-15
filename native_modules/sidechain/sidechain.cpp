@@ -58,7 +58,7 @@ static inline double mix_out(double dry, double wet, double m) {
 }
 // ---------------------------------------------------------------------------
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 
 struct State {
   bool active;

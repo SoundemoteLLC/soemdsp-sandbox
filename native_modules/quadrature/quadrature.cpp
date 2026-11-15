@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const int kSections = 4;
 
 // Published pole radii; sections use radius² as coeff.

@@ -535,7 +535,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.14.5-g332";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.15.1-pool";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -2180,6 +2180,12 @@ function handleNodeGraphLiveWorkletMessage(event) {
     if (typeof setNodeGraphLivePlanStatus === "function") {
       setNodeGraphLivePlanStatus("PORTAL_DEBUG is in the console Ã¢â‚¬â€ copy that", "warn");
     }
+  } else if (message.type === "nativeGraphLimits") {
+    nodeGraphPrintEngineLimits(message.limits || {});
+  } else if (message.type === "nativeMemory") {
+    nodeGraphOnEngineMemory(message.memory || {});
+  } else if (message.type === "nativeTypeCapacity") {
+    nodeGraphOnTypeCapacity(message.capacity || {});
   } else if (message.type === "nativeGraphStatus") {
     setNodeGraphLiveEvidence("native-graph", message);
     const status = String(message.status || "");
@@ -2520,6 +2526,151 @@ function nodeGraphLiveConnectionUpdatePayload(plan = {}, audio = {}) {
  * @returns {Promise<boolean>} true if the plan applied (or was intentionally
  *   preserved after a recoverable error); false if audio was muted/stopped.
  */
+// ---------------------------------------------------------------------------
+// Engine limits in the console: printed once when the engine starts, and a
+// counter every time an audio module is added to the patch. A quick reminder
+// of limits you would otherwise have to remember; anything over is an error.
+// ---------------------------------------------------------------------------
+function nodeGraphEngineAudioNodes() {
+  const audioTypes = typeof NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPE_SET !== "undefined"
+    ? NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPE_SET
+    : null;
+  const nodes = Array.isArray(nodeGraphMvp.patch?.nodes) ? nodeGraphMvp.patch.nodes : [];
+  return audioTypes ? nodes.filter((n) => audioTypes.has(String(n.type))) : [];
+}
+
+function nodeGraphPrintEngineLimits(limits) {
+  nodeGraphMvp.engineLimits = limits;
+  const audio = nodeGraphEngineAudioNodes().length;
+  console.info(
+    `[engine limits] graph engine v${limits.version}\n`
+    + `  channels per module:      ${limits.channels}  (Mono, Left, Right and extras; fixed)\n`
+    + `  audio modules:            ${limits.nodes}  (this patch has ${audio})\n`
+    + `  cables:                   ${limits.connections}\n`
+    + `  modulation wires:         ${limits.modEdges}\n`
+    + `  nodes in one feedback loop: ${limits.loopNodes}\n`
+    + `  frames per block:         ${limits.blockFrames}\n`
+    + `  memory for heavy modules: ${limits.memoryMb} MB  (reverbs, delays, noise ... take it when added, give it back when removed)\n`
+    + `  Per-type slots (soft clipper, oscillator, reverbs ...) are shown as "x / max" when you add one.\n`
+    + `  Going over any of these stops the engine and prints an error here.`,
+  );
+}
+
+function nodeGraphPrintModuleCount(type) {
+  const nodes = nodeGraphEngineAudioNodes();
+  const total = nodes.length;
+  const same = nodes.filter((n) => String(n.type) === type).length;
+  const max = nodeGraphMvp.engineLimits?.nodes || 0;
+  const cap = nodeGraphMvp.engineTypeCapacity?.[type];
+  const capText = cap ? `${same} / ${cap} ${type}` : `${same} / ? ${type}`;
+  const totalText = max ? `${total} / ${max} audio modules` : `${total} audio modules`;
+  const text = `[engine] ${capText}  \u00b7  ${totalText}`;
+  if ((cap && same > cap) || (max && total > max)) {
+    console.error(`${text}  OVER THE LIMIT: the engine stops when they are all connected`);
+  } else {
+    console.info(text);
+  }
+}
+
+// Called with every plan send: prints a counter for each audio module added since the last call.
+function nodeGraphReportModuleSpawns() {
+  const nodes = nodeGraphEngineAudioNodes();
+  const ids = new Set(nodes.map((n) => String(n.id)));
+  const seen = nodeGraphMvp._engineSeenModuleIds;
+  nodeGraphMvp._engineSeenModuleIds = ids;
+  if (!(seen instanceof Set)) return; // first plan of the session: only a baseline
+  const added = nodes.filter((n) => !seen.has(String(n.id)));
+  if (added.length || ids.size < seen.size) nodeGraphQueryEngineMemory();
+  if (!added.length) return;
+  const max = nodeGraphMvp.engineLimits?.nodes || 0;
+  if (added.length > 4) {
+    console.info(`[engine] ${added.length} modules added  \u00b7  ${nodes.length}${max ? ` / ${max}` : ""} audio modules`);
+    if (max && nodes.length > max) console.error(`[engine] ${nodes.length} / ${max} audio modules: OVER THE LIMIT`);
+    return;
+  }
+  const types = [...new Set(added.map((n) => String(n.type)))];
+  const missing = types.filter((t) => nodeGraphMvp.engineTypeCapacity?.[t] === undefined);
+  if (missing.length && nodeGraphMvp.live?.node?.port) {
+    nodeGraphMvp.engineCapacityPending = new Set([...(nodeGraphMvp.engineCapacityPending || []), ...types]);
+    nodeGraphMvp.live.node.port.postMessage({ type: "queryTypeCapacity", types: missing });
+    return; // printed when the engine answers
+  }
+  for (const type of types) nodeGraphPrintModuleCount(type);
+}
+
+// ---------------------------------------------------------------------------
+// Memory budget for heavy modules (Command Center). An app setting kept in this browser, not part of a
+// patch: reverbs, delays, chorus, noise ... take their buffers from one shared pool of this size.
+// Going over it stops the engine with an error naming the limit (never silent).
+// ---------------------------------------------------------------------------
+const nodeGraphMemoryBudgetKey = "soemdsp.memoryBudgetMb";
+const nodeGraphMemoryBudgetDefaultMb = 3072;
+const nodeGraphMemoryBudgetMinMb = 256;
+const nodeGraphMemoryBudgetMaxMb = 3500; // the engine's address space is 4 GiB, minus its fixed ~200 MB
+
+function nodeGraphClampMemoryBudgetMb(value) {
+  const v = Math.round(Number(value));
+  if (!Number.isFinite(v)) return nodeGraphMemoryBudgetDefaultMb;
+  return Math.min(nodeGraphMemoryBudgetMaxMb, Math.max(nodeGraphMemoryBudgetMinMb, v));
+}
+
+function nodeGraphMemoryBudgetMb() {
+  try {
+    const stored = localStorage.getItem(nodeGraphMemoryBudgetKey);
+    if (stored !== null) return nodeGraphClampMemoryBudgetMb(stored);
+  } catch (_e) { /* storage unavailable: default */ }
+  return nodeGraphMemoryBudgetDefaultMb;
+}
+
+function nodeGraphSendMemoryBudget(workletNode) {
+  const node = workletNode || nodeGraphMvp.live?.node;
+  try {
+    node?.port?.postMessage({ type: "setMemoryBudget", mb: nodeGraphMemoryBudgetMb() });
+  } catch (_e) { /* the worklet may not exist yet: it is sent again when it starts */ }
+}
+
+function syncNodeGraphMemoryBudgetControl() {
+  const input = document.getElementById("nodeSceneMemoryBudgetMb");
+  if (input && document.activeElement !== input) input.value = String(nodeGraphMemoryBudgetMb());
+}
+
+function handleNodeGraphMemoryBudgetChange(event) {
+  const input = event.currentTarget || document.getElementById("nodeSceneMemoryBudgetMb");
+  const mb = nodeGraphClampMemoryBudgetMb(input?.value);
+  try { localStorage.setItem(nodeGraphMemoryBudgetKey, String(mb)); } catch (_e) { /* not saved */ }
+  if (input) input.value = String(mb);
+  nodeGraphSendMemoryBudget();
+  console.info(`[engine] memory budget for heavy modules set to ${mb} MB`);
+  nodeGraphQueryEngineMemory();
+}
+
+// Memory the heavy modules hold, printed after audio modules are added or removed (asked a moment after the
+// plan is sent, once the engine has applied it).
+function nodeGraphQueryEngineMemory() {
+  if (nodeGraphMvp._engineMemoryTimer) clearTimeout(nodeGraphMvp._engineMemoryTimer);
+  nodeGraphMvp._engineMemoryTimer = setTimeout(() => {
+    nodeGraphMvp._engineMemoryTimer = 0;
+    nodeGraphMvp.live?.node?.port?.postMessage({ type: "queryMemory" });
+  }, 500);
+}
+
+function nodeGraphOnEngineMemory(memory) {
+  const last = nodeGraphMvp.engineMemory;
+  nodeGraphMvp.engineMemory = memory;
+  if (last && last.usedMb === memory.usedMb) return;
+  if (!last && !memory.usedMb) return; // nothing heavy yet
+  const text = `[engine] memory ${memory.usedMb} / ${memory.budgetMb} MB used by heavy modules (peak ${memory.peakMb} MB)`;
+  if (memory.usedMb > memory.budgetMb * 0.9) console.error(`${text}  NEARLY FULL`);
+  else console.info(text);
+}
+
+function nodeGraphOnTypeCapacity(capacity) {
+  nodeGraphMvp.engineTypeCapacity = { ...(nodeGraphMvp.engineTypeCapacity || {}), ...capacity };
+  const pending = nodeGraphMvp.engineCapacityPending ? [...nodeGraphMvp.engineCapacityPending] : [];
+  nodeGraphMvp.engineCapacityPending = new Set();
+  for (const type of pending) nodeGraphPrintModuleCount(type);
+}
+
 async function sendNodeGraphLivePlan() {
   if (!nodeGraphMvp.live.node && !nodeGraphMvp.live.context) {
     return false;
@@ -2532,6 +2683,7 @@ async function sendNodeGraphLivePlan() {
   );
 
   try {
+    nodeGraphReportModuleSpawns();
     const plan = nodeGraphBuildLivePlan();
     nodeGraphMvp.live.planSendGen = (nodeGraphFiniteNumber(nodeGraphMvp.live.planSendGen)) + 1;
     const planSendGen = nodeGraphMvp.live.planSendGen;
@@ -3462,12 +3614,12 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-visual.js?v=perf-20261015",
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
-  "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.14.3-limits-2",
+  "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1-limits-print-2-budget",
+  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.15.4-budget",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=step-register-1-limits-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
-  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.14.3-metaview-1",
+  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.15.4-budget",
   "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015",
   "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-db-1",
   "./public/modules/_shared/output-amplitude.js?v=output-amp-1",
@@ -3540,6 +3692,7 @@ async function createNodeGraphLiveWorkletNode(context, plan = null) {
     },
   );
   workletNode.port.onmessage = handleNodeGraphLiveWorkletMessage;
+  nodeGraphSendMemoryBudget(workletNode); // before the engine loads, so its first modules already see the setting
   workletNode.onprocessorerror = () => {
     setNodeGraphLiveProcessorError("AudioWorklet processor crashed");
   };

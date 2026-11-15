@@ -208,6 +208,11 @@ NodeLiveAudioProcessor.prototype.setConnections = function setConnections(plan, 
       inputs: (Array.isArray(sink?.inputs) ? sink.inputs : []).map((input) => ({ ...input })),
     }));
     this.syncVisualInputBuffers();
+    // A wire edit changes which modules need scope rings (a new MOD source,
+    // a new visual sink feed). The baked list only rebuilt on setPlan, so a
+    // module that became a MOD source by an edit published no samples and
+    // its MOD ghost sat at 0 until the patch was reloaded.
+    this.compileScopeCapture?.();
     if (plan?.timing && typeof this.normalizePatchTiming === "function") {
       this.timing = this.normalizePatchTiming(plan.timing);
     }

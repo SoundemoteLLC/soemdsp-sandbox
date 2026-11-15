@@ -1,5 +1,5 @@
 // soemdsp-native-module: robin_leaky_envelope
-// soemdsp-native-label: Robin Leaky Envelope
+// soemdsp-native-label: Decay Deceleration
 // soemdsp-native-target: robinLeakyEnvelope
 // soemdsp-native-kind: envelope
 //
@@ -24,7 +24,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const double kLn60dB = -6.907755278982137; // ln(0.001)
 static const double kHoldSeconds = 1000.0;
 static const double kIdleLevel = 1.0e-7;
@@ -48,7 +48,7 @@ static State gPool[kMaxInstances];
 static const char kMetadataJson[] =
   "{"
     "\"module\":\"robin_leaky_envelope\","
-    "\"label\":\"Robin Leaky Envelope\","
+    "\"label\":\"Decay Deceleration\","
     "\"targetType\":\"robinLeakyEnvelope\","
     "\"kind\":\"envelope\""
   "}";

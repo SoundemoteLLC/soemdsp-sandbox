@@ -19,7 +19,7 @@ namespace {
 using namespace soemdsp_maths;
 using namespace softpop;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const unsigned int kSeedNoise = kSeedAudio;
 static const double kPitchModCents = 2400.0;
 

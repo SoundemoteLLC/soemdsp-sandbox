@@ -54,7 +54,7 @@ namespace {
 using namespace soemdsp_maths;
 
 constexpr int kBands = 5;
-constexpr int kMaxInstances = 256;
+constexpr int kMaxInstances = 384;
 constexpr double kLn2 = 0.69314718055994531;
 constexpr double kBankMakeup = 2.5;   // bank sum trim (constant-peak bands pass ~1 harmonic each)
 constexpr double kBodyCutoffRatio = 0.7; // Body lowpass Hz = ratio * F1

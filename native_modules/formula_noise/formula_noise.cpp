@@ -117,7 +117,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128; // states are small (about 10 KB)
 
 struct FormulaNoiseState {
   bool active;

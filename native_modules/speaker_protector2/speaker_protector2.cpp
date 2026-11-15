@@ -15,7 +15,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const double kHpHz = 1000.0;
 static const double kThreshold = 1.9952623149688795; // 10^(6/20)
 static const double kDropDefault = 0.008;

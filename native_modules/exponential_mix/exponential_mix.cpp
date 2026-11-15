@@ -15,7 +15,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const double kEng = 0.001;
 // -ln(0.001) = ln(1000)
 static const double kNegLnEng = 6.907755278982137;

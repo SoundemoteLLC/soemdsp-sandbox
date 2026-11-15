@@ -7,18 +7,20 @@
 // Comb notches at n/delay. Reset zeros LFO only.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 384;
 // 0.25 s @ 192 kHz — flanger range with headroom if Time/Depth are large.
 static const int kMaxDelaySamples = 48000;
 
 struct FlangerState {
   bool active;
-  float buffer[kMaxDelaySamples];
+  void* poolBlock; // one shared-pool block with all the buffers of this instance
+  float* buffer; // in the pool block
   int writeIndex;
   double lfoPhase;
   double lastReset;
@@ -49,6 +51,11 @@ extern "C" int soemdsp_flanger_create() {
   for (int i = 0; i < kMaxInstances; i += 1) {
     if (!gPool[i].active) {
       FlangerState& s = gPool[i];
+      unsigned long bytes = sizeof(float) * (unsigned long)(kMaxDelaySamples);
+      void* blk = soemdsp::memory_pool::alloc(bytes);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      s.poolBlock = blk;
+      s.buffer = (float*)blk;
       clear_buffer(s);
       s.lfoPhase = 0.0;
       s.lastReset = 0.0;
@@ -61,6 +68,11 @@ extern "C" int soemdsp_flanger_create() {
 
 extern "C" void soemdsp_flanger_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
+    gPool[handle - 1].poolBlock = nullptr;
+    gPool[handle - 1].buffer = nullptr;
+  }
   gPool[handle - 1].active = false;
 }
 

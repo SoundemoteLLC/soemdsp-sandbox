@@ -28,7 +28,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 8;
+static const int kMaxInstances = 128;
 static const int kSosCount = 6;
 static const int kMaxHostFrames = 1024;
 static const int kMaxEngineFrames = kMaxHostFrames * 4;

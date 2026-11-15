@@ -35,7 +35,7 @@ namespace {
 using namespace soemdsp_maths;
 using namespace softpop;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 struct Chan {
   Noise noise;

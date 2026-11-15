@@ -1437,8 +1437,8 @@
           <label class="node-ui-dev-control">
             <span>signal wire thickness</span>
             <div class="node-ui-dev-control-row">
-              <input id="nodeUiDevWireThickness" type="range" min="0.5" max="12" step="0.01" value="3.46">
-              <output id="nodeUiDevWireThicknessValue" for="nodeUiDevWireThickness">3.46px</output>
+              <input id="nodeUiDevWireThickness" type="range" min="0.5" max="12" step="0.01" value="3">
+              <output id="nodeUiDevWireThicknessValue" for="nodeUiDevWireThickness">3px</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
@@ -1465,15 +1465,15 @@
           <label class="node-ui-dev-control">
             <span>param wire thickness</span>
             <div class="node-ui-dev-control-row">
-              <input id="nodeUiDevParamWireThickness" type="range" min="0.5" max="6" step="0.01" value="1.08">
-              <output id="nodeUiDevParamWireThicknessValue" for="nodeUiDevParamWireThickness">1.08px</output>
+              <input id="nodeUiDevParamWireThickness" type="range" min="0.5" max="6" step="0.01" value="1">
+              <output id="nodeUiDevParamWireThicknessValue" for="nodeUiDevParamWireThickness">1px</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
             <span>param wire end dot</span>
             <div class="node-ui-dev-control-row">
-              <input id="nodeUiDevParamWireDotSize" type="range" min="0" max="12" step="0.01" value="3.64">
-              <output id="nodeUiDevParamWireDotSizeValue" for="nodeUiDevParamWireDotSize">3.64px</output>
+              <input id="nodeUiDevParamWireDotSize" type="range" min="0" max="12" step="0.01" value="3.3">
+              <output id="nodeUiDevParamWireDotSizeValue" for="nodeUiDevParamWireDotSize">3.3px</output>
             </div>
           </label>
           <label class="node-ui-dev-check">
@@ -1494,6 +1494,13 @@
               id="nodeUiDevPixelateWireDotsOnZoom"
               type="checkbox">
             <span>pixelate wire dots on zoom</span>
+          </label>
+          <label class="node-ui-dev-check">
+            <input
+              id="nodeUiDevWireDotShadows"
+              type="checkbox"
+              checked>
+            <span>wire dot shadows</span>
           </label>
           <div class="node-color-row" style="--color-row-cells:3" data-color-row-cells="3">
           <label class="node-ui-dev-color-control">
@@ -2017,6 +2024,11 @@
               <label class="scene-context-global-smoothing-label" for="nodeSceneGlobalSmoothingSeconds" aria-label="Smoothing" data-tooltip-key="timing.globalSmoothing">&#x1F39A;&#xFE0F;</label>
               <input id="nodeSceneGlobalSmoothingSeconds" class="scene-context-global-smoothing-input" type="number" inputmode="decimal" step="0.001" min="0" autocomplete="off" aria-label="Global smoothing time in seconds" data-tooltip-key="timing.globalSmoothing" title="Global smoothing time in seconds. Drag to tune; double-click to type. Ctrl-click resets to one audio block." readonly>
               <span class="scene-context-global-smoothing-unit">sec</span>
+            </div>
+            <div id="nodeSceneMemoryBudgetControl" class="scene-context-global-smoothing-control" role="group" aria-label="Memory for heavy modules" title="Memory budget for heavy modules (reverbs, delays, chorus, noise ...). They take it when added and give it back when removed. Over budget the engine stops and prints an error.">
+              <label class="scene-context-global-smoothing-label" for="nodeSceneMemoryBudgetMb" aria-label="Memory">&#x1F9E0;</label>
+              <input id="nodeSceneMemoryBudgetMb" class="scene-context-global-smoothing-input" type="number" inputmode="numeric" step="128" min="256" max="3500" autocomplete="off" aria-label="Memory budget for heavy modules in megabytes">
+              <span class="scene-context-global-smoothing-unit">MB</span>
             </div>
             <div id="nodeSceneTimingControls" class="scene-context-timing-controls" role="group" aria-label="Patch timing"></div>
             <div class="scene-context-modular-view-controls" role="group" aria-label="Modular view">
@@ -3625,7 +3637,7 @@
   <script data-boot-defer type="text/plain" src="./public/modules/additiveGenerator/additive-waveform-display.js?v=additive-face-20261106-fb1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-pulse-explosion-display.js?v=pe-face-20261110-fb1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-pulse-train-display.js?v=pe-face-20261110-fb1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-live-runtime.js?v=2026.11.14.6-g332"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-live-runtime.js?v=2026.11.15.4-budget"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-controller-bootstrap.js?v=wire-break-trigger-0129"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-canvas-fit.js?v=no-phone-box-1-canvas-name-tileblend-1-canvasbg-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-screen-solo.js?v=one-stroke-1-dc-host-1-scircle-1"></script>
@@ -3638,7 +3650,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-render-live-event-bindings.js?v=sample-name-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-header-event-bindings.js?v=playhead-hbs-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-help-event-bindings.js?v=remove-workspace-view-0002"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-scene-menu-event-bindings.js?v=out-ch-5-cbz-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-scene-menu-event-bindings.js?v=out-ch-5-cbz-1-budget"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-uidev-event-bindings.js?v=plugin-ui-persist-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-settings-event-bindings.js?v=book-ui-script-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-slider-event-bindings.js?v=node-graph-slider-event-bindings-refactor-1780369200000"></script>

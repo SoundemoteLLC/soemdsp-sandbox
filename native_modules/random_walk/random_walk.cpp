@@ -34,7 +34,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 struct RandomWalkState {
   unsigned int seed;

@@ -17,7 +17,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128; // instances are tiny; the tables are one shared bank
 static const int kTableLen = 4096;
 static const int kSpecH = kTableLen / 2 - 1; // 2047
 static const int kFrameCount = 4;

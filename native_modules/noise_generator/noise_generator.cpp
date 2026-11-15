@@ -13,7 +13,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 // Block-processing boundary buffers, same fixed-size-static-array pattern
 // as fractal_brownian_noise and sabrina_reverb's process_block APIs.
 static const int kMaxBlockFrames = 2048;

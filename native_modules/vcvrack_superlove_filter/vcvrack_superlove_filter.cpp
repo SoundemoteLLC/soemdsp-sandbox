@@ -16,7 +16,7 @@ using namespace soemdsp_maths;
 
 namespace {
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 static const double kTrisawZeroCrossing = 0.75;
 static const double kLp18ModMin = -0.1;
 static const double kLp18ModMax = -6.0;

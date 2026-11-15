@@ -15,7 +15,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 
 // Heard / internal-carrier at Resonance 0.8, 48 kHz, after a short impulse.
 // Clean/Dirty track together (~0.248). Hard and Downsampled are their own loops.

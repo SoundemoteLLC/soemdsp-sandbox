@@ -30,7 +30,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 4;
+static const int kMaxInstances = 128;
 // Safety refuse only — ~30 min @ 48 kHz. Actual RAM is sized to the loaded file.
 static const int kMaxFrames = 48000 * 60 * 30;
 static const size_t kWasmPage = 65536;

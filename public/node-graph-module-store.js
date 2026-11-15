@@ -2619,8 +2619,8 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   robinLeakyEnvelope: {
     category: "envelope",
-    description: "Robin Leaky Envelope: Trigger starts a leaky-integrator decay whose speed glides from Start Decay to End Decay over Transition. Fast fall that settles slow, or into a hold (End Decay max). After Robin Schmidt (RS-MET).",
-    label: "Robin Leaky Envelope",
+    description: "Decay Deceleration (Robin Schmidt's leaky envelope): Trigger starts a leaky-integrator decay whose speed glides from Start Decay to End Decay over Transition. Fast fall that settles slow, or into a hold (End Decay max). After Robin Schmidt (RS-MET).",
+    label: "Decay Deceleration",
     notes: ["Trigger", "Start Decay", "End Decay", "Transition", "decay", "leaky integrator", "Robin Schmidt", "native"],
   },
   exponentialMix: {

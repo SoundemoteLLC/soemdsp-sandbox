@@ -336,7 +336,7 @@ double morphImpulse(
   return kernelR(a) * (1.0 - sym) + kernelR(-a) * sym;
 }
 
-constexpr int kMaxInstances = 16;
+constexpr int kMaxInstances = 128;
 
 void prepareSawCoeffsMul(DsfKernelCoeffs& c, double morph, double n, double mult) {
   if (c.ready && c.morph == morph && c.n == n) return;

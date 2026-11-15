@@ -18,7 +18,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 32;
+constexpr int kMaxInstances = 128;
 constexpr int kMaxBlockFrames = 2048;
 
 // Waveform choice indices (shop list).

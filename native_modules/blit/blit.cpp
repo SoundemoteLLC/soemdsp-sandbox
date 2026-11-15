@@ -66,7 +66,7 @@ namespace {
 using soemdsp_blit::sinApprox;
 using soemdsp_blit::BlitSaw;
 
-constexpr int kMaxInstances = 16;
+constexpr int kMaxInstances = 128;
 struct SlotState {
   BlitSaw sawA;   // phase offset 0 -- feeds Saw directly.
   BlitSaw sawB;   // phase offset 0.5 cycle -- subtracted to form Square.

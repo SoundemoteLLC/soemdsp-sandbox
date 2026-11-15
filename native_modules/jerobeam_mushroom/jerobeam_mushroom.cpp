@@ -17,7 +17,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 struct MushroomState {
   bool active;
   double phase;

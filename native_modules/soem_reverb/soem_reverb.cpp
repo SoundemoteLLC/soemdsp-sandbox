@@ -13,6 +13,7 @@
 // is a simplified peak follower so wet gain still tracks input.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
@@ -20,7 +21,7 @@ using namespace soemdsp_maths;
 
 // Memory: float buffers live in a flat pool (not inside the state struct) so
 // scalar IO fields stay at stable low offsets and we never stack-copy state.
-constexpr int kMaxInstances = 4;
+constexpr int kMaxInstances = 128; // tiny slots; the delay lines come from the shared memory pool
 constexpr int kMaxDelays = 12;
 // Echo/Diffuse max = 1 s. Size like delay_effect: seconds * design rate (192 kHz).
 // Engine rate can be host*oversampling; bufferSize uses live sampleRate up to this cap.
@@ -211,7 +212,11 @@ struct SilenceDetector {
 };
 
 // Flat sample storage — one row per delay line, not nested in state structs.
-static float gDelayPool[kMaxInstances][kLinesPerInstance][kMaxDelaySamples];
+// Each instance takes one block of kLinesPerInstance lines from the shared memory pool when created.
+static float* gDelayBlock[kMaxInstances];
+static inline float* delay_line(int instanceIndex, int line) {
+  return gDelayBlock[instanceIndex] + (unsigned long)line * (unsigned long)kMaxDelaySamples;
+}
 
 // LFO styles from original ModulatedDelay::runLfo (Parabol active; Random/FBM
 // were commented alternatives). 0=Parabol, 1=Random Walk, 2=FBM.
@@ -723,16 +728,19 @@ static void fullReset(SoEmReverbState& s) {
 static void bindDelayStorage(SoEmReverbState& s, int instanceIndex) {
   int line = 0;
   for (int i = 0; i < kMaxDelays; i++) {
-    s.delaysL[i].bind(gDelayPool[instanceIndex][line++]);
-    s.delaysR[i].bind(gDelayPool[instanceIndex][line++]);
+    s.delaysL[i].bind(delay_line(instanceIndex, line++));
+    s.delaysR[i].bind(delay_line(instanceIndex, line++));
   }
-  s.echoL.bind(gDelayPool[instanceIndex][line++]);
-  s.echoR.bind(gDelayPool[instanceIndex][line++]);
+  s.echoL.bind(delay_line(instanceIndex, line++));
+  s.echoR.bind(delay_line(instanceIndex, line++));
 }
 
 extern "C" int soemdsp_soem_reverb_create(double sampleRate) {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
+      float* block = (float*)soemdsp::memory_pool::alloc(sizeof(float) * (unsigned long)kLinesPerInstance * (unsigned long)kMaxDelaySamples);
+      if (!block) return 0; // out of memory budget: the engine reports it
+      gDelayBlock[i] = block;
       SoEmReverbState& s = gPool[i];
       // Clear scalars only — delay sample pool cleared via clear().
       s = SoEmReverbState{};
@@ -774,6 +782,10 @@ extern "C" int soemdsp_soem_reverb_create(double sampleRate) {
 
 extern "C" void soemdsp_soem_reverb_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gDelayBlock[handle - 1]);
+    gDelayBlock[handle - 1] = nullptr;
+  }
   gPool[handle - 1].active = false;
 }
 

@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 128;
+static const int kMaxInstances = 384;
 static const int kBandCount = 30;
 // 1 / (2 * sinh(ln(2)/2 * 1/3)) — one-third octave. Wider Q stacks neighbors.
 static const double kDefaultQ = 4.32;

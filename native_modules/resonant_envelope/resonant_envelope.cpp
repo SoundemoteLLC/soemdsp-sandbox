@@ -50,7 +50,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const double kZetaFloor = 0.02;
 static const double kAttackFloor = 0.0005;
 static const double kDecayMin = 0.001;

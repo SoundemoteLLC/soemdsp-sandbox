@@ -9,7 +9,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kStepsPerProgression = 4;
 static const int kProgressionCount = 6;
 

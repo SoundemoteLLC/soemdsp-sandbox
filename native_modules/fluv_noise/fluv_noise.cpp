@@ -13,7 +13,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 64;
+constexpr int kMaxInstances = 128;
 constexpr int kMaxNoisePoles = 4;
 constexpr double kDefaultStartHz = 2000.0;
 constexpr double kDefaultFullHz = 7000.0;

@@ -28,7 +28,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 
 struct SincState {
   double phase;

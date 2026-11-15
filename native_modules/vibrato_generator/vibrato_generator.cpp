@@ -20,7 +20,7 @@ namespace {
 using namespace soemdsp_maths;
 using namespace soemdsp_vibrato;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 struct VibratoModuleState {
   bool active;

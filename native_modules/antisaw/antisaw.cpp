@@ -39,7 +39,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 static const int kMaxReflections = 256;
 // Hand-rolled fmod (no libm): a - b*floor(a/b), valid for a >= 0, b > 0,
 // which is all this module ever calls it with (raw harmonic freq, sample

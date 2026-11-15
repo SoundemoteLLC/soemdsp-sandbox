@@ -33,7 +33,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static double smoothstep01(double value) {
   double t = clamp(value, 0.0, 1.0);
   return t * t * (3.0 - 2.0 * t);

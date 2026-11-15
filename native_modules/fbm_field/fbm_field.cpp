@@ -13,7 +13,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kMaxGridW = 512;
 static const int kMaxGridH = 512;
 static const int kMaxGridCells = kMaxGridW * kMaxGridH;

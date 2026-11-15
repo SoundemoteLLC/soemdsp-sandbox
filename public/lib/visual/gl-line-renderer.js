@@ -2383,7 +2383,16 @@ void main() {
         pushTextVertex(q, 40, x0, y1, 0, 1, t[0], t[1], t[2], a);
         drawTexturedTinted(s, w, h, q, 0, 48);
       } else {
-        drawTextured(s, w, h, [x0, y0, 0, 0, x1, y0, 1, 0, x0, y1, 0, 1, x1, y0, 1, 0, x1, y1, 1, 1, x0, y1, 0, 1], 0);
+        const quad = [x0, y0, 0, 0, x1, y0, 1, 0, x0, y1, 0, 1, x1, y0, 1, 0, x1, y1, 1, 1, x0, y1, 0, 1];
+        // "straight": a straight-alpha picture (zero rgb where empty), same
+        // two passes as the "straight" quads: colour lands unmultiplied on a
+        // clear pixel, plain over on an opaque one. No dark edge.
+        if (blend === "straight") {
+          gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA, gl.ONE, gl.ZERO, gl.ONE);
+          drawTextured(s, w, h, quad, 0);
+          gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
+        }
+        drawTextured(s, w, h, quad, 0);
       }
       if (blend === "lighten") gl.blendEquation(gl.FUNC_ADD);
       if (src.glSnapshot && src.texture && !src.keep) {
@@ -2930,12 +2939,20 @@ void main() {
       // so a normal SRC_ALPHA write gets multiplied again when it crosses the
       // wire and leaves a dark ring. MAX unions same-colour coverage.
       const max = blend === "max";
+      // "straight": normal over-blend, but where the pixel underneath is
+      // transparent the colour lands unmultiplied. A plain SRC_ALPHA edge
+      // there gets multiplied again by the premultipliedAlpha:false
+      // compositor and shows as a dark ring over whatever lies below.
+      // Pass 1 adds colour * (1 - dst alpha) on covered pixels only (the
+      // coverage cut zeroes the quad's empty corners); pass 2 is the normal
+      // over-blend: c*a + c*(1-a) = c on a clear pixel, plain over on a plate.
+      const straight = blend === "straight";
       if (max) gl.blendEquation(gl.MAX);
       gl.blendFuncSeparate(max ? gl.ONE : gl.SRC_ALPHA, max ? gl.ONE : colourDst, gl.ONE, max ? gl.ONE : alphaDst);
       gl.useProgram(s.program);
       bindCam(gl, lineCamLocs(s), batch);
       if (s.lineDash) gl.uniform2f(s.lineDash, batch.dashOn || 0, batch.dashOff || 0);
-      if (s.coverage) gl.uniform1f(s.coverage, max ? 1 : 0);
+      if (s.coverage) gl.uniform1f(s.coverage, max || straight ? 1 : 0);
       if (s.lineEdge) gl.uniform1f(s.lineEdge, batch.edge === "chrome" ? 1 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
       gl.bufferData(gl.ARRAY_BUFFER, data.subarray(start, n), gl.STREAM_DRAW);
@@ -2948,6 +2965,11 @@ void main() {
           gl.vertexAttribPointer(loc, sizes[i], gl.FLOAT, false, FLOATS * 4, off * 4);
         }
         off += sizes[i];
+      }
+      if (straight) {
+        gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA, gl.ONE, gl.ZERO, gl.ONE);
+        gl.drawArrays(gl.TRIANGLES, 0, count);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
       }
       gl.drawArrays(gl.TRIANGLES, 0, count);
       for (const loc of s.attribs) if (loc >= 0) gl.disableVertexAttribArray(loc);
@@ -2993,7 +3015,8 @@ void main() {
       for (const layer of batch.layers) {
         layer.camera = batch.camera;
         layer.textPixelated = batch.textPixelated;
-        drawContent(layer, blend, alphaDst);
+        // A layer may ask for its own quad blend (e.g. "straight" wire dots).
+        drawContent(layer, layer.quadBlend || blend, alphaDst);
       }
       s._drawBatch = batch;
     }
@@ -3197,10 +3220,12 @@ void main() {
     gl.enableVertexAttribArray(s.veilPx);
     gl.vertexAttribPointer(s.veilPos, 2, gl.FLOAT, false, 16, 0);
     gl.vertexAttribPointer(s.veilPx, 2, gl.FLOAT, false, 16, 8);
-    // Straight colour. A SRC_ALPHA write gets premultiplied again when the
-    // canvas is stacked on the module body, so the stripe vanished there
-    // and only survived on top of the display in this same buffer.
-    gl.disable(gl.BLEND);
+    // Blend over the plate already drawn in this buffer, so the stripe is a
+    // see-through tint. With blending off the stripe replaced the plate's
+    // pixels outright and read as a solid band. Alpha keeps the plate's own
+    // coverage (ONE, ONE_MINUS_SRC_ALPHA) so the canvas stays opaque there.
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     if (s.veilPeriod) gl.uniform1f(s.veilPeriod, batch.veilPeriod > 0 ? batch.veilPeriod : 18);
     for (let n = 0; n < batch.veils.length; n += 1) {
       const shape = batch.veils[n];
@@ -3227,7 +3252,6 @@ void main() {
     }
     gl.disableVertexAttribArray(s.veilPos);
     gl.disableVertexAttribArray(s.veilPx);
-    gl.enable(gl.BLEND);
   }
 
   function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, cuts) {

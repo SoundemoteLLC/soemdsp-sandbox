@@ -14,7 +14,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const int kMaxPoints = 32;
 static const int kBezierSamples = 96;
 

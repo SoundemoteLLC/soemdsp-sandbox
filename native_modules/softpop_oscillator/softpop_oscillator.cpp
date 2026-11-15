@@ -99,7 +99,7 @@ namespace {
 using namespace soemdsp_maths;
 using namespace softpop;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 
 enum { kSrcSine = 0, kSrcDitherSine = 1, kSrcTrisaw = 2, kSrcSoftSquare = 3, kSrcSoftTri = 4, kSrcPolyBlepTri = 5 };
 

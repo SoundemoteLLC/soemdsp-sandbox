@@ -92,6 +92,9 @@ var nodeGraphMvp = {
   pixelateWiresOnZoom: false,
   // UIDEV: wire end dots from zoom-1 bakes in each module's stack.
   pixelateWireDotsOnZoom: false,
+  // UIDEV: on = the dim edge where a module-stack dot crosses its cable
+  // (the dot's soft edge darkened twice); off = dots blend straight into it.
+  wireDotShadows: true,
   // Cable strokes under modules by default; Visibility can raise them above.
   wiresAboveModules: false,
   // Amount fill off until the user turns it on (Visibility / UI settings).

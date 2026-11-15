@@ -18,7 +18,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kChannels = 3; // 0 mono, 1 left, 2 right
 static const int kMaxBlockFrames = 128;
 static const double kKneeEps = 1.0e-4;

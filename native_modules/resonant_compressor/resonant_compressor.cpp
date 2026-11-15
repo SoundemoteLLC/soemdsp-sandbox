@@ -32,7 +32,7 @@ extern "C" double soemdsp_resonant_envelope_sc(int handle);
 
 namespace {
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 
 struct State {
   int env;

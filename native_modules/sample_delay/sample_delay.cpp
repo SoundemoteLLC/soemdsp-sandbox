@@ -15,19 +15,21 @@
 // Write first, then read. Speaker protection owns unsafe levels — no min-delay floor.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 // 4.0s @ 192 kHz — covers host 48 kHz × 4× oversampling with headroom.
 static const double kMaxDelaySeconds = 4.0;
 static const int kMaxDelaySamples = 768000;
 
 struct SampleDelayState {
   bool active;
-  float buffer[kMaxDelaySamples];
+  void* poolBlock; // one shared-pool block with all the buffers of this instance
+  float* buffer; // in the pool block
   int writeIndex;
   int filled;  // how many samples written, capped at capacity
 };
@@ -48,6 +50,11 @@ extern "C" int soemdsp_sample_delay_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       SampleDelayState& s = gPool[i];
+      unsigned long bytes = sizeof(float) * (unsigned long)(kMaxDelaySamples);
+      void* blk = soemdsp::memory_pool::alloc(bytes);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      s.poolBlock = blk;
+      s.buffer = (float*)blk;
       clear_buffer(s);
       s.active = true;
       return i + 1;
@@ -58,6 +65,11 @@ extern "C" int soemdsp_sample_delay_create() {
 
 extern "C" void soemdsp_sample_delay_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
+    gPool[handle - 1].poolBlock = nullptr;
+    gPool[handle - 1].buffer = nullptr;
+  }
   gPool[handle - 1].active = false;
 }
 

@@ -27,7 +27,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 32;
+constexpr int kMaxInstances = 128;
 constexpr int kMaxVoices = 64;
 
 unsigned int xorshift32(unsigned int& state) {

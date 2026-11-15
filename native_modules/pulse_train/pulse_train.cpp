@@ -102,7 +102,7 @@ using soemdsp_maths::gate_hit_velocity;
 
 namespace {
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kMaxPulses = 16384;
 static const int kMaxFwdDual = 8192; // 2*8192-1 = 16383
 

@@ -42,7 +42,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kMaxEvents = 128;
 static const double kLatency = 2.0;  // internal samples (B-spline half width)
 

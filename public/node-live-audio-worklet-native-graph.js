@@ -164,7 +164,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   fm: 169,
   pitchHz: 170,
   pitchManager: 185,
-  ampDb: 180,
+  ampDb: 264, // own id: it shared 180 with wavetable2d, so Amp<->dB ran the wavetable code
   wavetableAdsr: 168,
   rasterRgb: 160,
   chaosfly: 161,
@@ -2818,6 +2818,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphWireChangeInPlace =
         rc = -1;
       }
       if (rc === 0) this._nativeLiveParamModKeys?.add?.(`${edge.dstId}\0${edge.paramKey}\0${edge.srcId}\0${edge.srcPort}`);
+      else this.reportNativeWireFailure(`modulation ${edge.srcId}.${edge.srcPort} -> ${edge.dstId}.${edge.paramKey}`, rc);
     }
     if (needsCompile && (native.soemdsp_graph_compile(handle) | 0) !== 0) return false;
 
@@ -2845,7 +2846,17 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphWireChangeInPlace =
     this.rememberNativeGraphKeyParts(); // the next edit must diff against this state, not the one before it
     this.syncNativeGraphBypass();
     if (typeof this.syncNativeGraphParams === "function") this.syncNativeGraphParams();
-    const summary = `cables +${addedOps.length} -${removedOps.length} mods +${addedEdges.length} -${removedEdges.length}`
+    // Port views are cached by node hash + port. A module removed and added
+    // back under the same id (same hash) kept the old module's freed memory,
+    // so its scope and every MOD ghost reading it showed zeros. Drop them.
+    if (addedIds.size || goneIds.size) this.nativeGraphPortViewCache = null;
+    {
+      const planConns = Array.isArray(this._planConnections) ? this._planConnections : [];
+      this.refreshNativeWiredNodeIds(typeof this.expandControllerDigitalThruConnections === "function"
+        ? this.expandControllerDigitalThruConnections(planConns)
+        : planConns);
+    }
+    const summary =`cables +${addedOps.length} -${removedOps.length} mods +${addedEdges.length} -${removedEdges.length}`
       + ` nodes +${addedIds.size} -${goneIds.size}${needsCompile ? " (order rebuilt)" : ""}`;
     this.postNativeGraphStatus("ok", `wire-change ${summary}`);
     this.postPortalDebug?.("wire-change", {
@@ -2879,6 +2890,7 @@ NodeLiveAudioProcessor.prototype.nativeCompileFailureText =
       [4, "connections"],
       [8, "edges"],
       [16, "modulation edges"],
+      [256, "MB of module memory"],
     ];
     const hit = [];
     for (const [bit, name] of names) {
@@ -2888,9 +2900,89 @@ NodeLiveAudioProcessor.prototype.nativeCompileFailureText =
     }
     this.nativeGraphCompiled = false;
     this._nativeGraphOverflowBlocked = true;
-    const which = (bits & 2) && this._nativeLastCapacityFailure ? ` [${this._nativeLastCapacityFailure}]` : "";
+    const which = (bits & (2 | 256)) && this._nativeLastCapacityFailure ? ` [${this._nativeLastCapacityFailure}]` : "";
     return `${what} refused: the patch exceeds an engine limit (${hit.join(", ") || "unknown"}${which}); the engine is stopped until it fits`;
   };
+
+/**
+ * A wire the plan asked for that the engine refused. An error, never silent
+ * (policy section 10): it reaches the plan status and the browser console.
+ * Running out of connections or modulation edges is also stopped by the
+ * engine's overflow (compile refuses); anything else here is a real fault.
+ */
+NodeLiveAudioProcessor.prototype.reportNativeWireFailure = function reportNativeWireFailure(what, rc) {
+  this.postNativeGraphStatus("error", `${what} was not connected (engine returned ${rc})`);
+};
+
+/**
+ * Tell the page the engine's fixed limits (read from the engine, so the numbers
+ * cannot drift from the code). Posted once each time the graph engine loads.
+ */
+NodeLiveAudioProcessor.prototype.postNativeGraphLimits = function postNativeGraphLimits() {
+  const native = this.nativeGraph;
+  if (typeof native?.soemdsp_graph_limit !== "function") return;
+  const limit = (bit) => native.soemdsp_graph_limit(bit) | 0;
+  try {
+    this.port.postMessage({
+      type: "nativeGraphLimits",
+      limits: {
+        version: typeof native.soemdsp_graph_version === "function" ? native.soemdsp_graph_version() | 0 : 0,
+        nodes: limit(1),
+        connections: limit(4),
+        edges: limit(8),
+        modEdges: limit(16),
+        channels: limit(32),
+        loopNodes: limit(64),
+        blockFrames: limit(128),
+        memoryMb: limit(256),
+      },
+    });
+  } catch (_e) { /* the page may not be listening yet */ }
+};
+
+/** The memory budget (MB) for heavy modules, set by the page (Command Center). Kept until the engine has loaded. */
+NodeLiveAudioProcessor.prototype.applyMemoryBudget = function applyMemoryBudget() {
+  const native = this.nativeGraph;
+  if (this._memoryBudgetMb && typeof native?.soemdsp_memory_set_budget_mb === "function") {
+    native.soemdsp_memory_set_budget_mb(this._memoryBudgetMb | 0);
+  }
+};
+
+NodeLiveAudioProcessor.prototype.setMemoryBudgetMb = function setMemoryBudgetMb(mb) {
+  const value = Math.round(Number(mb));
+  if (!(value > 0)) return;
+  this._memoryBudgetMb = value;
+  this.applyMemoryBudget();
+  this.answerMemory?.();
+};
+
+/** Shared memory pool numbers (MB), for the page's console: what heavy modules hold now, the budget, the peak. */
+NodeLiveAudioProcessor.prototype.answerMemory = function answerMemory() {
+  const native = this.nativeGraph;
+  if (typeof native?.soemdsp_memory_stat !== "function") return;
+  const mb = (which) => Math.round((native.soemdsp_memory_stat(which) / 1048576) * 10) / 10;
+  try {
+    this.port.postMessage({ type: "nativeMemory", memory: { usedMb: mb(0), committedMb: mb(1), budgetMb: mb(2), peakMb: mb(3) } });
+  } catch (_e) { /* ignore */ }
+};
+
+/**
+ * How many modules of each asked-for type the engine can hold. Takes and gives
+ * back real instances (about a millisecond per type), so the page asks once per
+ * type, when a module of that type is first added.
+ */
+NodeLiveAudioProcessor.prototype.answerTypeCapacity = function answerTypeCapacity(types) {
+  const native = this.nativeGraph;
+  if (typeof native?.soemdsp_graph_type_capacity !== "function" || !Array.isArray(types)) return;
+  const capacity = {};
+  for (const type of types) {
+    const typeId = this.mapNativeGraphTypeId(String(type || ""));
+    if (typeId) capacity[type] = native.soemdsp_graph_type_capacity(typeId) | 0;
+  }
+  try {
+    this.port.postMessage({ type: "nativeTypeCapacity", capacity });
+  } catch (_e) { /* ignore */ }
+};
 
 /**
  * Incremental topology sync: remove deleted natives, add new ones, rebuild
@@ -3102,6 +3194,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
             hashById.get(dstId),
             this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
           ) | 0;
+          if (rc !== 0) this.reportNativeWireFailure(`cable ${srcId}.${srcPort} -> ${dstId}.${dstPort}`, rc);
           return rc === 0;
         }
         if (!srcId || !biasTypeId) return true;
@@ -3143,6 +3236,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
           hashById.get(dstId),
           this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
         ) | 0;
+        if (rc !== 0) this.reportNativeWireFailure(`host cable ${srcId}.${srcPort} -> ${dstId}.${dstPort}`, rc);
         return rc === 0;
       };
 
@@ -3213,8 +3307,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
               edge.dstHash,
               edge.paramId | 0,
             ) | 0;
-            if (rc !== 0) return;
+            if (rc !== 0) {
+              this.reportNativeWireFailure(`modulation ${edge.srcId}.${edge.srcPort} -> ${edge.dstId}.${edge.paramKey}`, rc);
+              return;
+            }
           } catch (_e) {
+            this.reportNativeWireFailure(`modulation ${edge.srcId}.${edge.srcPort} -> ${edge.dstId}.${edge.paramKey}`, "exception");
             return;
           }
           liveParamModKeys.add(`${edge.dstId}\0${edge.paramKey}\0${edge.srcId}\0${edge.srcPort}`);
@@ -3222,6 +3320,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
       }
       this._nativeLiveParamModKeys = liveParamModKeys;
       this._nativePhaseModLiveKeys = liveParamModKeys;
+      this.refreshNativeWiredNodeIds(connections);
       this.pushNativeGraphScopeTaps(native, connections, idSet, typeById, hashById);
 
       this.bindNativeNamedPortals?.();
@@ -3260,6 +3359,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         }
       }
       this._nativeGraphParamCacheCold = false;
+      // Same as the in-place path: a node re-added under an old id must not
+      // read the removed node's cached port memory (scopes, MOD ghosts).
+      this.nativeGraphPortViewCache = null;
       if (typeof this.syncNativeGraphParams === "function") {
         this.syncNativeGraphParams();
       }
@@ -3370,7 +3472,7 @@ NodeLiveAudioProcessor.prototype.installNativeMetaVoiceBusFeeders =
         this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
       ) | 0;
       if (crcBus !== 0) {
-        this.postNativeGraphStatus("warning", `voice ${kind} connect failed (${crcBus}) ${feedId}`);
+        this.reportNativeWireFailure(`voice ${kind} bus ${feedId}`, crcBus);
         return;
       }
       metaVoiceBusFeeders.push({
@@ -4645,8 +4747,12 @@ NodeLiveAudioProcessor.prototype.compileNativeMetaVoiceCircuits = function compi
               ctx?.liveParamModKeys?.add?.(
                 `${dstLane.voiceIds[v]}\0${paramKey}\0${srcLane.voiceIds[v]}\0${srcPort}`,
               );
+            } else {
+              this.reportNativeWireFailure(`voice modulation ${srcLane.voiceIds[v]}.${srcPort} -> ${dstLane.voiceIds[v]}.${paramKey}`, rc);
             }
-          } catch (_e) { /* skip */ }
+          } catch (_e) {
+            this.reportNativeWireFailure(`voice modulation ${srcLane.voiceIds[v]}.${srcPort} -> ${dstLane.voiceIds[v]}.${paramKey}`, "exception");
+          }
         }
       }
     });
@@ -6448,6 +6554,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("octaveOffset", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, disc("octaveOffset", 0));
       push("sequenceOffset", P.NATIVE_GRAPH_PARAM_IN_LOW, disc("sequenceOffset", 0));
+      // gateLength→IN_HIGH: share of the step the Gate stays high (1 = legato).
+      push("gateLength", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("gateLength", 1));
       continue;
     }
     if (type === "hilbert") {
@@ -9351,7 +9459,22 @@ NodeLiveAudioProcessor.prototype.nativeHostCvFeederHash = function nativeHostCvF
   if (!build?.biasTypeId || !build.native || !this.nativeGraphHandle) return 0;
   const feedKey = `${srcId}\0${String(srcPort || "")}`;
   const existing = build.hostFeederHashByKey.get(feedKey);
-  if (existing) return existing;
+  if (existing) {
+    // A feeder kept from the previous wiring (surgical rewire seeds the map
+    // from it) must be listed as in use, or the prune after compile removes
+    // it: a port that only drives ParamModEdges (Keyboard Gate -> PolyBLEP
+    // Amplitude) went dead on any rewire that reached this path. The cable
+    // path does the same (see "Keep host Bias / Scale feeders").
+    if (!build.hostFeeders.some((f) => (f?.hash | 0) === (existing | 0))) {
+      build.hostFeeders.push({
+        hash: existing,
+        sourceNode: String(srcId),
+        sourcePort: String(srcPort || ""),
+        sampleBlock: this.nativeHostCvFeederKind(srcId, srcPort, build.biasTypeId).sampleBlock,
+      });
+    }
+    return existing;
+  }
   const feedId = `__hostCv:${srcId}:${String(srcPort || "")}`;
   const feedHash = this.fnv1aHash32(feedId);
   const feedKind = this.nativeHostCvFeederKind(srcId, srcPort, build.biasTypeId);
@@ -9533,6 +9656,38 @@ NodeLiveAudioProcessor.prototype.pushNativeGraphScopeTaps = function pushNativeG
     if (!hash) continue;
     native.soemdsp_graph_set_node_scope_taps(this.nativeGraphHandle, hash >>> 0, (masks.get(id) || 0) >>> 0);
   }
+};
+
+/**
+ * Modules on any cable or MOD wire. Only these get audio-rate face rings
+ * (scopes, and the MOD ghosts that read them). Full compile, the surgical
+ * rewire and the in-place wire change all refresh it: when only the full
+ * compile did, a module wired by an in-place edit (e.g. a new Slew Limiter
+ * driving PolyBLEP Amplitude) published no samples and its ghost sat at 0.
+ */
+NodeLiveAudioProcessor.prototype.refreshNativeWiredNodeIds = function refreshNativeWiredNodeIds(connections) {
+  const wiredIds = new Set();
+  const list = Array.isArray(connections) ? connections : [];
+  for (let ci = 0; ci < list.length; ci += 1) {
+    const c = list[ci];
+    const s = String(c?.sourceNode || "");
+    const d = String(c?.destinationNode || "");
+    if (s) wiredIds.add(s);
+    if (d) wiredIds.add(d);
+  }
+  if (this.modulationConnections && typeof this.modulationConnections.forEach === "function") {
+    this.modulationConnections.forEach((mods) => {
+      if (!Array.isArray(mods)) return;
+      for (let i = 0; i < mods.length; i += 1) {
+        const m = mods[i];
+        const s = String(m?.sourceNode || "");
+        const d = String(m?.destinationNode || "");
+        if (s) wiredIds.add(s);
+        if (d) wiredIds.add(d);
+      }
+    });
+  }
+  this._nativeWiredNodeIds = wiredIds;
 };
 
 NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNativeGraphFromPlan() {
@@ -10130,8 +10285,12 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
                 this.fnv1aHash32(dstId),
                 paramId | 0,
               ) | 0;
-              if (rc !== 0) continue;
+              if (rc !== 0) {
+                this.reportNativeWireFailure(`modulation ${srcId}.${srcPort} -> ${dstId}.${paramKey}`, rc);
+                continue;
+              }
             } catch (_e) {
+              this.reportNativeWireFailure(`modulation ${srcId}.${srcPort} -> ${dstId}.${paramKey}`, "exception");
               continue;
             }
             liveParamModKeys.add(`${dstId}\0${paramKey}\0${srcId}\0${srcPort}`);
@@ -10155,27 +10314,7 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
     if (typeof this.snapNativeHostCvFeederSmoothing === "function") {
       this.snapNativeHostCvFeederSmoothing(native, hostFeeders);
     }
-    const wiredIds = new Set();
-    for (let ci = 0; ci < connections.length; ci += 1) {
-      const c = connections[ci];
-      const s = String(c?.sourceNode || "");
-      const d = String(c?.destinationNode || "");
-      if (s) wiredIds.add(s);
-      if (d) wiredIds.add(d);
-    }
-    if (this.modulationConnections && typeof this.modulationConnections.forEach === "function") {
-      this.modulationConnections.forEach((list) => {
-        if (!Array.isArray(list)) return;
-        for (let i = 0; i < list.length; i += 1) {
-          const m = list[i];
-          const s = String(m?.sourceNode || "");
-          const d = String(m?.destinationNode || "");
-          if (s) wiredIds.add(s);
-          if (d) wiredIds.add(d);
-        }
-      });
-    }
-    this._nativeWiredNodeIds = wiredIds;
+    this.refreshNativeWiredNodeIds(connections);
     this.pushNativeGraphScopeTaps(native, connections, idSet, typeById, hashById);
 
     this.bindNativeNamedPortals?.();

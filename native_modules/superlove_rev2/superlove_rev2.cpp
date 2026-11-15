@@ -14,7 +14,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 // Trisaw (HP/BP) zero on the falling edge at Morph 0.5 sits at phase 0.75.
 // Add this so Phase 0 is a zero-crossing on both LP (Softwave Tri) and HP/BP.
 static const double kTrisawZeroCrossing = 0.75;

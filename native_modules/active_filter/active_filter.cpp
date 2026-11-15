@@ -18,7 +18,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 256;
+static const int kMaxInstances = 384;
 
 // Slope: 0 Bypass, 1=6, 2=12, 3=18, 4=24. feedbackCircuit: 0..3
 static const char kMetadataJson[] =

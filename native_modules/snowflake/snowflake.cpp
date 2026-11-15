@@ -7,6 +7,7 @@
 // walked at audio rate into X/Y. Port of public/modules/snowflake/snowflake-math.js.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
@@ -35,7 +36,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 // Sized so each catalog pattern can take ≥1 more rewrite past the old 8k/48k walls.
 static const int kMaxPoints = 32768;
 static const int kMaxString = 200000;
@@ -86,7 +87,8 @@ struct SnowflakeState {
   bool hasPath;
   int pointCount;
   double totalLength;
-  Pt points[kMaxPoints];
+  void* poolBlock; // one shared-pool block with all the buffers of this instance
+  Pt* points; // in the pool block
   bool active;
 };
 
@@ -309,6 +311,11 @@ extern "C" int soemdsp_snowflake_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       SnowflakeState& s = gPool[i];
+      unsigned long bytes = sizeof(Pt) * (unsigned long)(kMaxPoints);
+      void* blk = soemdsp::memory_pool::alloc(bytes);
+      if (!blk) return 0; // out of memory budget: the engine reports it
+      s.poolBlock = blk;
+      s.points = (Pt*)blk;
       s.phase = 0.0;
       s.spinPhase = 0.0;
       s.outX = 0.0;
@@ -330,6 +337,11 @@ extern "C" int soemdsp_snowflake_create() {
 
 extern "C" void soemdsp_snowflake_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
+  if (gPool[handle - 1].active) {
+    soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
+    gPool[handle - 1].poolBlock = nullptr;
+    gPool[handle - 1].points = nullptr;
+  }
   gPool[handle - 1].active = false;
   gPool[handle - 1].hasPath = false;
 }

@@ -15,7 +15,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 96;
+static const int kMaxInstances = 128;
 static const int kMaxBlockFrames = 128;
 static const double kCurveK = 3.5;
 static const int kShapeLin = 0;

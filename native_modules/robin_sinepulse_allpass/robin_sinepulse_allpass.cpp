@@ -50,7 +50,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 64;
+static const int kMaxInstances = 128;
 static const int kMaxStages = 256;          // rsFlatZapper::maxNumStages
 static const int kIdleSamples = 4096;
 static const double kLn2 = 0.6931471805599453;

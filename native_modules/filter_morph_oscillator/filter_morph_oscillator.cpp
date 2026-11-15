@@ -24,7 +24,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-constexpr int kMaxInstances = 64;
+constexpr int kMaxInstances = 128;
 constexpr int kMaxPoles = 4;
 constexpr int kNoiseHpPoles = 2;
 constexpr int kNoiseLpPoles = 2;

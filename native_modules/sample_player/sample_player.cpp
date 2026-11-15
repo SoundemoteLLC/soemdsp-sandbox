@@ -24,7 +24,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 static const int kMaxFrames = 48000 * 60 * 10; // ~10 min @ 48 kHz
 static const size_t kWasmPage = 65536;
 static const int kMaxFreeNodes = 64;

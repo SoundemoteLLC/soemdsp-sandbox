@@ -15,7 +15,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static const int kMaxBands = 6;
 static const int kMaxSplits = 5;   // bands - 1
 static const int kMaxBiquads = 4;  // LR8 = butter order 4 → 2 Qs × dual cascade

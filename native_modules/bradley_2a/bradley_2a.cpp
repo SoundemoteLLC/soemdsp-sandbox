@@ -48,7 +48,7 @@ static const char kMetadataJson[] =
     "]"
   "}";
 
-static const int kMaxInstances = 32;
+static const int kMaxInstances = 128;
 static double wrap_two_pi(double p) {
   return p - kTwoPi * dsp_floor(p / kTwoPi);
 }

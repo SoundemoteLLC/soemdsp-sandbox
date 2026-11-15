@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 128;
 // Generous upper bound on a single block-processing call. Real AudioWorklet
 // render quanta are 128 frames; this leaves headroom for any offline/preview
 // caller that might batch more samples per call.
