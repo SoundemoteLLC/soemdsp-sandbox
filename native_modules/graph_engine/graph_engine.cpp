@@ -774,7 +774,8 @@ extern "C" double soemdsp_velvet_noise_sample(
   double stereoSpread,
   double mix,
   double sampleRate,
-  double decay
+  double decay,
+  double tailDarkness
 );
 extern "C" double soemdsp_velvet_noise_right(int handle);
 extern "C" double soemdsp_velvet_noise_trigger_pos(int handle);
@@ -4475,6 +4476,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeResonantCompressor) ? 0.01 : // Attack s (Resonant Compressor)
     (typeId == kTypePulseExplosion) ? 1.0 // endTime
       : (typeId == kTypeSlewLimiter) ? 0.05
+      : (typeId == kTypeVelvetNoise) ? 0.0 // Tail Darkness off
       : (typeId == kTypeSampleDelay) ? 0.0
       : (typeId == kTypeDelayedTrigger) ? 0.01
       : (typeId == kTypeRandomClock) ? 1.0
@@ -15575,6 +15577,7 @@ static void process_exponential_delay(Circuit& g, Node& node, int frames) {
 //   node.diffusionAmount: Stereo Spread (0 .. 1)
 //   node.seed: Seed
 //   node.mix: Mix / Gain (0 .. 1)
+//   node.timeNumerator: Decay (dB/s); node.timeDenominator: Tail Darkness (0 = off)
 static void process_velvet_noise(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   {
@@ -15619,7 +15622,8 @@ static void process_velvet_noise(Circuit& g, Node& node, int frames) {
       spread,
       mix,
       sr,
-      control_audio(g, node.timeNumerator, f) // Decay dB/s
+      control_audio(g, node.timeNumerator, f), // Decay dB/s
+      control_audio(g, node.timeDenominator, f) // Tail Darkness (0 = off)
     );
     const double outR = soemdsp_velvet_noise_right(node.nativeHandle);
 

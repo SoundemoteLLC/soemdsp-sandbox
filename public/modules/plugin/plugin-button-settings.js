@@ -38,7 +38,7 @@ const NODE_GRAPH_PLUGIN_BUTTON_DISPLAY_DEFAULTS = Object.freeze({
   strokeScale: 0.06,
   rounding: 0.18,
   buttonShowLabel: true,
-  buttonLabelAlign: "left",
+  buttonLabelAlign: "middle",
   labelText: "",
   offText: "Off",
   onText: "On",
@@ -75,6 +75,10 @@ function nodeGraphPluginButtonNormalizeText(value, fallback) {
   return String(value).replace(/\s+/g, " ").trim().slice(0, NODE_GRAPH_PLUGIN_BUTTON_TEXT_MAX);
 }
 
+function nodeGraphPluginButtonLegacyGateCaption(text, momentary, fallback) {
+  return momentary && text === "Gate" ? fallback : text;
+}
+
 function normalizeNodeGraphPluginButtonDisplaySettings(settings, type) {
   const d = NODE_GRAPH_PLUGIN_BUTTON_DISPLAY_DEFAULTS;
   const src = settings && typeof settings === "object" ? settings : {};
@@ -88,8 +92,9 @@ function normalizeNodeGraphPluginButtonDisplaySettings(settings, type) {
     buttonLabelAlign: nodeGraphPluginButtonNormalizeLabelAlign(src.buttonLabelAlign, d.buttonLabelAlign),
     // Display name — written by Module Options only (nodeGraphControllerFaceSettingsForNode).
     labelText: nodeGraphPluginButtonNormalizeText(src.labelText, d.labelText),
-    offText: nodeGraphPluginButtonNormalizeText(src.offText, momentary ? "Gate" : d.offText),
-    onText: nodeGraphPluginButtonNormalizeText(src.onText, momentary ? "Gate" : d.onText),
+    // Momentary used to default both captions to "Gate": show Off / On like Toggle (an old "Gate" caption is treated as that default).
+    offText: nodeGraphPluginButtonLegacyGateCaption(nodeGraphPluginButtonNormalizeText(src.offText, d.offText), momentary, d.offText),
+    onText: nodeGraphPluginButtonLegacyGateCaption(nodeGraphPluginButtonNormalizeText(src.onText, d.onText), momentary, d.onText),
     backgroundColor: nodeGraphPluginButtonNormalizeHex(src.backgroundColor ?? src.background, d.backgroundColor),
     strokeColor: nodeGraphPluginButtonNormalizeHex(src.strokeColor, d.strokeColor),
     inactiveColor: nodeGraphPluginButtonNormalizeHex(src.inactiveColor, d.inactiveColor),

@@ -93,6 +93,7 @@ struct VelvetNoiseState {
   int builtWidth;
   double builtSpread;
   double builtDecay;
+  int builtTail;
   double builtRate;
   unsigned int builtSeed;
 
@@ -160,9 +161,17 @@ static inline void set_tap(Tap& tap, int start, int width, double sign) {
 // Fills `t` from the given settings. Every tap draws the same number of random
 // values whatever the settings are, so one setting can move without
 // reshuffling what the others decided.
+// Mean of 1/w over w = 1..W (a tap's energy factor on noise for widths drawn
+// uniformly up to W): H(W) / W, with the harmonic number from its expansion.
+static double mean_inv_width(double w) {
+  if (w <= 1.0) return 1.0;
+  const double h = soemdsp_maths::dsp_ln(w) + 0.5772156649015329 + 0.5 / w - 1.0 / (12.0 * w * w);
+  return h / w;
+}
+
 static void build_table(
-  TapTable& t, double grid, int taps, int maxWidth, double spread, unsigned int seed,
-  double decay, double sampleRate
+  TapTable& t, double grid, int taps, int headWidth, double spread, unsigned int seed,
+  double decay, double sampleRate, int tailWidth
 ) {
   // Decay is a rate in dB per second: tap level falls by `decay` dB every
   // second. 0 is flat and small values are nearly flat (continuous at 0).
@@ -176,8 +185,24 @@ static void build_table(
   bool openL = true;
   bool openR = true;
 
+  // Tail Darkness: the widest pulse grows from Darkness at the first tap to
+  // Tail Darkness at the last (0 = off), so the tail darkens over time the way
+  // a room's highs die first (Dark Velvet Noise, Fagerstrom et al., DAFx 2022).
+  // Each tap also gets back the energy wider pulses lose, so Decay alone sets
+  // the tail's level and Tail Darkness only its colour.
+  const bool ramp = tailWidth > 0 && tailWidth != headWidth && taps > 1;
+  const double headEnergy = mean_inv_width((double)headWidth);
+
   for (int i = 0; i < taps; ++i) {
     const double blockStart = (double)i * grid;
+    int maxWidth = headWidth;
+    double rampGain = 1.0;
+    if (ramp) {
+      const double u = (double)i / (double)(taps - 1);
+      maxWidth = (int)((double)headWidth + u * (double)(tailWidth - headWidth) + 0.5);
+      if (maxWidth < 1) maxWidth = 1;
+      rampGain = __builtin_sqrt(headEnergy / mean_inv_width((double)maxWidth));
+    }
 
     const double jitterL = next_unit(sL);
     const double widthUnitL = next_unit(sL);
@@ -203,18 +228,21 @@ static void build_table(
 
     if (openL) {
       if (posL + (double)widthL < (double)(kDelaySize - 1)) {
-        const double envL = soemdsp_maths::dsp_exp(-decayK * (posL + 0.5 * (double)widthL));
+        const double envL = rampGain * soemdsp_maths::dsp_exp(-decayK * (posL + 0.5 * (double)widthL));
         set_tap(t.left[countL++], (int)posL, widthL, signL * envL);
-        sumL += envL * envL;
+        // A tap averages `width` samples (gain 1/width), so its energy on
+        // noise is env^2 / width. Counting the width keeps the wet level the
+        // same at any Darkness (it used to drop as Darkness rose).
+        sumL += envL * envL / (double)widthL;
       } else {
         openL = false;
       }
     }
     if (openR) {
       if (blendPosR + (double)widthR < (double)(kDelaySize - 1)) {
-        const double envR = soemdsp_maths::dsp_exp(-decayK * (blendPosR + 0.5 * (double)widthR));
+        const double envR = rampGain * soemdsp_maths::dsp_exp(-decayK * (blendPosR + 0.5 * (double)widthR));
         set_tap(t.right[countR++], (int)blendPosR, widthR, signR * envR);
-        sumR += envR * envR;
+        sumR += envR * envR / (double)widthR;
       } else {
         openR = false;
       }
@@ -225,7 +253,9 @@ static void build_table(
   t.countL = countL;
   t.countR = countR;
   t.normL = sumL > 0.0 ? 1.0 / __builtin_sqrt(sumL) : 0.0;
-  t.normR = countR > 0 ? 1.0 / __builtin_sqrt((double)countR) : 0.0;
+  // Right normalizes on its own energy like Left. It used the plain tap count,
+  // which ignored Decay and width, so Right came out louder than Left.
+  t.normR = sumR > 0.0 ? 1.0 / __builtin_sqrt(sumR) : 0.0;
 }
 
 static inline double read_taps(const Cell* line, int write, const Tap* taps, int count) {
@@ -322,6 +352,7 @@ int soemdsp_velvet_noise_create() {
       s.builtWidth = 0;
       s.builtSpread = 0.0;
       s.builtDecay = 0.0;
+      s.builtTail = 0;
       s.builtRate = 0.0;
       s.builtSeed = 0u;
       s.tables[0].countL = 0;
@@ -373,7 +404,8 @@ double soemdsp_velvet_noise_sample(
   double stereoSpread,  // 0 .. 1
   double mix,           // Diffuser dry/wet, Generator level
   double sampleRate,
-  double decay          // Diffuser tail decay in dB per second, 0 = flat
+  double decay,         // Diffuser tail decay in dB per second, 0 = flat
+  double tailDarkness   // max pulse width at the last tap, 0 = same as Darkness
 ) {
   if (handle <= 0 || handle > kMaxInstances) return 0.0;
   VelvetNoiseState& s = gPool[handle - 1];
@@ -399,22 +431,24 @@ double soemdsp_velvet_noise_sample(
 
   if (!(mix == mix)) mix = 0.0;
   if (!(decay == decay)) decay = 0.0;
+  int tail = (tailDarkness == tailDarkness && tailDarkness > 0.0) ? (int)(tailDarkness + 0.5) : 0;
+  if (tail > kMaxPulseWidth) tail = kMaxPulseWidth;
   if (!(inL == inL)) inL = 0.0;
   if (!(inR == inR)) inR = 0.0;
 
   // Tap table upkeep.
   if (s.builtGrid < 0.0) {
-    build_table(s.tables[s.cur], grid, taps, width, spread, s.seed, decay, sampleRate);
-    s.builtDecay = decay; s.builtRate = sampleRate;
+    build_table(s.tables[s.cur], grid, taps, width, spread, s.seed, decay, sampleRate, tail);
+    s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
     s.builtGrid = grid; s.builtTaps = taps; s.builtWidth = width;
     s.builtSpread = spread; s.builtSeed = s.seed;
   } else if (!s.fading && (
     grid != s.builtGrid || taps != s.builtTaps || width != s.builtWidth
     || spread != s.builtSpread || s.seed != s.builtSeed
-    || decay != s.builtDecay || sampleRate != s.builtRate
+    || decay != s.builtDecay || sampleRate != s.builtRate || tail != s.builtTail
   )) {
-    build_table(s.tables[1 - s.cur], grid, taps, width, spread, s.seed, decay, sampleRate);
-    s.builtDecay = decay; s.builtRate = sampleRate;
+    build_table(s.tables[1 - s.cur], grid, taps, width, spread, s.seed, decay, sampleRate, tail);
+    s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
     s.builtGrid = grid; s.builtTaps = taps; s.builtWidth = width;
     s.builtSpread = spread; s.builtSeed = s.seed;
     s.fading = true;
@@ -510,7 +544,7 @@ double soemdsp_velvet_noise_trigger_neg(int handle) {
 }
 
 int soemdsp_velvet_noise_version() {
-  return 4;
+  return 6; // 6: Tail Darkness (pulse width ramps over the tail). 5: wet level independent of Darkness
 }
 
 } // extern "C"

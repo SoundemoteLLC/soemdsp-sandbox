@@ -2685,7 +2685,11 @@ function nodeGraphGlGraphPresent(options = {}) {
           for (let d = 0; d < own.length; d += 1) nodeGraphGlGraphDrawWireEnd(endsLayer, own[d], wireFeather);
         }
       }
-      nodeGraphGlGraphDrawButtonCaptions(body, toX, toY, layoutZoom, cssW, cssH, captions);
+      // Own layer, after the face textures: the button fill is part of the face picture, so a caption in the
+      // body layer would sit under it (Toggle / Momentary showed no Off / On text).
+      if (captions.length) {
+        nodeGraphGlGraphDrawButtonCaptions(nodeGraphGlLinesLayer(batch) || body, toX, toY, layoutZoom, cssW, cssH, captions);
+      }
       // Round shapes paint their own plate: above this group's plate fill.
       if (shapes.length) {
         nodeGraphGlGraphDrawRoundShapes(nodeGraphGlLinesLayer(batch), toX, toY, zoom, Boolean(frameCamera), shapes);

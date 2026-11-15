@@ -6040,6 +6040,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 0));
+      push("tailDarkness", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, disc("tailDarkness", 0));
       continue;
     }
     if (type === "softpopOscillator") {

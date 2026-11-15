@@ -7124,6 +7124,18 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Maximum randomized rectangular pulse width in Diffuser mode. 1 = bright velvet noise; higher values = wider rectangular pulses for natural 6 dB/oct high-frequency damping."
       },
       {
+        defaultValue: "0",
+        key: "tailDarkness",
+        label: "Tail Darkness",
+        max: "1024",
+        mid: "32",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        unit: "smp",
+        tooltip: "Darkness at the end of the Diffuser tail. The widest pulse grows from Darkness at the first tap to this at the last, so the tail gets darker as it goes, like a room where the highs die first. The tail's level stays set by Decay; this only changes its colour. 0 = off (the whole tail uses Darkness)."
+      },
+      {
         defaultValue: "1",
         key: "stereoSpread",
         label: "Stereo Spread",
