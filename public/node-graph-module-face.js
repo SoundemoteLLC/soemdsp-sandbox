@@ -1514,6 +1514,17 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       }, text, z);
     }
   }
+  // Debug overlay (D): a "cpu" tag in the corner of every cell whose parameter
+  // costs more CPU as it rises (definition `constraint: "cpu"`). Drawn here in
+  // GL like the rest of the face, only while the CPU filter is on.
+  if (document.body.classList.contains("node-constraint-cpu-active")) {
+    for (const wd of widgets) {
+      if (wd.type !== "cell" || !wd.param) continue;
+      const row = el.querySelector(`.node-parameter-row[data-param="${CSS.escape(wd.param)}"]`);
+      if (!String(row?.dataset?.nodeConstraint || "").split(" ").includes("cpu")) continue;
+      nodeGraphModuleFaceText(batch, "cpu", ox + (wd.x + wd.w - 3) * z, oy + (wd.y + 7) * z, 9 * z, "#f2b84b", { align: "right", weight: 700 });
+    }
+  }
 }
 
 function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {

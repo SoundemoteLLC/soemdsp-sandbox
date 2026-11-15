@@ -3332,6 +3332,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "velvet_noise",
+      "label": "Velvet Noise",
+      "targetType": "velvetNoise",
+      "kind": "noise",
+      "source": "native_modules/velvet_noise/velvet_noise.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/velvet_noise/velvet_noise.cpp",
+      "localSourceUrl": "/native_modules/velvet_noise/velvet_noise.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/velvet_noise/velvet_noise.wasm",
+      "wasmUrl": "native_modules/velvet_noise/velvet_noise.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "vibrato_generator",
       "label": "Vibrato Generator",
       "targetType": "vibratoGenerator",

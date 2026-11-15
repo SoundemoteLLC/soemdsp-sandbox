@@ -96,6 +96,12 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
       return;
     }
     if (message.type === "setMetaView") {
+      // The host re-sends the open Meta view after every plan send. Same view
+      // = nothing to do; recompiling here ran soemdsp_graph_clear and reset
+      // every module's state whenever any module was added or edited.
+      if (String(message.metaId || "") === String(this._metaViewId || "")) {
+        return;
+      }
       if (typeof this.applyMetaViewPreview === "function") {
         this.applyMetaViewPreview(message.metaId);
       } else {

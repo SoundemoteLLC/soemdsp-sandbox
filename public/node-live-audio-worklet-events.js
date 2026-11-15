@@ -278,6 +278,7 @@ NodeLiveAudioProcessor.prototype.setConnections = function setConnections(plan, 
     // Efficient mode: recompile only if wires/nodes changed. Bypass is a flag —
     // never clear/recreate natives (that wiped reverb/delay tails).
     if (this.efficientProduct) {
+      this._nativeGraphOverflowBlocked = false; // a new plan: let an overflowed graph try again
       if (typeof this.syncNativeGraphFromPlan === "function") {
         this.syncNativeGraphFromPlan();
       } else if (typeof this.compileNativeGraphFromPlan === "function") {

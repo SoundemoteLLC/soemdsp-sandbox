@@ -512,6 +512,15 @@ function nodeGraphPulseTrainEndPort(type, port) {
   return String(type || "").trim() === "pulseTrain" && String(port || "").trim() === "End";
 }
 
+/** Velvet Noise Trigger + / Trigger - keep their sign next to the trigger symbol. */
+function nodeGraphVelvetNoiseTriggerSign(type, port) {
+  if (String(type || "").trim() !== "velvetNoise") return "";
+  const raw = String(port || "").trim();
+  if (raw === "Trigger +") return "+";
+  if (raw === "Trigger -") return "-";
+  return "";
+}
+
 /** Oscillator Reset that takes trigger height (definition.resetTrigger). */
 function nodeGraphPortIsTriggerReset(type, port) {
   if (!nodeGraphPortIsReset(port)) return false;
@@ -523,6 +532,8 @@ function nodeGraphPortIsTriggerReset(type, port) {
 
 function nodeGraphGateTriggerPortDisplayLabel(type, port) {
   if (nodeGraphPortIsTrigger(port, type)) {
+    const velvetSign = nodeGraphVelvetNoiseTriggerSign(type, port);
+    if (velvetSign) return `${velvetSign}${NODE_GRAPH_TRIGGER_GLYPH}`;
     return nodeGraphPulseTrainEndPort(type, port) ? `End${NODE_GRAPH_TRIGGER_GLYPH}` : NODE_GRAPH_TRIGGER_GLYPH;
   }
   if (nodeGraphPortIsReset(port)) {
@@ -536,6 +547,8 @@ function nodeGraphGateTriggerPortDisplayLabel(type, port) {
 
 function nodeGraphGateTriggerPortSpokenName(type, port) {
   if (nodeGraphPortIsTriggerReset(type, port)) return "Reset trigger";
+  if (nodeGraphVelvetNoiseTriggerSign(type, port) === "+") return "Positive trigger";
+  if (nodeGraphVelvetNoiseTriggerSign(type, port) === "-") return "Negative trigger";
   if (nodeGraphPortIsTrigger(port, type)) return nodeGraphPulseTrainEndPort(type, port) ? "End trigger" : "Trigger";
   if (nodeGraphPortIsReset(port)) return "Reset";
   if (nodeGraphPortIsGate(port, type)) return "Gate";

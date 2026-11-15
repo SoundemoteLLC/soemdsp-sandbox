@@ -1024,6 +1024,7 @@ NodeLiveAudioProcessor.prototype._setPlanImpl = function _setPlanImpl(plan, mess
     // natives (that wiped reverb/delay tails and sounded like an engine restart).
     // Leaving efficient destroys graph-owned natives (sabrina pool=2).
     if (this.efficientProduct) {
+      this._nativeGraphOverflowBlocked = false; // a new plan: let an overflowed graph try again
       if (typeof this.syncNativeGraphFromPlan === "function") {
         this.syncNativeGraphFromPlan();
       } else {

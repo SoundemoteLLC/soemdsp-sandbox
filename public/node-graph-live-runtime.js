@@ -2188,6 +2188,8 @@ function handleNodeGraphLiveWorkletMessage(event) {
       setNodeGraphLivePlanStatus(`native graph ${detail}`, "good");
     } else if (status === "missing" || status === "error" || status === "idle") {
       setNodeGraphLivePlanStatus(`native graph: ${detail}`, "warn");
+      // An error must never be silent: it is also a console error.
+      if (status === "error") console.error(`[native graph] ${detail}`);
     }
   } else if (message.type === "nativeModuleStatus") {
     setNodeGraphLiveEvidence("native-module", message);
@@ -3456,16 +3458,16 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/lib/note-mask-128.js?v=pq-oct-st-1",
   "./public/node-graph-keyboard-chord-memory.js?v=kbd-gl-1",
   "./public/modules/sequencer/sequencer-math.js?v=seq-23",
-  "./public/node-live-audio-worklet-events.js?v=step-register-1-sg-drag-2",
+  "./public/node-live-audio-worklet-events.js?v=step-register-1-sg-drag-2-limits-1",
   "./public/node-live-audio-worklet-visual.js?v=perf-20261015",
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.14.3",
+  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.14.3-limits-2",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
-  "./public/node-live-audio-worklet-set-plan.js?v=step-register-1",
+  "./public/node-live-audio-worklet-set-plan.js?v=step-register-1-limits-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
-  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.14.3",
+  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.14.3-metaview-1",
   "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015",
   "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-db-1",
   "./public/modules/_shared/output-amplitude.js?v=output-amp-1",

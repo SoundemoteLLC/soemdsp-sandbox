@@ -257,8 +257,8 @@ const nodeGraphModuleStoreDepartments = Object.freeze([
   { id: "analogFilter",     emoji: "🔥", label: "Analog Filter", defaultModule: "passiveFilter",     symbol: "≈",  title: "Analog Filter",     pitch: "Circuit-style filters — Dual Ladder, Ladder, Passive, 303, Flower Child, SuperLove, and other engines with personality." },
   { id: "musical",      emoji: "🎼", label: "Musical",      symbol: "𝄞",  title: "Musical",  pitch: "Pitch, scale, and harmony tools: quantizers, chord pickers, progressions, and other note-theory building blocks." },
   { id: "space",        emoji: "⛪", label: "Space", defaultModule: "pingPongDelay",        symbol: "FX",  title: "Space",     pitch: "Space and multifx: delay, reverb, flanger, phaser, and other processors for shaping finished sound." },
-  // Id stays clock (saved settings / catalog). Shelf label is Time.
-  { id: "clock",        emoji: "⌚", label: "Clock", defaultModule: "clock",        symbol: "♪",   title: "Clock",     pitch: "Clocks, sequencers, dividers, counters, and trigger timing — everything that decides WHEN the rest of the patch fires." },
+  // Id stays clock (saved settings / catalog); the user-facing department is Sequence.
+  { id: "clock",        emoji: "⌚", label: "Sequence", defaultModule: "clock",        symbol: "♪",   title: "Sequence", pitch: "Sequencers, dividers, counters, and trigger timing — everything that decides WHEN the rest of the patch fires." },
   { id: "digital",      emoji: "🔬", label: "Digital", defaultModule: "t",      symbol: "{ }", title: "Digital",   pitch: "Patch-local code surfaces, exact value conversion, and digital/visual programming tools inside the sandbox." },
   { id: "text",         emoji: "📝", label: "Text", defaultModule: "textBox",         symbol: "Aa",  title: "Text",      pitch: "Text and code surfaces: labels, streams, and control-plane Code boxes. Not audio DSP." },
   { id: "sample",       emoji: "🎶", label: "Sample Player", defaultModule: "samplePlayer", symbol: "▣", title: "Sample Player", pitch: "Sample and music-file playback: one-shots, loops, and scrubbable players that turn stored audio into patch signal." },
@@ -367,7 +367,7 @@ const nodeGraphModuleStoreDepartmentAliasToId = Object.freeze({
   Clock:             "clock",
   clock:             "clock",
   Time:              "clock",
-  // Category id stays "clock" (persistence); shelf label is Time.
+  // Category id stays "clock" (persistence); shelf label is Sequence.
   time:              "clock",
   Visual:            "digital",
   Invisible:         "invisible",
@@ -1084,6 +1084,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Fluv Noise as a generator: pitch-tracked noise band (HP at ƒ, LP at ƒ×Spread) with log Start→Full mix.",
     label: "Fluv Noise",
     notes: ["fluv", "analog", "hiss", "dither", "noise band", "filter morph", "stereo", "native"],
+  },
+  velvetNoise: {
+    category: "noise",
+    description: "Real-time Velvet Noise generator and Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser.",
+    label: "Velvet Noise",
+    notes: ["velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "generator", "noise", "native"],
   },
   randomWalk: {
     category: "noise",
@@ -3865,6 +3871,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     source: "native_modules/fluv_noise/fluv_noise.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/fluv_noise/fluv_noise.cpp",
   },
+  velvetNoise: {
+    source: "native_modules/velvet_noise/velvet_noise.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/velvet_noise/velvet_noise.cpp",
+  },
   pumpCurve: {
     source: "native_modules/pump_curve/pump_curve.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/pump_curve/pump_curve.cpp",
@@ -4188,6 +4198,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   stepGrid: {
     source: "public/modules/stepGrid/step-grid-worklet-evaluator.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/stepGrid/step-grid-worklet-evaluator.js",
+  },
+  sturmianGrid: {
+    source: "native_modules/graph_engine/graph_engine.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },
   sequencer: {
     source: "public/modules/sequencer/sequencer-math.js",
