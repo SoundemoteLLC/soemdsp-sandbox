@@ -93,6 +93,13 @@ function nodeGraphExternalStartLiveOutput() {
 // Autostart Live Audio once the sandbox interface has finished booting (patch
 // committed, DOM built) when embedded with ?autostart=1.
 if (nodeGraphExternalAutostartRequested()) {
+  const resumeFromGesture = () => {
+    if (typeof nodeGraphLiveEnsureContextFromGesture === "function") {
+      nodeGraphLiveEnsureContextFromGesture();
+    }
+  };
+  document.addEventListener("pointerdown", resumeFromGesture, { capture: true });
+  document.addEventListener("keydown", resumeFromGesture, { capture: true });
   if (document.documentElement.dataset.nodeSandboxInterfaceReady === "true") {
     nodeGraphExternalStartLiveOutput();
   } else {

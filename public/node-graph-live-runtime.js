@@ -3814,10 +3814,14 @@ async function startNodeGraphLiveAudio(outputSerial = nodeGraphMvp.live.outputTo
         context = new AudioContextConstructor();
       }
     }
+    nodeGraphMvp.live.gestureContext = context;
     nodeGraphMvp.live.sessionId += 1;
     nodeGraphMvp.live.planSerial = 0;
     if (context.state === "suspended") {
       await context.resume();
+    }
+    if (nodeGraphMvp.live.gestureContext === context) {
+      nodeGraphMvp.live.gestureContext = null;
     }
     if (nodeGraphLiveEngineStartCancelled(outputSerial)) {
       try {
