@@ -1,0 +1,70 @@
+name: Migrate Sandbox releases
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Copy releases and verify SHA-256 digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/migrate.py <<'PYTHON'
+          import hashlib, json, os, pathlib, re, subprocess, tempfile, urllib.request
+          
+          SOURCE = 'SoundemoteLLC/sandbox'
+          DEST = 'SoundemoteLLC/soemdsp-sandbox'
+          
+          def gh(*args):
+              return subprocess.check_output(['gh', *args], text=True)
+          
+          def api(path):
+              return json.loads(gh('api', path))
+          
+          releases = api(f'repos/{SOURCE}/releases?per_page=100')
+          latest = api(f'repos/{SOURCE}/releases/latest')['tag_name']
+          for release in reversed(releases):
+              tag = release['tag_name']
+              print(f'Migrating {tag}', flush=True)
+              existing = {r['tag_name']: r for r in api(f'repos/{DEST}/releases?per_page=100')}.get(tag)
+              with tempfile.TemporaryDirectory() as folder:
+                  notes = pathlib.Path(folder, 'notes.md')
+                  notes.write_text(release['body'] or '', encoding='utf-8')
+                  if not existing:
+                      match = re.search(r'Built from soemdsp-sandbox ([0-9a-f]+)', release['body'] or '')
+                      args = ['release', 'create', tag, '-R', DEST, '--draft', '--title', release['name'] or tag, '--notes-file', str(notes)]
+                      if match:
+                          args += ['--target', api(f'repos/{DEST}/commits/{match[1]}')['sha']]
+                      else:
+                          args += ['--verify-tag']
+                      if release['prerelease']:
+                          args += ['--prerelease']
+                      gh(*args)
+                  current = api(f'repos/{DEST}/releases/tags/{tag}')
+                  assets = {a['name']: a for a in current['assets']}
+                  for asset in release['assets']:
+                      if asset['name'] in assets:
+                          copy = assets[asset['name']]
+                          assert copy['size'] == asset['size'] and copy['digest'] == asset['digest'], asset['name']
+                          continue
+                      path = pathlib.Path(folder, asset['name'])
+                      request = urllib.request.Request(asset['browser_download_url'], headers={'User-Agent': 'Sandbox-release-migration'})
+                      with urllib.request.urlopen(request) as response, path.open('wb') as output:
+                          while chunk := response.read(1024 * 1024):
+                              output.write(chunk)
+                      assert path.stat().st_size == asset['size'], asset['name']
+                      if asset.get('digest'):
+                          assert 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest() == asset['digest'], asset['name']
+                      gh('release', 'upload', tag, str(path), '-R', DEST)
+                      path.unlink()
+                  copied = api(f'repos/{DEST}/releases/tags/{tag}')
+                  assert {(a['name'], a['size'], a['digest']) for a in copied['assets']} == {(a['name'], a['size'], a['digest']) for a in release['assets']}
+                  gh('release', 'edit', tag, '-R', DEST, '--draft=false', '--latest=false')
+                  print(f'Verified {tag}: {len(release["assets"])} assets', flush=True)
+          gh('release', 'edit', latest, '-R', DEST, '--latest')
+          print('All releases and asset digests verified.', flush=True)
+          PYTHON
+          python /tmp/migrate.py
