@@ -1040,6 +1040,16 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       0,
       64,
     ),
+    thresholdThickness: normalizeNodeGraphTraceDisplayNumber(
+      source.thresholdThickness,
+      defaults.thresholdThickness ?? 1,
+      0.5,
+      8,
+    ),
+    thresholdColor: normalizeNodeGraphTraceDisplayColor(
+      source.thresholdColor,
+      defaults.thresholdColor || "#ffb833",
+    ),
     pauseOnSilence: (() => {
       const raw = source.pauseOnSilence;
       if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;

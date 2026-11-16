@@ -2367,26 +2367,10 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Noise Detector",
     notes: ["multimeter", "fidelity", "nsdf", "mcleod", "noise", "gate", "threshold"],
   },
-  rmsStereo: {
-    category: "multimeter",
-    description: "Stereo RMS: Left/Right in, music RMS ((L+R)/2 or lone side) on RMS A/D. Face follows RMS A.",
-    label: "RMS Stereo",
-    notes: [
-      "multimeter",
-      "rms",
-      "stereo",
-      "left",
-      "right",
-      "level",
-      "meter",
-      "gate",
-      "waterfall",
-    ],
-  },
   lufs: {
     category: "multimeter",
     description: "Placeholder LUFS loudness meter (integrated / short-term / momentary).",
-    label: "LUFS",
+    label: "LUFS Meter",
     notes: [
       "under construction",
       "multimeter",
@@ -2588,9 +2572,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   rmsMeter: {
     category: "dynamics",
-    description: "RMS Meter: one-pole running mean square, RMS = sqrt(ms). Outs RMS (linear), dB (20*log10, -120 floor), Env Inverted (1 - RMS*Amplitude, 0..1) for ducking.",
+    description: "RMS Meter: stereo one-pole running mean square, RMS = sqrt(ms). Left / Right in (R unwired = mono). Outs per side: RMS (linear), dB (20*log10, -120 floor, Peak Hold), Env Inverted (1 - RMS*Amplitude, 0..1) for ducking; plus RMS Avg / dB Avg of (L+R)/2 and a Threshold Gate. dB waterfall with Min / Max zoom.",
     label: "RMS Meter",
-    notes: ["rms", "meter", "level", "loudness", "db", "duck", "sidechain", "native"],
+    notes: ["rms", "meter", "level", "loudness", "db", "duck", "sidechain", "native", "stereo", "multimeter", "gate", "threshold", "left", "right"],
   },
   powerDecay: {
     category: "envelope",
@@ -2613,9 +2597,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   hyperbolicDecay: {
     category: "envelope",
-    description: "Hyperbolic: Trigger restarts start·end/((start−end)·u+end) from height to 0.001. Shape w warps time; 0 is linear time.",
-    label: "Hyperbolic",
-    notes: ["Trigger", "Duration", "Shape w", "decay", "hyperbolic", "native"],
+    description: "Hyperbolic AD: Trigger runs an optional hyperbolic attack (the decay run backwards) then start*end/((start-end)*u+end) from height to 0.001. Atk w / Dec w warp time; 0 is linear time. Free / Latch. Speed changes finish the envelope faster or slower from where it is.",
+    label: "Hyperbolic AD",
+    notes: ["Trigger", "Attack", "Decay", "Atk w", "Dec w", "attack", "decay", "hyperbolic", "AD", "native"],
   },
   robinLeakyEnvelope: {
     category: "envelope",
@@ -2631,9 +2615,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   ellipsoidDecay: {
     category: "envelope",
-    description: "EllipsoidDecay: Trigger restarts RoundShape sine→square bottom-left Bi Y from height to 0.001. Morph 0 = circle, 1 = square.",
-    label: "EllipsoidDecay",
-    notes: ["Trigger", "Duration", "Morph", "decay", "ellipsoid", "roundshape", "sine to square", "native"],
+    description: "Ellipsoid AD: Trigger runs an optional attack (the decay run backwards) then the RoundShape sine-to-square bottom-left quarter from height to 0.001. Morph (-1..+1, both sides) with Attack / Decay Morph trims that use the remaining room (like Skew % in the Step Graph); 0 = straight ramp, +0.5 = circle, +1 = square, negative = the slow orientation (fast up on the attack). Free / Latch. Speed changes finish the envelope faster or slower from where it is.",
+    label: "Ellipsoid AD",
+    notes: ["Trigger", "Attack", "Decay", "Morph", "AtkMrph", "DecMrph", "attack", "decay", "ellipsoid", "roundshape", "AD", "native"],
   },
   vactrol: {
     category: "envelope",
@@ -3858,10 +3842,6 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   nextPatch: {
     source: "public/modules/nextPatch/next-patch-worklet-evaluator.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/nextPatch/next-patch-worklet-evaluator.js",
-  },
-  rmsStereo: {
-    source: "public/modules/rms/rms-math.js",
-    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rms/rms-math.js",
   },
   noiseGenerator: {
     source: "native_modules/noise_generator/noise_generator.cpp",

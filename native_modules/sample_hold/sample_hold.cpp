@@ -23,7 +23,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 192;
+static const int kMaxInstances = 384; // 3 per node
 
 struct SampleHoldState {
   bool active;

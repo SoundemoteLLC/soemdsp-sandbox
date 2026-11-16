@@ -954,12 +954,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   }
   // RMS Meter: RMS on Mono, dB on Saw, Env Inverted on Ramp.
   if (t === "rmsMeter") {
-    if (p === "rms" || p === "rms l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
-    if (p === "rms r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
-    if (p === "db" || p === "db l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
-    if (p === "db r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
-    if (p === "env inverted" || p === "env inverted l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
-    if (p === "env inverted r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
+    if (p === "rms") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "db") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "env inverted") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
   }
   // Electro Snare: Snare L on Left, Snare R on Right, Env on Mono.
   if (t === "electroSnare" || t === "modalSnare") {
@@ -1458,6 +1456,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "gate" || p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
+  // Hyperbolic Decay: face phase dot (__EnvPos: 0..1 attack, 1..2 decay, -1 idle) on Phase01.
+  if ((t === "hyperbolicDecay" || t === "ellipsoidDecay") && p === "__envpos") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "pulseExplosion") {
     if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -7013,6 +7013,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("attack", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("attack", 300));
       push("release", P.NATIVE_GRAPH_PARAM_WIDTH, cont("release", 300));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("peakHold", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("peakHold", 0)); // Hold s (dB outs)
+      push("thresholdDb", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("thresholdDb", -12)); // Gate threshold dBFS
       continue;
     }
     if (type === "powerDecay") {
@@ -7026,7 +7028,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("decayTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decayTime", 2));
       push("shape", P.NATIVE_GRAPH_PARAM_SHAPE, cont("shape", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
-      if (type === "hyperbolicDecay") push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
+      if (type === "hyperbolicDecay") {
+        push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
+        push("attackTime", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("attackTime", 0)); // s, 0 = no attack stage
+        push("attackShape", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("attackShape", 0));
+      }
       continue;
     }
     if (type === "robinLeakyEnvelope") {
@@ -7040,6 +7046,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("decayTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decayTime", 2));
       push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
+      push("attackTime", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("attackTime", 0)); // s, 0 = no attack stage
+      push("attackMorph", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("attackMorph", 0));        // offset to Morph
+      push("decayMorph", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("decayMorph", 0));         // offset to Morph
       continue;
     }
     if (type === "exponentialMix") {
@@ -10502,7 +10512,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
   if (portId === P.NATIVE_GRAPH_PORT_MONO) {
     if (type === "pulseTrain") return ["Shape", "Out", "Mono"];
     if (type === "resonantCompressor") return ["Out L"];
-    if (type === "rmsMeter") return ["RMS", "RMS L Tap"];
+    if (type === "rmsMeter") return ["RMS"];
     if (type === "acidSequencer") return ["Gate"];
     if (type === "clockDivider") return ["Gate", "Out", "Mono"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") {
@@ -10671,7 +10681,6 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "hostBpm") return ["Beat"];
     if (type === "pulseTrain") return ["Trigger"];
     if (type === "resonantCompressor") return ["Out R"];
-    if (type === "rmsMeter") return ["RMS R", "RMS R Tap"];
     if (type === "clockDivider") return ["Trigger"];
     if (type === "robinSinepulse") return ["env", "0-1", "0\u20131", "0..1"];
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
@@ -10824,7 +10833,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "vactrol") return ["Light"];
     if (type === "hostBpm") return ["Phase"];
     if (type === "resonantCompressor") return ["Env"];
-    if (type === "rmsMeter") return ["dB R"];
+    if (type === "rmsMeter") return ["Gate"];
     if (type === "acidSequencer") return ["CV"];
     if (type === "arp") return ["f", "ƒ", "Frequency", "Freq", "Square"];
     if (type === "transport") return ["Click", "Click L", "Click Left"];
@@ -10839,7 +10848,6 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Square"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_TRI) {
-    if (type === "rmsMeter") return ["Env Inverted R"];
     if (type === "transport") return ["Click R", "Click Right"];
     if (type === "hostBpm") return ["T", "Trigger", "Pulse"];
     if (type === "phoneTone") return ["Digital Thru"];
@@ -10889,6 +10897,8 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "pulseExplosion" || type === "pulseTrain" || type === "robinSinepulse") {
       return ["__Elapsed"];
     }
+    // Hyperbolic Decay face phase dot: 0..1 across the attack, 1..2 across the decay, -1 idle.
+    if (type === "hyperbolicDecay" || type === "ellipsoidDecay") return ["__EnvPos"];
     return [];
   }
   return [];
@@ -10978,7 +10988,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE, P.NATIVE_GRAPH_PORT_IS_IDLE)
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
-        || type === "robinSinepulse"
+        || type === "robinSinepulse" || type === "hyperbolicDecay" || type === "ellipsoidDecay"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
         || type === "clockDivider" || type === "triggerDivider"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
@@ -11166,7 +11176,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "clock" || type === "pulseExplosion" || type === "pulseTrain"
-        || type === "robinSinepulse"
+        || type === "robinSinepulse" || type === "hyperbolicDecay" || type === "ellipsoidDecay"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc"
         || type === "clockDivider" || type === "triggerDivider"
       ) {
@@ -11197,6 +11207,9 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
       } else if (type === "lookaheadLimiter") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW);
+      } else if (type === "rmsMeter") {
+        // Gate ring for the waterfall's gate strip (Square carries Gate).
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SQUARE);
       } else if (type === "sidechain") {
         // Saw = Envelope, Ramp = Dry Gain, Tri = Wet Gain (face taps).
         ports = facePorts.concat(

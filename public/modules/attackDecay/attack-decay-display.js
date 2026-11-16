@@ -68,7 +68,7 @@ function drawNodeGraphEnvelopeCurveDisplay(section) {
   }
 }
 
-function nodeGraphEnvelopeCurveBuildPreview(node, type, width) {
+function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
   const pts = Math.max(64, Math.floor(nodeGraphFiniteNumber(width, 128)));
   if (
     (type === "expAdsr" || type === "curveEnvelopeMod")
@@ -271,6 +271,64 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width) {
     };
   }
 
+  if (type === "hyperbolicDecay" && typeof nodeGraphHyperbolicDecayPreviewCurve === "function") {
+    const duration = Math.max(0.001, nodeGraphEnvelopeCurveLiveParam(node, "decayTime", 2));
+    const shape = nodeGraphEnvelopeCurveLiveParam(node, "shape", 0);
+    const attack = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "attackTime", 0));
+    const attackShape = nodeGraphEnvelopeCurveLiveParam(node, "attackShape", 0);
+    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+    const preview = nodeGraphHyperbolicDecayPreviewCurve({ duration, shape, attack, attackShape, amplitude }, pts, heightPx);
+    // Phase dot: the engine's position (__EnvPos): 0..1 across the attack, 1..2 across the decay, -1 idle.
+    // It is a phase, so changing a time while the envelope runs moves the curve under the dot, not the dot.
+    const pos = typeof nodeGraphModuleScopeLatestOutputValue === "function"
+      ? Number(nodeGraphModuleScopeLatestOutputValue(String(node.id || ""), "__EnvPos", Number.NaN))
+      : Number.NaN;
+    let phaseT = Number.NaN;
+    if (Number.isFinite(pos) && pos >= 0) {
+      const aFrac = preview.guideT;
+      phaseT = pos < 1 ? aFrac * pos : aFrac + (1 - aFrac) * Math.min(1, pos - 1);
+    }
+    return {
+      points: preview.points,
+      total: preview.total,
+      guideT: preview.guideT,
+      ampView: preview.ampView,
+      phaseT,
+      leftLabel: " ",
+      rightLabel: " ",
+      signature: { type, duration, shape, attack, attackShape, amplitude, phaseT: Number.isFinite(phaseT) ? Math.round(phaseT * 2000) : -1 },
+    };
+  }
+
+  if (type === "ellipsoidDecay" && typeof nodeGraphEllipsoidDecayPreviewCurve === "function") {
+    const duration = Math.max(0.001, nodeGraphEnvelopeCurveLiveParam(node, "decayTime", 2));
+    const attack = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "attackTime", 0));
+    const morph = nodeGraphEnvelopeCurveLiveParam(node, "morph", 0);
+    const attackMorph = nodeGraphEnvelopeCurveLiveParam(node, "attackMorph", 0);
+    const decayMorph = nodeGraphEnvelopeCurveLiveParam(node, "decayMorph", 0);
+    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+    const preview = nodeGraphEllipsoidDecayPreviewCurve({ duration, attack, morph, attackMorph, decayMorph, amplitude }, pts, heightPx);
+    // Phase dot: the engine's position (__EnvPos): 0..1 across the attack, 1..2 across the decay, -1 idle.
+    const pos = typeof nodeGraphModuleScopeLatestOutputValue === "function"
+      ? Number(nodeGraphModuleScopeLatestOutputValue(String(node.id || ""), "__EnvPos", Number.NaN))
+      : Number.NaN;
+    let phaseT = Number.NaN;
+    if (Number.isFinite(pos) && pos >= 0) {
+      const aFrac = preview.guideT;
+      phaseT = pos < 1 ? aFrac * pos : aFrac + (1 - aFrac) * Math.min(1, pos - 1);
+    }
+    return {
+      points: preview.points,
+      total: preview.total,
+      guideT: preview.guideT,
+      ampView: preview.ampView,
+      phaseT,
+      leftLabel: " ",
+      rightLabel: " ",
+      signature: { type, duration, attack, morph, attackMorph, decayMorph, amplitude, phaseT: Number.isFinite(phaseT) ? Math.round(phaseT * 2000) : -1 },
+    };
+  }
+
   if (type === "pingEnvelope" && typeof nodeGraphPingEnvelopePreviewCurve === "function") {
     const attack = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "attack", 0));
     const decay = Math.max(0, Math.min(1, nodeGraphEnvelopeCurveLiveParam(node, "decay", 0.5)));
@@ -335,7 +393,7 @@ function drawNodeGraphEnvelopeCurveDisplayInner(section) {
   const cssH = Math.max(1, faceMetrics
     ? faceMetrics.cssH
     : nodeGraphFiniteNumber(section.clientHeight || section.offsetHeight, 1));
-  const built = nodeGraphEnvelopeCurveBuildPreview(node, type, cssW);
+  const built = nodeGraphEnvelopeCurveBuildPreview(node, type, cssW, cssH);
   const signature = JSON.stringify(built.signature);
   if (
     section._envelopeCurveSignature === signature
@@ -434,6 +492,8 @@ function drawNodeGraphEnvelopeCurveDisplayInner(section) {
     section._envPlayT = playT;
     section._envGateWas = gateOn;
   }
+  // Modules that know their exact position (Hyperbolic Decay) override the inferred one; NaN hides the dot.
+  if ("phaseT" in built) playT = built.phaseT;
   if (Number.isFinite(playT) && pts.length) {
     let dot = pts[0];
     let bestD = 1e9;

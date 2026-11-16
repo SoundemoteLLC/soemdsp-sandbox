@@ -2238,13 +2238,13 @@ function nodeGraphTraceDisplayColorWidgetModuleUrl() {
   }
   const script = document.querySelector('script[src*="node-graph-module-scopes.js"]');
   if (script?.src) {
-    return new URL("color-widget.js?v=hsl-lamp-1", script.src).href;
+    return new URL("color-widget.js?v=hsl-lamp-2", script.src).href;
   }
   // Fallbacks: site root /public/, then document-relative public/
   try {
-    return new URL("/public/color-widget.js?v=hsl-lamp-1", window.location.origin).href;
+    return new URL("/public/color-widget.js?v=hsl-lamp-2", window.location.origin).href;
   } catch {
-    return new URL("public/color-widget.js?v=hsl-lamp-1", window.location.href).href;
+    return new URL("public/color-widget.js?v=hsl-lamp-2", window.location.href).href;
   }
 }
 
@@ -2564,6 +2564,9 @@ function nodeGraphTraceDisplayColorWidgetLabel(field) {
   }
   if (field === "strokeColor") {
     return "Stroke";
+  }
+  if (field === "thresholdColor") {
+    return "Threshold";
   }
   if (field === "strokeLeftColor" || field === "strokeRightColor") {
     // Left / Right stroke; modules with stereoWaterfallLabels (Sidechain) use

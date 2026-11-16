@@ -300,7 +300,6 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_OBSERVER_TYPES = Object.freeze([
   "phosphorLight",
   "pixelGrid",
   "rgbaHsla",
-  "rmsStereo",
   "sandboxVisuals",
   "scope2d",
   "scope2dTrace",

@@ -1657,7 +1657,7 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
         : (type === "scope2dTrace"
           ? ["dot1Color", "secondaryColor"]
           : ["dot1Color"])))
-  ).filter((key) => activeColors.has(key) && allow("colors", key));
+  ).concat(type === "waterfall" ? ["thresholdColor"] : []).filter((key) => activeColors.has(key) && allow("colors", key));
   const parts = [];
   const rows = [];
   const xyzInk = isXyzWaterfallNode && type === "waterfall";
@@ -2218,7 +2218,14 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
   const parts = [];
 
   // Filter keys that only apply on stereo Trace faces (Output / SoEmReverb / …).
+  const hasGateStrip = Boolean(
+    typeof nodeGraphModuleDefinitions === "object" && nodeGraphModuleDefinitions?.[node?.type]?.gateStripPort,
+  );
   const allowKey = (kind, key) => {
+    // Threshold line + gate strip settings belong to RMS Meter only.
+    if ((key === "thresholdThickness" || key === "thresholdColor") && (type !== "waterfall" || !hasGateStrip)) {
+      return false;
+    }
     if (type !== "waterfall") {
       return true;
     }

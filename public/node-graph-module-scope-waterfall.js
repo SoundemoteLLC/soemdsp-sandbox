@@ -822,7 +822,7 @@ function nodeGraphWaterfallAmp(buffer, slot) {
       gain: 1,
       offset: 0,
       minDb: typeof NODE_GRAPH_RMS_DB_DEFAULT_MIN === "number" ? NODE_GRAPH_RMS_DB_DEFAULT_MIN : -48,
-      maxDb: typeof NODE_GRAPH_RMS_DB_CEIL === "number" ? NODE_GRAPH_RMS_DB_CEIL : 0,
+      maxDb: typeof NODE_GRAPH_RMS_DB_DEFAULT_MAX === "number" ? NODE_GRAPH_RMS_DB_DEFAULT_MAX : 3,
     };
   }
   // Trace buffer view folds Display Scale into gain. Waterfall applies Scale
@@ -955,6 +955,32 @@ function nodeGraphWaterfallRightOnlySpans(leftYs, rightYs) {
   if (b.y0 < o0) only.push({ y0: b.y0, y1: o0 });
   if (b.y1 > o1) only.push({ y0: o1, y1: b.y1 });
   return { only, overlap: { y0: o0, y1: o1 } };
+}
+
+/** True when the Gate ring (0 / 1) is high anywhere in [start, end) of its own samples. */
+function nodeGraphWaterfallGateOpen(buffer, start, end) {
+  if (!buffer?.length) return false;
+  const from = Math.max(0, Math.floor(start));
+  const to = Math.min(buffer.length, Math.max(from, Math.floor(end)));
+  if (to <= from) {
+    const v = Number(buffer[Math.min(buffer.length - 1, Math.max(0, Math.floor(end)))]);
+    return Number.isFinite(v) && v >= 0.5;
+  }
+  const step = to - from > 8192 ? Math.ceil((to - from) / 8192) : 1;
+  for (let i = from; i < to; i += step) {
+    if (Number(buffer[i]) >= 0.5) return true;
+  }
+  return false;
+}
+
+/** The gate strip for one column: a bar along the top edge, in the Threshold line's colour. */
+function nodeGraphWaterfallStampGateStrip(canvas, x, height, color) {
+  if (typeof nodeGraphWaterfallGlStampBar !== "function") return;
+  const h = Math.max(3, Math.round(height * 0.08));
+  const rgb = nodeGraphWaterfallParseInkRgb(color || "#ffb833");
+  nodeGraphWaterfallGlStampBar(
+    canvas, x, 1, { y0: 0, y1: h, strokeY0: 0, strokeY1: h }, null, false, [rgb[0], rgb[1], rgb[2], 0.95], "source-over", 1, true, null,
+  );
 }
 
 function nodeGraphWaterfallStampFilledSpan(canvas, x, ys, prevEdge, connect, rgb, blend) {
@@ -2232,6 +2258,7 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
   }
   for (const c of redo) {
     nodeGraphWaterfallStampColumnFills(destCanvas, c.x, c.spans, mode, stampComposite, useFill);
+    if (c.gate) nodeGraphWaterfallStampGateStrip(destCanvas, c.x, height, settings.thresholdColor);
   }
   const strokeCols = Object.create(null);
   const recent = [];
@@ -2286,7 +2313,13 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
     nodeGraphWaterfallStampColumnFills(
       destCanvas, x, columnSpans, mode, stampComposite, useFill,
     );
-    if (useStroke) recent.push({ x, spans: columnSpans });
+    let gateOn = false;
+    if (spec.gateBuffer) {
+      const gateWin = nodeGraphWaterfallMapSampleWindow(spec.buffer, spec.gateBuffer, s0, Math.max(s0 + 1e-6, s1));
+      gateOn = Boolean(gateWin) && nodeGraphWaterfallGateOpen(spec.gateBuffer, gateWin.start, gateWin.end);
+      if (gateOn) nodeGraphWaterfallStampGateStrip(destCanvas, x, height, settings.thresholdColor);
+    }
+    if (useStroke) recent.push({ x, spans: columnSpans, gate: gateOn });
     for (let i = 0; i < columnSpans.length; i += 1) {
       const span = columnSpans[i];
       // Stroke does not depend on the fill (see the onset path): collected
@@ -2354,6 +2387,7 @@ function nodeGraphWaterfallPaint(spec) {
     stereoBuffers: spec.stereoBuffers,
     xyzBuffers: spec.xyzBuffers,
     rgbBuffers: spec.rgbBuffers,
+    gateBuffer: spec.gateBuffer,
   };
   const remember = () => {
     if (typeof rememberNodeGraphTraceDisplaySignature === "function") {

@@ -182,7 +182,8 @@ const css = `
     outline-offset: -1px;
   }
 
-  .scw-label[data-copied="true"] {
+  /* Copy feedback covers only the color block, never the hex field. */
+  .scw-label[data-copied="true"] .scw-label-text {
     outline: 2px solid var(--color-widget-accent);
     outline-offset: -2px;
   }
@@ -785,8 +786,7 @@ export class SoundColorWidget {
         <div class="scw-root">
           <span class="scw-label" role="group">
             <input class="scw-hex" type="text" spellcheck="false" maxlength="7" autocomplete="off" aria-label="Hex color">
-            <span class="scw-label-text"><span class="scw-label-glyph"></span></span>
-            <span class="scw-copy-toast" aria-live="polite"></span>
+            <span class="scw-label-text"><span class="scw-label-glyph"></span><span class="scw-copy-toast" aria-live="polite"></span></span>
           </span>
           <button type="button" class="scw-control scw-plane" data-part="plane" aria-label="Color plane">
             <canvas class="scw-plane-canvas" aria-hidden="true"></canvas>
@@ -947,7 +947,7 @@ export class SoundColorWidget {
     } catch {
       this.copyHexFallback(hex);
     }
-    this.showCopyToast("Hashtag copied");
+    this.showCopyToast("Hex copied");
   }
 
   copyHexFallback(hex) {

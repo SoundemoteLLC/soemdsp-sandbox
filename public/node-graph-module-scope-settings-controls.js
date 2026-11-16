@@ -963,6 +963,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     scale: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0.01, 100),
     framePadding: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 6), 0, 64),
     fadeAmount: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 4), 0, 64),
+    thresholdThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0.5, 8),
   }),
   waterfallRgb: Object.freeze({
     dot1Size: nodeGraphTraceDisplayClampInkPx,

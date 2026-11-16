@@ -1989,7 +1989,8 @@ function nodeGraphPaintRmsDbGuideOverlay(batch, width, height, slot = null) {
   const labelPad = Math.max(4, Math.round(width * 0.02));
   const fontPx = Math.max(9, Math.min(13, Math.round(height * 0.045)));
   const minLabelGap = fontPx * 1.15;
-  // Lines first, then labels with Y collision so dense guides don't stack.
+  // Labels first (with Y collision so dense guides don't stack); each labelled guide then gets its line, which
+  // starts after the number so a line never runs through text. Levels with no room for a label draw no line.
   const drawn = [];
   for (const entry of levels) {
     const db = Number(entry?.db);
@@ -2002,17 +2003,16 @@ function nodeGraphPaintRmsDbGuideOverlay(batch, width, height, slot = null) {
     }
     const isZero = Math.abs(db) < 1e-9;
     const isExtreme = entry?.role === "min" || entry?.role === "max";
-    const a = isZero ? 0.55 : (isExtreme ? 0.38 : 0.22);
-    nodeGraphGlLinesRect(batch, 0, Math.floor(y), width, 1, [1, 1, 1, a]);
     drawn.push({ db, y, isZero, isExtreme });
   }
-  // Prefer extremes and 0 dB when labels would collide.
+  // 0 dB first (full scale must never be dropped), then the zoom ends, when labels would collide.
   drawn.sort((a, b) => {
-    const rank = (entry) => (entry.isExtreme ? 0 : (entry.isZero ? 1 : 2));
+    const rank = (entry) => (entry.isZero ? 0 : (entry.isExtreme ? 1 : 2));
     const d = rank(a) - rank(b);
     return d !== 0 ? d : a.y - b.y;
   });
   const labeledYs = [];
+  let labelRight = 0;
   for (const entry of drawn) {
     const label = nodeGraphRmsDbGuideLabel(entry.db);
     if (!label) {
@@ -2029,6 +2029,32 @@ function nodeGraphPaintRmsDbGuideOverlay(batch, width, height, slot = null) {
       baseline: "middle",
       weight: 400,
     });
+    const labelW = typeof nodeGraphGlLinesMeasureText === "function"
+      ? nodeGraphGlLinesMeasureText(label, fontPx, undefined, 400)
+      : label.length * fontPx * 0.6;
+    const lineX = Math.min(width, Math.ceil(labelPad + labelW + fontPx * 0.5));
+    labelRight = Math.max(labelRight, lineX);
+    const a = entry.isZero ? 0.4 : (entry.isExtreme ? 0.3 : 0.22);
+    nodeGraphGlLinesRect(batch, lineX, Math.floor(entry.y), Math.max(0, width - lineX), 1, [1, 1, 1, a]);
+  }
+  // Gate Threshold: a dashed line where the gate opens, so it can be compared with the signal.
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(slot?.nodeId) : null;
+  const threshold = Number(node?.params?.thresholdDb);
+  if (node && Number.isFinite(threshold) && threshold >= face.minDb && threshold <= face.maxDb) {
+    const bipolar = typeof nodeGraphRmsDbToFaceBipolar === "function"
+      ? nodeGraphRmsDbToFaceBipolar(threshold, face.minDb, face.maxDb)
+      : 0;
+    const ty = Math.floor(midY - bipolar * halfHeight);
+    const look = typeof nodeGraphTraceDisplaySettingsForSlot === "function" ? nodeGraphTraceDisplaySettingsForSlot(slot) : null;
+    const thick = Math.max(1, Math.round(Number(look?.thresholdThickness) || 1));
+    const rgb = typeof nodeGraphWaterfallParseInkRgb === "function"
+      ? nodeGraphWaterfallParseInkRgb(look?.thresholdColor || "#ffb833")
+      : [255, 184, 51];
+    const dash = Math.max(3, Math.round(fontPx * 0.5));
+    const startX = Math.max(labelRight, labelPad);
+    for (let dx = startX; dx < width; dx += dash * 2) {
+      nodeGraphGlLinesRect(batch, dx, ty - Math.floor(thick / 2), Math.min(dash, width - dx), thick, [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0.9]);
+    }
   }
 }
 
@@ -2074,6 +2100,13 @@ function drawNodeGraphTraceDisplayCanvasItem(item, pixelRatio) {
   if (typeof nodeGraphWaterfallPaint !== "function") {
     return false;
   }
+  // A module's Gate ring (RMS Meter): drawn as a strip along the top while the gate is on.
+  const gateStripPort = typeof nodeGraphModuleDefinitions === "object"
+    ? nodeGraphModuleDefinitions[slot?.type]?.gateStripPort
+    : null;
+  const gateBuffer = gateStripPort && typeof nodeGraphModuleScopeState === "object"
+    ? nodeGraphModuleScopeState.buffers.get(`${slot.nodeId}:${gateStripPort}`) || null
+    : null;
   const painted = nodeGraphWaterfallPaint({
     item,
     slot,
@@ -2085,6 +2118,7 @@ function drawNodeGraphTraceDisplayCanvasItem(item, pixelRatio) {
     stereoBuffers,
     xyzBuffers,
     rgbBuffers,
+    gateBuffer,
     density,
   });
   const def = typeof nodeGraphModuleDefinitions === "object"

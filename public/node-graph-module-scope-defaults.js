@@ -180,6 +180,9 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   // mask width (default 4, milder than the old hardcoded 8).
   framePadding: 6,
   fadeAmount: 4,
+  // RMS Meter: the Threshold line and the gate strip (colour shared).
+  thresholdThickness: 1,
+  thresholdColor: "#ffb833",
   // Off: keep scrolling. On: silence (linear amp at or below Planck) holds the plate.
   pauseOnSilence: false,
   // 1D Onset only. Off: the sweep wraps and keeps drawing. On: it holds at the

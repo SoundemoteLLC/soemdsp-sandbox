@@ -233,8 +233,9 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "fltThickness",
     "ampThickness",
     "memThickness",
+    "thresholdThickness",
   ],
-  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "playheadColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor", "barColor"],
+  colors: ["thresholdColor", "dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "playheadColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor", "barColor"],
   // Every control key that exists in the shared popover MUST be listed here.
   // setNodeGraphTraceDisplaySettingsFormType only show/hides keys from these
   // lists — anything missing leaks onto every module (e.g. Output saw
@@ -334,8 +335,9 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "lineSmoothing",
       "framePadding",
       "fadeAmount",
+      "thresholdThickness",
     ]),
-    colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor"]),
+    colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "thresholdColor"]),
     toggles: Object.freeze(["skipDiscontinuities", "autoRange", "pauseOnSilence", "pauseAtEnd"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend"]),
   }),
@@ -1370,6 +1372,12 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     inputmode: "decimal",
     id: "nodeTraceDisplayWaterfallFade",
   }),
+  // RMS Meter only: the dashed Threshold line (its colour is thresholdColor, shared with the gate strip).
+  thresholdThickness: Object.freeze({
+    label: "Threshold line (px)",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayThresholdThickness",
+  }),
 
   // Vactrol per-line thickness. Labels stand alone (no title / hover tooltip).
   lightThickness: Object.freeze({
@@ -2278,6 +2286,13 @@ const nodeGraphDisplaySettingsColorMeta = Object.freeze({
     aria: "Stroke color",
     defaultValue: "#ffffff",
     id: "nodeTraceDisplayStrokeColor",
+  }),
+  // RMS Meter only: dashed Threshold line and the gate strip along the top.
+  thresholdColor: Object.freeze({
+    label: "Threshold",
+    aria: "Threshold line and gate strip color",
+    defaultValue: "#ffb833",
+    id: "nodeTraceDisplayThresholdColor",
   }),
   // Two-channel Instant Waterfall: per-channel stroke (Left / Dry, Right / Wet).
   strokeLeftColor: Object.freeze({

@@ -903,7 +903,7 @@
     },
     {
       "name": "ellipsoid_decay",
-      "label": "EllipsoidDecay",
+      "label": "Ellipsoid AD",
       "targetType": "ellipsoidDecay",
       "kind": "envelope",
       "source": "native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
@@ -1389,7 +1389,7 @@
     },
     {
       "name": "hyperbolic_decay",
-      "label": "Hyperbolic",
+      "label": "Hyperbolic AD",
       "targetType": "hyperbolicDecay",
       "kind": "envelope",
       "source": "native_modules/hyperbolic_decay/hyperbolic_decay.cpp",

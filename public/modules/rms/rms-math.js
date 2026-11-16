@@ -5,8 +5,10 @@
 
 /** Silence floor for digital RMS D when amplitude is ~0 (not a face guide). */
 const NODE_GRAPH_RMS_DB_FLOOR = -120;
-/** Default meter top — 0 dB FS; above that is clipping / speaker-danger. */
-const NODE_GRAPH_RMS_DB_CEIL = 0;
+/** Highest Max dB the zoom accepts: headroom above 0 dB FS (clipping / speaker-danger) stays visible. */
+const NODE_GRAPH_RMS_DB_CEIL = 12;
+/** Default meter top: 3 dB of headroom above full scale, so the 0 dB line is not cut off at the edge. */
+const NODE_GRAPH_RMS_DB_DEFAULT_MAX = 3;
 /** Default meter bottom / Min dB floor. */
 const NODE_GRAPH_RMS_DB_DEFAULT_MIN = -48;
 
@@ -225,7 +227,7 @@ function nodeGraphRmsNormalizeDbRange(minDb, maxDb) {
   let min = Number(minDb);
   let max = Number(maxDb);
   if (!Number.isFinite(min)) min = NODE_GRAPH_RMS_DB_DEFAULT_MIN;
-  if (!Number.isFinite(max)) max = NODE_GRAPH_RMS_DB_CEIL;
+  if (!Number.isFinite(max)) max = NODE_GRAPH_RMS_DB_DEFAULT_MAX;
   min = Math.max(NODE_GRAPH_RMS_DB_DEFAULT_MIN, Math.min(NODE_GRAPH_RMS_DB_CEIL, min));
   max = Math.max(NODE_GRAPH_RMS_DB_DEFAULT_MIN, Math.min(NODE_GRAPH_RMS_DB_CEIL, max));
   if (!(max > min)) {

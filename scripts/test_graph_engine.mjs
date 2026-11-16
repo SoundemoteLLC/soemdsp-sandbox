@@ -363,6 +363,229 @@ const shuffled = (n) => {
   }
 }
 
+// ---------------------------------------------------------------- 5b. RMS Meter (stereo in, one set of outs)
+{
+  const RMS = 227;
+  const P_AMPLITUDE = 12, P_ATTACK = 53, P_RELEASE = 31, P_THRESHOLD = 80;
+  const MONO = 0, SAW = 3, SQUARE = 5; // RMS, dB, Gate
+  const run = (setup, blocks = 400) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, OSC); x.soemdsp_graph_set_param(h, 1, 10, 220); x.soemdsp_graph_set_param(h, 1, P_AMPLITUDE, 1);
+    x.soemdsp_graph_add_node(h, 2, RMS);
+    x.soemdsp_graph_set_param(h, 2, P_ATTACK, 50); x.soemdsp_graph_set_param(h, 2, P_RELEASE, 50);
+    setup(h);
+    x.soemdsp_graph_compile(h);
+    let sumSq = 0, n = 0;
+    for (let b = 0; b < blocks; b++) {
+      x.soemdsp_graph_process_block(h, BLK);
+      if (b >= blocks - 100) for (const v of port(h, 1, SINE)) { sumSq += v * v; n += 1; }
+    }
+    const last = (p) => port(h, 2, p)[BLK - 1];
+    const out = { truth: Math.sqrt(sumSq / n), rms: last(MONO), db: last(SAW), gate: last(SQUARE) };
+    x.soemdsp_graph_destroy(h);
+    return out;
+  };
+  // Mono (Left only): the meter agrees with the sine's true RMS.
+  const mono = run((h) => x.soemdsp_graph_connect(h, 1, SINE, 2, 0));
+  check(Math.abs(mono.rms - mono.truth) < 0.02 * mono.truth && Math.abs(mono.db - 20 * Math.log10(mono.truth)) < 0.2, `rms meter: sine reads ${mono.rms.toFixed(3)} RMS / ${mono.db.toFixed(2)} dB (true ${mono.truth.toFixed(3)})`);
+  // Stereo = average of the channel powers: the same sine on both sides reads the same as one side; sine + silence reads 1/sqrt(2) of it.
+  const both = run((h) => { x.soemdsp_graph_connect(h, 1, SINE, 2, 0); x.soemdsp_graph_connect(h, 1, SINE, 2, 2); });
+  check(Math.abs(both.rms - mono.rms) < 0.02 * mono.rms, `rms meter: the same signal on Left and Right reads ${both.rms.toFixed(3)} (one side ${mono.rms.toFixed(3)})`);
+  const half = run((h) => { x.soemdsp_graph_add_node(h, 3, CLIP); x.soemdsp_graph_connect(h, 1, SINE, 2, 0); x.soemdsp_graph_connect(h, 3, SINE, 2, 2); });
+  check(Math.abs(half.rms - mono.rms / Math.SQRT2) < 0.02 * mono.rms, `rms meter: Left sine, Right silent reads ${half.rms.toFixed(3)} (1/sqrt 2 of ${mono.rms.toFixed(3)})`);
+  // Gate: threshold below the level = 1, above = 0.
+  const level = mono.db;
+  const gateOn = run((h) => { x.soemdsp_graph_connect(h, 1, SINE, 2, 0); x.soemdsp_graph_set_param(h, 2, P_THRESHOLD, level - 6); });
+  const gateOff = run((h) => { x.soemdsp_graph_connect(h, 1, SINE, 2, 0); x.soemdsp_graph_set_param(h, 2, P_THRESHOLD, level + 3); });
+  check(gateOn.gate === 1 && gateOff.gate === 0, `rms meter: Gate is ${gateOn.gate} 6 dB under the level and ${gateOff.gate} 3 dB over it`);
+  check(x.soemdsp_graph_type_capacity(RMS) === x.soemdsp_graph_limit(1), "rms meter: holds the node cap of instances");
+}
+
+// ---------------------------------------------------------------- 5c. Hyperbolic Decay (attack, speed is a rate)
+{
+  const HYP = 209;
+  const P_SHAPE = 13, P_MODE = 21, P_ATT = 52, P_DEC = 53, P_OFFSET = 71, P_ATTSHAPE = 80;
+  const OUT = 0, POS = 10;
+  // A Bias node is the trigger: its offset goes 0 -> 1 at block 40. Returns per-block { out (last sample), pos }.
+  const run = (setup, seconds, atBlock = null) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_set_smooth_mode(h, 1, P_OFFSET, 3); // a step, not a ramp (every rising sample is a hit)
+    x.soemdsp_graph_add_node(h, 2, HYP);
+    x.soemdsp_graph_connect(h, 1, 0, 2, 0);
+    x.soemdsp_graph_set_param(h, 2, P_SHAPE, 0);
+    x.soemdsp_graph_set_param(h, 2, P_MODE, 0); // Free: live Decay
+    setup(h);
+    x.soemdsp_graph_compile(h);
+    const blocks = Math.ceil((seconds * SR) / BLK);
+    const rows = [];
+    for (let b = 0; b < blocks; b++) {
+      if (b === 40) x.soemdsp_graph_set_param(h, 1, P_OFFSET, 1); // after the param glides have settled
+      if (atBlock && b === atBlock.block) atBlock.fn(h);
+      x.soemdsp_graph_process_block(h, BLK);
+      const o = port(h, 2, OUT);
+      let peak = 0;
+      for (const v of o) peak = Math.max(peak, v);
+      rows.push({ out: o[BLK - 1], peak, pos: port(h, 2, POS)[BLK - 1] });
+    }
+    x.soemdsp_graph_destroy(h);
+    return rows;
+  };
+  const startBlock = (rows) => rows.findIndex((r) => r.peak > 1e-4);
+  const endBlock = (rows, from) => { for (let i = rows.length - 1; i > from; i--) if (rows[i].peak > 1e-4) return i; return -1; };
+  const sec = (blocks) => (blocks * BLK) / SR;
+
+  // 1. No attack: the first sample is the trigger height.
+  const plain = run((h) => { x.soemdsp_graph_set_param(h, 2, P_DEC, 1); x.soemdsp_graph_set_param(h, 2, P_ATT, 0); }, 2);
+  const s0 = startBlock(plain);
+  check(s0 > 0 && plain[s0].peak > 0.9, `hyperbolic: with Attack 0 the envelope starts at the trigger height (${plain[s0]?.peak.toFixed(3)})`);
+
+  // 2. Attack 0.5 s: it rises from near zero to the height at the end of the attack, then decays.
+  const att = run((h) => { x.soemdsp_graph_set_param(h, 2, P_DEC, 1); x.soemdsp_graph_set_param(h, 2, P_ATT, 0.5); }, 2.5);
+  const a0 = startBlock(att);
+  let peakAt = att.findIndex((r, i) => i >= a0 && r.peak > 0.99);
+  check(att[a0].peak < 0.05 && peakAt > a0 && Math.abs(sec(peakAt - a0) - 0.5) < 0.03,
+    `hyperbolic: Attack 0.5 s rises from ${att[a0].peak.toFixed(3)} to ${att[peakAt]?.peak.toFixed(3)} peaking ${sec(peakAt - a0).toFixed(2)} s after the start`);
+  check(att[a0 + 3].pos >= 0 && att[a0 + 3].pos < 1 && att[peakAt + 20].pos > 1, "hyperbolic: position reads 0..1 in the attack and 1..2 in the decay");
+
+  // 2b. The attack is the decay run backwards: the same time and shape on both sides are symmetrical about the peak.
+  {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_set_smooth_mode(h, 1, P_OFFSET, 3);
+    x.soemdsp_graph_add_node(h, 2, HYP);
+    x.soemdsp_graph_connect(h, 1, 0, 2, 0);
+    for (const [id, v] of [[P_MODE, 0], [P_ATT, 1], [P_DEC, 1], [P_SHAPE, 1.5], [P_ATTSHAPE, 1.5]]) x.soemdsp_graph_set_param(h, 2, id, v);
+    x.soemdsp_graph_compile(h);
+    const series = [];
+    const blocks = Math.ceil((2.6 * SR) / BLK);
+    for (let b = 0; b < blocks; b++) {
+      if (b === 40) x.soemdsp_graph_set_param(h, 1, P_OFFSET, 1);
+      x.soemdsp_graph_process_block(h, BLK);
+      for (const v of port(h, 2, OUT)) series.push(v);
+    }
+    x.soemdsp_graph_destroy(h);
+    const first = series.findIndex((v) => v > 1e-4);
+    let peak = first;
+    for (let i = first; i < series.length; i++) if (series[i] > series[peak]) peak = i;
+    let worst = 0;
+    for (const k of [20000, 10000, 5000]) {
+      const l = series[peak - k], r = series[peak + k];
+      worst = Math.max(worst, Math.abs(l - r) / Math.max(l, r));
+    }
+    check(worst < 0.05, `hyperbolic: same Attack, Decay and shape (1 s, w 1.5) are symmetrical about the peak (worst difference ${(worst * 100).toFixed(2)}%)`);
+  }
+
+  // 3. Speed is a rate: halfway through a 2 s decay, set Decay to 4 s. It finishes 3 s after the start (not 4).
+  const base = run((h) => { x.soemdsp_graph_set_param(h, 2, P_DEC, 2); x.soemdsp_graph_set_param(h, 2, P_ATT, 0); }, 5);
+  const bs = startBlock(base);
+  const sw = bs + Math.round((1.0 * SR) / BLK);
+  const slow = run((h) => { x.soemdsp_graph_set_param(h, 2, P_DEC, 2); x.soemdsp_graph_set_param(h, 2, P_ATT, 0); }, 6, { block: sw, fn: (h) => x.soemdsp_graph_set_param(h, 2, P_DEC, 4) });
+  const sStart = startBlock(slow);
+  const sEnd = endBlock(slow, sStart);
+  const finishes = sec(sEnd - sStart);
+  check(Math.abs(finishes - 3.0) < 0.1 && Math.abs(sec(endBlock(base, bs) - bs) - 2.0) < 0.1,
+    `hyperbolic: doubling Decay halfway finishes at ${finishes.toFixed(2)} s (expected 3.0; plain 2 s decay ends at ${sec(endBlock(base, bs) - bs).toFixed(2)} s)`);
+}
+
+// ---------------------------------------------------------------- 5d. Ellipsoid AD (attack, morphs, speed is a rate)
+{
+  const ELL = 212;
+  const P_MORPH = 13, P_MODE = 21, P_ATT = 52, P_DEC = 53, P_OFFSET = 71, P_ATTMORPH = 80, P_DECMORPH = 81;
+  const OUT = 0, POS = 10;
+  // Returns every output sample. A Bias node is the trigger (offset 0 -> 1 at block 40, after param glides settle).
+  const run = (params, seconds, change = null) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_set_smooth_mode(h, 1, P_OFFSET, 3);
+    x.soemdsp_graph_add_node(h, 2, ELL);
+    x.soemdsp_graph_connect(h, 1, 0, 2, 0);
+    x.soemdsp_graph_set_param(h, 2, P_MODE, 0);
+    x.soemdsp_graph_set_param(h, 2, P_ATTMORPH, 0); // engine defaults for these slots are not 0; the page pushes 0
+    x.soemdsp_graph_set_param(h, 2, P_DECMORPH, 0);
+    for (const [id, v] of Object.entries(params)) x.soemdsp_graph_set_param(h, 2, Number(id), v);
+    x.soemdsp_graph_compile(h);
+    const series = [], pos = [];
+    const blocks = Math.ceil((seconds * SR) / BLK);
+    for (let b = 0; b < blocks; b++) {
+      if (b === 40) x.soemdsp_graph_set_param(h, 1, P_OFFSET, 1);
+      if (change && b === change.block) x.soemdsp_graph_set_param(h, 2, change.id, change.value);
+      x.soemdsp_graph_process_block(h, BLK);
+      for (const v of port(h, 2, OUT)) series.push(v);
+      pos.push(port(h, 2, POS)[BLK - 1]);
+    }
+    x.soemdsp_graph_destroy(h);
+    return { series, pos };
+  };
+  const first = (r) => r.series.findIndex((v) => v > 1e-4);
+  const last = (r) => { for (let i = r.series.length - 1; i > 0; i--) if (r.series[i] > 1e-4) return i; return -1; };
+
+  const plain = run({ [P_DEC]: 1, [P_ATT]: 0, [P_MORPH]: 0 }, 2);
+  check(plain.series[first(plain)] > 0.99, `ellipsoid: with Attack 0 it starts at the trigger height (${plain.series[first(plain)].toFixed(3)})`);
+
+  const att = run({ [P_DEC]: 1, [P_ATT]: 0.5, [P_MORPH]: 0 }, 2.5);
+  const a0 = first(att);
+  const peakAt = att.series.findIndex((v, i) => i >= a0 && v > 0.999);
+  check(att.series[a0] < 0.05 && peakAt > a0 && Math.abs((peakAt - a0) / SR - 0.5) < 0.03,
+    `ellipsoid: Attack 0.5 s rises from ${att.series[a0].toFixed(3)} to the height at ${((peakAt - a0) / SR).toFixed(2)} s`);
+
+  // Morph moves both sides; AtkMrph / DecMrph are trims. Morph 0.5 = trim 0.5 on a Morph 0 module.
+  const viaMorph = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: 0.5 }, 3);
+  const viaTrims = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: 0, [P_ATTMORPH]: 0.5, [P_DECMORPH]: 0.5 }, 3);
+  const n = Math.min(viaMorph.series.length, viaTrims.series.length);
+  let dm = 0;
+  for (let i = 0; i < n; i += 97) dm = Math.max(dm, Math.abs(viaMorph.series[i] - viaTrims.series[i]));
+  check(dm < 1e-6, `ellipsoid: Morph 0.5 and both trims at 0.5 give the same envelope (max difference ${dm.toExponential(1)})`);
+  const circle = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: 0 }, 3);
+  let dc = 0;
+  for (let i = 0; i < n; i += 97) dc = Math.max(dc, Math.abs(viaMorph.series[i] - circle.series[i]));
+  check(dc > 0.05, `ellipsoid: Morph 0.5 changes the curve (max difference from Morph 0 is ${dc.toFixed(2)})`);
+
+  // The trims use the remaining room: Morph 0.6 with both trims +1 is Morph +1, with -1 it is Morph -1.
+  const sq = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: 1 }, 3);
+  const late = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: -1 }, 3);
+  const trimUp = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: 0.6, [P_ATTMORPH]: 1, [P_DECMORPH]: 1 }, 3);
+  const trimDown = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: 0.6, [P_ATTMORPH]: -1, [P_DECMORPH]: -1 }, 3);
+  let du = 0, dd = 0;
+  for (let i = 0; i < n; i += 97) { du = Math.max(du, Math.abs(sq.series[i] - trimUp.series[i])); dd = Math.max(dd, Math.abs(late.series[i] - trimDown.series[i])); }
+  check(du < 1e-6 && dd < 1e-6, `ellipsoid: with Morph 0.6, trims +1 reach Morph +1 and -1 reach Morph -1 (differences ${du.toExponential(1)}, ${dd.toExponential(1)})`);
+  // Morph -1 is a late drop: a decay of 1 s is still near the height halfway; Morph +1 has already dropped.
+  const lateDecay = run({ [P_DEC]: 1, [P_ATT]: 0, [P_MORPH]: -1 }, 2);
+  const earlyDecay = run({ [P_DEC]: 1, [P_ATT]: 0, [P_MORPH]: 1 }, 2);
+  const f0 = first(lateDecay), mid = Math.round(0.5 * SR);
+  check(lateDecay.series[f0 + mid] > 0.9 && earlyDecay.series[first(earlyDecay) + mid] < 0.05,
+    `ellipsoid: halfway through the decay Morph -1 is at ${lateDecay.series[f0 + mid].toFixed(2)} (late drop) and Morph +1 at ${earlyDecay.series[first(earlyDecay) + mid].toFixed(3)} (early drop)`);
+
+  // Both orientations on the attack: at a quarter of a 1 s attack the level is 0.25 for a ramp (Morph 0),
+  // 1 - cos(pi/8) = 0.076 for Morph +0.5 (slow up) and sin(pi/8) = 0.383 for Morph -0.5 (fast up).
+  const quarter = (m) => {
+    const r = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: m }, 2.5);
+    return r.series[first(r) + Math.round(0.25 * SR)];
+  };
+  const qRamp = quarter(0), qSlow = quarter(0.5), qFast = quarter(-0.5);
+  check(Math.abs(qRamp - 0.25) < 0.01 && Math.abs(qSlow - 0.0761) < 0.01 && Math.abs(qFast - 0.3827) < 0.01,
+    `ellipsoid: attack at a quarter: ramp ${qRamp.toFixed(3)} (0.25), Morph +0.5 slow up ${qSlow.toFixed(3)} (0.076), Morph -0.5 fast up ${qFast.toFixed(3)} (0.383)`);
+
+  // Equal Attack, Decay and Morph are symmetrical about the peak.
+  const sym = run({ [P_DEC]: 1, [P_ATT]: 1, [P_MORPH]: 0.4 }, 2.6);
+  const s0 = first(sym);
+  let sp = s0;
+  for (let i = s0; i < sym.series.length; i++) if (sym.series[i] > sym.series[sp]) sp = i;
+  let worst = 0;
+  for (const k of [20000, 10000, 5000]) {
+    const l = sym.series[sp - k], r = sym.series[sp + k];
+    worst = Math.max(worst, Math.abs(l - r) / Math.max(l, r));
+  }
+  check(worst < 0.05, `ellipsoid: equal Attack, Decay and Morph are symmetrical about the peak (worst difference ${(worst * 100).toFixed(2)}%)`);
+
+  // Speed is a rate: halfway through a 2 s decay, set Decay to 4 s: it finishes 3 s after the start (not 4).
+  const base = run({ [P_DEC]: 2, [P_ATT]: 0, [P_MORPH]: 0 }, 5);
+  const slow = run({ [P_DEC]: 2, [P_ATT]: 0, [P_MORPH]: 0 }, 6, { block: 40 + Math.round(SR / BLK), id: P_DEC, value: 4 });
+  const baseLen = (last(base) - first(base)) / SR;
+  const slowLen = (last(slow) - first(slow)) / SR;
+  check(Math.abs(baseLen - 2) < 0.1 && Math.abs(slowLen - 3) < 0.1, `ellipsoid: doubling Decay halfway finishes at ${slowLen.toFixed(2)} s (expected 3.0; plain 2 s decay ends at ${baseLen.toFixed(2)} s)`);
+}
+
 // ---------------------------------------------------------------- 6. limits the console prints
 {
   check(x.soemdsp_graph_limit(32) === 12, `limits: ${x.soemdsp_graph_limit(32)} channel slots per module (the startup print reports this)`);
