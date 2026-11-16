@@ -395,6 +395,7 @@ function nodeGraphBlankStartupPatch() {
     requiredAssets: [],
     samples: [],
     uiItems: [],
+    drawings: [],
   };
 }
 
@@ -464,4 +465,5 @@ const nodeGraphDefaultPatch = Object.freeze({
   requiredAssets: [],
   samples: [],
   uiItems: [],
+  drawings: [],
 });

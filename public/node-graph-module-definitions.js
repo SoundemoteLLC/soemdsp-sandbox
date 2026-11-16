@@ -6993,11 +6993,11 @@ const nodeGraphModuleDefinitions = (
         label: "Density",
         max: "20000",
         mid: "2500",
-        min: "50",
+        min: "0",
         nonlinearSlider: true,
         step: "any",
         unit: "Hz",
-        tooltip: "Pulse density (impulse rate per second). Higher density = smoother, denser reflections/noise."
+        tooltip: "Pulse density (impulse rate per second). Higher density = smoother, denser reflections/noise. 0 Hz pauses: no new impulses, and the Diffuser keeps the taps it has. At very low density in Diffuser mode the taps are far apart and only those that fit the delay line (about 5.5 s) are used."
       },
       {
         defaultValue: "64",
@@ -7005,12 +7005,14 @@ const nodeGraphModuleDefinitions = (
         constraint: "cpu",
         key: "tapCount",
         label: "Tap Count",
-        max: "4096",
+        // Spawn range 8..256 (CPU grows with taps). The engine takes up to 4096:
+        // raise Max in the parameter settings for longer tails.
+        max: "256",
         mid: "64",
         min: "8",
-        nonlinearSlider: false,
+        nonlinearSlider: true,
         step: "1",
-        tooltip: "Number of sparse taps in Diffuser mode. Tap Count / Density sets tail length."
+        tooltip: "Number of sparse taps in Diffuser mode. Tap Count / Density sets tail length. CPU cost grows with taps. Range here is 8 to 256; the engine allows up to 4096 if you raise Max in the parameter settings."
       },
       {
         defaultValue: "1",

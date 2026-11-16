@@ -58,15 +58,6 @@
       "folder": "bugs"
     },
     {
-      "slug": "bugs/modal snare not working in reaper but works on web",
-      "label": "modal snare not working in reaper but works on web",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/modal%20snare%20not%20working%20in%20reaper%20but%20works%20on%20web.json",
-      "author": "",
-      "emoji": "",
-      "folder": "bugs"
-    },
-    {
       "slug": "bugs/need better volume curve for resonance",
       "label": "need better volume curve for resonance",
       "name": "",
@@ -116,6 +107,15 @@
       "label": "ugly timing jitter",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/ugly%20timing%20jitter.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
+      "slug": "bugs/velvet noise breaks engine",
+      "label": "velvet noise breaks engine",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/velvet%20noise%20breaks%20engine.json",
       "author": "",
       "emoji": "",
       "folder": "bugs"
@@ -1049,14 +1049,6 @@
       "emoji": ""
     },
     {
-      "slug": "modal snare not working in reaper but works on web",
-      "label": "modal snare not working in reaper but works on web",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/modal%20snare%20not%20working%20in%20reaper%20but%20works%20on%20web.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
       "slug": "motm485",
       "label": "motm485",
       "name": "",
@@ -1589,6 +1581,14 @@
       "label": "ugly timing jitter",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/ugly%20timing%20jitter.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "velvet noise breaks engine",
+      "label": "velvet noise breaks engine",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/velvet%20noise%20breaks%20engine.json",
       "author": "",
       "emoji": ""
     },

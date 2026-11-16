@@ -7,6 +7,7 @@
 // Band gains are absolute decibels (±12 dB UI default; hard clamp ±24).
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/filter/matched_bell.h>
 
 namespace {
 
@@ -77,6 +78,14 @@ static void design_peak(PeakBand* b, double freqHz, double gainDb, double q, dou
   if (!(freqHz > 1.0) || freqHz >= ny || dsp_fabs(gainDb) < 1.0e-4) {
     set_bypass_coeffs(b);
     b->lastDb = 0.0;
+    return;
+  }
+  // Decramped bell: matches the analog bell's magnitude up to Nyquist; the bilinear RBJ bell below is the fallback.
+  MatchedBellCoeffs mb;
+  if (matched_bell_design(freqHz, q, gainDb, sr, mb)) {
+    b->b0 = mb.b0; b->b1 = mb.b1; b->b2 = mb.b2; b->a1 = mb.a1; b->a2 = mb.a2;
+    b->active = 1;
+    b->lastDb = gainDb;
     return;
   }
   const double A = db_to_amp(gainDb * 0.5); // 10^(dB/40)

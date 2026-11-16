@@ -110,6 +110,14 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     icon: "🕯️",
     showInNav: true,
   }),
+  pencil: Object.freeze({
+    key: "pencil",
+    elementId: "nodePencilPage",
+    workspaceKey: "pencil",
+    label: "Pencil",
+    icon: "\u270F\uFE0F",
+    showInNav: true,
+  }),
   miniPerform: Object.freeze({
     key: "miniPerform",
     elementId: "nodeMiniPerformPage",
@@ -135,6 +143,7 @@ const nodeGraphUnifiedWindowPageOrder = Object.freeze([
   "visibilityMenu",
   "hotkeys",
   "emoji",
+  "pencil",
 ]);
 
 function nodeGraphUnifiedWindowPageConfig(page = "") {
@@ -489,6 +498,8 @@ function applyNodeGraphUnifiedWindowSize(element, pageKey = "", size = null) {
     applyNodeGraphMiniPerformPageSize(box, element);
   } else if (key === "emoji" && typeof applyNodeGraphEmojiPageSize === "function") {
     applyNodeGraphEmojiPageSize(box, element);
+  } else if (key === "pencil" && typeof applyNodeGraphPencilPageSize === "function") {
+    applyNodeGraphPencilPageSize(box, element);
   } else if (key === "uiSettings" && typeof applyNodeUserUiSettingsWindowSize === "function") {
     applyNodeUserUiSettingsWindowSize(box, element);
   }
@@ -613,6 +624,11 @@ function closeNodeGraphUnifiedWindowPage(page = "", options = {}) {
       case "emoji":
         if (typeof setNodeGraphEmojiPageOpen === "function") {
           setNodeGraphEmojiPageOpen(false);
+        }
+        break;
+      case "pencil":
+        if (typeof setNodeGraphPencilPageOpen === "function") {
+          setNodeGraphPencilPageOpen(false);
         }
         break;
       case "miniPerform":
@@ -920,6 +936,11 @@ function openNodeGraphUnifiedWindowPage(page = "", options = {}) {
       case "emoji":
         if (typeof setNodeGraphEmojiPageOpen === "function") {
           setNodeGraphEmojiPageOpen(true);
+        }
+        break;
+      case "pencil":
+        if (typeof setNodeGraphPencilPageOpen === "function") {
+          setNodeGraphPencilPageOpen(true);
         }
         break;
       case "miniPerform":
@@ -1622,6 +1643,17 @@ function syncNodeGraphUnifiedWindowNavBars() {
       page: "emoji",
       prepare(element) {
         const existing = element.querySelector("#nodeEmojiUnifiedNavHost, :scope > .node-unified-window-nav-host");
+        if (existing) {
+          return existing;
+        }
+        return ensureNodeGraphUnifiedWindowNavHost(element);
+      },
+    },
+    {
+      elementId: "nodePencilPage",
+      page: "pencil",
+      prepare(element) {
+        const existing = element.querySelector("#nodePencilUnifiedNavHost, :scope > .node-unified-window-nav-host");
         if (existing) {
           return existing;
         }

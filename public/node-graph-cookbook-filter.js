@@ -38,6 +38,116 @@ function nodeGraphCookbookFilterStageCount(stages) {
   return Number.isFinite(value) ? clampNodeSliderValue(value, 0, 5) : 2;
 }
 
+// Decramped (analog-matched) bell and shelves, mirror of library/include/soemdsp/filter/matched_bell.h.
+// shape 0 bell, 1 low shelf, 2 high shelf. Returns {b0,b1,b2,a1,a2} or null when the design does not apply
+// (the caller keeps the bilinear RBJ form).
+function nodeGraphMatchedAnalogMag2(shape, x, A, q) {
+  const x2 = x * x, sA = Math.sqrt(A);
+  let nr, ni, dr, di;
+  if (shape === 0) { nr = 1 - x2; ni = x * A / q; dr = 1 - x2; di = x / (A * q); }
+  else if (shape === 1) { nr = A * (A - x2); ni = A * x * sA / q; dr = 1 - A * x2; di = x * sA / q; }
+  else { nr = A * (1 - A * x2); ni = A * x * sA / q; dr = A - x2; di = x * sA / q; }
+  const den = dr * dr + di * di;
+  return den > 1e-300 ? (nr * nr + ni * ni) / den : 1e300;
+}
+
+function nodeGraphMatchedFit(shape, a1, a2, w0, A, q) {
+  const phiC = Math.sin(0.5 * w0) ** 2;
+  const B0 = (1 + a1 + a2) ** 2, B1 = -4 * (a1 + 4 * a2 + a1 * a2), B2 = 16 * a2;
+  const T0 = nodeGraphMatchedAnalogMag2(shape, 0, A, q);
+  const y0 = T0 * B0;
+  const y1 = nodeGraphMatchedAnalogMag2(shape, 1, A, q) * (B0 + B1 * phiC + B2 * phiC * phiC);
+  const y2 = nodeGraphMatchedAnalogMag2(shape, Math.PI / w0, A, q) * (B0 + B1 + B2);
+  const N2 = ((y2 - y0) - (y1 - y0) / phiC) / (1 - phiC);
+  const N1 = (y1 - y0) / phiC - N2 * phiC;
+  const S = Math.sqrt(T0) * (1 + a1 + a2), P = -(N1 + N2) / 4, bb = N2 / 16;
+  const disc = S * S - 4 * P;
+  if (disc < 0) return null;
+  const rd = Math.sqrt(disc);
+  for (let i = 0; i < 2; i += 1) {
+    const v = 0.5 * (S + (i === 0 ? rd : -rd)), u = S - v, d2 = u * u - 4 * bb;
+    if (d2 < 0) continue;
+    const rd2 = Math.sqrt(d2);
+    for (let j = 0; j < 2; j += 1) {
+      const b0 = 0.5 * (u + (j === 0 ? rd2 : -rd2)), b2 = u - b0;
+      if (!(b0 > 1e-12) || !(Math.abs(b2) < b0 && Math.abs(v) < b0 + b2)) continue;
+      return { b0, b1: v, b2, a1, a2 };
+    }
+  }
+  return null;
+}
+
+function nodeGraphMatchedBiquadMag2(k, w) {
+  const c1 = Math.cos(w), s1 = Math.sin(w), c2 = Math.cos(2 * w), s2 = Math.sin(2 * w);
+  const nr = k.b0 + k.b1 * c1 + k.b2 * c2, ni = -(k.b1 * s1 + k.b2 * s2);
+  const dr = 1 + k.a1 * c1 + k.a2 * c2, di = -(k.a1 * s1 + k.a2 * s2);
+  const den = dr * dr + di * di;
+  return den > 1e-300 ? (nr * nr + ni * ni) / den : 1e300;
+}
+
+// Two pole sets are tried and the one closer to the analog curve is kept: the impulse-invariant image of the analog
+// poles, and the bilinear (RBJ) poles (they win when the analog poles sit near or above Nyquist).
+function nodeGraphMatchedCoefficients(shape, frequency, q, gainDb, rate) {
+  if (!(rate > 1) || !(frequency > 0) || !(q > 0)) return null;
+  const absDb = Math.abs(gainDb);
+  if (!(absDb > 1e-6)) return { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
+  const w0 = Math.min(2 * Math.PI * frequency / rate, Math.PI * 0.999);
+  const A = Math.exp(0.05756462732485115 * absDb);
+  const phiC = Math.sin(0.5 * w0) ** 2;
+  if (!(1 - phiC > 1e-3) || !(phiC > 1e-12)) return null;
+  const wn = shape === 0 ? 1 : (shape === 1 ? 1 / Math.sqrt(A) : Math.sqrt(A));
+  const zeta = shape === 0 ? 1 / (2 * A * q) : 1 / (2 * q);
+  let ia1, ia2;
+  if (zeta < 1) {
+    const r = Math.exp(-zeta * wn * w0), wd = wn * w0 * Math.sqrt(1 - zeta * zeta);
+    ia1 = -2 * r * Math.cos(wd);
+    ia2 = r * r;
+  } else {
+    const d = Math.sqrt(zeta * zeta - 1), p1 = Math.exp(wn * w0 * (-zeta + d)), p2 = Math.exp(wn * w0 * (-zeta - d));
+    ia1 = -(p1 + p2);
+    ia2 = p1 * p2;
+  }
+  const sn = Math.sin(w0), cs = Math.cos(w0);
+  let ba1, ba2;
+  if (shape === 0) {
+    const alpha = sn / (2 * q), a0 = 1 + alpha / A;
+    ba1 = -2 * cs / a0;
+    ba2 = (1 - alpha / A) / a0;
+  } else {
+    const beta = Math.sqrt(A) / q;
+    if (shape === 1) {
+      const a0 = (A + 1) + (A - 1) * cs + beta * sn;
+      ba1 = -2 * ((A - 1) + (A + 1) * cs) / a0;
+      ba2 = ((A + 1) + (A - 1) * cs - beta * sn) / a0;
+    } else {
+      const a0 = (A + 1) - (A - 1) * cs + beta * sn;
+      ba1 = 2 * ((A - 1) - (A + 1) * cs) / a0;
+      ba2 = ((A + 1) - (A - 1) * cs - beta * sn) / a0;
+    }
+  }
+  const probes = [0.04, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95];
+  let best = null, bestErr = 0;
+  for (const [a1, a2] of [[ia1, ia2], [ba1, ba2]]) {
+    const cand = nodeGraphMatchedFit(shape, a1, a2, w0, A, q);
+    if (!cand) continue;
+    let err = 0;
+    for (const f of probes) {
+      const w = Math.PI * f;
+      const r = nodeGraphMatchedBiquadMag2(cand, w) / nodeGraphMatchedAnalogMag2(shape, w / w0, A, q);
+      err = Math.max(err, Math.abs(Math.log(Math.max(r, 1e-30))));
+    }
+    if (!best || err < bestErr) { best = cand; bestErr = err; }
+  }
+  if (!best) return null;
+  return gainDb >= 0
+    ? best
+    : { b0: 1 / best.b0, b1: best.a1 / best.b0, b2: best.a2 / best.b0, a1: best.b1 / best.b0, a2: best.b2 / best.b0 };
+}
+
+function nodeGraphMatchedBellCoefficients(frequency, q, gainDb, rate) {
+  return nodeGraphMatchedCoefficients(0, frequency, q, gainDb, rate);
+}
+
 function nodeGraphCookbookFilterCoefficients(
   mode,
   frequency,
@@ -111,6 +221,10 @@ function nodeGraphCookbookFilterCoefficients(
     b0 = amplitude * ((amplitude + 1) + (amplitude - 1) * cosine + beta * sine);
     b1 = -2 * amplitude * ((amplitude - 1) + (amplitude + 1) * cosine);
     b2 = amplitude * ((amplitude + 1) + (amplitude - 1) * cosine - beta * sine);
+  }
+  if (safeMode === 7 || safeMode === 8 || safeMode === 9) {
+    const matched = nodeGraphMatchedCoefficients(safeMode === 7 ? 0 : safeMode - 7, freq, safeQ, nodeGraphFiniteNumber(gainDb), rate);
+    if (matched) return matched;
   }
   const scale = a0 !== 0 ? 1 / a0 : 1;
   return {

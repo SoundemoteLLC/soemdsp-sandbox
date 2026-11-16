@@ -27,18 +27,32 @@
 // One pool for the whole combined binary: the state is an inline variable, so
 // every module that includes this header shares the same one when linked
 // together (each standalone module build has its own).
+//
+// Native builds (the DAW plugin compiles these modules for x64): there is no
+// memory.grow, so blocks come from calloc and go back with free. Same budget,
+// same accounting, no free list (the OS reuses the memory). Addresses are
+// pointer-sized and byte counts 64-bit: `unsigned long` is 32-bit on Windows,
+// which cut pointers in half, and the old native branch returned nullptr for
+// every block, so every pool module stopped the plugin's engine.
 #pragma once
+
+#if !defined(__wasm__)
+#include <cstdlib>
+#endif
 
 namespace soemdsp {
 namespace memory_pool {
 
-static const unsigned long kPageBytes = 65536UL;
+typedef __UINTPTR_TYPE__ Addr;     // a block address (pointer-sized on every target)
+typedef unsigned long long Bytes;  // byte counts (64-bit on every target)
+
+static const Bytes kPageBytes = 65536ULL;
 static const int kMaxLiveBlocks = 8192;
 static const int kMaxFreeBlocks = 8192;
 
 struct Block {
-  unsigned long addr;  // start of the block (0 = empty slot)
-  unsigned long pages;
+  Addr addr;    // start of the block (0 = empty slot)
+  Bytes pages;
 };
 
 struct State {
@@ -46,11 +60,11 @@ struct State {
   Block freed[kMaxFreeBlocks];
   int liveCount;
   int freedCount;
-  unsigned long usedBytes;       // live blocks
-  unsigned long committedBytes;  // everything the pool ever grew (live + free)
-  unsigned long peakBytes;       // highest usedBytes seen
-  unsigned long budgetBytes;     // 0 = default budget
-  unsigned long failedBytes;     // size of the last request that could not be met (0 = none)
+  Bytes usedBytes;       // live blocks
+  Bytes committedBytes;  // everything the pool ever grew (live + free); native: live only
+  Bytes peakBytes;       // highest usedBytes seen
+  Bytes budgetBytes;     // 0 = default budget
+  Bytes failedBytes;     // size of the last request that could not be met (0 = none)
 };
 
 inline State& state() {
@@ -58,34 +72,51 @@ inline State& state() {
   return s;
 }
 
-static const unsigned long kDefaultBudgetBytes = 3072UL * 1024UL * 1024UL;  // 3 GiB (128 big reverbs fit); the user setting overrides (combined max-memory is 4 GiB)
+static const Bytes kDefaultBudgetBytes = 3072ULL * 1024ULL * 1024ULL;  // 3 GiB (128 big reverbs fit); the user setting overrides (combined max-memory is 4 GiB)
 
-inline unsigned long budget() {
+inline Bytes budget() {
   const State& s = state();
   return s.budgetBytes ? s.budgetBytes : kDefaultBudgetBytes;
 }
 
-inline void set_budget(unsigned long bytes) { state().budgetBytes = bytes; }
+inline void set_budget(Bytes bytes) { state().budgetBytes = bytes; }
 
-inline unsigned long pages_for(unsigned long bytes) {
+inline Bytes pages_for(Bytes bytes) {
   return bytes ? (bytes + kPageBytes - 1) / kPageBytes : 1;
 }
 
-inline void zero_block(unsigned long addr, unsigned long bytes) {
+inline void zero_block(Addr addr, Bytes bytes) {
   unsigned char* p = (unsigned char*)addr;
-  for (unsigned long i = 0; i < bytes; i++) p[i] = 0;
+  for (Bytes i = 0; i < bytes; i++) p[i] = 0;
 }
 
-inline void* alloc(unsigned long bytes) {
+inline void* alloc(Bytes bytes) {
   State& s = state();
-  const unsigned long pages = pages_for(bytes);
-  const unsigned long size = pages * kPageBytes;
+  const Bytes pages = pages_for(bytes);
+  const Bytes size = pages * kPageBytes;
   if (s.liveCount >= kMaxLiveBlocks || s.usedBytes + size > budget()) {
     s.failedBytes = size;
     return nullptr;
   }
-  unsigned long addr = 0;
-  unsigned long blockPages = pages;
+  Addr addr = 0;
+  Bytes blockPages = pages;
+#if !defined(__wasm__)
+  {
+    void* p = std::calloc((size_t)size, 1);
+    if (!p) {
+      s.failedBytes = size;
+      return nullptr;
+    }
+    addr = (Addr)p;
+    s.committedBytes += size;
+    s.live[s.liveCount].addr = addr;
+    s.live[s.liveCount].pages = blockPages;
+    s.liveCount += 1;
+    s.usedBytes += size;
+    if (s.usedBytes > s.peakBytes) s.peakBytes = s.usedBytes;
+    return p;
+  }
+#endif
   // Reuse the smallest released block that fits.
   int best = -1;
   for (int i = 0; i < s.freedCount; i++) {
@@ -113,11 +144,8 @@ inline void* alloc(unsigned long bytes) {
       s.failedBytes = size;
       return nullptr;
     }
-    addr = (unsigned long)previous * kPageBytes;  // new pages are zero
+    addr = (Addr)previous * (Addr)kPageBytes;  // new pages are zero
     s.committedBytes += size;
-#else
-    s.failedBytes = size;
-    return nullptr;
 #endif
   }
   s.live[s.liveCount].addr = addr;
@@ -131,10 +159,17 @@ inline void* alloc(unsigned long bytes) {
 inline void release(void* block) {
   if (!block) return;
   State& s = state();
-  const unsigned long addr = (unsigned long)block;
+  const Addr addr = (Addr)block;
   for (int i = s.liveCount - 1; i >= 0; i--) {
     if (s.live[i].addr != addr) continue;
     s.usedBytes -= s.live[i].pages * kPageBytes;
+#if !defined(__wasm__)
+    s.committedBytes -= s.live[i].pages * kPageBytes;
+    std::free(block);
+    s.live[i] = s.live[s.liveCount - 1];
+    s.liveCount -= 1;
+    return;
+#endif
     Block b = s.live[i];
     // Merge with free blocks that touch this one, so freed space comes back as big blocks again.
     for (bool merged = true; merged;) {
@@ -165,9 +200,9 @@ inline void release(void* block) {
 }
 
 // Size of a request that failed since the last call (0 = none): lets the engine tell "out of memory" from "no free slot".
-inline unsigned long take_failure() {
+inline Bytes take_failure() {
   State& s = state();
-  const unsigned long v = s.failedBytes;
+  const Bytes v = s.failedBytes;
   s.failedBytes = 0;
   return v;
 }

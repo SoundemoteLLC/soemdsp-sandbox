@@ -38,39 +38,191 @@ function nodeGraphSurfacePointToClient(point, surface = typeof nodeGraphZoomSurf
   };
 }
 
+// Kept lines are the patch's drawings (saved with it): one entry per
+// mouse-down..mouse-up stroke.
 function nodeGraphHitTrailKeptStrokes() {
-  if (!Array.isArray(nodeGraphMvp.hitTrailKeptStrokes)) {
-    nodeGraphMvp.hitTrailKeptStrokes = [];
-  }
-  return nodeGraphMvp.hitTrailKeptStrokes;
+  const patch = nodeGraphMvp.patch;
+  if (!patch) return [];
+  if (!Array.isArray(patch.drawings)) patch.drawings = [];
+  return patch.drawings;
 }
 
-/** Screen px. The GL pass divides by zoom, so the trail looks the same at any zoom. */
+// Drawing undo/redo (Pencil page buttons), separate from the patch history.
+function nodeGraphDrawingHistory() {
+  if (!nodeGraphMvp.drawingHistory) nodeGraphMvp.drawingHistory = { undo: [], redo: [] };
+  return nodeGraphMvp.drawingHistory;
+}
+
+function clearNodeGraphDrawingHistory() {
+  nodeGraphMvp.drawingHistory = { undo: [], redo: [] };
+  if (typeof syncNodeGraphPencilPageButtons === "function") syncNodeGraphPencilPageButtons();
+}
+
+function nodeGraphDrawingsCopy(list) {
+  return (Array.isArray(list) ? list : []).map((s) => ({
+    points: s.points.map((p) => ({ x: p.x, y: p.y })),
+    worldDash: Array.isArray(s.worldDash) ? s.worldDash.slice() : s.worldDash,
+    worldWidth: s.worldWidth,
+  }));
+}
+
+/** Replace the patch's drawings. Marks the patch edited and autosaves; no patch-history step. */
+function setNodeGraphDrawings(next, options = {}) {
+  const patch = nodeGraphMvp.patch;
+  if (!patch) return;
+  if (options.record !== false) {
+    const history = nodeGraphDrawingHistory();
+    history.undo.push(nodeGraphDrawingsCopy(patch.drawings));
+    history.redo = [];
+  }
+  patch.drawings = typeof normalizeNodeGraphPatchDrawings === "function"
+    ? normalizeNodeGraphPatchDrawings(next)
+    : next;
+  nodeGraphMvp.patchDirtyState = "edited";
+  if (typeof syncNodeGraphHeaderPatchTitle === "function") syncNodeGraphHeaderPatchTitle();
+  if (typeof scheduleNodeGraphHistoryAutosave === "function") scheduleNodeGraphHistoryAutosave();
+  if (typeof syncNodeGraphPencilPageButtons === "function") syncNodeGraphPencilPageButtons();
+  presentNodeGraphHitTrail();
+}
+
+function undoNodeGraphDrawing() {
+  const history = nodeGraphDrawingHistory();
+  if (!history.undo.length) return;
+  history.redo.push(nodeGraphDrawingsCopy(nodeGraphHitTrailKeptStrokes()));
+  setNodeGraphDrawings(history.undo.pop(), { record: false });
+}
+
+function redoNodeGraphDrawing() {
+  const history = nodeGraphDrawingHistory();
+  if (!history.redo.length) return;
+  history.undo.push(nodeGraphDrawingsCopy(nodeGraphHitTrailKeptStrokes()));
+  setNodeGraphDrawings(history.redo.pop(), { record: false });
+}
+
+/** Erase every drawing whose line passes within `radius` world px of (x, y). Returns how many went. */
+function nodeGraphDrawingIndicesNear(x, y, radius) {
+  const strokes = nodeGraphHitTrailKeptStrokes();
+  const hits = [];
+  for (let i = 0; i < strokes.length; i += 1) {
+    const s = strokes[i];
+    const reach = radius + (Number(s.worldWidth) || 0) * 0.5;
+    const pts = s.points || [];
+    let hit = false;
+    if (pts.length === 1) {
+      hit = Math.hypot(pts[0].x - x, pts[0].y - y) <= reach;
+    }
+    for (let k = 1; k < pts.length && !hit; k += 1) {
+      hit = nodeGraphDistPointToSegment(x, y, pts[k - 1].x, pts[k - 1].y, pts[k].x, pts[k].y) <= reach;
+    }
+    if (hit) hits.push(i);
+  }
+  return hits;
+}
+
+// Pencil (Command Center > Pencil). Sizes are screen px at the moment a line
+// is drawn: a new line always starts at the same size on screen, and once
+// drawn it lives in world units, so zooming scales it like everything else.
+const nodeGraphPencilDefaults = Object.freeze({ width: 6, dash: 14, gap: 11 });
+const nodeGraphPencilStorageKey = "soemdsp-sandbox.pencil";
+
+function nodeGraphPencilSettings() {
+  if (!nodeGraphMvp.pencil) {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(nodeGraphPencilStorageKey) || "null");
+    } catch (_e) {
+      saved = null;
+    }
+    const pick = (key) => {
+      const n = Number(saved?.[key]);
+      return Number.isFinite(n) && n >= 0 ? n : nodeGraphPencilDefaults[key];
+    };
+    nodeGraphMvp.pencil = { width: pick("width"), dash: pick("dash"), gap: pick("gap") };
+  }
+  return nodeGraphMvp.pencil;
+}
+
+function setNodeGraphPencilSetting(key, value) {
+  const pencil = nodeGraphPencilSettings();
+  const n = Number(value);
+  if (!(key in nodeGraphPencilDefaults) || !Number.isFinite(n) || n < 0) return;
+  pencil[key] = n;
+  try {
+    localStorage.setItem(nodeGraphPencilStorageKey, JSON.stringify(pencil));
+  } catch (_e) { /* private window: settings last for this session */ }
+  if (typeof presentNodeGraphHitTrail === "function") presentNodeGraphHitTrail();
+}
+
+// Pencil tool: "select" (drag selects; Ctrl keeps the line), "draw" (every
+// stroke is kept, nothing is selected), "erase" (whole strokes the pointer
+// touches are removed). Not saved: a reload starts in Select.
+function nodeGraphPencilTool() {
+  const tool = nodeGraphMvp.pencilTool;
+  return tool === "draw" || tool === "erase" ? tool : "select";
+}
+
+function setNodeGraphPencilTool(tool) {
+  nodeGraphMvp.pencilTool = tool === "draw" || tool === "erase" ? tool : "select";
+  document.body?.classList.toggle("pencil-tool-draw", nodeGraphMvp.pencilTool === "draw");
+  document.body?.classList.toggle("pencil-tool-erase", nodeGraphMvp.pencilTool === "erase");
+  if (typeof syncNodeGraphPencilPageButtons === "function") syncNodeGraphPencilPageButtons();
+}
+
+// Eraser reach around the pointer, screen px (plus the stroke's own half width).
+const nodeGraphPencilEraseRadiusPx = 8;
+
+/** Erase whole drawings along the segment a..b (world px). One undo step per press. */
+function nodeGraphPencilEraseAlong(drag, a, b) {
+  const zoom = nodeGraphHitTrailZoom();
+  const radius = nodeGraphPencilEraseRadiusPx / zoom;
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const steps = Math.max(1, Math.ceil(len / Math.max(radius * 0.5, 1e-3)));
+  const doomed = new Set();
+  for (let s = 0; s <= steps; s += 1) {
+    const t = s / steps;
+    for (const i of nodeGraphDrawingIndicesNear(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, radius)) doomed.add(i);
+  }
+  if (!doomed.size) return;
+  const strokes = nodeGraphHitTrailKeptStrokes();
+  const next = strokes.filter((_s, i) => !doomed.has(i));
+  // The first erase of this press is the undo step; later ones join it.
+  setNodeGraphDrawings(next, { record: !drag.erased });
+  drag.erased = true;
+}
+
+/**
+ * The pen for a line that starts now, in world units (screen px / zoom), so it
+ * keeps its size relative to the canvas after it is drawn. Gap 0 = solid.
+ */
 function nodeGraphHitTrailLivePen() {
+  const pencil = nodeGraphPencilSettings();
+  const zoom = nodeGraphHitTrailZoom();
   return {
-    width: 6,
-    dash: [14, 11],
+    worldWidth: pencil.width / zoom,
+    worldDash: [pencil.dash / zoom, pencil.gap / zoom],
   };
 }
 
 function clearNodeGraphHitTrailKept() {
-  nodeGraphMvp.hitTrailKeptStrokes = [];
+  if (nodeGraphHitTrailKeptStrokes().length) setNodeGraphDrawings([]);
 }
 
-function nodeGraphHitTrailPushKept(points, pen = null) {
-  if (!points?.length) {
+/** Add strokes (arrays of points) as drawings in one undoable step. */
+function nodeGraphHitTrailPushKept(pointLists, pen = null) {
+  const lists = (Array.isArray(pointLists?.[0]) ? pointLists : [pointLists]).filter((l) => l?.length);
+  if (!lists.length) {
     return;
   }
   const style = pen || nodeGraphHitTrailLivePen();
-  const strokes = nodeGraphHitTrailKeptStrokes();
-  strokes.push({
-    dash: style.dash,
-    points: points.map((p) => ({ x: nodeGraphFiniteNumber(p.x), y: nodeGraphFiniteNumber(p.y) })),
-    width: style.width,
-  });
-  while (strokes.length > 48) {
-    strokes.shift();
+  const next = nodeGraphHitTrailKeptStrokes().slice();
+  for (const points of lists) {
+    next.push({
+      points: points.map((p) => ({ x: nodeGraphFiniteNumber(p.x), y: nodeGraphFiniteNumber(p.y) })),
+      worldDash: style.worldDash,
+      worldWidth: style.worldWidth,
+    });
   }
+  setNodeGraphDrawings(next);
 }
 
 function nodeGraphHitTrailMirrorPoint(point, center) {
@@ -144,15 +296,16 @@ function nodeGraphHitTrailBeginMirrorStroke(drag, point) {
 function nodeGraphHitTrailAllStrokes() {
   const strokes = nodeGraphHitTrailKeptStrokes().slice();
   const drag = nodeGraphMvp.marqueeSelection;
-  const pen = nodeGraphHitTrailLivePen();
-  const live = drag?.points;
+  // The pen is fixed when the line starts (zooming mid-line does not resize it).
+  const pen = drag?.pen || nodeGraphHitTrailLivePen();
+  const live = drag?.erase ? null : drag?.points;
   if (live?.length) {
-    strokes.push({ dash: pen.dash, live: true, points: live, width: pen.width });
+    strokes.push({ live: true, points: live, worldDash: pen.worldDash, worldWidth: pen.worldWidth });
   }
-  if (Array.isArray(drag?.mirrorStrokes)) {
+  if (!drag?.erase && Array.isArray(drag?.mirrorStrokes)) {
     for (const points of drag.mirrorStrokes) {
       if (points?.length) {
-        strokes.push({ dash: pen.dash, live: true, points, width: pen.width });
+        strokes.push({ live: true, points, worldDash: pen.worldDash, worldWidth: pen.worldWidth });
       }
     }
   }
@@ -893,6 +1046,9 @@ function updateNodeGraphMarqueeSelection(event = null) {
     const fromSurface = drag.lastSampleSurface || drag.points?.[drag.points.length - 1] || drag.current || drag.start || raw;
     nodeGraphHitTrailAppendPoint(drag, raw);
     const tip = drag.points?.[drag.points.length - 1] || raw;
+    if (drag.erase) {
+      nodeGraphPencilEraseAlong(drag, fromSurface, raw);
+    }
     if (!drag.cosmetic) {
       nodeGraphHitTrailSampleSegment(drag, fromSurface, tip);
     }
@@ -915,9 +1071,13 @@ function startNodeGraphMarqueeSelection(event, workspace) {
     document.activeElement.blur();
   }
   const point = nodeGraphClientPoint(event);
-  const keepCtrl = Boolean(event.ctrlKey);
-  const mirrorDraw = Boolean(event.shiftKey);
-  const cosmetic = keepCtrl || mirrorDraw;
+  const tool = nodeGraphPencilTool();
+  const erase = tool === "erase";
+  // Draw keeps every stroke and selects nothing. Select only ever draws a
+  // temporary line (Ctrl: a line that does not select); it is never kept.
+  const keepCtrl = tool === "draw";
+  const mirrorDraw = !erase && Boolean(event.shiftKey);
+  const cosmetic = keepCtrl || mirrorDraw || erase || Boolean(event.ctrlKey);
   if (mirrorDraw) {
     // Shift+click plants the mirror origin. Drag never moves it.
     nodeGraphMvp.hitTrailMirrorCenter = { x: point.x, y: point.y };
@@ -936,6 +1096,8 @@ function startNodeGraphMarqueeSelection(event, workspace) {
   nodeGraphMvp.marqueeSelection = {
     additive: false,
     cosmetic,
+    erase,
+    erased: false,
     keepTrail: keepCtrl,
     mirrorDraw,
     mirrorStrokes: [],
@@ -949,6 +1111,7 @@ function startNodeGraphMarqueeSelection(event, workspace) {
     moduleBoundsCache: null,
     mouseSmooth,
     moved: false,
+    pen: nodeGraphHitTrailLivePen(),
     pointerId: event.pointerId,
     points: [{ x: point.x, y: point.y }],
     selectionDirty: false,
@@ -961,6 +1124,10 @@ function startNodeGraphMarqueeSelection(event, workspace) {
   };
   if (mirrorDraw) {
     nodeGraphHitTrailBeginMirrorStroke(nodeGraphMvp.marqueeSelection, point);
+  }
+  if (erase) {
+    // A click (no drag) erases what is under the pointer too.
+    nodeGraphPencilEraseAlong(nodeGraphMvp.marqueeSelection, point, point);
   }
   // Pre-warm module AABBs once on pointerdown. Wire polylines are built lazily
   // on first wire hunt (modules-only snakes never pay that cost). Locked patch
@@ -984,6 +1151,28 @@ function startNodeGraphMarqueeSelection(event, workspace) {
   }
   event.preventDefault();
   event.stopPropagation();
+}
+
+// Draw and Erase take a press anywhere on the canvas, on top of modules too:
+// modules do not react and nothing is selected. Runs in the capture phase at
+// the window, before module, slider, pan and placement handlers. Floating
+// windows (Command Center, Pencil page ...) keep working.
+function nodeGraphPencilCapturePointerDown(event) {
+  if (event.button !== 0 || nodeGraphMvp.marqueeSelection) return;
+  if (typeof nodeGraphPencilTool !== "function" || nodeGraphPencilTool() === "select") return;
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  const target = event.target;
+  if (!workspace || !(target instanceof Element) || !workspace.contains(target)) return;
+  const floatingUi = typeof nodeGraphWorkspaceFloatingUiSelector === "string"
+    ? nodeGraphWorkspaceFloatingUiSelector
+    : ".node-floating-window-surface";
+  if (target.closest(floatingUi)) return;
+  startNodeGraphMarqueeSelection(event, workspace);
+  event.stopImmediatePropagation();
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pointerdown", nodeGraphPencilCapturePointerDown, true);
 }
 
 function beginNodeGraphMarqueeSelection(event) {
@@ -1050,16 +1239,11 @@ function dragNodeGraphMarqueeSelection(event) {
 
   const point = nodeGraphClientPoint(event);
   drag.current = point;
-  const wasMoved = drag.moved;
   drag.moved ||=
     Math.abs(point.x - drag.start.x) > 2 ||
     Math.abs(point.y - drag.start.y) > 2;
-  if (drag.moved && !wasMoved && !drag.keepTrail && !drag.cosmetic) {
-    clearNodeGraphHitTrailKept();
-  }
-  if (event.ctrlKey) {
-    drag.keepTrail = true;
-    drag.cosmetic = true;
+  if (event.ctrlKey && !drag.erase) {
+    drag.cosmetic = true; // Ctrl in Select: stop selecting, the line stays temporary
   }
   updateNodeGraphMarqueeSelection(event);
   event.preventDefault();
@@ -1072,9 +1256,6 @@ function endNodeGraphMarqueeSelection(event) {
     return;
   }
 
-  if (event.ctrlKey) {
-    drag.keepTrail = true;
-  }
   syncNodeGraphMarqueeShiftMirror(nodeGraphEventHoldsShift(event));
   if (drag.moved) {
     updateNodeGraphMarqueeSelection(event);
@@ -1084,14 +1265,10 @@ function endNodeGraphMarqueeSelection(event) {
   } else if (!drag.cosmetic && !drag.skipModuleHits) {
     setNodeGraphSelection(null);
   }
-  if (drag.keepTrail && drag.moved && drag.points?.length) {
-    const pen = nodeGraphHitTrailLivePen();
-    nodeGraphHitTrailPushKept(drag.points, pen);
-    if (Array.isArray(drag.mirrorStrokes)) {
-      for (const points of drag.mirrorStrokes) {
-        nodeGraphHitTrailPushKept(points, pen);
-      }
-    }
+  if (!drag.erase && drag.keepTrail && drag.moved && drag.points?.length) {
+    // One stroke (plus its mirror copies) = one drawing step to undo.
+    const pen = drag.pen || nodeGraphHitTrailLivePen();
+    nodeGraphHitTrailPushKept([drag.points, ...(Array.isArray(drag.mirrorStrokes) ? drag.mirrorStrokes : [])], pen);
   }
   nodeGraphMvp.marqueeSelection = null;
   presentNodeGraphHitTrail();

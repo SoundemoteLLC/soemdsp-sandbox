@@ -947,6 +947,38 @@ const nodeGraphPatchUiItemSizeLimits = Object.freeze({
   maxHeight: 420,
 });
 
+// Pencil drawings saved in the patch (notes, arrows, little helpers). One entry
+// per mouse-down..mouse-up stroke. Points are world (zoom-1 surface) px; width
+// and dash were fixed in world units when the stroke was drawn.
+function normalizeNodeGraphPatchDrawings(drawings = []) {
+  if (!Array.isArray(drawings)) {
+    return [];
+  }
+  const round = (v) => Math.round(Number(v) * 100) / 100;
+  const out = [];
+  for (const source of drawings) {
+    if (!source || typeof source !== "object" || !Array.isArray(source.points)) continue;
+    const points = [];
+    for (const p of source.points) {
+      const x = Number(p?.x);
+      const y = Number(p?.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x: round(x), y: round(y) });
+    }
+    if (!points.length) continue;
+    const width = Number(source.worldWidth);
+    const dash = Array.isArray(source.worldDash) ? source.worldDash.map(Number) : [];
+    out.push({
+      points,
+      worldWidth: Number.isFinite(width) && width > 0 ? round(width) || 0.01 : 6,
+      worldDash: [
+        Number.isFinite(dash[0]) && dash[0] >= 0 ? round(dash[0]) : 14,
+        Number.isFinite(dash[1]) && dash[1] >= 0 ? round(dash[1]) : 11,
+      ],
+    });
+  }
+  return out;
+}
+
 function normalizeNodeGraphPatchUiItems(uiItems = [], options = {}) {
   if (!Array.isArray(uiItems)) {
     return [];

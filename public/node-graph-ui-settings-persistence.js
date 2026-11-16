@@ -22,6 +22,7 @@ const nodeGraphWorkspaceWindowStateKeys = Object.freeze([
   "tooltipWindow",
   "sampleWaveformSettings",
   "emoji",
+  "pencil",
   "miniPerform",
 ]);
 
@@ -40,6 +41,7 @@ const nodeGraphWorkspaceWindowElements = Object.freeze({
   tooltipWindow: "nodeTooltipWindow",
   sampleWaveformSettings: "nodeSampleWaveformSettingsWindow",
   emoji: "nodeEmojiPage",
+  pencil: "nodePencilPage",
   miniPerform: "nodeMiniPerformPage",
 });
 

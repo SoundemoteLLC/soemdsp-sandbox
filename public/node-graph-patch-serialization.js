@@ -103,6 +103,7 @@ function serializeNodeGraphPatch(patch = nodeGraphMvp.patch, options = {}) {
     uiItems: normalizeNodeGraphPatchUiItems(patch.uiItems, {
       nodeIds: new Set((nodesOut || []).map((n) => String(n?.id || "")).filter(Boolean)),
     }),
+    drawings: normalizeNodeGraphPatchDrawings(patch.drawings),
     view: viewPruned,
     visual: normalizeNodeGraphPatchVisual(patch.visual),
     windows: typeof normalizeNodeGraphPatchWindows === "function"

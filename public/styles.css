@@ -5252,6 +5252,91 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   padding: 8px 10px 14px;
 }
 
+/* Pencil page (Command Center nav). Same shell as the Emoji page. */
+.node-pencil-page {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: var(--node-unified-window-min-width, 24px);
+  min-height: var(--node-unified-window-min-height, 120px);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(127, 199, 217, 0.42);
+  border-radius: var(--node-module-frame-radius);
+  corner-shape: var(--node-module-corner-shape, squircle);
+  background: rgba(9, 12, 15, 0.96);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+}
+
+.node-pencil-page[hidden] {
+  display: none !important;
+}
+
+.node-pencil-page-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px 14px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.node-pencil-row {
+  display: grid;
+  grid-template-columns: 4.5em 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-pencil-row input {
+  min-width: 0;
+}
+
+.node-pencil-unit,
+.node-pencil-note {
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
+.node-pencil-note {
+  margin: 4px 0 0;
+}
+
+.node-pencil-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.node-pencil-button {
+  padding: 5px 6px;
+  border: 1px solid rgba(127, 199, 217, 0.35);
+  border-radius: 6px;
+  background: rgba(127, 199, 217, 0.08);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.node-pencil-button.active {
+  border-color: rgba(127, 199, 217, 0.95);
+  background: rgba(127, 199, 217, 0.28);
+}
+
+.node-pencil-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.node-pencil-count {
+  margin: 0;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
 /* Mini Performance View (docs/MINI_PERFORM_VIEW_PLAN.md). */
 .node-mini-perform-page {
   position: fixed;

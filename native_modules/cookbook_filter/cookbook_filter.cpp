@@ -10,6 +10,7 @@
 // Live path: getSampleDirect1() only (lattice choice removed).
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/filter/matched_bell.h>
 
 namespace {
 
@@ -126,6 +127,16 @@ static void calc_coeffs(CookbookState& s, int mode, double freq, double q, doubl
   if (mode == kBypass) {
     identity_coeffs(s);
     return;
+  }
+
+  // Peak and shelves: decramped (match the analog prototype's magnitude up to Nyquist); the bilinear RBJ forms below are the fallback.
+  if (mode == kPeak || mode == kLowShelf || mode == kHighShelf) {
+    const int shape = mode == kPeak ? kMatchedBell : (mode == kLowShelf ? kMatchedLowShelf : kMatchedHighShelf);
+    MatchedBellCoeffs mb;
+    if (matched_design(shape, freq, q, gainDb, rate, mb)) {
+      s.a1 = mb.a1; s.a2 = mb.a2; s.b0 = mb.b0; s.b1 = mb.b1; s.b2 = mb.b2;
+      return;
+    }
   }
 
   const double omega = kTwoPi * freq / rate;

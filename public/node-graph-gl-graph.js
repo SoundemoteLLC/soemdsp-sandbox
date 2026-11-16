@@ -3134,13 +3134,39 @@ function nodeGraphGlGraphDrawTrail(trailBatch) {
   ).slice();
   const alpha = Number.parseFloat(style?.getPropertyValue("--node-selection-hit-trail-alpha") || "");
   rgba[3] = (rgba[3] ?? 1) * (Number.isFinite(alpha) ? alpha : 0.95);
+  const zoom = Math.max(1e-4, Number(trailBatch.camera?.zoom) || 1);
   for (let i = 0; i < strokes.length; i += 1) {
     const stroke = strokes[i];
-    const half = Math.max(0.5, (Number(stroke.width) || 6) * 0.5);
-    const dash = Array.isArray(stroke.dash) ? stroke.dash : [14, 11];
-    const flat = nodeGraphStrokeSmoothPoints(stroke.points, 4);
+    // worldWidth / worldDash: sizes fixed in world units when the line was
+    // drawn (screen px / zoom then), so a drawn line scales with zoom. The
+    // trail batch draws through the camera, which applies the zoom itself:
+    // widths and dashes go in as world units (multiplying by zoom here
+    // applied it twice, so lines ballooned as you zoomed in).
+    const world = Number(stroke.worldWidth) > 0;
+    const half = world
+      ? Math.max(0.25 / zoom, stroke.worldWidth * 0.5)
+      : Math.max(0.5, (Number(stroke.width) || 6) * 0.5);
+    const dash = world && Array.isArray(stroke.worldDash) ? stroke.worldDash
+      : (Array.isArray(stroke.dash) ? stroke.dash : [14, 11]);
+    // Fine resample (1.5 world px) so every dash bends with the curve.
+    const flat = nodeGraphStrokeSmoothPoints(stroke.points, 1.5);
     if (flat.length < 4) continue;
-    nodeGraphGlLinesDash(trailBatch, flat, half, Math.max(0.5, dash[0]), Math.max(0, dash[1]), rgba);
+    // Each dash is its own joined, round-capped stroke along the smoothed
+    // curve. The old per-segment rectangles (nodeGraphGlLinesDash) kinked on
+    // tight swirls: straight 14 px chunks with notches at every joint.
+    if (typeof nodeGraphStrokeDashes === "function" && typeof nodeGraphGlLinesPolyline === "function") {
+      // Gap 0 = one solid line.
+      const pieces = dash[1] > 0
+        ? nodeGraphStrokeDashes(flat, Math.max(1e-3, dash[0]), dash[1])
+        : [flat];
+      for (let p = 0; p < pieces.length; p += 1) {
+        const piece = pieces[p];
+        if (piece.length >= 4) nodeGraphGlLinesPolyline(trailBatch, piece, half, 1, rgba);
+        else if (piece.length >= 2 && typeof nodeGraphGlLinesDot === "function") nodeGraphGlLinesDot(trailBatch, piece[0], piece[1], half, 1, rgba);
+      }
+    } else {
+      nodeGraphGlLinesDash(trailBatch, flat, half, Math.max(0.5, dash[0]), Math.max(0, dash[1]), rgba);
+    }
   }
 }
 

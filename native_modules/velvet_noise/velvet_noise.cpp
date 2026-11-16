@@ -300,7 +300,7 @@ static inline void generator_step(
   if (s.genCount >= s.genLength) {
     s.genRemainder += grid;
     int length = (int)s.genRemainder;
-    if (length < 1) length = 1;
+    if (length < 1) length = 1; // at most one impulse per sample (density above the sample rate)
     s.genRemainder -= (double)length;
     if (s.genRemainder < 0.0) s.genRemainder = 0.0;
     s.genLength = length;
@@ -413,9 +413,11 @@ double soemdsp_velvet_noise_sample(
 
   if (!(sampleRate >= 1000.0)) sampleRate = 48000.0;
   if (!(densityHz == densityHz)) densityHz = 2500.0;
-  if (densityHz < 1.0) densityHz = 1.0;
-  if (densityHz > sampleRate) densityHz = sampleRate;
-  const double grid = sampleRate / densityHz; // >= 1 sample
+  // Density 0 (or below) pauses: no new impulses (Generator, trigger outs) and
+  // the Diffuser keeps the taps it has. No hidden floor: 0 means stopped, not
+  // "1 Hz". Above the sample rate the Generator simply fires on every sample.
+  const bool paused = !(densityHz > 0.0);
+  const double grid = paused ? s.builtGrid : sampleRate / densityHz;
 
   int taps = (tapCount == tapCount) ? (int)(tapCount + 0.5) : 64;
   if (taps < 1) taps = 1;
@@ -436,8 +438,10 @@ double soemdsp_velvet_noise_sample(
   if (!(inL == inL)) inL = 0.0;
   if (!(inR == inR)) inR = 0.0;
 
-  // Tap table upkeep.
-  if (s.builtGrid < 0.0) {
+  // Tap table upkeep (none while paused: the Diffuser keeps its taps).
+  if (paused) {
+    // nothing to build; a module that starts paused has no taps yet (wet is silent)
+  } else if (s.builtGrid < 0.0) {
     build_table(s.tables[s.cur], grid, taps, width, spread, s.seed, decay, sampleRate, tail);
     s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
     s.builtGrid = grid; s.builtTaps = taps; s.builtWidth = width;
@@ -514,7 +518,7 @@ double soemdsp_velvet_noise_sample(
   // while the module is diffusing.
   double genL = 0.0;
   double genR = 0.0;
-  generator_step(s, grid, spread, genL, genR);
+  if (!paused) generator_step(s, grid, spread, genL, genR); // paused: holds its place
   s.trigPos = genL > 0.0 ? 1.0 : 0.0;
   s.trigNeg = genL < 0.0 ? 1.0 : 0.0;
   if (mm < 1.0) {
@@ -544,7 +548,7 @@ double soemdsp_velvet_noise_trigger_neg(int handle) {
 }
 
 int soemdsp_velvet_noise_version() {
-  return 6; // 6: Tail Darkness (pulse width ramps over the tail). 5: wet level independent of Darkness
+  return 7; // 7: Density 0 pauses (no 1 Hz floor). 6: Tail Darkness (pulse width ramps over the tail). 5: wet level independent of Darkness
 }
 
 } // extern "C"

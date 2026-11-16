@@ -55,8 +55,10 @@ function nodeGraphHistoryResolveSamples(samples) {
 function recordNodeGraphHistory() {
   const live = nodeGraphMvp.patch;
   nodeGraphHistoryRememberSamples(live?.samples);
+  // Drawings are not in the audio/patch history: the Pencil page has its own
+  // undo/redo, so drawing never adds a step here and Undo never erases a note.
   const snapshot = serializeNodeGraphPatch(
-    { ...live, samples: nodeGraphHistorySlimSamples(live?.samples) },
+    { ...live, drawings: [], samples: nodeGraphHistorySlimSamples(live?.samples) },
     { pretty: false },
   );
   if (nodeGraphMvp.historySnapshots[nodeGraphMvp.historyIndex] === snapshot) {
@@ -192,6 +194,8 @@ function applyNodeGraphHistorySnapshot(snapshot, status) {
     return;
   }
   next.samples = nodeGraphHistoryResolveSamples(next.samples);
+  // Keep the drawings on screen (they have their own undo on the Pencil page).
+  next.drawings = Array.isArray(nodeGraphMvp.patch?.drawings) ? nodeGraphMvp.patch.drawings : [];
   const flags = nodeGraphHistoryCommitOptions(nodeGraphMvp.patch, next);
   commitNodeGraphPatch(next, {
     ...flags,

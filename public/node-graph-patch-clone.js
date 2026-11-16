@@ -895,6 +895,7 @@ function cloneNodeGraphPatch(patch) {
         : []),
     timing: normalizeNodeGraphPatchTiming(patch.timing),
     uiItems: normalizeNodeGraphPatchUiItems(patch.uiItems),
+    drawings: normalizeNodeGraphPatchDrawings(patch.drawings),
     view: normalizeNodeGraphPatchView(patch.view),
     visual: normalizeNodeGraphPatchVisual(patch.visual),
     windows: normalizeNodeGraphPatchWindows(patch.windows),

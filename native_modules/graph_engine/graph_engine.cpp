@@ -17200,7 +17200,7 @@ extern "C" double soemdsp_memory_stat(int which) {
 
 // The memory budget in MB (the user setting); applies to later allocations.
 extern "C" void soemdsp_memory_set_budget_mb(int mb) {
-  soemdsp::memory_pool::set_budget(mb > 0 ? (unsigned long)mb * 1024UL * 1024UL : 0UL);
+  soemdsp::memory_pool::set_budget(mb > 0 ? (unsigned long long)mb * 1024ULL * 1024ULL : 0ULL); // 64-bit: 4096 MB wrapped to 0 in a 32-bit long
 }
 
 // 1 when the module type's buffers come from the memory pool (adding or removing one rebuilds the engine).
@@ -18193,7 +18193,7 @@ extern "C" int soemdsp_graph_limit(int bit) {
   if (bit == kOverflowConnections) return kMaxConnections;
   if (bit == kOverflowEdges) return kMaxEdges;
   if (bit == kOverflowModEdges) return kMaxParamModEdges;
-  if (bit == kOverflowMemory) return (int)(soemdsp::memory_pool::budget() / (1024UL * 1024UL)); // MB
+  if (bit == kOverflowMemory) return (int)(soemdsp::memory_pool::budget() / (1024ULL * 1024ULL)); // MB
   if (bit == 32) return kChannels;          // output channel slots per module (Mono, Left, Right and extras)
   if (bit == 64) return kMaxFbGroupNodes;   // nodes in one feedback loop
   if (bit == 128) return kMaxBlockFrames;   // frames per block

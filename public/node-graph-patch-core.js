@@ -1149,6 +1149,7 @@ function validateNodeGraphPatch(patch) {
       : [],
     timing: normalizeNodeGraphPatchTiming(patch.timing),
     uiItems,
+    drawings: normalizeNodeGraphPatchDrawings(patch.drawings),
     view,
     visual: normalizeNodeGraphPatchVisual(patch.visual),
     windows: normalizeNodeGraphPatchWindows(patch.windows),
@@ -2062,6 +2063,10 @@ function commitNodeGraphPatchBody(patch, options = {}) {
       nodeGraphPatchThrowLoadFailure(pretty, error);
     }
     nodeGraphMvp.patch = validated;
+  }
+  // A newly loaded patch starts its own drawing undo/redo.
+  if (options.resetEditorView && typeof clearNodeGraphDrawingHistory === "function") {
+    clearNodeGraphDrawingHistory();
   }
   if (options.resetEditorView && typeof resetNodeGraphEditorViewToOrigin === "function") {
     resetNodeGraphEditorViewToOrigin({ apply: true, persist: false });
