@@ -13,7 +13,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > /tmp/migrate.py <<'PYTHON'
-          import hashlib, json, os, pathlib, re, subprocess, tempfile, urllib.request
+          import time, hashlib, json, os, pathlib, re, subprocess, tempfile, urllib.request
           
           SOURCE = 'SoundemoteLLC/sandbox'
           DEST = 'SoundemoteLLC/soemdsp-sandbox'
@@ -22,7 +22,14 @@ jobs:
               return subprocess.check_output(['gh', *args], text=True)
           
           def api(path):
-              return json.loads(gh('api', path))
+              return json.loads(gh('api', '-H', 'Cache-Control: no-cache', path))
+          
+          def get_release(tag):
+              for attempt in range(12):
+                  match = next((r for r in api(f'repos/{DEST}/releases?per_page=100&attempt={time.time_ns()}') if r['tag_name'] == tag), None)
+                  if match: return match
+                  time.sleep(5)
+              raise RuntimeError(f'Release not visible: {tag}')
           
           releases = api(f'repos/{SOURCE}/releases?per_page=100')
           latest = api(f'repos/{SOURCE}/releases/latest')['tag_name']
@@ -43,7 +50,7 @@ jobs:
                       if release['prerelease']:
                           args += ['--prerelease']
                       gh(*args)
-                  current = next(r for r in api(f'repos/{DEST}/releases?per_page=100') if r['tag_name'] == tag)
+                  current = get_release(tag)
                   assets = {a['name']: a for a in current['assets']}
                   for asset in release['assets']:
                       if asset['name'] in assets:
@@ -60,7 +67,7 @@ jobs:
                           assert 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest() == asset['digest'], asset['name']
                       gh('release', 'upload', tag, str(path), '-R', DEST)
                       path.unlink()
-                  copied = next(r for r in api(f'repos/{DEST}/releases?per_page=100') if r['tag_name'] == tag)
+                  copied = get_release(tag)
                   assert {(a['name'], a['size'], a['digest']) for a in copied['assets']} == {(a['name'], a['size'], a['digest']) for a in release['assets']}
                   gh('release', 'edit', tag, '-R', DEST, '--draft=false', '--latest=false')
                   print(f'Verified {tag}: {len(release["assets"])} assets', flush=True)
