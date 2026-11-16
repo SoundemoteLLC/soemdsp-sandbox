@@ -43,7 +43,7 @@ jobs:
                       if release['prerelease']:
                           args += ['--prerelease']
                       gh(*args)
-                  current = api(f'repos/{DEST}/releases/tags/{tag}')
+                  current = next(r for r in api(f'repos/{DEST}/releases?per_page=100') if r['tag_name'] == tag)
                   assets = {a['name']: a for a in current['assets']}
                   for asset in release['assets']:
                       if asset['name'] in assets:
@@ -60,7 +60,7 @@ jobs:
                           assert 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest() == asset['digest'], asset['name']
                       gh('release', 'upload', tag, str(path), '-R', DEST)
                       path.unlink()
-                  copied = api(f'repos/{DEST}/releases/tags/{tag}')
+                  copied = next(r for r in api(f'repos/{DEST}/releases?per_page=100') if r['tag_name'] == tag)
                   assert {(a['name'], a['size'], a['digest']) for a in copied['assets']} == {(a['name'], a['size'], a['digest']) for a in release['assets']}
                   gh('release', 'edit', tag, '-R', DEST, '--draft=false', '--latest=false')
                   print(f'Verified {tag}: {len(release["assets"])} assets', flush=True)
