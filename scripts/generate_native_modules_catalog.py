@@ -24,10 +24,10 @@ NATIVE_MODULE_HEADER_RE = re.compile(
 
 SANDBOX_LICENSE = "Soundemote Noncommercial"
 SANDBOX_LICENSE_URL = (
-    "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE"
+    "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE"
 )
 NOTICE_URL = (
-    "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
 )
 SOEMDSP_LICENSE_URL = (
     "https://github.com/elanhickler/soemdsp/blob/main/LICENSE"
@@ -82,7 +82,7 @@ def native_module_entry_from_source(source_path: Path) -> dict[str, object] | No
         "targetType": target_type,
         "kind": headers.get("kind") or "",
         "source": relative_source,
-        "sourceUrl": f"https://github.com/elanhickler/soemdsp-sandbox/blob/master/{relative_source}",
+        "sourceUrl": f"https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/{relative_source}",
         "localSourceUrl": f"/{relative_source}",
         "libUrl": lib_url,
         "wasm": relative_wasm,

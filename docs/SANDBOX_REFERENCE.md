@@ -11,7 +11,7 @@ Project overview, live demo and license: [`README.md`](../README.md). This file 
 ## Download, run, stop, test
 
 ```powershell
-git clone https://github.com/elanhickler/soemdsp-sandbox.git
+git clone https://github.com/SoundemoteLLC/soemdsp-sandbox.git
 cd soemdsp-sandbox
 
 python server.py
