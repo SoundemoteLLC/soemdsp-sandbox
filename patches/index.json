@@ -58,6 +58,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/modal snare not working in reaper but works on web",
+      "label": "modal snare not working in reaper but works on web",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/modal%20snare%20not%20working%20in%20reaper%20but%20works%20on%20web.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/need better volume curve for resonance",
       "label": "need better volume curve for resonance",
       "name": "",
@@ -1036,6 +1045,14 @@
       "label": "meditation",
       "name": "",
       "url": "/soemdsp-sandbox/patches/meditation.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "modal snare not working in reaper but works on web",
+      "label": "modal snare not working in reaper but works on web",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/modal%20snare%20not%20working%20in%20reaper%20but%20works%20on%20web.json",
       "author": "",
       "emoji": ""
     },
