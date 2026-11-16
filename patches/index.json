@@ -31,6 +31,15 @@
       "folder": "Alarm"
     },
     {
+      "slug": "bugs/double toggle snare",
+      "label": "double toggle snare",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/double%20toggle%20snare.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/jittery plot",
       "label": "jittery plot",
       "name": "",
@@ -44,15 +53,6 @@
       "label": "keyboard not controling step register pitch",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/keyboard%20not%20controling%20step%20register%20pitch.json",
-      "author": "",
-      "emoji": "",
-      "folder": "bugs"
-    },
-    {
-      "slug": "bugs/midi no work in REAPER",
-      "label": "midi no work in REAPER",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/midi%20no%20work%20in%20REAPER.json",
       "author": "",
       "emoji": "",
       "folder": "bugs"
@@ -760,6 +760,14 @@
       "emoji": ""
     },
     {
+      "slug": "double toggle snare",
+      "label": "double toggle snare",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/double%20toggle%20snare.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "dreamy_delay",
       "label": "dreamy_delay",
       "name": "",
@@ -1028,14 +1036,6 @@
       "label": "meditation",
       "name": "",
       "url": "/soemdsp-sandbox/patches/meditation.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
-      "slug": "midi no work in REAPER",
-      "label": "midi no work in REAPER",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/midi%20no%20work%20in%20REAPER.json",
       "author": "",
       "emoji": ""
     },
