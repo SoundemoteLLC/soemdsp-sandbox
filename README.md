@@ -4,6 +4,10 @@ Browser-based modular audio synthesis — patch native C++/WASM DSP modules, wat
 
 ### Live demo — [soundemote.io/sandbox](http://soundemote.io/sandbox)
 
+### Downloads — [Sandbox releases](https://github.com/SoundemoteLLC/soemdsp-sandbox/releases)
+
+CLAP, VST3, AU, and standalone downloads for Windows, macOS, and Linux are published alongside the source in this repository. Available formats vary by platform.
+
 ---
 
 ## What's inside
