@@ -60,6 +60,10 @@
     } catch (_e) { /* host gone */ }
   }
 
+  global.soemdspPluginHostPokeInput = function (nodeId, port) {
+    postToHost({ event: "inputPoke", nodeId: String(nodeId || ""), port: String(port || "") });
+  };
+
   var pendingCalls = new Map();
   var nextCallId = 1;
   var completeBound = false;

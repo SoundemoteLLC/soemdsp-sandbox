@@ -384,6 +384,9 @@ function triggerNodeGraphInputWireBreakPulse(nodeId, port) {
   if (!nodeId || !port) {
     return false;
   }
+  if (window.soemdspPluginHost && typeof window.soemdspPluginHostPokeInput === "function") {
+    window.soemdspPluginHostPokeInput(nodeId, port);
+  }
   if (nodeGraphMvp.live.runtime) {
     if (!(nodeGraphMvp.live.runtime.inputWireBreakTriggers instanceof Map)) {
       nodeGraphMvp.live.runtime.inputWireBreakTriggers = new Map();
