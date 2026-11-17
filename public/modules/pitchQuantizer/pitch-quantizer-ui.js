@@ -183,48 +183,104 @@ if (typeof globalThis !== "undefined") {
   globalThis.nodeGraphPitchQuantizerSeamRects = nodeGraphPitchQuantizerSeamRects;
 }
 
-function nodeGraphPitchQuantizerKeyPaint(key, mask) {
+function nodeGraphPitchQuantizerDarkenRgba(rgba, amount) {
+  const t = Math.max(0, Math.min(1, Number(amount) || 0));
+  return [rgba[0] * (1 - t), rgba[1] * (1 - t), rgba[2] * (1 - t), rgba[3]];
+}
+
+/**
+ * Keyboard-shaped look tables for the shared state-paint path. Idle and
+ * enabled (teal / in-scale) each have a base plus an inverted "blue"
+ * (active) slot: where Keyboard brightens a sounding key, these darken it
+ * and add a dark ring so the live class stays distinct from the teal.
+ */
+function nodeGraphPitchQuantizerPaintLooks() {
   const L = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
-  const on = typeof nodeGraphPitchQuantizerMaskHasClass === "function"
-    ? nodeGraphPitchQuantizerMaskHasClass(mask, key.pc)
-    : false;
-  const mix = typeof nodeGraphPianoKeysMix === "function"
-    ? nodeGraphPianoKeysMix
-    : (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
-  const over = typeof nodeGraphPianoKeysOver === "function"
-    ? nodeGraphPianoKeysOver
-    : (top, under) => [
-      top[0] * top[3] + under[0] * (1 - top[3]),
-      top[1] * top[3] + under[1] * (1 - top[3]),
-      top[2] * top[3] + under[2] * (1 - top[3]),
-      1,
-    ];
-  if (!key.black) {
-    const top = on ? L.electricTopNatural : L.naturalTop;
-    const bottom = on ? L.electricBottomNatural : L.naturalBottom;
-    const mid = mix(top, bottom, 0.5);
-    return {
-      top,
-      bottom,
-      stroke: on ? 1 : 0,
-      strokeRgba: on ? over(L.electric, mid) : mid,
-      text: on ? L.electricLabelNatural : L.naturalLabel,
-    };
-  }
-  const top = on ? L.electricTopSharp : L.sharpTop;
-  const bottom = on ? L.electricBottomSharp : L.sharpBottom;
-  const mid = mix(top, bottom, 0.5);
-  const border = on ? L.electric : L.sharpStroke;
+  const darkRing = [0.02, 0.05, 0.05, 0.85];
+  const darkTealRing = [0.02, 0.12, 0.10, 0.88];
   return {
-    top,
-    bottom,
-    stroke: 1,
-    strokeRgba: over(border, mid),
-    text: on ? L.electricLabelSharp : L.sharpLabel,
+    idle: {
+      white: {
+        base: { top: L.naturalTop, bottom: L.naturalBottom, text: L.naturalLabel },
+        blue: {
+          top: nodeGraphPitchQuantizerDarkenRgba(L.naturalTop, 0.55),
+          bottom: nodeGraphPitchQuantizerDarkenRgba(L.naturalBottom, 0.7),
+          text: L.naturalLabel,
+          inset: darkRing,
+        },
+      },
+      black: {
+        base: { top: L.sharpTop, bottom: L.sharpBottom, text: L.sharpLabel, border: L.sharpStroke },
+        blue: {
+          top: nodeGraphPitchQuantizerDarkenRgba(L.sharpTop, 0.55),
+          bottom: nodeGraphPitchQuantizerDarkenRgba(L.sharpBottom, 0.65),
+          text: [0.90, 0.93, 0.94, 1],
+          border: darkRing,
+        },
+      },
+    },
+    enabled: {
+      white: {
+        base: {
+          top: L.electricTopNatural,
+          bottom: L.electricBottomNatural,
+          text: L.electricLabelNatural,
+          inset: L.electric,
+        },
+        blue: {
+          top: nodeGraphPitchQuantizerDarkenRgba(L.electricTopNatural, 0.5),
+          bottom: nodeGraphPitchQuantizerDarkenRgba(L.electricBottomNatural, 0.65),
+          text: L.electricLabelNatural,
+          inset: darkTealRing,
+        },
+      },
+      black: {
+        base: {
+          top: L.electricTopSharp,
+          bottom: L.electricBottomSharp,
+          text: L.electricLabelSharp,
+          border: L.electric,
+        },
+        blue: {
+          top: nodeGraphPitchQuantizerDarkenRgba(L.electricTopSharp, 0.5),
+          bottom: nodeGraphPitchQuantizerDarkenRgba(L.electricBottomSharp, 0.6),
+          text: [0.85, 1, 0.96, 1],
+          border: darkTealRing,
+        },
+      },
+    },
   };
 }
 
-function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev) {
+/**
+ * Live quantized pitch class from the module's `pitch` scope buffer, only
+ * while the engine is playing. Cleared when stopped so the face does not
+ * freeze a stale note (audio-only-during-play).
+ */
+function nodeGraphPitchQuantizerLivePitchClass(nodeId) {
+  const playing = typeof scopePaintIsEnginePlaying === "function"
+    && scopePaintIsEnginePlaying();
+  if (!playing) return null;
+  if (typeof nodeGraphModuleScopeLatestOutputValue !== "function") return null;
+  const pitch = Number(nodeGraphModuleScopeLatestOutputValue(nodeId, "pitch", Number.NaN));
+  if (!Number.isFinite(pitch)) return null;
+  return (((Math.round(pitch) % 12) + 12) % 12);
+}
+
+function nodeGraphPitchQuantizerKeyPaint(key, mask, livePc) {
+  const looks = nodeGraphPitchQuantizerPaintLooks();
+  const on = typeof nodeGraphPitchQuantizerMaskHasClass === "function"
+    ? nodeGraphPitchQuantizerMaskHasClass(mask, key.pc)
+    : false;
+  const live = livePc != null && Number(livePc) === Number(key.pc);
+  const look = on ? looks.enabled : looks.idle;
+  const state = typeof nodeGraphPianoKeysFlagState === "function"
+    ? nodeGraphPianoKeysFlagState({ active: live })
+    : { contains: (name) => name === "active" && live };
+  return nodeGraphPianoKeysPaint(look, state, { black: key.black, wideLabels: true });
+}
+
+function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev, livePc) {
   const L = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
   const stroke = Math.max(1, strokeDev | 0);
   const glowPad = Math.max(2, stroke * 2);
@@ -285,7 +341,7 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
     totalUnits: Math.max(1, whites.length),
     labelSizeK: 1,
     labelFont: NODE_GRAPH_PITCH_QUANTIZER_GL_FONT,
-    paintKey: (key) => nodeGraphPitchQuantizerKeyPaint(key, mask),
+    paintKey: (key) => nodeGraphPitchQuantizerKeyPaint(key, mask, livePc),
   });
 }
 
@@ -322,7 +378,8 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     const shift = typeof nodeGraphPitchQuantizerSemitoneShift === "function"
       ? nodeGraphPitchQuantizerSemitoneShift(patchNode)
       : 0;
-    return { mask, jacked, shift };
+    const livePc = nodeGraphPitchQuantizerLivePitchClass(nodeId);
+    return { mask, jacked, shift, livePc };
   }
 
   function keyAtClientXY(clientX, clientY) {
@@ -353,7 +410,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
   section.addEventListener("pointerdown", onPointerDown);
 
   function paint() {
-    const { mask, jacked } = faceState();
+    const { mask, jacked, livePc } = faceState();
     const m = typeof nodeGraphDisplayCanvasSize === "function"
       ? nodeGraphDisplayCanvasSize(section, canvas)
       : null;
@@ -362,7 +419,8 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     const bw = Math.max(1, m.width);
     const bh = Math.max(1, m.height);
     const strokeDev = Math.max(1, Math.round(dpr));
-    const sig = `${bw}x${bh}:s${strokeDev}:m${mask}:j${jacked ? 1 : 0}`;
+    const liveSig = livePc == null ? "-" : String(livePc);
+    const sig = `${bw}x${bh}:s${strokeDev}:m${mask}:j${jacked ? 1 : 0}:p${liveSig}`;
     if (sig === lastSig) return;
     lastSig = sig;
     const batch = typeof nodeGraphGlLinesBegin === "function"
@@ -375,7 +433,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     }
     const layout = nodeGraphPitchQuantizerKeyLayout(bw, bh);
     hitLayout = layout;
-    nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev);
+    nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev, livePc);
     if (typeof nodeGraphGlLinesEnd === "function" && !nodeGraphGlLinesEnd(batch)) {
       lastSig = "";
       if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);

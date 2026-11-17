@@ -256,6 +256,122 @@ function nodeGraphPianoKeysDraw(batch, geom, opts) {
   return true;
 }
 
+
+/**
+ * ClassList-shaped state bag so callers can pass a plain flags object
+ * (`{ active: true }`) into nodeGraphPianoKeysPaint, the same path Keyboard
+ * uses with its key.state.contains() set.
+ */
+function nodeGraphPianoKeysFlagState(flags) {
+  const bag = flags && typeof flags === "object" ? flags : {};
+  return {
+    contains: (name) => Boolean(bag[name]),
+  };
+}
+
+/**
+ * Shared key-state paint. Maps a look table plus state flags to a vertical
+ * gradient, optional ring stroke, and label colour. Keyboard and Pitch
+ * Quantizer both call this; they only differ in the look they pass.
+ * Keyboard brightens an active key; Pitch Quantizer darkens it.
+ */
+function nodeGraphPianoKeysPaint(look, state, opts) {
+  const L = look || {};
+  const s = state;
+  const has = (name) => Boolean(
+    s && typeof s.contains === "function" ? s.contains(name) : s && s[name],
+  );
+  const black = Boolean(opts && opts.black);
+  const wideLabels = Boolean(opts && opts.wideLabels);
+  if (!black) {
+    const W = L.white || {};
+    let style = W.base || {};
+    let ring = null;
+    let ringPx = 1;
+    let top = null;
+    let bottom = null;
+    if (has("chord-edit-note")) style = W.red;
+    else if (has("slot-edit")) { style = W.slot; ring = L.slotEditRing; ringPx = 2; }
+    else if (has("chord-memory") && has("slot-on")) style = W.slot;
+    else if (has("chord-memory") && has("active")) { style = W.blue; ring = L.greenRing; ringPx = 2; }
+    else if (has("chord-memory") && has("held")) { style = W.gold; ring = L.greenRing; ringPx = 2; }
+    else if (has("chord-memory")) style = W.green;
+    else if (has("held") && has("active")) { style = W.blue; ring = L.goldRing; ringPx = 2; }
+    else if (has("held")) style = W.gold;
+    else if (has("active")) style = W.blue;
+    else if (has("ghost-chord") && !has("slot-on")) {
+      top = nodeGraphPianoKeysOver(L.ghost.chord.top, W.base.top);
+      bottom = nodeGraphPianoKeysOver(L.ghost.chord.bottom, W.base.bottom);
+      ring = L.ghost.chord.ring;
+      ringPx = 2;
+    } else if (has("ghost-patch")) {
+      top = nodeGraphPianoKeysOver(L.ghost.patch.top, W.base.top);
+      bottom = nodeGraphPianoKeysOver(L.ghost.patch.bottom, W.base.bottom);
+      ring = L.ghost.patch.ring;
+      ringPx = 2;
+    } else if (has("patch-set")) {
+      top = nodeGraphPianoKeysOver(L.ghost.patchSet.top, W.base.top);
+      bottom = nodeGraphPianoKeysOver(L.ghost.patchSet.bottom, W.base.bottom);
+    }
+    if (!ring && style && style.inset) ring = style.inset;
+    // MIDI / chord Play Keys ghost: the sequencer.css inset ring (not on gold / chord slots).
+    if (has("ghost-play") && !has("held") && !has("chord-memory")) { ring = L.ghost.play; ringPx = 2; }
+    top = top || (style && style.top);
+    bottom = bottom || (style && style.bottom);
+    const mid = nodeGraphPianoKeysMix(top, bottom, 0.5);
+    return {
+      top,
+      bottom,
+      stroke: ring ? ringPx : 0,
+      strokeRgba: ring ? nodeGraphPianoKeysOver(ring, mid) : mid,
+      text: style && style.text,
+    };
+  }
+  const B = L.black || {};
+  let style = B.base || {};
+  let top = null;
+  let bottom = null;
+  let border = null;
+  let ringPx = 1;
+  if (has("chord-edit-note")) style = B.red;
+  else if (has("slot-edit")) { style = B.slot; border = L.slotEditRing; ringPx = 2; }
+  else if (has("chord-memory") && has("slot-on")) style = B.slot;
+  else if (has("chord-memory") && has("active")) { style = B.blue; border = L.greenRing; ringPx = 2; }
+  else if (has("chord-memory") && has("held")) { style = B.gold; border = L.greenRing; ringPx = 2; }
+  else if (has("chord-memory")) style = B.green;
+  else if (has("held") && has("active")) { style = B.blue; border = L.goldRing; ringPx = 2; }
+  else if (has("held")) style = B.gold;
+  else if (has("active")) style = B.blue;
+  else if (has("ghost-chord") && !has("slot-on")) {
+    top = nodeGraphPianoKeysOver(L.ghost.blackChord.top, B.ghostBase.top);
+    bottom = nodeGraphPianoKeysOver(L.ghost.blackChord.bottom, B.ghostBase.bottom);
+    border = L.ghost.blackChord.border;
+    ringPx = 2;
+  } else if (has("ghost-patch")) {
+    top = nodeGraphPianoKeysOver(L.ghost.blackPatch.top, B.ghostBase.top);
+    bottom = nodeGraphPianoKeysOver(L.ghost.blackPatch.bottom, B.ghostBase.bottom);
+    border = L.ghost.blackPatch.border;
+    ringPx = 2;
+  } else if (has("patch-set")) {
+    top = nodeGraphPianoKeysOver(L.ghost.blackPatchSet.top, B.base.top);
+    bottom = nodeGraphPianoKeysOver(L.ghost.blackPatchSet.bottom, B.base.bottom);
+    border = L.ghost.blackPatchSet.border;
+  }
+  if (has("ghost-play") && !has("held") && !has("chord-memory")) { border = L.ghost.play; ringPx = 2; }
+  top = top || (style && style.top);
+  bottom = bottom || (style && style.bottom);
+  border = border || (style && style.border);
+  const mid = nodeGraphPianoKeysMix(top, bottom, 0.5);
+  return {
+    top,
+    bottom,
+    stroke: ringPx,
+    strokeRgba: nodeGraphPianoKeysOver(border, mid),
+    // Black labels only take the state colour on wide keyboards (old @container 520px).
+    text: wideLabels ? (style && style.text) : (B.base && B.base.text),
+  };
+}
+
 if (typeof globalThis !== "undefined") {
   globalThis.NODE_GRAPH_PIANO_KEYS_INSET_FRAC = NODE_GRAPH_PIANO_KEYS_INSET_FRAC;
   globalThis.NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT = NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT;
@@ -271,4 +387,6 @@ if (typeof globalThis !== "undefined") {
   globalThis.nodeGraphPianoKeysSeamRects = nodeGraphPianoKeysSeamRects;
   globalThis.nodeGraphPianoKeysVisibleSeamRects = nodeGraphPianoKeysVisibleSeamRects;
   globalThis.nodeGraphPianoKeysDraw = nodeGraphPianoKeysDraw;
+  globalThis.nodeGraphPianoKeysFlagState = nodeGraphPianoKeysFlagState;
+  globalThis.nodeGraphPianoKeysPaint = nodeGraphPianoKeysPaint;
 }

@@ -1,8 +1,9 @@
 // Keyboard face, drawn by WebGL (docs/APP_POLICY.md section 3).
 // Key geometry, vertical gradients, rounded sharp bottoms, and seam layering
 // live in public/lib/visual/piano-keys-draw.js and are shared with the
-// Pitch Quantizer face. This file owns the Keyboard model, state paint, and
-// the callers that pass the Keyboard palette into that helper.
+// Pitch Quantizer face. This file owns the Keyboard model and look table;
+// key-state paint also lives in that helper so both faces share one path.
+// Callers pass the Keyboard palette (which brightens an active key).
 //
 // No key elements exist. Each .node-keyboard-surface carries a key model
 // (surface._midiKeyModel): one plain object per key with its MIDI note, its
@@ -320,101 +321,10 @@ const NODE_GRAPH_MIDI_KEY_LOOK = (() => {
  * Returns { top, bottom, stroke, strokeRgba, text } (stroke in layout px).
  */
 function nodeGraphKeyboardKeyPaint(key, wideLabels) {
-  const L = NODE_GRAPH_MIDI_KEY_LOOK;
-  const s = key.state;
-  const has = (name) => s.contains(name);
-  const cm = has("chord-memory");
-  const held = has("held");
-  const active = has("active");
-  const slotOn = has("slot-on");
-  const slotEdit = has("slot-edit");
-  if (!key.black) {
-    const W = L.white;
-    let look = W.base;
-    let ring = null;
-    let ringPx = 1;
-    let top = null;
-    let bottom = null;
-    if (has("chord-edit-note")) look = W.red;
-    else if (slotEdit) { look = W.slot; ring = L.slotEditRing; ringPx = 2; }
-    else if (cm && slotOn) look = W.slot;
-    else if (cm && active) { look = W.blue; ring = L.greenRing; ringPx = 2; }
-    else if (cm && held) { look = W.gold; ring = L.greenRing; ringPx = 2; }
-    else if (cm) look = W.green;
-    else if (held && active) { look = W.blue; ring = L.goldRing; ringPx = 2; }
-    else if (held) look = W.gold;
-    else if (active) look = W.blue;
-    else if (has("ghost-chord") && !slotOn) {
-      top = nodeGraphKeyboardOver(L.ghost.chord.top, W.base.top);
-      bottom = nodeGraphKeyboardOver(L.ghost.chord.bottom, W.base.bottom);
-      ring = L.ghost.chord.ring;
-      ringPx = 2;
-    } else if (has("ghost-patch")) {
-      top = nodeGraphKeyboardOver(L.ghost.patch.top, W.base.top);
-      bottom = nodeGraphKeyboardOver(L.ghost.patch.bottom, W.base.bottom);
-      ring = L.ghost.patch.ring;
-      ringPx = 2;
-    } else if (has("patch-set")) {
-      top = nodeGraphKeyboardOver(L.ghost.patchSet.top, W.base.top);
-      bottom = nodeGraphKeyboardOver(L.ghost.patchSet.bottom, W.base.bottom);
-    }
-    if (!ring && look.inset) ring = look.inset;
-    // MIDI / chord Play Keys ghost: the sequencer.css inset ring (not on gold / chord slots).
-    if (has("ghost-play") && !held && !cm) { ring = L.ghost.play; ringPx = 2; }
-    top = top || look.top;
-    bottom = bottom || look.bottom;
-    const mid = nodeGraphKeyboardMix(top, bottom, 0.5);
-    return {
-      top,
-      bottom,
-      stroke: ring ? ringPx : 0,
-      strokeRgba: ring ? nodeGraphKeyboardOver(ring, mid) : mid,
-      text: look.text,
-    };
-  }
-  const B = L.black;
-  let look = B.base;
-  let top = null;
-  let bottom = null;
-  let border = null;
-  let ringPx = 1;
-  if (has("chord-edit-note")) look = B.red;
-  else if (slotEdit) { look = B.slot; border = L.slotEditRing; ringPx = 2; }
-  else if (cm && slotOn) look = B.slot;
-  else if (cm && active) { look = B.blue; border = L.greenRing; ringPx = 2; }
-  else if (cm && held) { look = B.gold; border = L.greenRing; ringPx = 2; }
-  else if (cm) look = B.green;
-  else if (held && active) { look = B.blue; border = L.goldRing; ringPx = 2; }
-  else if (held) look = B.gold;
-  else if (active) look = B.blue;
-  else if (has("ghost-chord") && !slotOn) {
-    top = nodeGraphKeyboardOver(L.ghost.blackChord.top, B.ghostBase.top);
-    bottom = nodeGraphKeyboardOver(L.ghost.blackChord.bottom, B.ghostBase.bottom);
-    border = L.ghost.blackChord.border;
-    ringPx = 2;
-  } else if (has("ghost-patch")) {
-    top = nodeGraphKeyboardOver(L.ghost.blackPatch.top, B.ghostBase.top);
-    bottom = nodeGraphKeyboardOver(L.ghost.blackPatch.bottom, B.ghostBase.bottom);
-    border = L.ghost.blackPatch.border;
-    ringPx = 2;
-  } else if (has("patch-set")) {
-    top = nodeGraphKeyboardOver(L.ghost.blackPatchSet.top, B.base.top);
-    bottom = nodeGraphKeyboardOver(L.ghost.blackPatchSet.bottom, B.base.bottom);
-    border = L.ghost.blackPatchSet.border;
-  }
-  if (has("ghost-play") && !held && !cm) { border = L.ghost.play; ringPx = 2; }
-  top = top || look.top;
-  bottom = bottom || look.bottom;
-  border = border || look.border;
-  const mid = nodeGraphKeyboardMix(top, bottom, 0.5);
-  return {
-    top,
-    bottom,
-    stroke: ringPx,
-    strokeRgba: nodeGraphKeyboardOver(border, mid),
-    // Black labels only take the state colour on wide keyboards (old @container 520px).
-    text: wideLabels ? look.text : B.base.text,
-  };
+  return nodeGraphPianoKeysPaint(NODE_GRAPH_MIDI_KEY_LOOK, key.state, {
+    black: key.black,
+    wideLabels,
+  });
 }
 
 const NODE_GRAPH_MIDI_KEY_LABEL_FONT = "\"Cascadia Mono\", Consolas, monospace";

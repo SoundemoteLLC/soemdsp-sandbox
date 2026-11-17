@@ -191,4 +191,92 @@ const lastSeam = (() => {
 })();
 assert(lastSeam >= 0 && firstSharp > lastSeam, "natural seams are drawn before the opaque sharps");
 
-console.log("ok  pitch quantizer WebGL face: shared keyboard keys, inverted palette, no rogue DOM");
+assert(
+  /function nodeGraphPianoKeysPaint/.test(shared),
+  "shared helper must own the key-state paint path",
+);
+assert(
+  /nodeGraphPianoKeysPaint\(NODE_GRAPH_MIDI_KEY_LOOK/.test(keyboard),
+  "Keyboard KeyPaint must be a thin wrapper around the shared state-paint path",
+);
+assert(
+  /nodeGraphPianoKeysPaint\(look/.test(ui) && /nodeGraphPianoKeysFlagState/.test(ui),
+  "Pitch Quantizer KeyPaint must use the shared state-paint path, not a bespoke highlight",
+);
+assert(
+  /nodeGraphModuleScopeLatestOutputValue/.test(ui) && /scopePaintIsEnginePlaying/.test(ui),
+  "live class must come from the module scope output + play gate",
+);
+assert(
+  !/requestMIDIAccess|MIDIAccess|midiKeyboard|renderNodeGraphKeyboardActiveKeys|WebMidi/.test(ui),
+  "Pitch Quantizer must not touch MIDI; only MIDI modules do that",
+);
+
+ctx._playing = false;
+ctx._pitch = 64;
+ctx.scopePaintIsEnginePlaying = () => Boolean(ctx._playing);
+ctx.nodeGraphModuleScopeLatestOutputValue = (id, port, fallback) => {
+  if (port !== "pitch") return fallback;
+  return ctx._pitch;
+};
+
+assert(
+  ctx.nodeGraphPitchQuantizerLivePitchClass("pq1") === null,
+  "live highlight clears when the engine is stopped, even if a stale pitch is buffered",
+);
+ctx._playing = true;
+assert(ctx.nodeGraphPitchQuantizerLivePitchClass("pq1") === 4, "MIDI-like 64 (E) maps to pitch class 4");
+ctx._pitch = 60;
+assert(ctx.nodeGraphPitchQuantizerLivePitchClass("pq1") === 0, "60 (C) maps to class 0");
+ctx._pitch = 72.4;
+assert(ctx.nodeGraphPitchQuantizerLivePitchClass("pq1") === 0, "rounded 72 maps to class 0");
+ctx._pitch = 59.6;
+assert(ctx.nodeGraphPitchQuantizerLivePitchClass("pq1") === 0, "rounded 60 maps to class 0");
+ctx._pitch = Number.NaN;
+assert(ctx.nodeGraphPitchQuantizerLivePitchClass("pq1") === null, "non-finite pitch is not a live class");
+ctx._playing = false;
+ctx._pitch = 67;
+assert(ctx.nodeGraphPitchQuantizerLivePitchClass("pq1") === null, "stopped play gate wins over a finite pitch");
+
+let paintCalls = 0;
+const origPaint = ctx.nodeGraphPianoKeysPaint;
+ctx.nodeGraphPianoKeysPaint = function wrappedPaint(...args) {
+  paintCalls += 1;
+  return origPaint.apply(this, args);
+};
+const cPaint = ctx.nodeGraphPitchQuantizerKeyPaint(c, 0, 0);
+assert(paintCalls > 0, "PQ KeyPaint must call the shared nodeGraphPianoKeysPaint");
+ctx.nodeGraphPianoKeysPaint = origPaint;
+
+const paint = (key, mask, livePc) => ctx.nodeGraphPitchQuantizerKeyPaint(key, mask, livePc);
+const idleC = paint(c, 0, null);
+const liveC = paint(c, 0, 0);
+const enC = paint(c, C_MAJOR, null);
+const enLiveC = paint(c, C_MAJOR, 0);
+assert(lum(liveC.top) < lum(idleC.top) && lum(liveC.bottom) < lum(idleC.bottom), "live natural is darker than idle (inverted Keyboard highlight)");
+assert(liveC.stroke > 0, "live natural gets a dark ring");
+assert(idleC.stroke === 0, "idle natural has no ring");
+assert(lum(enLiveC.top) < lum(enC.top) && lum(enLiveC.bottom) < lum(enC.bottom), "live enabled natural is darker than enabled-only teal");
+assert(enC.stroke > 0 && enLiveC.stroke > 0, "enabled teal and live-on both keep a ring");
+assert(
+  JSON.stringify(enC.strokeRgba) !== JSON.stringify(enLiveC.strokeRgba),
+  "live ring is visually distinct from the enabled teal stroke",
+);
+const tealBias = (p) => p.top[1] - p.top[0];
+assert(tealBias(enC) > tealBias(idleC), "enabled-only natural still reads teal against idle");
+assert(tealBias(enLiveC) > tealBias(liveC), "live+enabled still reads teal against a live-but-out-of-scale natural");
+assert(
+  JSON.stringify(paint(c, C_MAJOR, 4)) === JSON.stringify(enC),
+  "a live class on another key does not restyle this enabled natural",
+);
+
+const idleCs = paint(cSharp, 0, null);
+const liveCs = paint(cSharp, 0, 1);
+assert(lum(liveCs.top) < lum(idleCs.top) && lum(liveCs.bottom) < lum(idleCs.bottom), "live sharp is darker than its light idle pad");
+assert(liveCs.stroke > 0, "live sharp keeps a dark ring");
+assert(
+  JSON.stringify(paint(cSharp, 0, 0)) === JSON.stringify(idleCs),
+  "a live natural does not darken a neighboring sharp",
+);
+
+console.log("ok  pitch quantizer WebGL face: shared keyboard keys, inverted palette, live key-on, no rogue DOM");
