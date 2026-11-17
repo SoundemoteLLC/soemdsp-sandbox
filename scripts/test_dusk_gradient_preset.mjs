@@ -1,4 +1,4 @@
-// Dusk is a shared gradient preset: black, dark purple, blue, icy light blue.
+// Dusk is a shared gradient preset: black, dark purple, blue, icy light blue, white.
 // It must be pickable everywhere the other color presets are, including
 // Robin Sinepulse and Spectrogram, and its six colors must stay evenly spaced.
 //   node scripts/test_dusk_gradient_preset.mjs
@@ -18,7 +18,7 @@ const check = (ok, msg) => {
   }
 };
 
-const want = ["#000000", "#3d1350", "#343e77", "#2a5e8b", "#3889ab", "#afd5e3"];
+const want = ["#000000", "#3d1350", "#343e77", "#2a5e8b", "#3889ab", "#ffffff"];
 const ctx = { console, Math, Number, Boolean, String, Array, Object, JSON, Infinity, undefined };
 ctx.globalThis = ctx;
 ctx.window = ctx;
@@ -42,7 +42,7 @@ check(spectro === presets && phosphor === presets, "Spectrogram and phosphor pre
 check(dusk?.label === "dusk", `dusk label is "dusk" (got ${dusk?.label})`);
 check(
   Array.isArray(dusk?.colors) && dusk.colors.map((c) => String(c).toLowerCase()).join(",") === want.join(","),
-  `dusk colors are the authored twilight ramp (${dusk?.colors?.join(", ")})`,
+  `dusk colors are the authored twilight ramp ending in white (${dusk?.colors?.join(", ")})`,
 );
 check(!Array.isArray(dusk?.stops), "dusk has no custom stop positions, so the picker spaces the six colors evenly");
 
