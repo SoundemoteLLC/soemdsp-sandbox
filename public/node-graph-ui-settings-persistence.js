@@ -1734,6 +1734,12 @@ function applyNodeUiDevSettings(settings) {
     if (definition.type === "boolean") {
       input.checked = Boolean(value);
     } else {
+      if (definition.type === "number" && (input.type === "range" || input.type === "number")) {
+        // Inputs without HTML limits take them from the definition before the value is set, so the browser's default 0-100 range can't clamp it.
+        if (!input.hasAttribute("min") && Number.isFinite(definition.min)) input.min = String(definition.min);
+        if (!input.hasAttribute("max") && Number.isFinite(definition.max)) input.max = String(definition.max);
+        if (!input.hasAttribute("step") && Number.isFinite(definition.step)) input.step = String(definition.step);
+      }
       input.value = String(value);
     }
     input.disabled = Boolean(definition.locked);
