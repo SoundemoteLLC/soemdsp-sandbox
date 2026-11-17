@@ -5,6 +5,7 @@
 // widths. Also the face layout export (soemdsp_velvet_reverb_layout, L and R).
 // Helpers take `taps`, or a legacy `density` (Hz) that means taps = density x decay.
 //   node scripts/test_velvet_reverb.mjs
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,8 +46,9 @@ function layout({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, 
   const level = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_level(), count).slice();
   const countR = x.soemdsp_velvet_reverb_layout_count_r();
   const posR = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_pos_r(), countR).slice();
+  const widthR = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_width_r(), countR).slice();
   const levelR = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_level_r(), countR).slice();
-  return { count, pos, width, level, countR, posR, levelR, length: x.soemdsp_velvet_reverb_layout_length(), flags: x.soemdsp_velvet_reverb_layout_flags() };
+  return { count, pos, width, level, countR, posR, widthR, levelR, length: x.soemdsp_velvet_reverb_layout_length(), flags: x.soemdsp_velvet_reverb_layout_flags() };
 }
 const energy = (a, from = 0, to = a.length) => { let e = 0; for (let i = from; i < to; i += 1) e += a[i] * a[i]; return e; };
 const bright = (a) => { let d = 0; for (let i = 1; i < a.length; i += 1) d += (a[i] - a[i - 1]) ** 2; return d / energy(a); };
@@ -70,7 +72,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const bs = [];
   for (let k = 0; k <= 300; k += 1) {
     const d = 1 + k * 0.01;
-    const r = ir({ decay: 0.05, density: 2560, dark: d, n: 4000 }).L;
+    const r = ir({ decay: 0.05, density: 2560, dark: d, gap: 1, n: 4000 }).L;
     if (prev) steps.push({ d, s: dist(prev, r) });
     bs.push(bright(r));
     prev = r;
@@ -106,9 +108,11 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   }
   check(lens[0] < lens[1] && lens[1] < lens[2], `more Length = longer tail: ${lens.map((v) => v.toFixed(3)).join(" < ")} s`);
   const counts = [[50, 0.5], [50, 5], [62.5, 0.025], [64, 0.001], [33.3, 1], [1, 0.2]].map(([taps, decay]) => [taps, layout({ taps, decay }).count]);
-  // ceil(Taps), unless the Length cannot give every tap a Min Gap cell (default 0.083 ms = 3.98 samples): 64 in 1 ms keep 13.
+  // ceil(Taps), unless the Length cannot give every tap a Min Gap cell (default 0.083 ms = 3.98 samples).
+  // 64 in 1 ms: 48 / 3.98 would be 13 including a leftover sliver too small for a whole-sample start, so 12 play.
   const wantOf = (taps, decay) => Math.ceil(Math.min(taps, Math.max(1, decay * FS) / (0.083e-3 * FS)) - 1e-9);
   const want = [[50, 0.5], [50, 5], [62.5, 0.025], [64, 0.001], [33.3, 1], [1, 0.2]].map(([t, d]) => wantOf(t, d));
+  want[3] = 12;
   check(counts.every(([, got], i) => got === want[i]), `tap count = ceil(Taps) at any Length, held by the cell floor only where it must: ${counts.map(([w, g]) => `${w}->${g}`).join(", ")}`);
   const a = nonzeroStarts(ir({ taps: 80, decay: 0.2, dark: 1 }).L), b = nonzeroStarts(ir({ taps: 80, decay: 2, dark: 1, n: 2 * FS + 2048 }).L);
   check(Math.abs(a - 80) <= 3 && Math.abs(b - 80) <= 3, `Length does not add taps: 80 taps -> ${a} onsets over 0.2 s, ${b} over 2 s`);
@@ -349,7 +353,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   check(Math.max(...steps) < 6 * med + 1e-9, `audio: Skew 0.5..0.9 sweep through the thinning has no pop (largest step ${Math.max(...steps).toFixed(4)} vs median ${med.toFixed(4)})`);
   // Darker pulses need wider cells: Darkness 32 keeps fewer of the same taps.
   const dark = layout({ taps: 256, decay: 0.05, dark: 32 });
-  check(dark.count < 256 && dark.count >= 70 && dark.count <= 80, `Darkness 32: 256 taps in 50 ms keep ${dark.count} (2400 samples / 32-sample cells = 75)`);
+  check(dark.count < 256 && dark.count >= 70 && dark.count <= 80, `Darkness 32: 256 taps in 50 ms keep ${dark.count} (2400 samples / 33-sample cells = 72)`);
 }
 
 // ---- Min Gap (ms): least spacing between consecutive taps, taps that do not fit are not used
@@ -359,9 +363,9 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   for (let i = 2; i < one.count; i += 1) if ((one.pos[i] - one.pos[i - 2]) * FS < 48 - 1) short2 += 1;
   check(one.count === 50 && (one.flags & 4) && short2 === 0, `Min Gap 1 ms: 256 taps in 50 ms keep ${one.count} (2400 / 48 samples = 50), every cell >= 48 samples (${short2} short)`);
   const none = layout({ taps: 4096, decay: 0.05, gap: 0 });
-  check(none.count === 2400, `Min Gap 0: the floor is the pulse (1 sample at Darkness 1): 4096 taps in 2400 samples keep ${none.count}`);
+  check(none.count === 1200, `Min Gap 0: the floor is the pulse plus one start sample (2 at Darkness 1): 4096 taps in 2400 samples keep ${none.count}`);
   const wide = layout({ taps: 256, decay: 0.05, gap: 0.1, dark: 32 });
-  check(wide.count === 75, `Min Gap never below the pulse: 0.1 ms (4.8 samples) at Darkness 32 keeps ${wide.count} (32-sample cells = 75)`);
+  check(wide.count === 72, `Min Gap never below the pulse: 0.1 ms (4.8 samples) at Darkness 32 keeps ${wide.count} (33-sample cells = 72)`);
   const a = ir({ taps: 256, decay: 0.05, gap: 0.5, n: 3000 }).L, b = ir({ taps: 256, decay: 0.05, gap: 0.51, n: 3000 }).L, c = ir({ taps: 256, decay: 0.05, gap: 0.52, n: 3000 }).L;
   check(dist(a, b) > 0 && dist(a, b) < 3 * dist(b, c) + 1e-9 && dist(b, c) < 3 * dist(a, b) + 1e-9, `audio: Min Gap moves smoothly (0.50 -> 0.51 ${dist(a, b).toFixed(4)}, 0.51 -> 0.52 ${dist(b, c).toFixed(4)})`);
   const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
@@ -471,6 +475,71 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   }
   x.soemdsp_velvet_reverb_destroy(h);
   check(lastHi / 96000 > 5.5 && lastHi / 96000 <= 6.01, `96 kHz: the last tap of a 6 s tail plays at ${(lastHi / 96000).toFixed(3)} s`);
+}
+
+
+// ---- Pulses stay inside their cell: no same-channel overlap, even at wide Darkness
+{
+  const endGap = (pos, width) => {
+    let ov = 0;
+    for (let i = 1; i < pos.length; i += 1) {
+      if (pos[i] * FS + 1e-9 < pos[i - 1] * FS + width[i - 1] * FS) ov += 1;
+    }
+    return ov;
+  };
+  const cellGapOk = (pos, minSmp) => {
+    let short = 0;
+    for (let i = 2; i < pos.length; i += 1) {
+      if ((pos[i] - pos[i - 2]) * FS < minSmp - 1) short += 1;
+    }
+    return short;
+  };
+  const cases = [
+    { taps: 256, dark: 32, decay: 0.05, gap: 0.083, skew: 0, tail: 0, tailRand: 1, tailCurve: 0, spread: 1, seed: 1 },
+    { taps: 256, dark: 32, decay: 0.05, gap: 1, skew: 0, tail: 0, tailRand: 1, tailCurve: 0, spread: 1, seed: 1 },
+    { taps: 256, dark: 1024, decay: 0.5, gap: 1, skew: 0, tail: 0, tailRand: 1, tailCurve: 0, spread: 1, seed: 2 },
+    { taps: 256, dark: 4, decay: 0.05, gap: 1, skew: 0.8, tail: 64, tailRand: 1, tailCurve: 0.5, spread: 1, seed: 3 },
+    { taps: 128, dark: 64, decay: 0.2, gap: 0, skew: -1, tail: 200, tailRand: 0, tailCurve: -0.8, spread: 0, seed: 4 },
+    { taps: 64, dark: 1024, decay: 0.025, gap: 1, skew: 1, tail: 1024, tailRand: 0, tailCurve: 0, spread: 1, seed: 5 },
+  ];
+  let rng = 123456789;
+  const unit = () => { rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0; return rng / 4294967296; };
+  for (let n = 0; n < 80; n += 1) {
+    cases.push({
+      taps: 16 + Math.floor(unit() * 400),
+      dark: 1 + unit() * 1023,
+      decay: 0.02 + unit() * 0.6,
+      gap: unit() < 0.2 ? 0 : unit() * 4,
+      skew: unit() * 2 - 1,
+      tail: unit() < 0.4 ? 0 : 1 + unit() * 1023,
+      tailRand: unit(),
+      tailCurve: unit() * 2 - 1,
+      spread: unit(),
+      seed: 1 + Math.floor(unit() * 10000),
+    });
+  }
+  let failedOv = 0, failedGap = 0, seen = 0;
+  for (const c of cases) {
+    const lay = layout(c);
+    const ovL = endGap(lay.pos, lay.width);
+    const ovR = endGap(lay.posR, lay.widthR);
+    const minSmp = Math.max(1, (c.gap > 0 ? c.gap : 0) * 0.001 * FS);
+    const gapL = cellGapOk(lay.pos, minSmp);
+    const gapR = cellGapOk(lay.posR, minSmp);
+    if (ovL || ovR) failedOv += 1;
+    if (gapL || gapR) failedGap += 1;
+    seen += 1;
+  }
+  check(failedOv === 0, `no same-channel pulse overlap in ${seen} layouts (Darkness up to 1024, Skew +-1, Tail Dark / Curve / Random, Spread)`);
+  check(failedGap === 0, `every other tap stays at least Min Gap apart in those ${seen} layouts (cell floor)`);
+  const defOpts = { taps: 64, dark: 1, spread: 1, decay: 0.025, tail: 0, seed: 1, amp: -60, skew: 0, gap: 1, tailRand: 1, tailCurve: 0 };
+  const defLay = layout(defOpts);
+  check(defLay.count === 25 && defLay.countR === 25 && endGap(defLay.pos, defLay.width) === 0 && endGap(defLay.posR, defLay.widthR) === 0, "default layout still 25 / 64 taps with no overlap");
+  const defIr = ir({ ...defOpts, n: Math.ceil(0.025 * FS) + 2048 });
+  const digest = crypto.createHash("sha256");
+  digest.update(Buffer.from(defIr.L.buffer));
+  digest.update(Buffer.from(defIr.R.buffer));
+  check(digest.digest("hex") === "7c6e4285d7a6afa86ea75903f9f527d949d5cc513d80ec7d4b96896e0dd10376", "default settings (Darkness 1) stay bit-identical");
 }
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }

@@ -252,12 +252,14 @@ static const int kLayoutTapLimit = 1;    // Taps > kMaxTaps (the engine's table 
 static const int kLayoutLengthLimit = 2; // Length longer than the delay line: the tail is held there
 static const int kLayoutThinned = 4;     // fewer taps play than Taps asks: they would bunch up (cell floor)
 
-// Cell floor (velvet_reverb v6): no tap's cell is narrower than its widest
-// pulse, and never under Min Gap (ms, a parameter), so every pulse fits its own cell with
-// room for its jitter and taps never stack or overlap. Where Density Skew (or
-// simply many Taps in a short Length) would pack cells tighter, the taps there
-// are not used: the tap count follows the floor instead of the setting, which
-// also saves CPU. kWarpSteps sections of the warp are each given
+// Cell floor (velvet_reverb v6, v11 no-overlap starts): no tap's cell is
+// narrower than max(Min Gap, pulse width + 1 sample), so every pulse has a
+// whole-sample start in [cellStart, cellEnd - width] and ends inside its
+// own cell. (The +1 is on the pulse, not on Min Gap, so a 1 ms default
+// gap is unchanged when Darkness is 1.) Where Density Skew (or simply many
+// Taps in a short Length) would pack cells tighter, the taps there are not
+// used: the tap count follows the floor instead of the setting, which also
+// saves CPU. kWarpSteps sections of the warp are each given
 // min(Taps share, section length / floor) taps; the running sum is continuous
 // in every parameter, and its fraction fades the last tap in exactly like a
 // fractional Taps, so moving Skew never pops.
@@ -314,6 +316,49 @@ static inline double expected_width_energy(double W, double randAmt) {
   return smoothE + randAmt * (randomE - smoothE);
 }
 
+// Room a cell needs so the pulse ends inside it and there is at least one
+// whole-sample start: max(Min Gap, width + 1). Adding 1 to Min Gap itself
+// would shrink default 1 ms packing (25 ms / 64 taps would drop a tap).
+static inline double cell_need(double minGap, double width) {
+  const double w = width + 1.0;
+  return w > minGap ? w : minGap;
+}
+
+// Whole-sample start in [cellStart, cellEnd - width]. If the historical
+// full-cell jitter already lands in that window, keep it (Darkness 1
+// default patches stay bit-identical). Otherwise remap jitter into the
+// window. Returns false when the cell is too small (drop the tap).
+static inline bool start_in_cell(double cellStart, double cellEnd, double width, double jitter, double minGap, int* startOut, double* posAmpOut) {
+  if (!startOut) return false;
+  (void)minGap;
+  // First whole sample at or after cellStart (ceil), so a pulse that ends
+  // at the previous cell's end cannot share a sample with this start.
+  int first = (int)cellStart;
+  if ((double)first < cellStart) first += 1;
+  if (first < 0) first = 0;
+  if ((double)first + width > cellEnd) first += 1;
+  int last = (int)(cellEnd - width);
+  while (last >= first && (double)last + width > cellEnd) last -= 1;
+  if (first > last) return false;
+  const double posOld = cellStart + jitter * (cellEnd - cellStart);
+  int s = (int)posOld;
+  if (s >= first && s <= last) {
+    *startOut = s;
+    if (posAmpOut) *posAmpOut = posOld;
+    return true;
+  }
+  const double latest = cellEnd - width;
+  const double lo = cellStart;
+  const double hi = latest > lo ? latest : lo;
+  const double pos = lo + jitter * (hi - lo);
+  s = (int)pos;
+  if (s < first) s = first;
+  if (s > last) s = last;
+  *startOut = s;
+  if (posAmpOut) *posAmpOut = (double)s;
+  return true;
+}
+
 static void build_table(
   TapTable& t, double taps, double headWidth, double spread, unsigned int seed,
   double lengthSeconds, double sampleRate, double tailWidth, double ampDecayDb,
@@ -364,13 +409,12 @@ static void build_table(
     const double m = (a == b) ? a : a * soemdsp_maths::pow_pos(b / a, u);
     return m < 1.0 ? 1.0 : m;
   };
-  // Min Gap: the least spacing between consecutive taps (never less than the
-  // pulse there, and at least one sample).
+  // Min Gap: the least spacing between consecutive cells (never less than
+  // the pulse there plus one sample of start positions, and at least one sample).
   double minGap = clean_min_gap_ms(minGapMs) * 0.001 * sampleRate;
   if (minGap < 1.0) minGap = 1.0;
   auto floorAt = [&](double x) {
-    const double m = widestAt(x);
-    return m > minGap ? m : minGap;
+    return cell_need(minGap, widestAt(x));
   };
 
   // Kept taps along the warped tail (see kWarpSteps). Without the floor this is
@@ -441,14 +485,11 @@ static void build_table(
   // determines positions and signs at any Tail Random.
   const double headEnergy = expected_width_energy(headWidth, randAmt);
 
-  double endL = 0.0; // where the previous pulse ends: pulses never overlap
-  double endR = 0.0;
   for (int i = 0; i < count; ++i) {
     const bool last = (i == count - 1);
     const double part = last ? lastPart : 1.0; // the last cell is what is left
     const double cellStart = cellEdge((double)i);
     const double cellEnd = cellEdge((double)i + part);
-    const double cellSize = cellEnd - cellStart;
 
     const double jitterL = next_unit(sL);
     const double widthUnitL = next_unit(sL);
@@ -474,47 +515,57 @@ static void build_table(
     const double widthR = widthL + spread * (rawWidthR - widthL); // stays in [1, maxWidth]
     // The sign goes independent on a per-tap threshold, so decorrelation grows evenly.
     const double signR = (ownR < spread) ? ownSignR : signL;
-    // Velvet jitter over the whole cell (Right follows Left at Spread 0 and its
-    // own draw at Spread 1). The cell floor keeps a cell at least the widest
-    // pulse, so a pulse can only reach into the next cell; a tap that would
-    // start inside the previous pulse starts where it ends (positions do not
-    // depend on the widths otherwise, so sweeping Darkness never moves taps).
-    double posL = cellStart + jitterL * cellSize;
-    double blendPosR = cellStart + (jitterL + spread * (jitterR - jitterL)) * cellSize;
-    if (posL < endL) posL = endL;
-    if (blendPosR < endR) blendPosR = endR;
+    // Whole-sample start in [cellStart, cellEnd - pulseWidth] per channel
+    // (Right follows Left's jitter at Spread 0 and its own at Spread 1).
+    // A cell narrower than max(Min Gap, this pulse's width + 1) drops the
+    // tap the same way extra taps are already dropped (thinned flag).
+    // RNG is always consumed above, so Seed stays deterministic at any
+    // Darkness / Tail Random / Spread.
+    const double jitterPosR = jitterL + spread * (jitterR - jitterL);
+    int startL = 0;
+    int startR = 0;
+    double posAmpL = 0.0;
+    double posAmpR = 0.0;
+    const bool fitL = start_in_cell(cellStart, cellEnd, widthL, jitterL, minGap, &startL, &posAmpL);
+    const bool fitR = start_in_cell(cellStart, cellEnd, widthR, jitterPosR, minGap, &startR, &posAmpR);
+    if ((openL && !fitL) || (openR && !fitR)) flags |= kLayoutThinned;
 
     if (openL) {
-      if (posL + widthL < (double)(delaySize - 1)) {
+      if (fitL && (double)startL + widthL < (double)(delaySize - 1)) {
+        const double posL = posAmpL;
         const double ampL = part * soemdsp_maths::dsp_exp(-decayK * (posL + 0.5 * widthL)); // amplitude (face height)
         const double envL = rampGain * ampL;
         if (out) {
-          out->pos[countL] = (double)(int)posL / sampleRate;
+          out->pos[countL] = (double)startL / sampleRate;
           out->width[countL] = widthL / sampleRate;
           out->level[countL] = signL * ampL;
         }
-        set_tap(t.left[countL++], (int)posL, widthL, signL * envL);
-        endL = posL + widthL;
+        set_tap(t.left[countL++], startL, widthL, signL * envL);
         // A tap averages `width` samples (gain 1/width), so its energy on
         // noise is env^2 * (n + f^2) / w^2 (env^2 / width at whole widths).
         // Counting the width keeps the wet level the same at any Darkness.
         sumL += envL * envL * width_energy(widthL);
+      } else if (!fitL) {
+        // Dropped: cell too narrow for this pulse. Keep openL so later
+        // cells can still play.
       } else {
         openL = false;
       }
     }
     if (openR) {
-      if (blendPosR + widthR < (double)(delaySize - 1)) {
+      if (fitR && (double)startR + widthR < (double)(delaySize - 1)) {
+        const double blendPosR = posAmpR;
         const double ampR = part * soemdsp_maths::dsp_exp(-decayK * (blendPosR + 0.5 * widthR));
         const double envR = rampGain * ampR;
         if (out) {
-          out->posR[countR] = (double)(int)blendPosR / sampleRate;
+          out->posR[countR] = (double)startR / sampleRate;
           out->widthR[countR] = widthR / sampleRate;
           out->levelR[countR] = signR * ampR;
         }
-        set_tap(t.right[countR++], (int)blendPosR, widthR, signR * envR);
-        endR = blendPosR + widthR;
+        set_tap(t.right[countR++], startR, widthR, signR * envR);
         sumR += envR * envR * width_energy(widthR);
+      } else if (!fitR) {
+        // Dropped: cell too narrow for this pulse.
       } else {
         openR = false;
       }
@@ -912,7 +963,7 @@ double* soemdsp_velvet_reverb_levels_r() { return gLevelsR; }
 int soemdsp_velvet_reverb_levels_count_r() { return gLevelsCountR; }
 
 int soemdsp_velvet_reverb_version() {
-  return 10; // 10: per-tap display peak-hold (width-filtered pulse x gain x norm, L/R, taken by the worklet at the face telemetry rate; off when the face is hidden). 9: Tail Curve (-1..+1, default 0): Step Graph rational bend (segment_rational01, same sign as Step Graph) on a log-width Darkness->Tail Darkness sweep, so cutoff falls exponentially over time at curve 0. 8: Tail Random (0 = smooth Darkness->Tail Darkness pulse widths, 1 = previous per-tap random widths; default 1) and Density Skew is -1..+1 (the rational warp is soft-capped just inside +-1 so the endpoints stay finite; Min Gap still drops bunched taps). 7: Min Gap parameter (default 1 ms) (ms; sample and layout take it last): the cell floor is max(Min Gap, widest pulse); Density Skew back to the one-sided rational warp. 6: cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
+  return 11; // 11: each pulse starts on a whole sample in [cellStart, cellEnd - width] so it cannot overlap the next tap on the same channel (cell floor is max(Min Gap, width + 1); L/R are checked separately). 10: per-tap display peak-hold (width-filtered pulse x gain x norm, L/R, taken by the worklet at the face telemetry rate; off when the face is hidden). 9: Tail Curve (-1..+1, default 0): Step Graph rational bend (segment_rational01, same sign as Step Graph) on a log-width Darkness->Tail Darkness sweep, so cutoff falls exponentially over time at curve 0. 8: Tail Random (0 = smooth Darkness->Tail Darkness pulse widths, 1 = previous per-tap random widths; default 1) and Density Skew is -1..+1 (the rational warp is soft-capped just inside +-1 so the endpoints stay finite; Min Gap still drops bunched taps). 7: Min Gap parameter (default 1 ms) (ms; sample and layout take it last): the cell floor is max(Min Gap, widest pulse); Density Skew back to the one-sided rational warp. 6: cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
 }
 
 } // extern "C"
