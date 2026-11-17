@@ -8757,7 +8757,7 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       { key: "amplitude1", label: "Amplitude1", defaultValue: "1", min: "0", mid: "1", max: "1", step: "0.01", maxDigits: 4 },
       { key: "amplitude2", label: "Amplitude2", defaultValue: "1", min: "0", mid: "1", max: "1", step: "0.01", maxDigits: 4 },
-      { key: "amplitude", label: "Amplitude", defaultValue: "1", min: "0", mid: "1", max: "1", step: "0.01", maxDigits: 4 },
+      { key: "amplitude", label: "Amp", defaultValue: "1", min: "0", mid: "1", max: "1", step: "0.01", maxDigits: 4 },
     ]
   },
 
@@ -8916,7 +8916,7 @@ const nodeGraphModuleDefinitions = (
         hardMax: "12",
         key: "amplitude",
         kind: "decibels",
-        label: "Amplitude (All)",
+        label: "Amp",
         max: "0",
         mid: "0",
         min: "-140",
@@ -9000,7 +9000,7 @@ const nodeGraphModuleDefinitions = (
         hardMax: "12",
         key: "amplitude",
         kind: "decibels",
-        label: "Gain",
+        label: "Amp",
         max: "0",
         mid: "0",
         min: "-140",
@@ -9059,7 +9059,7 @@ const nodeGraphModuleDefinitions = (
         defaultValue: "0", key: "pan4", label: "Pan4",
         max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
       {
-        defaultValue: "0", key: "amplitude", kind: "decibels", label: "Amplitude (All)",
+        defaultValue: "0", key: "amplitude", kind: "decibels", label: "Amp",
         // max = spawn slider max; hardMax keeps the previous +12 dB typed ceiling.
         hardMax: "12",
         max: "0", mid: "0", min: "-140", minusInf: true, nonlinearSlider: true,
