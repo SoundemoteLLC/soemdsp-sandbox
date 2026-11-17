@@ -24,8 +24,12 @@
 // (xorshift from the Seed, no clock or Math.random).
 // Look: the Pulse Train face settings (Background, Text = the line lamp, shown as
 // "Text" on this face: tap count / length readouts and the held-length bar,
-// Left, Right, Line thickness, Dot size) over the module definition's
-// defaultDisplaySettings (Dot size 0) for any key the node has not stored.
+// Left, Right, Line thickness, Dot size, optional Line blur) over the module
+// definition's defaultDisplaySettings (Dot size 0, Line blur 0 / off) for any
+// key the node has not stored. Line blur (tapLineBlur, CSS px, default 0)
+// smears each pulse only along the time axis with the same display Expo
+// skirt as the dots (1 - (1-e^-3t)/(1-e^-3), 4-sample box in X). It never
+// spreads up or down, so the Amp Decay envelope stays crisp.
 // Live tap flash is currently off (NODE_GRAPH_VELVET_TAP_LIVE_FLASH). Taps
 // draw static only: height is amplitude, width is the real pulse (1 device
 // px minimum), brightness is the log-width darkness map. The flash helpers
@@ -394,15 +398,95 @@ function nodeGraphVelvetTapsAxisSpans(a, b, minFull) {
   return spans;
 }
 
+// Same display Expo skirt as gl-line-renderer (APP_POLICY section 3 / dots):
+// coverage = 1 - (1 - e^-3t) / (1 - e^-3), t = distance past the solid edge
+// over the feather. t=0 -> 1, t=1 -> 0.
+function nodeGraphVelvetTapsExpoCoverage(t) {
+  if (t <= 0) return 1;
+  if (t >= 1) return 0;
+  return 1 - (1 - Math.exp(-3 * t)) / 0.95021293163;
+}
+
+// 4-sample box filter along X only (same sub-pixel offsets as coverageEdge
+// in the shared line shader). dist is 0 inside [x0, x1], else the distance
+// to the nearest vertical edge. No Y term: height stays a hard coverage AA
+// edge so the decay envelope does not blob.
+function nodeGraphVelvetTapsXCov(pxCenter, x0, x1, feather) {
+  let acc = 0;
+  for (let i = 0; i < 4; i += 1) {
+    const o = (i + 0.5) * 0.25 - 0.5;
+    const x = pxCenter + o;
+    let dist = 0;
+    if (x < x0) dist = x0 - x;
+    else if (x > x1) dist = x - x1;
+    acc += dist <= 0 || !(feather > 0)
+      ? (dist <= 0 ? 1 : 0)
+      : nodeGraphVelvetTapsExpoCoverage(Math.min(1, dist / feather));
+  }
+  return acc * 0.25;
+}
+
+// Horizontal Expo spans around a solid core [coreA, coreB) in device px.
+function nodeGraphVelvetTapsXBlurSpans(coreA, coreB, feather) {
+  const spans = [];
+  if (!(coreB > coreA)) return spans;
+  if (!(feather > 0)) {
+    const first = Math.floor(coreA);
+    const last = Math.ceil(coreB) - 1;
+    if (last < first) return spans;
+    if (first === last) {
+      spans.push({ p: first, c: coreB - coreA, w: 1 });
+      return spans;
+    }
+    spans.push({ p: first, c: (first + 1) - coreA, w: 1 });
+    if (last - first > 1) spans.push({ p: first + 1, c: 1, w: last - first - 1 });
+    spans.push({ p: last, c: coreB - last, w: 1 });
+    return spans;
+  }
+  const first = Math.floor(coreA - feather);
+  const last = Math.ceil(coreB + feather) - 1;
+  let runP = 0;
+  let runC = 0;
+  let runW = 0;
+  const flush = () => {
+    if (runW > 0 && runC > 0) spans.push({ p: runP, c: runC, w: runW });
+    runW = 0;
+  };
+  for (let p = first; p <= last; p += 1) {
+    const c = nodeGraphVelvetTapsXCov(p + 0.5, coreA, coreB, feather);
+    if (!(c > 1 / 255)) {
+      flush();
+      continue;
+    }
+    if (runW > 0 && Math.abs(c - runC) < 1 / 255) {
+      runW += 1;
+    } else {
+      flush();
+      runP = p;
+      runC = c;
+      runW = 1;
+    }
+  }
+  flush();
+  return spans;
+}
+
 // Sharp-cornered rectangle at exact CSS-pixel edges. Horizontal spans no
 // wider than 1 device px are a 1 px bar at full coverage; wider spans keep
-// fractional edge coverage. Height still uses coverage AA. Device pixels
-// follow batch.scale / dpr.
-function nodeGraphVelvetTapsCoverageRect(batch, xa, ya, wa, ha, rgba) {
+// fractional edge coverage. Height still uses coverage AA (never a vertical
+// skirt). Optional featherCss is a time-axis-only Expo blur in CSS px, using
+// the same curve as the dots; 0 keeps the sharp rect. Device pixels follow
+// batch.scale / dpr.
+function nodeGraphVelvetTapsCoverageRect(batch, xa, ya, wa, ha, rgba, featherCss) {
   if (!batch || typeof nodeGraphGlLinesRect !== "function") return;
   if (!(wa > 0) || !(ha > 0)) return;
   const k = Number(batch.scale) > 0 ? Number(batch.scale) : 1;
-  const xs = nodeGraphVelvetTapsAxisSpans(xa * k, (xa + wa) * k, 1);
+  const xsSharp = nodeGraphVelvetTapsAxisSpans(xa * k, (xa + wa) * k, 1);
+  if (!xsSharp.length) return;
+  const coreA = xsSharp[0].p;
+  const coreB = xsSharp[xsSharp.length - 1].p + xsSharp[xsSharp.length - 1].w;
+  const feather = Math.max(0, Number(featherCss) || 0) * k;
+  const xs = feather > 0 ? nodeGraphVelvetTapsXBlurSpans(coreA, coreB, feather) : xsSharp;
   const ys = nodeGraphVelvetTapsAxisSpans(ya * k, (ya + ha) * k);
   if (!xs.length || !ys.length) return;
   const saved = batch.scale;
@@ -444,6 +528,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     : Math.max(0, Number(look.lineSmoothing) || 1);
   const halfPx = Math.max(0, Number(look.lineThickness) || 0) * 0.5;
   const dotR = Math.max(0, Number(look.dotThickness) || 0) * 0.5;
+  const lineBlur = Math.max(0, Number(look.tapLineBlur) || 0);
   const line = rgba(look.strokePaint);
   const inkL = rgba(look.leftPaint);
   const inkR = rgba(look.rightPaint);
@@ -544,7 +629,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     if (taps && taps !== batch) taps.quadBlend = "add";
     const fill = (r, ink) => {
       if (!(r.hh > 0) || !(r.xb > r.xa) || !r.s) return;
-      nodeGraphVelvetTapsCoverageRect(taps, r.xa, r.s > 0 ? mid - r.hh : mid, r.xb - r.xa, r.hh, shade(ink, r));
+      nodeGraphVelvetTapsCoverageRect(taps, r.xa, r.s > 0 ? mid - r.hh : mid, r.xb - r.xa, r.hh, shade(ink, r), lineBlur);
     };
     for (const r of rl) fill(r, inkL);
     for (const r of rr) fill(r, inkR);
