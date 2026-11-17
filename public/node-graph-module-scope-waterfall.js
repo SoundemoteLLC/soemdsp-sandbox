@@ -912,15 +912,19 @@ function nodeGraphWaterfallLiveBuffer(spec, settings) {
   return best;
 }
 
-/** Overlap colour of the two channels: white, or the classic complement (red + blue = green) for mode "combine-green". */
-function nodeGraphWaterfallMeetRgb(leftRgb, rightRgb, mode) {
+/**
+ * Overlap colour of the two channels: the classic complement (red + blue =
+ * green) for mode "combine-green", otherwise Add eased toward white by how
+ * much of the pair overlaps (share 0…1, nodeGraphWaterfallOverlapShare).
+ */
+function nodeGraphWaterfallMeetRgb(leftRgb, rightRgb, mode, share = 1) {
   const l = leftRgb || [255, 0, 0];
   const r = rightRgb || [0, 0, 255];
   let m = null;
   if (typeof TraceStroke !== "undefined" && typeof TraceStroke.meetColorForMode === "function") {
-    m = TraceStroke.meetColorForMode(mode, l, r);
+    m = TraceStroke.meetColorForMode(mode, l, r, share);
   } else if (typeof TraceStroke !== "undefined" && typeof TraceStroke.meetColorFromPair === "function") {
-    m = TraceStroke.meetColorFromPair(l, r);
+    m = TraceStroke.meetColorFromPair(l, r, share);
   }
   if (!m || m.length < 3) {
     m = [
@@ -942,6 +946,16 @@ function nodeGraphWaterfallYsInterval(ys) {
   const y1 = Math.max(ys.y0, ys.y1);
   if (!Number.isFinite(y0) || !Number.isFinite(y1)) return null;
   return { y0, y1 };
+}
+
+/** Overlap length / union length of the two bars in one column (0…1). */
+function nodeGraphWaterfallOverlapShare(leftYs, rightYs, overlap) {
+  const a = nodeGraphWaterfallYsInterval(leftYs);
+  const b = nodeGraphWaterfallYsInterval(rightYs);
+  if (!a || !b || !overlap) return 0;
+  const union = Math.max(a.y1, b.y1) - Math.min(a.y0, b.y0);
+  if (!(union > 0)) return 1;
+  return Math.max(0, Math.min(1, (overlap.y1 - overlap.y0) / union));
 }
 
 /** Exclusive right/B spans plus the overlap that paints the meet color. */
@@ -1039,7 +1053,9 @@ function nodeGraphWaterfallStampColumnFills(canvas, x, spans, mode, stampComposi
       meetParts,
       left.rgb,
       right.rgb,
-      nodeGraphWaterfallMeetRgb(left.rgb, right.rgb, mode),
+      nodeGraphWaterfallMeetRgb(
+        left.rgb, right.rgb, mode, nodeGraphWaterfallOverlapShare(left.ys, right.ys, meetParts.overlap),
+      ),
     )) {
       return;
     }
@@ -1063,7 +1079,9 @@ function nodeGraphWaterfallStampColumnFills(canvas, x, spans, mode, stampComposi
       parts.overlap,
       null,
       false,
-      nodeGraphWaterfallMeetRgb(left.rgb, right.rgb, mode),
+      nodeGraphWaterfallMeetRgb(
+        left.rgb, right.rgb, mode, nodeGraphWaterfallOverlapShare(left.ys, right.ys, parts.overlap),
+      ),
       "source-over",
     );
   }

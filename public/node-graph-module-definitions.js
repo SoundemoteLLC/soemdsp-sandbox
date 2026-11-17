@@ -7727,7 +7727,7 @@ const nodeGraphModuleDefinitions = (
         key: "rate",
         kind: "frequency",
         label: "Rate",
-        max: "969.69",
+        max: "999",
         maxDigits: 5,
         mid: "2",
         min: "0",
