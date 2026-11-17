@@ -7,7 +7,8 @@
 // voice, stereo from the start. Trigger (label Closed) + Open + Reset in,
 // Hat L + Hat R + Env out. One fixed shared param set every algorithm reads:
 //   tune (x), tone (0..1), closedDecay (s T60), openDecay (s T60),
-//   metal (0..1), amplitude (0..1).
+//   metal (0..1 metal <-> shaped noise), amplitude (0..1),
+//   noiseFreq / noiseQ / noiseTilt (shared Modal Snare noise shaper).
 // Algorithms (choiceIds): 0 tr808, 1 tr606, 2 fm, 3 noise.
 //
 // Choke (one voice): Open hit restarts the VCA at v with Open Decay; Closed
@@ -28,6 +29,7 @@
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/filter/tpt_svf.h>
 #include <soemdsp/drum/drum_parts.h>
+#include <soemdsp/drum/noise_shape.h>
 
 namespace {
 
@@ -57,6 +59,7 @@ static const double kNoiseBp = 8000.0, kNoiseHpRatio = 0.5, kNoiseGain = 0.75;
 
 struct Chan {
   TptSvfState bp, hp;
+  NoiseShape ns;  // shared Modal Snare shaper (Freq / Q / Tilt)
 };
 
 struct State {
@@ -99,7 +102,11 @@ static void clear_voice(State& s) {
   s.vca = 0.0;
   s.rampFrom = 0.0;
   s.rampLeft = s.rampLen = 0;
-  for (int c = 0; c < 2; c++) { tpt_svf_reset(s.ch[c].bp); tpt_svf_reset(s.ch[c].hp); }
+  for (int c = 0; c < 2; c++) {
+    tpt_svf_reset(s.ch[c].bp);
+    tpt_svf_reset(s.ch[c].hp);
+    noise_shape_reset(s.ch[c].ns);
+  }
   hash_noise_reset(s.white);
   s.envOut = s.rightOut = 0.0;
 }
@@ -160,9 +167,14 @@ static double metal_tick(State& s, int alg, double tune, double tone, double sr)
   return 0.0;
 }
 
-static double channel_tick(State& s, int c, int alg, double metalSrc, double tune, double tone, double metal, double sr) {
+static double channel_tick(State& s, int c, int alg, double metalSrc, double tune, double tone, double metal,
+                           double noiseFreq, double noiseQ, double noiseTilt, double sr) {
   Chan& ch = s.ch[c];
-  const double n = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, c));
+  const double nRaw = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, c));
+  // Metal 1 on 808 / 606 / FM never mixes noise; skip the shaper so those
+  // patches stay bit-identical to the pre-shaper voice.
+  const bool useNoise = (alg == kAlgNoise) || (metal != 1.0);
+  const double n = useNoise ? noise_shape_tick(ch.ns, nRaw, noiseFreq, noiseQ, noiseTilt, sr) : nRaw;
   const double nyq = 0.45 * sr;
   TptSvfCoeffs k;
   if (alg == kAlg808 || alg == kAlg606) {
@@ -226,7 +238,10 @@ extern "C" double soemdsp_electro_hat_sample(
   double metal,
   double amplitude,
   double sampleRate,
-  double recalculateOnTrigger  // 0 Off (live) / 1 On: closedDecay / openDecay latched on each hit
+  double recalculateOnTrigger,  // 0 Off (live) / 1 On: closedDecay / openDecay latched on each hit
+  double noiseFreq,
+  double noiseQ,
+  double noiseTilt
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -272,6 +287,9 @@ extern "C" double soemdsp_electro_hat_sample(
   const double tn = safe(tone);
   const double mt = safe(metal);
   const double amp = safe(amplitude);
+  const double nf = mind(clamp(safe(noiseFreq), 20.0, 20000.0), 0.45 * sr);
+  const double nq = clamp(safe(noiseQ), 0.1, 50.0);
+  const double ntilt = clamp(safe(noiseTilt), -1.0, 1.0);
   const double ms = metal_tick(s, alg, tu, tn, sr);
   // Metal 1 (808 / 606 / FM): no noise reaches the filters, so when R's filter
   // state already equals L's, R would compute exactly L. Run the filters once;
@@ -281,13 +299,13 @@ extern "C" double soemdsp_electro_hat_sample(
   const Chan& c1 = s.ch[1];
   const bool sameState = c0.bp.z1 == c1.bp.z1 && c0.bp.z2 == c1.bp.z2
     && c0.hp.z1 == c1.hp.z1 && c0.hp.z2 == c1.hp.z2;
-  const double yL = channel_tick(s, 0, alg, ms, tu, tn, mt, sr);
+  const double yL = channel_tick(s, 0, alg, ms, tu, tn, mt, nf, nq, ntilt, sr);
   double yR;
   if (alg != kAlgNoise && mt == 1.0 && sameState) {
     yR = yL;
     s.ch[1] = s.ch[0];
   } else {
-    yR = channel_tick(s, 1, alg, ms, tu, tn, mt, sr);
+    yR = channel_tick(s, 1, alg, ms, tu, tn, mt, nf, nq, ntilt, sr);
   }
   hash_noise_advance(s.white);
   if (s.rampLeft > 0) {
@@ -323,6 +341,6 @@ extern "C" double soemdsp_electro_hat_f(int handle) {
   return gPool[handle - 1].fOut;
 }
 
-extern "C" int soemdsp_electro_hat_version() { return 3; } // 3: f out (soemdsp_electro_hat_f, Hz: main filter centre in Hz (808 / 606 band-pass, FM high-pass, Noise band-pass)).  // 2: Recalculate On Trigger (closedDecay / openDecay latched on hit)
+extern "C" int soemdsp_electro_hat_version() { return 4; } // 4: noiseFreq / noiseQ / noiseTilt (shared Modal Snare shaper) mixed by Metal.  // 3: f out (soemdsp_electro_hat_f, Hz: main filter centre in Hz (808 / 606 band-pass, FM high-pass, Noise band-pass)).  // 2: Recalculate On Trigger (closedDecay / openDecay latched on hit)
 extern "C" const char* soemdsp_electro_hat_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_hat_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

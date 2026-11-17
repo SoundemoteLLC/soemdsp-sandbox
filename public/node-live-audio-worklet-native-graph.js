@@ -7153,13 +7153,17 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if (type === "electroHat") {
       // Electro Hat (docs/DRUM_PACK_PLAN.md): waveform = Algorithm choiceId
       // (0 tr808 / 1 tr606 / 2 fm / 3 noise), frequency=tune x, shape=tone,
-      // timeNumerator=closedDecay, timeDenominator=openDecay, width=metal, amplitude.
+      // timeNumerator=closedDecay, timeDenominator=openDecay, width=metal,
+      // lpfFrequency=noiseFreq, resonance=noiseQ, saturate=noiseTilt, amplitude.
       push("algorithm", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("algorithm", 0));
       push("tune", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("tune", 1));
       push("tone", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tone", 0.5));
       push("closedDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("closedDecay", 0.05));
       push("openDecay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("openDecay", 0.5));
       push("metal", P.NATIVE_GRAPH_PARAM_WIDTH, cont("metal", 1));
+      push("noiseFreq", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("noiseFreq", 3000));
+      push("noiseQ", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("noiseQ", 1));
+      push("noiseTilt", P.NATIVE_GRAPH_PARAM_SATURATE, cont("noiseTilt", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
