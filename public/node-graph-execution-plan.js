@@ -830,6 +830,11 @@ function nodeGraphCompiledScopeCaptureNodeIds(graph, reachableNodes) {
         // Graph editor playhead reads "__GraphPhase" from scope buffers -- always
         // capture graph modules even when they have no separate oscilloscope face.
         nodeGraphModuleIsGraphType(node.type) ||
+        // Custom faces (Sturmian Grid, etc.) marked planScopeCapture need hidden
+        // taps such as __Phase / __Bar. customDisplayArea is layoutOwned and
+        // would otherwise be skipped.
+        (nodeGraphModuleDefinitions?.[node.type]?.planScopeCapture
+          && nodeGraphPatchNodeDisplayVisibleInPlan(node, { bypassedNodes })) ||
         modulationSources.has(String(node.id)) ||
         visualFeedSources.has(String(node.id)) ||
         inputSyncSources.has(String(node.id)) ||

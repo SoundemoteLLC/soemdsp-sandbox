@@ -11,6 +11,9 @@ registerNodeGraphChromelessModule("sturmianGrid", {
   definition: {
     planRole: "source",
     planFreeRun: true,
+    // Face reads hidden __Phase / __Bar taps every paint. customDisplayArea
+    // modules are layoutOwned and would otherwise be omitted from scope capture.
+    planScopeCapture: true,
     defaultWidthGu: 16,
     displayHeightGu: 8,
     chrome: "LayoutA",
@@ -72,7 +75,9 @@ registerNodeGraphChromelessModule("sturmianGrid", {
       { key: "walk", label: "Bar walk", defaultValue: "1", min: "0", max: "8", mid: "1", step: "1", nonlinearSlider: false, linearSmoothing: false },
       { key: "snap", label: "Rational snap", defaultValue: "0", min: "0", max: "1", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false, choices: ["Off", "On"], displayChoices: true },
       { key: "view", label: "View", defaultValue: "0", min: "0", max: "2", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false, choices: ["Plane", "Binary", "Level"], displayChoices: true },
-      // Kept so saved patches still load. The face ignores this; Steps sets cell size.
+      // Zoom-1 cell size in CSS pixels (soundemote-dev default 14). The face
+      // uses floor(cell * zoom) so cells grow in whole device pixels. Hidden
+      // so saved patches still load; shrinks only if the sounding bar cannot fit.
       { key: "cell", label: "Cell size", defaultValue: "14", min: "2", max: "48", mid: "14", step: "1", nonlinearSlider: false, linearSmoothing: false, hidden: true },
       { key: "stepPattern", label: "Track map", defaultValue: String(STURMIAN_DEFAULT_MASK), min: "0", max: "65535", mid: String(STURMIAN_DEFAULT_MASK), step: "1", nonlinearSlider: false, linearSmoothing: false, hidden: true },
     ],

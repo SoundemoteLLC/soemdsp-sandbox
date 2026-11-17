@@ -1,10 +1,11 @@
 const vec3 BG = vec3(13.0, 16.0, 24.0) / 255.0;
 
 vec3 laneColor(int lane) {
-  if (lane == 0) return vec3(1.0, 0.82, 0.48);
-  if (lane == 1) return vec3(0.48, 0.94, 0.78);
-  if (lane == 2) return vec3(0.60, 0.82, 1.0);
-  return vec3(1.0, 0.56, 0.80);
+  // soundemote-dev TRACK_COLORS: #ffd27a, #7af0c8, #9ad0ff, #ff9ad6
+  if (lane == 0) return vec3(255.0, 210.0, 122.0) / 255.0;
+  if (lane == 1) return vec3(122.0, 240.0, 200.0) / 255.0;
+  if (lane == 2) return vec3(154.0, 208.0, 255.0) / 255.0;
+  return vec3(255.0, 154.0, 214.0) / 255.0;
 }
 
 // 5x7 glyphs: 0,1,2,K,S,H,M. Rows are 5 bits, MSB is the left pixel.
@@ -70,59 +71,66 @@ float gridLimit = gridH > 0.5 ? gridH : faceH;
 float playCols = max(2.0, floor(steps + 0.5));
 float spreadN = max(1.0, floor(spread + 0.5));
 float walkN = max(0.0, floor(walk + 0.5));
-// Cell size is an integer texel (1:1 with the snapped screen quad). It
-// fits Steps columns and the Track Spread window in the grid region.
-float rowsNeeded = max(1.0, 3.0 * spreadN + 1.0);
-float cell = max(2.0, floor(min(w / playCols, gridLimit / rowsNeeded)));
-float cols = max(1.0, floor(w / cell));
-float rows = max(1.0, floor(gridLimit / cell));
-float padLeft = max(0.0, floor((cols - playCols) * 0.5));
-float ox = floor((w - cols * cell) * 0.5);
-float oy = floor((gridLimit - rows * cell) * 0.5);
+// Layout comes from JS (floor(baseCell * zoom), packed whole cells, integer
+// centered remainder). Do not re-fit cell to the plate — leftover is margin.
+float cell = max(2.0, layoutCell);
+float cols = max(1.0, layoutCols);
+float rows = max(1.0, layoutRows);
+float padLeft = max(0.0, layoutPadLeft);
+float ox = layoutOx;
+float oy = layoutOy;
 float firstN = playBar * walkN;
 float span = 3.0 * spreadN + 1.0;
 float above = max(0.0, floor((rows - span) * 0.5));
 float nTop = firstN - above;
 float gridX = px.x - ox;
 float gridY = px.y - oy;
-vec3 base = BG;
+// Leftover sub-cell space in the grid region is a black margin, not a stretch.
+vec3 base = vec3(0.0);
 bool inGrid = px.y < gridLimit && gridX >= 0.0 && gridY >= 0.0
   && gridX < cols * cell && gridY < rows * cell;
+float col = 0.0;
+float row = 0.0;
+float m = 0.0;
+float n = 0.0;
+float tile = 0.0;
+float fx = 0.0;
+float fy = 0.0;
+int trackHit = -1;
+bool inBar = false;
+float mask = floor(stepPattern + 0.5);
 if (inGrid) {
-  float col = floor(gridX / cell);
-  float row = floor(gridY / cell);
-  float m = col - padLeft;
-  float n = nTop + row;
+  col = floor(gridX / cell);
+  row = floor(gridY / cell);
+  m = col - padLeft;
+  n = nTop + row;
   float aa = alpha; float bb = beta;
   if (snap > 0.5) { aa = floor(aa * steps + 0.5) / steps; bb = floor(bb * steps + 0.5) / steps; }
   float z = fract(m * aa + n * bb + rho + drift * time);
-  float tile = z >= 1.0-aa ? 1.0 : (z >= 1.0-aa-bb ? 2.0 : 0.0);
+  tile = z >= 1.0-aa ? 1.0 : (z >= 1.0-aa-bb ? 2.0 : 0.0);
   base = vec3(16.0,19.0,28.0)/255.0;
   if(view < 0.5) base = tile < 0.5 ? BG : (tile < 1.5 ? vec3(150.0,151.0,255.0)/255.0 : vec3(255.0,42.0,101.0)/255.0);
   else if(view < 1.5) base = tile == 1.0 ? vec3(255.0,42.0,101.0)/255.0 : vec3(26.0,30.0,40.0)/255.0;
   else base = mix(vec3(18.0,20.0,30.0)/255.0, vec3(255.0,42.0,101.0)/255.0, z);
-  float mask = floor(stepPattern + 0.5);
   bool onTrack = false;
-  int trackHit = -1;
+  trackHit = -1;
   for (int track = 0; track < 4; track++) {
     float trackN = firstN + float(track) * spreadN;
     if (abs(n - trackN) < 0.5) { onTrack = true; trackHit = track; }
   }
-  bool inBar = m >= 0.0 && m < playCols;
+  inBar = m >= 0.0 && m < playCols;
   if (!onTrack || !inBar) base *= 0.55;
 
   float pr = max(1e-6, pixelRatio);
   float devX = floor(gridX * pr + 1e-4);
   float devY = floor(gridY * pr + 1e-4);
   float cellDev = cell * pr;
-  float fx = mod(gridX, cell);
-  float fy = mod(gridY, cell);
+  fx = mod(gridX, cell);
+  fy = mod(gridY, cell);
   float gridW = cols * cell;
   float gridSpanH = rows * cell;
-  // 1-texel gutters on a 1:1 screen-resolution face: left/top of each cell
-  // plus the outer right/bottom. Integer cell edges, so seams never jitter.
+  // 1-texel gutters: left/top of each cell plus the outer right/bottom.
   float colStartDev = floor(col * cell * pr + 1e-4);
-  float colEndDev = floor((col + 1.0) * cell * pr + 1e-4);
   float rowStartDev = floor(row * cell * pr + 1e-4);
   float gridEndX = floor(gridW * pr + 1e-4);
   float gridEndY = floor(gridSpanH * pr + 1e-4);
@@ -134,21 +142,6 @@ if (inGrid) {
       || (devX >= barX1 - 2.0 && devX < barX1 - 1.0))
       && mod(devY, 8.0) < 4.0)
     base = mix(base, vec3(1.0), 0.35);
-  bool playCol = playing > 0.5 && inBar && abs(m - playStep) < 0.5;
-  if (playCol && !gutter) {
-    base = mix(base, vec3(1.0), 0.22);
-    bool frame = (devX >= colStartDev + 1.0 && devX < colStartDev + 2.0)
-      || (devX >= colEndDev - 1.0 && devX < colEndDev)
-      || (devY >= 1.0 && devY < 2.0)
-      || (devY >= gridEndY - 1.0 && devY < gridEndY);
-    if (frame) base = vec3(1.0);
-    if (trackHit >= 0) {
-      if (mod(floor(mask / exp2(float(12 + trackHit))), 2.0) < 0.5
-          && mod(floor(mask / exp2(float(trackHit * 3) + tile)), 2.0) > 0.5
-          && fx >= 2.0 && fx < cell - 2.0 && fy >= 2.0 && fy < cell - 2.0)
-        base = mix(laneColor(trackHit), base, 0.15);
-    }
-  }
   if (!gutter && flashAmt > 0.0 && abs(m - flashStep) < 0.5 && trackHit >= 0
       && mod(floor(flashMask / exp2(float(trackHit))), 2.0) > 0.5
       && fx >= 2.0 && fx < cell - 2.0 && fy >= 2.0 && fy < cell - 2.0) {
@@ -172,7 +165,7 @@ if (inGrid) {
     if (frame) base = tc;
   }
 } else if (px.y >= gridLimit && px.y < faceH && px.x >= 0.0 && px.x < w) {
-  float mask = floor(stepPattern + 0.5);
+  base = BG;
   float colW = max(1.0, floor((w - stripPadX * 2.0 - stripGapX) * 0.5));
   float rowH = max(1.0, floor((faceH - gridLimit - stripPadY * 2.0 - stripGapY) * 0.5));
   for (int lane = 0; lane < 4; lane++) {
@@ -205,6 +198,26 @@ if (inGrid) {
         }
       }
       bx += btnSize + innerGap;
+    }
+  }
+}
+
+// Playhead last, matching soundemote-dev page.js: fillRect(x,0,cs,H) at
+// rgba(255,255,255,0.16), strokeRect 1px #fff around the column, then
+// sounding cells fillRect(x+2,y+2,cs-4,cs-4) in TRACK_COLORS at alpha 0.85.
+if (playing > 0.5 && px.y >= 0.0 && px.y < gridLimit) {
+  float stepCol = padLeft + floor(playStep + 0.5);
+  float x0 = ox + stepCol * cell;
+  if (px.x >= x0 && px.x < x0 + cell) {
+    base = mix(base, vec3(1.0), 0.16);
+    bool frame = px.x < x0 + 1.0 || px.x >= x0 + cell - 1.0
+      || px.y < 1.0 || px.y >= gridLimit - 1.0;
+    if (frame) base = vec3(1.0);
+    if (inGrid && inBar && trackHit >= 0
+        && mod(floor(mask / exp2(float(12 + trackHit))), 2.0) < 0.5
+        && mod(floor(mask / exp2(float(trackHit * 3) + tile)), 2.0) > 0.5
+        && fx >= 2.0 && fx < cell - 2.0 && fy >= 2.0 && fy < cell - 2.0) {
+      base = mix(base, laneColor(trackHit), 0.85);
     }
   }
 }

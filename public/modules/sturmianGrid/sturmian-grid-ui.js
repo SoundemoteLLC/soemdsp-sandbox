@@ -1,12 +1,16 @@
 // Packed sounding-bar grid and K/S/H/M lane map on the shared face texture;
 // standard parameter rows live in the module body. Layout CSS is module-space
-// (stable at zoom, no reflow). The face texture is snapped to the integer
-// framebuffer size of the on-screen quad (CSS x workspace zoom, matching the
-// GL graph canvas; 4096 cap) so every texel is 1:1 with a screen pixel. Cell
-// size, gutters, track outline, playhead, hit flash and lane toggles are
-// integer device pixels. The shared 2.5x threshold is unchanged; this plate
-// pins nearest and opts into compositor pixel-snap.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19";
+// (stable at zoom, no reflow). Cells are floor(baseCell * zoom) whole device
+// pixels (baseCell is the hidden cell param, default 14) and are not stretched
+// to fill the plate; leftover space is a centered integer black margin. The
+// face texture is snapped to the integer framebuffer size of the on-screen
+// quad (CSS x workspace zoom; 4096 cap) so every texel is 1:1. Gutters, track
+// outline, playhead and lane toggles are integer device pixels. The playhead
+// matches soundemote-dev: a 16% white column, a 1px white frame, and 85%
+// track-color insets on sounding cells, drawn on top of gutters. The shared
+// 2.5x threshold is unchanged; this plate pins nearest and opts into
+// compositor pixel-snap.
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_UI_DEFAULT_MASK = 3170;
 let sturmianShaderPromise = null;
@@ -40,10 +44,17 @@ function sturmianValues(nodeId, preview = null) {
   if (!Number.isFinite(Number(preview?.stepPattern ?? params.stepPattern))) {
     result.stepPattern = STURMIAN_UI_DEFAULT_MASK;
   }
+  const cell = Number(preview?.cell ?? params.cell);
+  result.cell = Number.isFinite(cell) ? cell : 14;
   return result;
 }
 
 function sturmianPlayhead(nodeId, steps) {
+  // Engine writes kPortPhase01 every sample as (step % steps) / steps, and
+  // kPortTri as the integer bar. Those hidden taps reach this face because
+  // the definition sets planScopeCapture (customDisplayArea is layoutOwned
+  // and would otherwise be skipped). LatestOutputValue is the last finite
+  // sample in the scope ring, updated every capture (Simulation FPS).
   const stepCount = Math.max(1, Number(steps) || 1);
   let playStep = 0;
   let playBar = 0;
@@ -58,26 +69,38 @@ function sturmianPlayhead(nodeId, steps) {
   }
   const bar = read("__Bar");
   if (Number.isFinite(bar)) playBar = Math.max(0, Math.floor(bar + 1e-6));
-  return { playStep, playBar, playing };
+  return { playStep, playBar, playing, phase };
 }
 
 // Integer-square packing, same as the shader, in integer texel / screen
-// pixels of the grid region: cell size fits Steps columns and the Track
-// Spread window. Extra columns/rows show the continued word (dim,
-// non-hittable). Remainder is centered. Column/row counts follow this
-// integer floor so zoom does not reflow the grid.
+// pixels of the grid region. Cell size is floor(baseCell * zoom) so it
+// grows only in whole device pixels and does not stretch to fill the
+// plate. As many whole cells as fit at that size are packed (sounding
+// bar plus continued word); leftover sub-cell space is a centered
+// integer black margin. Cell shrinks only when the sounding bar and
+// Track Spread window would not fit.
 function sturmianRowsNeeded(spread) {
   const spreadN = Math.max(1, Math.floor(Number(spread) + 0.5) || 1);
   return 3 * spreadN + 1;
 }
 
-function sturmianGridLayout(width, height, steps, spread) {
+function sturmianBaseCell(values) {
+  const n = Math.floor(Number(values?.cell ?? 14) + 0.5);
+  return Math.max(2, Number.isFinite(n) ? n : 14);
+}
+
+function sturmianGridLayout(width, height, steps, spread, zoom, baseCell) {
   const playCols = Math.max(2, Math.floor(Number(steps) + 0.5) || 2);
   const rowsNeeded = Math.max(1, sturmianRowsNeeded(spread));
-  const cell = Math.max(2, Math.floor(Math.min(
+  const z = Number.isFinite(Number(zoom)) && Number(zoom) > 0 ? Number(zoom) : 1;
+  const base = Math.max(2, Math.floor(Number(baseCell) + 0.5) || 14);
+  // Whole-pixel zoom steps. Do not stretch the cell to eat leftover space.
+  let cell = Math.max(2, Math.floor(base * z));
+  const maxFit = Math.max(2, Math.floor(Math.min(
     Math.max(1, width) / playCols,
     Math.max(1, height) / rowsNeeded
   )));
+  if (cell > maxFit) cell = maxFit;
   const cols = Math.max(1, Math.floor(Math.max(1, width) / cell));
   const rows = Math.max(1, Math.floor(Math.max(1, height) / cell));
   return {
@@ -92,6 +115,7 @@ function sturmianGridLayout(width, height, steps, spread) {
     cell,
     ox: Math.floor((width - cols * cell) * 0.5),
     oy: Math.floor((height - rows * cell) * 0.5),
+    baseCell: base,
   };
 }
 
@@ -140,7 +164,7 @@ function sturmianHitFace(face, plate, event, values, play, time) {
   const layout = plate._sturmianLayout || sturmianFaceLayout(
     plate._sturmianCssW || rect.width,
     plate._sturmianCssH || rect.height,
-    texW, texH, sturmianViewZoom(), values.steps, values.spread,
+    texW, texH, sturmianViewZoom(), values.steps, values.spread, sturmianBaseCell(values),
   );
   for (const button of layout.lanes.buttons) {
     if (dx >= button.x && dx < button.x + button.w && dy >= button.y && dy < button.y + button.h) {
@@ -190,7 +214,9 @@ function sturmianEnsureGpu(shader) {
     + " uniform float flashStep; uniform float flashMask; uniform float flashAmt;"
     + " uniform float gridH; uniform float stripPadX; uniform float stripPadY;"
     + " uniform float stripGapX; uniform float stripGapY; uniform float btnSize;"
-    + " uniform float labelW; uniform float innerGap;";
+    + " uniform float labelW; uniform float innerGap;"
+    + " uniform float layoutCell; uniform float layoutCols; uniform float layoutRows;"
+    + " uniform float layoutOx; uniform float layoutOy; uniform float layoutPadLeft;";
   const vertex = compile(gl.VERTEX_SHADER, "#version 300 es\nin vec2 aPos; out vec2 vUv; void main(){vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);}");
   const fragment = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\nin vec2 vUv; out vec4 out_color; uniform vec2 resolution; uniform float time;\n${uniforms}\n${shader.functions}\nvoid main(){ vec2 uv=vUv; ${shader.body}\n}`);
   const program = gl.createProgram();
@@ -225,6 +251,12 @@ function sturmianEnsureGpu(shader) {
     btnSize: gl.getUniformLocation(program, "btnSize"),
     labelW: gl.getUniformLocation(program, "labelW"),
     innerGap: gl.getUniformLocation(program, "innerGap"),
+    layoutCell: gl.getUniformLocation(program, "layoutCell"),
+    layoutCols: gl.getUniformLocation(program, "layoutCols"),
+    layoutRows: gl.getUniformLocation(program, "layoutRows"),
+    layoutOx: gl.getUniformLocation(program, "layoutOx"),
+    layoutOy: gl.getUniformLocation(program, "layoutOy"),
+    layoutPadLeft: gl.getUniformLocation(program, "layoutPadLeft"),
     floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])),
   };
   return sturmianSharedGpu;
@@ -363,14 +395,14 @@ function sturmianLaneButtons(texW, stripY, stripH, zoom) {
   return { ...m, colW, rowH, buttons };
 }
 
-function sturmianFaceLayout(cssW, cssH, texW, texH, zoom, steps, spread) {
+function sturmianFaceLayout(cssW, cssH, texW, texH, zoom, steps, spread, baseCell) {
   // Prefer the actual texel scale (tex/css) so the strip still fits when the
   // 4096 backing cap shrinks the texture below CSS x zoom.
   const layoutZoom = cssH > 0 ? texH / cssH : zoom;
   let stripH = Math.max(1, Math.round(STURMIAN_STRIP_CSS * layoutZoom));
   if (stripH > texH - 8) stripH = Math.max(1, Math.floor(texH * 0.28));
   const gridH = Math.max(1, texH - stripH);
-  const grid = sturmianGridLayout(texW, gridH, steps, spread);
+  const grid = sturmianGridLayout(texW, gridH, steps, spread, layoutZoom, baseCell);
   const lanes = sturmianLaneButtons(texW, gridH, stripH, layoutZoom);
   return { ...grid, texW, texH, gridH, stripH, zoom, layoutZoom, lanes };
 }
@@ -453,7 +485,9 @@ function sturmianPaint(face) {
   const time = (performance.now() - face._sturmianStarted) / 1000;
   gl.uniform1f(gpu.time, time);
   const values = sturmianValues(nodeId, face._sturmianPreview);
-  const layout = sturmianFaceLayout(logicalWidth, logicalHeight, width, height, screen.zoom, values.steps, values.spread);
+  const layout = sturmianFaceLayout(
+    logicalWidth, logicalHeight, width, height, screen.zoom, values.steps, values.spread, sturmianBaseCell(values),
+  );
   plate._sturmianLayout = layout;
   for (const key of STURMIAN_FLOATS) gl.uniform1f(gpu.floats[key], values[key]);
   const play = sturmianPlayhead(nodeId, values.steps);
@@ -473,6 +507,12 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.btnSize, layout.lanes.btn);
   gl.uniform1f(gpu.labelW, layout.lanes.labelW);
   gl.uniform1f(gpu.innerGap, layout.lanes.innerGap);
+  gl.uniform1f(gpu.layoutCell, layout.cell);
+  gl.uniform1f(gpu.layoutCols, layout.cols);
+  gl.uniform1f(gpu.layoutRows, layout.rows);
+  gl.uniform1f(gpu.layoutOx, layout.ox);
+  gl.uniform1f(gpu.layoutOy, layout.oy);
+  gl.uniform1f(gpu.layoutPadLeft, layout.padLeft);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   if (typeof nodeGraphSharedGlEndPresent === "function") nodeGraphSharedGlEndPresent(gl);
   const ctx = typeof nodeGraphSharedGlPresentTarget === "function"
