@@ -5,6 +5,7 @@
 (function initTraceHistoryDraw(global) {
   const BLENDS = Object.freeze([
     "combine",
+    "combine-green",
     "lighter",
     "screen",
     "source-over",

@@ -483,7 +483,7 @@ function nodeGraphOnsetGlEnsureLine(s) {
 // plain over.
 function nodeGraphOnsetGlStrokeBlend(gl, blend) {
   const m = String(blend || "source-over");
-  if (m === "lighter" || m === "combine" || m === "meet") gl.blendFunc(gl.ONE, gl.ONE);
+  if (m === "lighter" || m === "combine" || m === "combine-green" || m === "meet") gl.blendFunc(gl.ONE, gl.ONE);
   else if (m === "screen") gl.blendFunc(gl.ONE_MINUS_DST_COLOR, gl.ONE);
   // d * (c * a + 1 - a): multiply inside, untouched where coverage is 0.
   else if (m === "multiply") gl.blendFunc(gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA);
@@ -686,7 +686,7 @@ function nodeGraphWaterfallGlApplyBlend(gl, mode) {
   } else if (m === "screen") {
     // 1 - (1 - d)(1 - c): src * (1 - dst) + dst.
     gl.blendFunc(gl.ONE_MINUS_DST_COLOR, gl.ONE);
-  } else if (m === "lighter" || m === "combine" || m === "meet") {
+  } else if (m === "lighter" || m === "combine" || m === "combine-green" || m === "meet") {
     gl.blendFunc(gl.ONE, gl.ONE);
   } else if (m === "multiply") {
     gl.blendFunc(gl.DST_COLOR, gl.ZERO);
@@ -730,7 +730,7 @@ function nodeGraphWaterfallGlUploadFloats(gl, buf, values, count = values.length
 
 function nodeGraphWaterfallGlBlendKind(mode) {
   const m = String(mode || "source-over");
-  if (m === "lighter" || m === "screen" || m === "combine" || m === "meet") return 1;
+  if (m === "lighter" || m === "screen" || m === "combine" || m === "combine-green" || m === "meet") return 1;
   if (m === "multiply") return 2;
   if (m === "difference") return 3;
   if (m === "exclusion") return 4;

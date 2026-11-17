@@ -747,7 +747,7 @@ function drawNodeGraphVectorDotItem(renderer, item, pixelRatio) {
     ? "source-over"
     : (typeof nodeGraphScopeStereoBlendComposite === "function"
       ? nodeGraphScopeStereoBlendComposite(blend)
-      : (blend === "combine" ? "lighter" : blend));
+      : ((blend === "combine" || blend === "combine-green") ? "lighter" : blend));
   const e = Math.max(0, Math.min(1, energy));
   const amount = Math.max(0, Math.min(1, e * lampBright));
   const shape = {

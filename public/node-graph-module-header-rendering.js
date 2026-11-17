@@ -1020,6 +1020,12 @@ function createNodeGraphModuleHeader(type, node, definition) {
     }
   });
   titleText.addEventListener("dblclick", (event) => {
+    // Alt + click bypasses, so Alt + double click is two quick bypass toggles, never a rename.
+    if (event.altKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     // Already editing: let the browser select the word. preventDefault +
     // PlaceCaretAtPoint was why the highlight flashed then vanished.
     event.stopPropagation();

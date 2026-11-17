@@ -336,7 +336,7 @@ function organizeNodeUiDevSections() {
   if (!helperBody) {
     return;
   }
-  const organizerVersion = "section-v4-grouped";
+  const organizerVersion = "section-v6-lighting";
   const hasHiddenDetails = Boolean(
     helperBody.querySelector("details.node-ui-dev-section:not([open]), details:not([open])"),
   );
@@ -361,6 +361,7 @@ function organizeNodeUiDevSections() {
     );
   };
 
+  const lightingBoxes = [];
   for (const section of nodeUiDevSettingSections) {
     const rows = section.ids.map(rowForId).filter(Boolean);
     if (!rows.length) {
@@ -374,12 +375,19 @@ function organizeNodeUiDevSections() {
     heading.textContent = section.title;
     const body = document.createElement("div");
     body.className = "node-ui-dev-section-body";
-    rows[0].before(box);
+    // Seat the box among the helper's top-level children. The first row can sit inside a
+    // colour-row grid, and a box dropped into one of those cells stays one narrow column wide.
+    let anchor = rows[0];
+    while (anchor.parentElement && anchor.parentElement !== helperBody) anchor = anchor.parentElement;
+    anchor.before(box);
     box.append(heading, body);
     for (const row of rows) {
       body.append(row);
     }
+    if (/^lighting/.test(section.title)) lightingBoxes.push(box);
   }
+  // The lighting boxes (lighting, stroke, loudness) sit together, in the order they are listed.
+  for (let i = 1; i < lightingBoxes.length; i += 1) lightingBoxes[i - 1].after(lightingBoxes[i]);
 
   helperBody.dataset.sectionsOrganized = organizerVersion;
 }

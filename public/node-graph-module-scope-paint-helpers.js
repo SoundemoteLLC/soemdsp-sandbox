@@ -686,7 +686,7 @@ function nodeGraphScopeStereoBlendMode(value, fallback = "combine") {
   }
   const ok = (typeof TraceStroke !== "undefined" && Array.isArray(TraceStroke.STEREO_BLEND_MODES))
     ? TraceStroke.STEREO_BLEND_MODES
-    : ["combine", "lighter", "screen", "source-over", "multiply", "difference", "exclusion", "xor"];
+    : ["combine", "combine-green", "lighter", "screen", "source-over", "multiply", "difference", "exclusion", "xor"];
   const raw = String(value != null ? value : (fallback || "combine")).toLowerCase().trim();
   return ok.includes(raw) ? raw : "combine";
 }
@@ -694,7 +694,7 @@ function nodeGraphScopeStereoBlendMode(value, fallback = "combine") {
 /** Canvas composite for a layer onto the plate (Meet → Add, same as waterfall). */
 function nodeGraphScopeStereoBlendComposite(mode) {
   const m = nodeGraphScopeStereoBlendMode(mode);
-  if (m === "combine" || m === "meet") {
+  if (m === "combine" || m === "combine-green" || m === "meet") {
     return "lighter";
   }
   return m;

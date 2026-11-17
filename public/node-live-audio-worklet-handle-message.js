@@ -211,6 +211,12 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
       }
       return;
     }
+    if (message.type === "setNodeLevels") {
+      // Per-module output levels for the stroke follow option; off costs nothing.
+      this.nodeLevelsEnabled = message.enabled === true;
+      this.nodeLevelPeaks = null;
+      return;
+    }
     if (message.type === "setDisplayFps") {
       const fps = Number(message.displayFps);
       this.displayFps = Number.isFinite(fps)

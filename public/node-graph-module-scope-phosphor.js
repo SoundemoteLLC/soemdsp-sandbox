@@ -45,9 +45,10 @@ function absorbNodeGraphModuleScopePhosphorDrawCursors() {
         ? nodeGraphModuleScopeLocalFallbackCanvas(slot)
         : null);
     absorbNodeGraphPhosphorDrawCursorOnCanvas(faceCanvas, endFrame);
-    const numberCanvas = typeof nodeGraphNumberReadoutCanvasForSlot === "function"
-      ? nodeGraphNumberReadoutCanvasForSlot(slot)
-      : null;
+    // Peek only, like the face canvas above. Creating the readout canvas here
+    // gave every waterfall / trace face an empty readout layer on pause, and a
+    // layer with no picture is drawn as a black plate over the real display.
+    const numberCanvas = slot?.scopeElement?.querySelector?.(":scope > .node-number-readout-canvas") || null;
     absorbNodeGraphPhosphorDrawCursorOnCanvas(numberCanvas, endFrame);
   }
 }

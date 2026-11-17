@@ -554,7 +554,9 @@
     }
     if (faceFailed.get(key) === `${cw}x${ch}`) return null;
     faceSweep(gl);
-    if (entry) faceDelete(gl, entry);
+    // The old picture (if it is still alive) is stretched into the new texture below, so a face
+    // resized by a view switch keeps its image until its next repaint instead of going blank.
+    const previous = entry && entry.gl === gl && entry.texture && entry.fbo ? entry : null;
     // A face has no 2D bitmap: a new texture starts transparent (no upload).
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -568,11 +570,25 @@
     if (!ok) {
       gl.deleteFramebuffer(fbo);
       gl.deleteTexture(texture);
+      if (entry) faceDelete(gl, entry);
       faceTextures.delete(key);
       faceFailed.set(key, `${cw}x${ch}`);
       return null;
     }
     faceFailed.delete(key);
+    if (previous && previous.w > 0 && previous.h > 0 && typeof gl.blitFramebuffer === "function") {
+      try {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, previous.fbo);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fbo);
+        const prevScissor = gl.isEnabled(gl.SCISSOR_TEST);
+        gl.disable(gl.SCISSOR_TEST);
+        gl.blitFramebuffer(0, 0, previous.w, previous.h, 0, 0, cw, ch, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+        if (prevScissor) gl.enable(gl.SCISSOR_TEST);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      } catch (_error) { /* the new texture just starts transparent */ }
+    }
+    if (entry) faceDelete(gl, entry);
     entry = { gl, key, owner: face, texture, fbo, w: cw, h: ch, gen: 0, glFaceTexture: true };
     faceTextures.set(key, entry);
     return entry;

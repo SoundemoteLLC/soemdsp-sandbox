@@ -3,132 +3,114 @@
 // soemdsp-native-target: velvetNoise
 // soemdsp-native-kind: noise
 //
-// Velvet Noise generator and Dark Velvet Noise (DVN) diffuser.
+// Velvet Noise: a stereo random-event generator. One event at a random position in
+// every 1/Density period, nothing in between. What an event looks like is the Shape:
 //
-// Generator:
-//   Continuous stereo velvet noise: one +1 / -1 impulse at a random position in
-//   every 1/Density period, 0 everywhere else. The period is fractional
-//   (sampleRate / Density carried with a remainder), so Density is not
-//   quantized to whole-sample grids.
+//   Trigger          one sample (a velvet impulse).
+//   Sinc             a lowpass impulse (windowed sinc, peak exactly on the event). Cutoff sets
+//                    how wide the lobes are, Lobes how many ring either side of the peak.
+//   PolyBLEP Saw     a ramp that starts at the event and completes before the next one.
+//   Half Sine        the same ramp with the half-sine curve (a bassier, rounder saw).
+//   Sine             one full sine cycle from event to event.
+//   Rect Sine        a rectified sine arch: sharp at the bottom, rounded at the top.
 //
-// Diffuser (Dark Velvet Noise):
-//   Sparse FIR of Tap Count rectangular pulses, one per 1/Density period, with
-//   random position, sign and width (1 .. Darkness samples). Each pulse is read
-//   from a leaky running sum of the input:
+// The four ramp shapes are one cycle per gap: an event starts a cycle and the next
+// event ends it, so the cycle length follows the random spacing. Their jumps and
+// kinks are PolyBLEP / PolyBLAMP corrected at the event's exact (fractional) time.
 //
-//     I[n]   = leak * I[n-1] + x[n]
-//     pulse  = I[n - start] - leak^width * I[n - end]        (end = start + width)
+// Sign:
+//   Random   every event is flipped to +1 or -1 at random (classic velvet noise).
+//   Bipolar  every event is the shape's own bipolar form (a saw is always -1 to +1,
+//            an impulse is always +1), so the Trigger - output never fires.
 //
-//   The leak^width factor makes the difference exactly the (leak-weighted) sum
-//   of the last `width` samples, so nothing from before the pulse bleeds in and
-//   the sum never drifts. Cost is O(1) per tap for any width.
+// Event times are real numbers, not whole samples: the whole-sample part is the
+// classic velvet position and the fraction comes from its own random stream, so
+// Trigger mode keeps the classic sequence and every other shape is placed exactly.
 //
-// Click-free changes:
-//   Density, Tap Count, Darkness, Stereo Spread, Seed and the sample rate all
-//   rebuild the tap table. A rebuild goes into the idle one of two tables and
-//   the wet signal crossfades to it (kFadeSeconds). While a fade is running,
-//   further changes wait for it, so a swept knob costs one rebuild per fade.
-//   Generator <-> Diffuser crossfades too (kModeFadeSeconds).
+// Sinc needs lead-in (its ringing starts before the peak), so events are drawn
+// ahead of time and the kernel is stamped early. The peak still lands on the event:
+// there is no added latency and the Trigger outputs stay aligned with it.
 //
-// No latency: taps are causal and the earliest pulse can sit at delay 0, so dry
-// and wet are already time-aligned.
+// Density 0 pauses the generator (no hidden 1 Hz floor). Above the sample rate the
+// generator simply fires on every sample.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
 
 namespace {
 
-// Slots are tiny now: the big buffers (tap tables and delay lines, ~8.8 MB per instance) come
-// from the shared memory pool when an instance is created and go back when it is destroyed.
 static const int kMaxInstances = 128;
-// Physical limits only. Tap Count and Darkness ranges belong to the parameters;
-// the DSP follows whatever they allow up to what fits in memory / the delay line.
-static const int kMaxTaps = 4096;
-static const int kMaxPulseWidth = 65536; // a pulse must fit well inside the delay line
-// 2^18 samples: 5.46 s at 48 kHz, 2.73 s at 96 kHz. Taps that would land past
-// the end are left out (never piled up at the edge).
-static const int kDelaySize = 262144;
-static const int kDelayMask = kDelaySize - 1;
-static const double kLeak = 0.9999;
-static const double kLnLeak = -1.0000500033335824e-4; // ln(kLeak)
-static const double kFadeSeconds = 0.02;
-static const double kModeFadeSeconds = 0.01;
+static const int kRing = 1024;      // event blocks kept: drawn ahead plus a little history
+static const int kRingMask = kRing - 1;
+static const int kMaxHalf = 1024;   // longest sinc reach: samples either side of an event
+static const int kAcc = 4096;       // output ring the sinc kernels are stamped into (> 2 * reach)
+static const int kAccMask = kAcc - 1;
 
-struct Tap {
-  int start;       // delay of the newest sample in the pulse
-  int end;         // start + width
-  double gain;     // sign / width
-  double leakPow;  // kLeak ^ width
+enum Shape {
+  kTrigger = 0,
+  kSinc = 1,
+  kSaw = 2,
+  kHalfSine = 3,
+  kSine = 4,
+  kRectSine = 5,
+  kShapeCount = 6
 };
 
-struct TapTable {
-  Tap left[kMaxTaps];
-  Tap right[kMaxTaps];
-  int countL;
-  int countR;
-  double normL;
-  double normR;
+struct Ev {
+  double t;     // absolute time in samples (fractional)
+  double te;    // t, pushed later if needed so events are at least one sample apart (ramp shapes)
+  double sign;  // +1 / -1, drawn for every event so the sequence never depends on Sign mode
 };
 
-// One delay-line cell: the running sum plus how many nonzero inputs have
-// arrived up to this sample. Equal counts at a pulse's two ends mean its window
-// saw only silence, so the pulse is exactly 0 instead of rounding residue.
-struct Cell {
-  double v;
-  unsigned int count;
+struct Pend {
+  double j;
+  double s;
+  unsigned int idx;
+  bool valid;
+};
+
+struct Chan {
+  unsigned int tIdx;  // next event for the Trigger shape / outputs (fires on floor(t))
+  unsigned int rIdx;  // next event the ramp shapes have not reached yet (reached when t <= now)
+  unsigned int sIdx;  // next event whose sinc kernel is not stamped yet
+  bool havePrev;
+  Ev prev;            // the event whose cycle is running
+  Pend pend;          // jump of the upcoming event, computed one sample ahead
+  bool post;          // a corrected event is within one sample behind us
+  double postJ;
+  double postS;
+  double postTau;
+  double* acc;        // kAcc cells, in the pool block
 };
 
 struct VelvetNoiseState {
   bool active;
-
-  // Tap tables: `cur` is audible; during a fade the other one fades in.
-  TapTable* tables; // two tables, in the pool block
-  int cur;
-  bool fading;
-  double fade; // 0 .. 1 toward the other table
-
-  // What the newest table was built from.
-  double builtGrid;
-  int builtTaps;
-  int builtWidth;
-  double builtSpread;
-  double builtDecay;
-  int builtTail;
-  double builtRate;
-  unsigned int builtSeed;
-
   unsigned int seed;
-
-  // Diffuser
-  double integralL;
-  double integralR;
-  int writeIdx;
-  unsigned int countL;
-  unsigned int countR;
-  Cell* delayL;     // kDelaySize cells each, in the pool block
-  Cell* delayR;
-  void* block;      // the one pool block that holds tables and both delay lines
-
-  // Generator
   unsigned int rngL;
   unsigned int rngR;
-  double genRemainder; // fractional samples carried between periods
-  int genLength;       // whole samples in the current period
-  int genCount;        // samples into the current period
-  int genOffsetL;
-  int genOffsetR;
-  double genSignL;
-  double genSignR;
-
-  double modeMix; // 0 Generator .. 1 Diffuser
+  unsigned int rngFL;  // fractional part of the event time
+  unsigned int rngFR;
+  long long now;       // sample being made
+  double lastTeL;      // effective time of the last drawn event, per channel
+  double lastTeR;
+  double blockEnd;     // start of the next period to draw (a whole number of samples)
+  double remainder;    // fractional samples carried between periods
+  unsigned int wr;     // periods drawn so far
+  Ev* evL;            // kRing events each, in the pool block
+  Ev* evR;
+  void* block;
+  Chan ch[2];
+  double sincFc;      // sinc cutoff in cycles per sample (0.5 = Nyquist)
+  double sincK;       // sinc reach in samples either side
   double outRight;
-  double trigPos; // 1 on the sample the Left stream fires +1
-  double trigNeg; // 1 on the sample the Left stream fires -1
+  double trigPos;
+  double trigNeg;
 };
 
 static VelvetNoiseState gPool[kMaxInstances];
 
-static const unsigned long kBlockBytes = 2UL * sizeof(TapTable) + 2UL * (unsigned long)kDelaySize * sizeof(Cell);
+static const unsigned long kBlockBytes =
+  2UL * (unsigned long)kRing * sizeof(Ev) + 2UL * (unsigned long)kAcc * sizeof(double);
 
 static inline unsigned int next_rand(unsigned int& state) {
   state ^= state << 13;
@@ -151,179 +133,308 @@ static inline unsigned int seed_right(unsigned int seed) {
   return r ? r : 0x87654321u;
 }
 
-static inline void set_tap(Tap& tap, int start, int width, double sign) {
-  tap.start = start;
-  tap.end = start + width;
-  tap.gain = sign / (double)width;
-  tap.leakPow = soemdsp_maths::dsp_exp((double)width * kLnLeak);
+// Value and slope (per unit phase) at the two ends of each ramp shape's cycle.
+struct RampEnds {
+  double f0;
+  double f1;
+  double d0;
+  double d1;
+};
+
+static const double kVPi = 3.14159265358979323846;
+static const double kVTwoPi = 6.28318530717958647692;
+
+static const RampEnds kRamp[4] = {
+  { -1.0, 1.0, 2.0, 2.0 },            // Saw: 2x - 1
+  { -1.0, 1.0, 0.0, 0.0 },            // Half Sine: -cos(pi x)
+  { 0.0, 0.0, kVTwoPi, kVTwoPi },       // Sine: sin(2 pi x)
+  { -1.0, -1.0, kVTwoPi, -kVTwoPi }     // Rect Sine: 2 sin(pi x) - 1
+};
+
+static inline double ramp_value(int shape, double x) {
+  if (shape == kSaw) return 2.0 * x - 1.0;
+  if (shape == kHalfSine) return -soemdsp_maths::dsp_cos(kVPi * x);
+  if (shape == kSine) return soemdsp_maths::dsp_sin(kVTwoPi * x);
+  return 2.0 * soemdsp_maths::dsp_sin(kVPi * x) - 1.0;
 }
 
-// Fills `t` from the given settings. Every tap draws the same number of random
-// values whatever the settings are, so one setting can move without
-// reshuffling what the others decided.
-// Mean of 1/w over w = 1..W (a tap's energy factor on noise for widths drawn
-// uniformly up to W): H(W) / W, with the harmonic number from its expansion.
-static double mean_inv_width(double w) {
-  if (w <= 1.0) return 1.0;
-  const double h = soemdsp_maths::dsp_ln(w) + 0.5772156649015329 + 0.5 / w - 1.0 / (12.0 * w * w);
-  return h / w;
-}
-
-static void build_table(
-  TapTable& t, double grid, int taps, int headWidth, double spread, unsigned int seed,
-  double decay, double sampleRate, int tailWidth
-) {
-  // Decay is a rate in dB per second: tap level falls by `decay` dB every
-  // second. 0 is flat and small values are nearly flat (continuous at 0).
-  const double decayK = decay * 0.1151292546497023 / sampleRate;
-  double sumL = 0.0;
-  double sumR = 0.0;
-  unsigned int sL = seed_left(seed);
-  unsigned int sR = seed_right(seed);
-  int countL = 0;
-  int countR = 0;
-  bool openL = true;
-  bool openR = true;
-
-  // Tail Darkness: the widest pulse grows from Darkness at the first tap to
-  // Tail Darkness at the last (0 = off), so the tail darkens over time the way
-  // a room's highs die first (Dark Velvet Noise, Fagerstrom et al., DAFx 2022).
-  // Each tap also gets back the energy wider pulses lose, so Decay alone sets
-  // the tail's level and Tail Darkness only its colour.
-  const bool ramp = tailWidth > 0 && tailWidth != headWidth && taps > 1;
-  const double headEnergy = mean_inv_width((double)headWidth);
-
-  for (int i = 0; i < taps; ++i) {
-    const double blockStart = (double)i * grid;
-    int maxWidth = headWidth;
-    double rampGain = 1.0;
-    if (ramp) {
-      const double u = (double)i / (double)(taps - 1);
-      maxWidth = (int)((double)headWidth + u * (double)(tailWidth - headWidth) + 0.5);
-      if (maxWidth < 1) maxWidth = 1;
-      rampGain = __builtin_sqrt(headEnergy / mean_inv_width((double)maxWidth));
-    }
-
-    const double jitterL = next_unit(sL);
-    const double widthUnitL = next_unit(sL);
-    const double signL = (next_rand(sL) & 0x10000u) ? 1.0 : -1.0;
-
-    const double jitterR = next_unit(sR);
-    const double widthUnitR = next_unit(sR);
-    const double ownSignR = (next_rand(sR) & 0x10000u) ? 1.0 : -1.0;
-    const double ownR = next_unit(sR);
-
-    const double posL = blockStart + jitterL * grid;
-    const double posR = blockStart + jitterR * grid;
-    const int widthL = 1 + (int)(widthUnitL * (double)maxWidth);
-    const int rawWidthR = 1 + (int)(widthUnitR * (double)maxWidth);
-
-    // Right follows Left at Spread 0 and its own draw at Spread 1. The sign
-    // goes independent on a per-tap threshold, so decorrelation grows evenly.
-    const double blendPosR = posL + spread * (posR - posL);
-    int widthR = (int)((double)widthL + spread * (double)(rawWidthR - widthL) + 0.5);
-    if (widthR < 1) widthR = 1;
-    if (widthR > maxWidth) widthR = maxWidth;
-    const double signR = (ownR < spread) ? ownSignR : signL;
-
-    if (openL) {
-      if (posL + (double)widthL < (double)(kDelaySize - 1)) {
-        const double envL = rampGain * soemdsp_maths::dsp_exp(-decayK * (posL + 0.5 * (double)widthL));
-        set_tap(t.left[countL++], (int)posL, widthL, signL * envL);
-        // A tap averages `width` samples (gain 1/width), so its energy on
-        // noise is env^2 / width. Counting the width keeps the wet level the
-        // same at any Darkness (it used to drop as Darkness rose).
-        sumL += envL * envL / (double)widthL;
-      } else {
-        openL = false;
-      }
-    }
-    if (openR) {
-      if (blendPosR + (double)widthR < (double)(kDelaySize - 1)) {
-        const double envR = rampGain * soemdsp_maths::dsp_exp(-decayK * (blendPosR + 0.5 * (double)widthR));
-        set_tap(t.right[countR++], (int)blendPosR, widthR, signR * envR);
-        sumR += envR * envR / (double)widthR;
-      } else {
-        openR = false;
-      }
-    }
-    if (!openL && !openR) break;
+// PolyBLEP (step) and PolyBLAMP (slope) residuals for an event that sits x samples
+// before (x in [-1, 0)) or after (x in [0, 1)) this sample. J is the jump in value
+// across the event and S the jump in slope per sample.
+static inline double event_correction(double x, double J, double S) {
+  if (x < 0.0) {
+    const double a = x + 1.0;
+    return 0.5 * J * a * a + (S / 6.0) * a * a * a;
   }
-
-  t.countL = countL;
-  t.countR = countR;
-  t.normL = sumL > 0.0 ? 1.0 / __builtin_sqrt(sumL) : 0.0;
-  // Right normalizes on its own energy like Left. It used the plain tap count,
-  // which ignored Decay and width, so Right came out louder than Left.
-  t.normR = sumR > 0.0 ? 1.0 / __builtin_sqrt(sumR) : 0.0;
+  return 0.5 * J * (2.0 * x - x * x - 1.0)
+    + 0.5 * S * (1.0 / 3.0 + x * x - x * x * x / 3.0 - x);
 }
 
-static inline double read_taps(const Cell* line, int write, const Tap* taps, int count) {
-  double sum = 0.0;
-  for (int i = 0; i < count; ++i) {
-    const Tap& tap = taps[i];
-    const Cell& a = line[(write - tap.start) & kDelayMask];
-    const Cell& b = line[(write - tap.end) & kDelayMask];
-    if (a.count == b.count) continue; // window saw only silence: exactly 0
-    sum += (a.v - tap.leakPow * b.v) * tap.gain;
+static void restart_stream(VelvetNoiseState& s) {
+  s.rngL = seed_left(s.seed);
+  s.rngR = seed_right(s.seed);
+  s.rngFL = seed_left(s.seed ^ 0xA5A5A5A5u);
+  s.rngFR = seed_right(s.seed ^ 0x5A5A5A5Au);
+  s.blockEnd = (double)s.now;
+  s.lastTeL = -1.0e18;
+  s.lastTeR = -1.0e18;
+  s.remainder = 0.0;
+  s.wr = 0u;
+  for (int c = 0; c < 2; ++c) {
+    Chan& ch = s.ch[c];
+    ch.tIdx = 0u;
+    ch.rIdx = 0u;
+    ch.sIdx = 0u;
+    ch.havePrev = false;
+    ch.prev.t = 0.0;
+    ch.prev.te = 0.0;
+    ch.prev.sign = 1.0;
+    ch.pend.valid = false;
+    ch.pend.idx = 0u;
+    ch.pend.j = 0.0;
+    ch.pend.s = 0.0;
+    ch.post = false;
+    ch.postJ = 0.0;
+    ch.postS = 0.0;
+    ch.postTau = 0.0;
+    if (ch.acc) for (int i = 0; i < kAcc; ++i) ch.acc[i] = 0.0;
   }
-  return sum;
 }
 
 static void clear_state(VelvetNoiseState& s) {
-  for (int i = 0; i < kDelaySize; ++i) {
-    s.delayL[i].v = 0.0;
-    s.delayL[i].count = 0u;
-    s.delayR[i].v = 0.0;
-    s.delayR[i].count = 0u;
-  }
-  s.integralL = 0.0;
-  s.integralR = 0.0;
-  s.countL = 0u;
-  s.countR = 0u;
-  s.writeIdx = 0;
-  s.genRemainder = 0.0;
-  s.genLength = 0;
-  s.genCount = 0;
-  s.genOffsetL = 0;
-  s.genOffsetR = 0;
-  s.genSignL = 1.0;
-  s.genSignR = 1.0;
+  s.now = 0;
   s.outRight = 0.0;
   s.trigPos = 0.0;
   s.trigNeg = 0.0;
+  restart_stream(s);
 }
 
-static inline void generator_step(
-  VelvetNoiseState& s, double grid, double spread, double& outL, double& outR
+// Draws the next period: one event per channel. The classic draws (position, sign,
+// right-channel blend) are made in the classic order, so the whole-sample position and
+// the sign of every event are the same sequence the old generator produced.
+static void draw_block(VelvetNoiseState& s, double grid, double spread) {
+  s.remainder += grid;
+  int length = (int)s.remainder;
+  if (length < 1) length = 1; // at most one event per sample (density above the sample rate)
+  s.remainder -= (double)length;
+  if (s.remainder < 0.0) s.remainder = 0.0;
+
+  const int offL = (int)(next_unit(s.rngL) * (double)length);
+  const double signL = (next_rand(s.rngL) & 0x10000u) ? 1.0 : -1.0;
+  const int rawR = (int)(next_unit(s.rngR) * (double)length);
+  const double ownSignR = (next_rand(s.rngR) & 0x10000u) ? 1.0 : -1.0;
+  const double ownR = next_unit(s.rngR);
+
+  int offR = (int)((double)offL + spread * (double)(rawR - offL) + 0.5);
+  if (offR > length - 1) offR = length - 1;
+  if (offR < 0) offR = 0;
+  const double signR = (ownR < spread) ? ownSignR : signL;
+
+  const double fracL = next_unit(s.rngFL);
+  const double rawFracR = next_unit(s.rngFR);
+  const double fracR = fracL + spread * (rawFracR - fracL);
+
+  const unsigned int k = s.wr & (unsigned int)kRingMask;
+  s.evL[k].t = s.blockEnd + (double)offL + fracL;
+  s.evL[k].sign = signL;
+  s.evR[k].t = s.blockEnd + (double)offR + fracR;
+  s.evR[k].sign = signR;
+  // The ramp shapes need a whole sample for a cycle to be anti-aliased, so their event times
+  // keep one sample of room after the previous event (a later event is pushed, never an earlier
+  // one, and it stays inside its own period). Trigger and Sinc use the true times.
+  s.evL[k].te = s.evL[k].t < s.lastTeL + 1.0 ? s.lastTeL + 1.0 : s.evL[k].t;
+  s.evR[k].te = s.evR[k].t < s.lastTeR + 1.0 ? s.lastTeR + 1.0 : s.evR[k].t;
+  s.lastTeL = s.evL[k].te;
+  s.lastTeR = s.evR[k].te;
+
+  s.blockEnd += (double)length;
+  s.wr++;
+}
+
+// Keeps enough periods drawn ahead for what the current shape needs.
+static void ensure_blocks(VelvetNoiseState& s, double nd, int shape, double grid, double spread) {
+  for (;;) {
+    bool need = s.wr <= s.ch[0].rIdx || s.wr <= s.ch[1].rIdx
+      || s.wr <= s.ch[0].tIdx || s.wr <= s.ch[1].tIdx;
+    if (!need && shape == kSinc) need = (s.blockEnd - s.sincK <= nd);
+    if (!need && shape >= kSaw) {
+      // A ramp needs the event after the next one to size its jump and kink.
+      for (int c = 0; c < 2 && !need; ++c) {
+        const Chan& ch = s.ch[c];
+        const Ev* ring = c == 0 ? s.evL : s.evR;
+        if (s.wr <= ch.rIdx + 1u && ring[ch.rIdx & (unsigned int)kRingMask].te - nd <= 1.0) need = true;
+      }
+    }
+    if (!need) return;
+    draw_block(s, grid, spread);
+  }
+}
+
+// Jump in value and in slope (per sample) when event `e` starts its cycle.
+static void compute_jump(
+  const Chan& c, const Ev* ring, unsigned int wr, unsigned int e, bool bipolar, int shape,
+  double& J, double& S
 ) {
-  if (s.genCount >= s.genLength) {
-    s.genRemainder += grid;
-    int length = (int)s.genRemainder;
-    if (length < 1) length = 1; // at most one impulse per sample (density above the sample rate)
-    s.genRemainder -= (double)length;
-    if (s.genRemainder < 0.0) s.genRemainder = 0.0;
-    s.genLength = length;
-    s.genCount = 0;
+  const RampEnds& end = kRamp[shape - kSaw];
+  const Ev& ev = ring[e & (unsigned int)kRingMask];
+  const double sN = bipolar ? 1.0 : ev.sign;
+  // A cycle shorter than a couple of samples has no room for a kink to be corrected, and a
+  // signal limited to Nyquist cannot slope steeper than pi per sample at unit height, so the
+  // slope that feeds the correction is capped there (cycle length floored at |d| / pi).
+  double dNext = (wr > e + 1u) ? ring[(e + 1u) & (unsigned int)kRingMask].te - ev.te : 1.0;
+  double room = dNext; // the shorter of the two cycles beside this event, before any floor
+  const double floorNext = (end.d0 < 0.0 ? -end.d0 : end.d0) / kVPi;
+  if (dNext < floorNext) dNext = floorNext;
+  if (dNext < 1e-6) dNext = 1e-6;
+  double jv = sN * end.f0;
+  double sv = sN * end.d0 / dNext;
+  if (c.havePrev) {
+    const double sP = bipolar ? 1.0 : c.prev.sign;
+    double dPrev = ev.te - c.prev.te;
+    if (dPrev < room) room = dPrev;
+    const double floorPrev = (end.d1 < 0.0 ? -end.d1 : end.d1) / kVPi;
+    if (dPrev < floorPrev) dPrev = floorPrev;
+    if (dPrev < 1e-6) dPrev = 1e-6;
+    jv -= sP * end.f1;
+    sv -= sP * end.d1 / dPrev;
+  }
+  // Corrections only fit kinks that stand alone: two kinks closer than ~2 samples overlap and
+  // would add up to far more than the little arch between them, so they fade out from 3 samples apart to 1.
+  J = jv;
+  S = room >= 3.0 ? sv : (room <= 1.0 ? 0.0 : sv * ((room - 1.0) * 0.5));
+}
 
-    const int offL = (int)(next_unit(s.rngL) * (double)length);
-    const double signL = (next_rand(s.rngL) & 0x10000u) ? 1.0 : -1.0;
-    const int rawR = (int)(next_unit(s.rngR) * (double)length);
-    const double ownSignR = (next_rand(s.rngR) & 0x10000u) ? 1.0 : -1.0;
-    const double ownR = next_unit(s.rngR);
+// Adds one windowed-sinc event (Blackman window) into the output ring: a lowpass impulse
+// sinc(2 fc x), peak 1, with a zero crossing every 1 / (2 fc) samples. Below Nyquist the lobes
+// are wider than a sample, so the pre- and post-ringing is spread between the ticks. The sine
+// and the window are stepped by rotation (one multiply-add pair per tap).
+static void stamp_sinc(VelvetNoiseState& s, Chan& c, const Ev& e, double sg, long long now) {
+  const double K = s.sincK;
+  const long long whole = (long long)e.t;
+  const double fr = e.t - (double)whole;
+  const double delta = kVTwoPi * s.sincFc;       // sine phase per sample
+  const double half = K + 1.0;                    // window half-width
+  const double wd = kVPi / half;                  // window phase per sample
+  const int reach = (int)K;
+  const int i0 = -reach;
+  const double x0 = (double)i0 - fr;
+  double sn = soemdsp_maths::dsp_sin(delta * x0);
+  double cs = soemdsp_maths::dsp_cos(delta * x0);
+  const double sd = soemdsp_maths::dsp_sin(delta);
+  const double cd = soemdsp_maths::dsp_cos(delta);
+  double wsn = soemdsp_maths::dsp_sin(wd * x0);
+  double wcs = soemdsp_maths::dsp_cos(wd * x0);
+  const double wsd = soemdsp_maths::dsp_sin(wd);
+  const double wcd = soemdsp_maths::dsp_cos(wd);
+  for (int i = i0; i <= reach + 1; ++i) {
+    const double x = (double)i - fr;
+    if (x <= K && x >= -K) {
+      const long long j = whole + (long long)i;
+      if (j >= now) { // not already played
+        const double th = delta * x;
+        const double k = (th > 1e-9 || th < -1e-9) ? sn / th : 1.0;
+        const double w = 0.42 + 0.5 * wcs + 0.08 * (2.0 * wcs * wcs - 1.0);
+        c.acc[(unsigned int)(j & (long long)kAccMask)] += sg * k * w;
+      }
+    }
+    const double ns = sn * cd + cs * sd;
+    cs = cs * cd - sn * sd;
+    sn = ns;
+    const double wns = wsn * wcd + wcs * wsd;
+    wcs = wcs * wcd - wsn * wsd;
+    wsn = wns;
+  }
+}
 
-    int offR = (int)((double)offL + spread * (double)(rawR - offL) + 0.5);
-    if (offR > length - 1) offR = length - 1;
-    if (offR < 0) offR = 0;
-    s.genOffsetL = offL;
-    s.genOffsetR = offR;
-    s.genSignL = signL;
-    s.genSignR = (ownR < spread) ? ownSignR : signL;
+static double run_channel(
+  VelvetNoiseState& s, int ci, double nd, int shape, bool bipolar, double grid, double spread
+) {
+  Chan& c = s.ch[ci];
+  const Ev* ring = ci == 0 ? s.evL : s.evR;
+  const unsigned int mask = (unsigned int)kRingMask;
+  const long long now = s.now;
+
+  // Events that land inside this sample (the Trigger shape and the Trigger outputs).
+  double trigVal = 0.0;
+  for (;;) {
+    ensure_blocks(s, nd, shape, grid, spread);
+    if (!(c.tIdx < s.wr && ring[c.tIdx & mask].t < nd + 1.0)) break;
+    const Ev& e = ring[c.tIdx & mask];
+    c.tIdx++;
+    const double sg = bipolar ? 1.0 : e.sign;
+    trigVal = sg;
+    if (ci == 0) {
+      if (sg > 0.0) s.trigPos = 1.0;
+      else s.trigNeg = 1.0;
+    }
   }
 
-  outL = (s.genCount == s.genOffsetL) ? s.genSignL : 0.0;
-  outR = (s.genCount == s.genOffsetR) ? s.genSignR : 0.0;
-  s.genCount++;
+  // Events that have begun by this sample's instant (start of a ramp cycle).
+  for (;;) {
+    ensure_blocks(s, nd, shape, grid, spread);
+    if (!(c.rIdx < s.wr && ring[c.rIdx & mask].te <= nd)) break;
+    const Ev& e = ring[c.rIdx & mask];
+    if (shape >= kSaw) {
+      double J, S;
+      if (c.pend.valid && c.pend.idx == c.rIdx) {
+        J = c.pend.j;
+        S = c.pend.s;
+      } else {
+        compute_jump(c, ring, s.wr, c.rIdx, bipolar, shape, J, S);
+      }
+      c.post = true;
+      c.postJ = J;
+      c.postS = S;
+      c.postTau = e.te;
+    }
+    c.prev = e;
+    c.havePrev = true;
+    c.rIdx++;
+  }
+
+  double y = 0.0;
+  if (shape == kTrigger) {
+    y = trigVal;
+  } else if (shape == kSinc) {
+    for (;;) {
+      ensure_blocks(s, nd, shape, grid, spread);
+      if (!(c.sIdx < s.wr && ring[c.sIdx & mask].t - s.sincK <= nd)) break;
+      const Ev& e = ring[c.sIdx & mask];
+      stamp_sinc(s, c, e, bipolar ? 1.0 : e.sign, now);
+      c.sIdx++;
+    }
+    y = c.acc[(unsigned int)(now & (long long)kAccMask)];
+  } else if (c.havePrev) {
+    const Ev& nx = ring[c.rIdx & mask];
+    double dt = nx.te - c.prev.te;
+    if (dt < 1e-12) dt = 1e-12;
+    double x = (nd - c.prev.te) / dt;
+    if (x < 0.0) x = 0.0;
+    if (x > 0.999999999) x = 0.999999999;
+    y = (bipolar ? 1.0 : c.prev.sign) * ramp_value(shape, x);
+
+    if (c.post) {
+      const double px = nd - c.postTau;
+      if (px >= 1.0) c.post = false;
+      else y += event_correction(px, c.postJ, c.postS);
+    }
+    if (nx.te - nd <= 1.0) {
+      if (!(c.pend.valid && c.pend.idx == c.rIdx)) {
+        double J, S;
+        compute_jump(c, ring, s.wr, c.rIdx, bipolar, shape, J, S);
+        c.pend.j = J;
+        c.pend.s = S;
+        c.pend.idx = c.rIdx;
+        c.pend.valid = true;
+      }
+      y += event_correction(nd - nx.te, c.pend.j, c.pend.s);
+    }
+  }
+
+  // Keep the stamping index current while another shape is playing, and clear the slot.
+  if (shape != kSinc) c.sIdx = c.rIdx;
+  c.acc[(unsigned int)(now & (long long)kAccMask)] = 0.0;
+  return y;
 }
 
 } // namespace
@@ -337,29 +448,14 @@ int soemdsp_velvet_noise_create() {
       if (!block) return 0; // out of memory budget: the engine reports it
       VelvetNoiseState& s = gPool[i];
       s.block = block;
-      s.tables = (TapTable*)block;
-      s.delayL = (Cell*)((unsigned char*)block + 2UL * sizeof(TapTable));
-      s.delayR = s.delayL + kDelaySize;
+      s.evL = (Ev*)block;
+      s.evR = s.evL + kRing;
+      s.ch[0].acc = (double*)(s.evR + kRing);
+      s.ch[1].acc = s.ch[0].acc + kAcc;
       s.active = true;
       s.seed = 1u;
-      s.rngL = seed_left(s.seed);
-      s.rngR = seed_right(s.seed);
-      s.cur = 0;
-      s.fading = false;
-      s.fade = 0.0;
-      s.builtGrid = -1.0; // first sample builds the table directly
-      s.builtTaps = 0;
-      s.builtWidth = 0;
-      s.builtSpread = 0.0;
-      s.builtDecay = 0.0;
-      s.builtTail = 0;
-      s.builtRate = 0.0;
-      s.builtSeed = 0u;
-      s.tables[0].countL = 0;
-      s.tables[0].countR = 0;
-      s.tables[0].normL = 0.0;
-      s.tables[0].normR = 0.0;
-      s.modeMix = -1.0; // first sample snaps to the mode
+      s.sincFc = 0.5;
+      s.sincK = 16.0;
       clear_state(s);
       return i + 1;
     }
@@ -372,9 +468,10 @@ void soemdsp_velvet_noise_destroy(int handle) {
   VelvetNoiseState& s = gPool[handle - 1];
   if (s.active) soemdsp::memory_pool::release(s.block);
   s.block = nullptr;
-  s.tables = nullptr;
-  s.delayL = nullptr;
-  s.delayR = nullptr;
+  s.evL = nullptr;
+  s.evR = nullptr;
+  s.ch[0].acc = nullptr;
+  s.ch[1].acc = nullptr;
   s.active = false;
 }
 
@@ -383,29 +480,24 @@ void soemdsp_velvet_noise_reset(int handle) {
   clear_state(gPool[handle - 1]);
 }
 
-// Restarts the generator stream; the diffuser table follows through the
-// crossfade on the next sample.
+// Restarts the event stream from the new seed.
 void soemdsp_velvet_noise_set_seed(int handle, double seed) {
   if (handle <= 0 || handle > kMaxInstances) return;
   VelvetNoiseState& s = gPool[handle - 1];
   s.seed = seed > 0.0 ? (unsigned int)seed : 0u;
-  s.rngL = seed_left(s.seed);
-  s.rngR = seed_right(s.seed);
+  restart_stream(s);
 }
 
 double soemdsp_velvet_noise_sample(
   int handle,
-  double inL,
-  double inR,
-  double mode,          // 0 = Generator, 1 = Diffuser
-  double densityHz,     // pulses per second
-  double tapCount,      // 1 .. 256
-  double darkness,      // max pulse width, 1 .. 32 samples
+  double shapeIn,       // 0 Trigger, 1 Sinc, 2 PolyBLEP Saw, 3 Half Sine, 4 Sine, 5 Rect Sine
+  double signIn,        // 0 = Random sign, 1 = Bipolar
+  double densityHz,     // events per second
   double stereoSpread,  // 0 .. 1
-  double mix,           // Diffuser dry/wet, Generator level
+  double gain,
   double sampleRate,
-  double decay,         // Diffuser tail decay in dB per second, 0 = flat
-  double tailDarkness   // max pulse width at the last tap, 0 = same as Darkness
+  double cutoffHz,      // Sinc: lowpass cutoff, at or above Nyquist = a plain band-limited impulse
+  double lobes          // Sinc: ringing lobes kept either side of the peak
 ) {
   if (handle <= 0 || handle > kMaxInstances) return 0.0;
   VelvetNoiseState& s = gPool[handle - 1];
@@ -413,121 +505,47 @@ double soemdsp_velvet_noise_sample(
 
   if (!(sampleRate >= 1000.0)) sampleRate = 48000.0;
   if (!(densityHz == densityHz)) densityHz = 2500.0;
-  // Density 0 (or below) pauses: no new impulses (Generator, trigger outs) and
-  // the Diffuser keeps the taps it has. No hidden floor: 0 means stopped, not
-  // "1 Hz". Above the sample rate the Generator simply fires on every sample.
-  const bool paused = !(densityHz > 0.0);
-  const double grid = paused ? s.builtGrid : sampleRate / densityHz;
+  if (!(gain == gain)) gain = 0.0;
 
-  int taps = (tapCount == tapCount) ? (int)(tapCount + 0.5) : 64;
-  if (taps < 1) taps = 1;
-  if (taps > kMaxTaps) taps = kMaxTaps;
-
-  int width = (darkness == darkness) ? (int)(darkness + 0.5) : 1;
-  if (width < 1) width = 1;
-  if (width > kMaxPulseWidth) width = kMaxPulseWidth;
+  int shape = (shapeIn == shapeIn) ? (int)(shapeIn + 0.5) : 0;
+  if (shape < 0) shape = 0;
+  if (shape >= kShapeCount) shape = kShapeCount - 1;
+  const bool bipolar = signIn == signIn && signIn >= 0.5;
 
   double spread = (stereoSpread == stereoSpread) ? stereoSpread : 1.0;
   if (spread < 0.0) spread = 0.0;
   if (spread > 1.0) spread = 1.0;
 
-  if (!(mix == mix)) mix = 0.0;
-  if (!(decay == decay)) decay = 0.0;
-  int tail = (tailDarkness == tailDarkness && tailDarkness > 0.0) ? (int)(tailDarkness + 0.5) : 0;
-  if (tail > kMaxPulseWidth) tail = kMaxPulseWidth;
-  if (!(inL == inL)) inL = 0.0;
-  if (!(inR == inR)) inR = 0.0;
+  s.trigPos = 0.0;
+  s.trigNeg = 0.0;
 
-  // Tap table upkeep (none while paused: the Diffuser keeps its taps).
-  if (paused) {
-    // nothing to build; a module that starts paused has no taps yet (wet is silent)
-  } else if (s.builtGrid < 0.0) {
-    build_table(s.tables[s.cur], grid, taps, width, spread, s.seed, decay, sampleRate, tail);
-    s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
-    s.builtGrid = grid; s.builtTaps = taps; s.builtWidth = width;
-    s.builtSpread = spread; s.builtSeed = s.seed;
-  } else if (!s.fading && (
-    grid != s.builtGrid || taps != s.builtTaps || width != s.builtWidth
-    || spread != s.builtSpread || s.seed != s.builtSeed
-    || decay != s.builtDecay || sampleRate != s.builtRate || tail != s.builtTail
-  )) {
-    build_table(s.tables[1 - s.cur], grid, taps, width, spread, s.seed, decay, sampleRate, tail);
-    s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
-    s.builtGrid = grid; s.builtTaps = taps; s.builtWidth = width;
-    s.builtSpread = spread; s.builtSeed = s.seed;
-    s.fading = true;
-    s.fade = 0.0;
+  // Density 0 (or below) pauses: no new events, and the stream holds its place.
+  if (!(densityHz > 0.0)) {
+    s.outRight = 0.0;
+    return 0.0;
   }
+  const double grid = sampleRate / densityHz;
+  const double nd = (double)s.now;
 
-  // Generator <-> Diffuser crossfade.
-  const double modeTarget = mode < 0.5 ? 0.0 : 1.0;
-  if (s.modeMix < 0.0) {
-    s.modeMix = modeTarget;
-  } else if (s.modeMix != modeTarget) {
-    const double step = 1.0 / (kModeFadeSeconds * sampleRate);
-    if (s.modeMix < modeTarget) {
-      s.modeMix += step;
-      if (s.modeMix > modeTarget) s.modeMix = modeTarget;
-    } else {
-      s.modeMix -= step;
-      if (s.modeMix < modeTarget) s.modeMix = modeTarget;
-    }
-  }
-  const double mm = s.modeMix;
+  // Sinc shape: cutoff in cycles per sample and the reach that holds the requested lobes.
+  if (!(cutoffHz == cutoffHz)) cutoffHz = sampleRate * 0.5;
+  double fc = cutoffHz / sampleRate;
+  if (fc > 0.5) fc = 0.5;
+  if (fc < 0.00002) fc = 0.00002;
+  if (!(lobes == lobes) || lobes < 1.0) lobes = 1.0;
+  if (lobes > 64.0) lobes = 64.0;
+  double reach = (double)(int)(lobes / (2.0 * fc) + 1.0);
+  if (reach < 4.0) reach = 4.0;
+  if (reach > (double)kMaxHalf) reach = (double)kMaxHalf;
+  s.sincFc = fc;
+  s.sincK = reach;
 
-  // The running sum is kept up in both modes so the diffuser always has a
-  // valid history to fade into.
-  s.integralL = s.integralL * kLeak + inL;
-  s.integralR = s.integralR * kLeak + inR;
-  const int w = s.writeIdx;
-  if (inL != 0.0) s.countL++;
-  if (inR != 0.0) s.countR++;
-  s.delayL[w].v = s.integralL;
-  s.delayL[w].count = s.countL;
-  s.delayR[w].v = s.integralR;
-  s.delayR[w].count = s.countR;
-  s.writeIdx = (w + 1) & kDelayMask;
+  const double outL = run_channel(s, 0, nd, shape, bipolar, grid, spread);
+  const double outR = run_channel(s, 1, nd, shape, bipolar, grid, spread);
+  s.now++;
 
-  double outL = 0.0;
-  double outR = 0.0;
-
-  if (mm > 0.0) {
-    const TapTable& a = s.tables[s.cur];
-    double wetL = read_taps(s.delayL, w, a.left, a.countL) * a.normL;
-    double wetR = read_taps(s.delayR, w, a.right, a.countR) * a.normR;
-    if (s.fading) {
-      const TapTable& b = s.tables[1 - s.cur];
-      const double g = s.fade;
-      wetL += g * (read_taps(s.delayL, w, b.left, b.countL) * b.normL - wetL);
-      wetR += g * (read_taps(s.delayR, w, b.right, b.countR) * b.normR - wetR);
-    }
-    outL += mm * (inL + mix * (wetL - inL));
-    outR += mm * (inR + mix * (wetR - inR));
-  }
-
-  if (s.fading) {
-    s.fade += 1.0 / (kFadeSeconds * sampleRate);
-    if (s.fade >= 1.0) {
-      s.cur = 1 - s.cur;
-      s.fading = false;
-      s.fade = 0.0;
-    }
-  }
-
-  // The impulse stream runs in both modes so the trigger outs keep firing
-  // while the module is diffusing.
-  double genL = 0.0;
-  double genR = 0.0;
-  if (!paused) generator_step(s, grid, spread, genL, genR); // paused: holds its place
-  s.trigPos = genL > 0.0 ? 1.0 : 0.0;
-  s.trigNeg = genL < 0.0 ? 1.0 : 0.0;
-  if (mm < 1.0) {
-    outL += (1.0 - mm) * mix * genL;
-    outR += (1.0 - mm) * mix * genR;
-  }
-
-  s.outRight = outR;
-  return outL;
+  s.outRight = outR * gain;
+  return outL * gain;
 }
 
 double soemdsp_velvet_noise_right(int handle) {
@@ -535,8 +553,8 @@ double soemdsp_velvet_noise_right(int handle) {
   return gPool[handle - 1].outRight;
 }
 
-// One-sample triggers from the Left impulse stream, split by sign. Height is
-// always 1 (Mix / Gain does not scale them).
+// One-sample triggers from the Left event stream, split by sign. Height is always 1
+// (Amp does not scale them). In Bipolar mode every event is positive.
 double soemdsp_velvet_noise_trigger_pos(int handle) {
   if (handle <= 0 || handle > kMaxInstances) return 0.0;
   return gPool[handle - 1].trigPos;
@@ -548,7 +566,7 @@ double soemdsp_velvet_noise_trigger_neg(int handle) {
 }
 
 int soemdsp_velvet_noise_version() {
-  return 7; // 7: Density 0 pauses (no 1 Hz floor). 6: Tail Darkness (pulse width ramps over the tail). 5: wet level independent of Darkness
+  return 9; // 9: Sinc Cutoff and Lobes (lowpass sinc, audible pre/post ringing), pool memory again. 8: generator only, with Shape (Trigger, Sinc, PolyBLEP Saw, Half Sine, Sine, Rect Sine) and Sign (Random / Bipolar). 7: Density 0 pauses
 }
 
 } // extern "C"

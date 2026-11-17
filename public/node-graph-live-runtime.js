@@ -535,7 +535,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.15.10-ad4";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.2-velvet-split";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -1919,7 +1919,7 @@ function nodeGraphIngestFrameBatchNow(batch) {
   state.ingested += 1;
   const sessionId = batch.sessionId;
   // Meter and visual state first so scope-driven paints see current values.
-  for (const kind of ["meter", "visualControls", "scope"]) {
+  for (const kind of ["meter", "visualControls", "levels", "scope"]) {
     const part = batch[kind];
     if (!part) {
       continue;
@@ -1980,6 +1980,10 @@ function handleNodeGraphLiveWorkletMessage(event) {
   const message = event.data || {};
   if (message.type === "frameBatch") {
     nodeGraphReceiveFrameBatch(message);
+    return;
+  }
+  if (message.type === "levels") {
+    nodeGraphIngestNodeLevels(message.peaks);
     return;
   }
   if (message.type === "recordChunk") {
@@ -3615,12 +3619,12 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1-limits-print-2-budget",
-  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.15.14-ad4",
+  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.16.8-pcache",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=step-register-1-limits-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
-  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.15.4-budget",
-  "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015",
+  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.16.3-levels",
+  "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015-lvl",
   "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-db-1",
   "./public/modules/_shared/output-amplitude.js?v=output-amp-1",
   // Yellow Graph: DOMAIN param chase for MOD (DSP is native opcodes 111Ã¢â‚¬â€œ124).
@@ -4022,6 +4026,17 @@ async function startNodeGraphLiveAudio(outputSerial = nodeGraphMvp.live.outputTo
     nodeGraphMvp.live.usesWorklet = usesWorklet;
     liveNode.connect(outputGain);
     outputGain.connect(context.destination);
+    if (typeof nodeGraphModuleStrokeFollowSourceIsModule === "function") nodeGraphSyncNodeLevelsEnabled(nodeGraphModuleStrokeFollowSourceIsModule());
+    // Level tap on the very last stage (after the whole chain and the output gain).
+    try {
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 2048; // ~43 ms: longer than a display frame, so no sample between frames is missed
+      outputGain.connect(analyser);
+      nodeGraphMvp.live.outputAnalyser = analyser;
+      nodeGraphMvp.live.outputAnalyserBuf = new Float32Array(analyser.fftSize);
+      nodeGraphMvp.live.outputLevelSmooth = 0;
+      nodeGraphStartOutputClipWatch();
+    } catch (_) {}
     // Fresh session is never muted Ã¢â‚¬â€ clear any sticky mute from a prior error.
     setNodeGraphLiveOutputMuted(false);
     // Mic is best-effort: a blocked/unavailable microphone must not abort the
@@ -4300,4 +4315,84 @@ if (typeof document !== "undefined") {
   } else {
     bindNodeGraphPageVisibilityAudioPolicy();
   }
+}
+
+// Per-module level (0..1, decibel scale like the final output) for the stroke follow option.
+const nodeGraphNodeLevels = new Map();
+
+function nodeGraphIngestNodeLevels(peaks) {
+  if (!peaks || typeof peaks !== "object") return;
+  const seen = new Set();
+  for (const id of Object.keys(peaks)) {
+    seen.add(id);
+    const peak = Number(peaks[id]) || 0;
+    // Linear in the signal, no smoothing: the level IS the peak the engine saw since the last post
+    // (the worklet keeps the largest |sample| of every block in between), so a single sample in any
+    // block lights the module for at least one displayed frame.
+    nodeGraphNodeLevels.set(id, Math.max(0, Math.min(1, peak)));
+  }
+  // A module with no activity in this post is silent now.
+  for (const id of [...nodeGraphNodeLevels.keys()]) if (!seen.has(id)) nodeGraphNodeLevels.delete(id);
+}
+
+function nodeGraphNodeLevel(id) {
+  return nodeGraphNodeLevels.get(id) || 0;
+}
+
+// Tell the engine whether to collect per-module levels (off costs nothing).
+function nodeGraphSyncNodeLevelsEnabled(enabled) {
+  try {
+    nodeGraphMvp?.live?.node?.port?.postMessage({ type: "setNodeLevels", enabled: enabled === true });
+  } catch (_) {}
+  if (!enabled) nodeGraphNodeLevels.clear();
+}
+
+// Smoothed level (0..1) of what leaves the engine, read by the module stroke follow option.
+function nodeGraphOutputLevel() {
+  const live = nodeGraphMvp?.live;
+  const analyser = live?.outputAnalyser;
+  if (!analyser || live.context?.state !== "running") return 0;
+  const now = performance.now();
+  if (live.outputLevelAt === now) return live.outputLevelSmooth || 0;
+  live.outputLevelAt = now;
+  const buf = live.outputAnalyserBuf;
+  analyser.getFloatTimeDomainData(buf);
+  // Linear: the largest |sample| of the window, same light smoothing up and down.
+  let peak = 0;
+  for (let i = 0; i < buf.length; i += 1) {
+    const v = buf[i];
+    const m = v < 0 ? -v : v;
+    if (m > peak) peak = m;
+  }
+  // No smoothing: the largest |sample| of the window.
+  live.outputLevelSmooth = Math.min(1, peak);
+  return live.outputLevelSmooth;
+}
+
+// 0..1: how strongly the Output module glows red. It is the ear protector's mute amount
+// (1 while the protector is fully engaged, fading back as it releases).
+function nodeGraphOutputOverLevel() {
+  const mute = Number(globalThis.nodeGraphOutputProtectMute);
+  return Number.isFinite(mute) ? Math.max(0, Math.min(1, mute)) : 0;
+}
+
+function nodeGraphIsOutputModule(nodeId) {
+  return typeof nodeGraphPatchNode === "function" && nodeGraphPatchNode(nodeId)?.type === "output";
+}
+
+// Redraws the module plates while the ear protector glow is on or has just ended.
+let nodeGraphOutputClipFrame = 0;
+function nodeGraphStartOutputClipWatch() {
+  if (nodeGraphOutputClipFrame) return;
+  let wasOver = false;
+  const tick = () => {
+    nodeGraphOutputClipFrame = 0;
+    const live = nodeGraphMvp?.live;
+    if (!live?.outputAnalyser) return;
+    const over = nodeGraphOutputOverLevel() > 0;
+    if ((over || wasOver) && typeof nodeGraphGlGraphPresentDisplaysOnly === "function") nodeGraphGlGraphPresentDisplaysOnly();
+    wasOver = over;
+    nodeGraphOutputClipFrame = requestAnimationFrame(tick);
+  };
+  nodeGraphOutputClipFrame = requestAnimationFrame(tick);
 }

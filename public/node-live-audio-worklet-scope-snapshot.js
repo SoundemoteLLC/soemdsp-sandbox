@@ -283,6 +283,7 @@ NodeLiveAudioProcessor.prototype.postFrameBatch = function postFrameBatch(scope 
       scope: scope || null,
       meter: held?.meter || null,
       visualControls: held?.visualControls || null,
+      levels: held?.levels || null,
     };
     if (transfer && transfer.length) {
       this.port.postMessage(batch, transfer);
@@ -304,12 +305,24 @@ NodeLiveAudioProcessor.prototype.postFramePart = function postFramePart(kind, bo
     const held = this.heldFrameParts || (this.heldFrameParts = {
       meter: null,
       visualControls: null,
+      levels: null,
       sinceFrame: typeof currentFrame === "number" ? currentFrame : 0,
     });
     if (kind === "meter") {
       held.meter = held.meter
         ? (Array.isArray(held.meter) ? [...held.meter, body] : [held.meter, body])
         : body;
+    } else if (kind === "levels") {
+      // Peaks accumulate (max) between posts so a short transient is not lost.
+      const prev = held.levels?.peaks;
+      if (!prev) {
+        held.levels = body;
+      } else {
+        for (const id of Object.keys(body.peaks)) {
+          const v = body.peaks[id];
+          if (!(prev[id] >= v)) prev[id] = v;
+        }
+      }
     } else {
       held[kind] = body;
     }

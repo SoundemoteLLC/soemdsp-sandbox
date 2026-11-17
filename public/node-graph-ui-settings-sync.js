@@ -332,6 +332,141 @@ function bindNodeUiDevSliderFillColorControls() {
 
 // Unselected plate outline. CSS-only — do not fold into the header sync
 // (that rebuilds the patch / heatmap / wires on every input event).
+// Plate corners for the GL plates (read per draw). Top and bottom are set apart.
+const NODE_MODULE_CORNER_SHAPE_NAMES = ["Round", "Squircle", "Pill"];
+let nodeGraphModuleStrokeFollowAmount = 0.92;
+let nodeGraphModuleStrokeFollowFrame = 0;
+let nodeGraphModuleStrokeFollowBeat = 0;
+// The colour a loud signal moves the stroke toward (0..1 rgb).
+// Fallback when a module has no outgoing cable yet (the Output module): amber-pink.
+const nodeGraphStrokeLoudFallbackRgb = [252 / 255, 190 / 255, 161 / 255];
+// Loud stroke look: brightness lifts the cable colour toward white (0..1), alpha is its opacity.
+let nodeGraphStrokeLoudBrightness = 0;
+let nodeGraphStrokeLoudAlpha = 0.31;
+
+// A module's loud colour is the colour of its first outgoing cable; the UI Dev colour is the
+// fallback (the Output module, or a module with no cable yet).
+function nodeGraphStrokeLoudColor(nodeId) {
+  const cableState = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
+  // First outgoing cable; a module with none (the Output module) uses its first incoming cable.
+  const cable = cableState?.firstCable?.get?.(String(nodeId)) || cableState?.firstCableIn?.get?.(String(nodeId)) || null;
+  const rgb = cable || nodeGraphStrokeLoudFallbackRgb;
+  const lift = nodeGraphStrokeLoudBrightness;
+  return [rgb[0] + (1 - rgb[0]) * lift, rgb[1] + (1 - rgb[1]) * lift, rgb[2] + (1 - rgb[2]) * lift, nodeGraphStrokeLoudAlpha];
+}
+function nodeGraphModuleStrokeFollowSourceIsModule() {
+  return nodeGraphModuleStrokeFollowAmount > 0;
+}
+// Output module stroke while the ear protector is engaged (fixed look).
+const nodeGraphOutputOverheatRgb = [254 / 255, 57 / 255, 77 / 255, 0.95];
+
+// True while the follow option is on (amount above 0).
+function nodeGraphModuleStrokeFollowActive() {
+  return nodeGraphModuleStrokeFollowAmount > 0;
+}
+
+function nodeGraphOutputOverheatColor() {
+  return nodeGraphOutputOverheatRgb;
+}
+
+// 0..1: how hard the module strokes follow the final output level right now.
+// Modules that make no audio (controllers, game triggers) have no level to follow.
+const NODE_STROKE_FOLLOW_SILENT_CATEGORIES = new Set(["controller", "gametrigger"]);
+const nodeStrokeFollowSilentCache = new Map();
+
+function nodeGraphModuleStrokeFollowIsNonAudio(nodeId) {
+  if (nodeStrokeFollowSilentCache.has(nodeId)) return nodeStrokeFollowSilentCache.get(nodeId);
+  const type = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId)?.type : "";
+  const category = typeof nodeGraphModuleStoreCatalog === "object" && nodeGraphModuleStoreCatalog ? nodeGraphModuleStoreCatalog[type]?.category : "";
+  const silent = NODE_STROKE_FOLLOW_SILENT_CATEGORIES.has(category);
+  if (type) nodeStrokeFollowSilentCache.set(nodeId, silent);
+  return silent;
+}
+
+// A module whose output goes nowhere has nothing to follow. Cached by the connection list.
+let nodeStrokeFollowSourcesFor = null;
+let nodeStrokeFollowSourcesLen = -1;
+let nodeStrokeFollowSources = new Set();
+
+function nodeGraphModuleStrokeFollowHasOutgoing(nodeId) {
+  const connections = nodeGraphMvp?.patch?.connections;
+  if (!Array.isArray(connections)) return true;
+  if (connections !== nodeStrokeFollowSourcesFor || connections.length !== nodeStrokeFollowSourcesLen) {
+    nodeStrokeFollowSourcesFor = connections;
+    nodeStrokeFollowSourcesLen = connections.length;
+    nodeStrokeFollowSources = new Set(connections.map((c) => c?.sourceNode));
+  }
+  return nodeStrokeFollowSources.has(nodeId);
+}
+
+// 0..1 animation amount for one module right now: its output level (each module's own output; the
+// Output module follows the final output) times the "animate" control. Modules that make no audio
+// (controllers, game triggers) and modules whose output goes nowhere do not animate.
+function nodeGraphModuleStrokeFollowLevel(nodeId) {
+  if (!(nodeGraphModuleStrokeFollowAmount > 0)) return 0;
+  if (nodeGraphModuleStrokeFollowIsNonAudio(nodeId)) return 0;
+  let raw = 0;
+  if (typeof nodeGraphIsOutputModule === "function" && nodeGraphIsOutputModule(nodeId)) {
+    raw = typeof nodeGraphOutputLevel === "function" ? nodeGraphOutputLevel() : 0;
+  } else {
+    if (!nodeGraphModuleStrokeFollowHasOutgoing(nodeId)) return 0;
+    raw = typeof nodeGraphNodeLevel === "function" ? nodeGraphNodeLevel(nodeId) : 0;
+  }
+  return Math.min(1, raw * 1.5) * nodeGraphModuleStrokeFollowAmount;
+}
+
+function nodeGraphModuleStrokeFollowTick() {
+  nodeGraphModuleStrokeFollowFrame = 0;
+  if (!(nodeGraphModuleStrokeFollowAmount > 0)) return;
+  if (typeof nodeGraphGlGraphPresentDisplaysOnly === "function") nodeGraphGlGraphPresentDisplaysOnly();
+  nodeGraphModuleStrokeFollowFrame = requestAnimationFrame(nodeGraphModuleStrokeFollowTick);
+}
+
+let nodeGraphModulePlateLookState = { topShape: 1, topRadius: 6, bottomShape: 1, bottomRadius: 6 };
+
+function nodeGraphModulePlateLook() {
+  return nodeGraphModulePlateLookState;
+}
+
+function syncNodeUiDevModuleCorners() {
+  const read = (id, fallback, lo, hi) => {
+    const input = document.getElementById(id);
+    const n = Number(input?.value);
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, Math.round(n))) : fallback;
+  };
+  const look = {
+    topShape: read("nodeUiDevModuleTopShape", 1, 0, 2),
+    topRadius: read("nodeUiDevModuleTopRadius", 6, 0, 60),
+    bottomShape: read("nodeUiDevModuleBottomShape", 1, 0, 2),
+    bottomRadius: read("nodeUiDevModuleBottomRadius", 6, 0, 60),
+  };
+  nodeGraphModulePlateLookState = look;
+  const follow = read("nodeUiDevStrokeAnimate", 92, 0, 100);
+  nodeGraphModuleStrokeFollowAmount = follow / 100;
+  if (typeof nodeGraphSyncNodeLevelsEnabled === "function") nodeGraphSyncNodeLevelsEnabled(nodeGraphModuleStrokeFollowSourceIsModule());
+  const loudBright = read("nodeUiDevStrokeLoudBrightness", 0, 0, 100);
+  const loudAlpha = read("nodeUiDevStrokeLoudAlpha", 31, 0, 100);
+  nodeGraphStrokeLoudBrightness = loudBright / 100;
+  nodeGraphStrokeLoudAlpha = loudAlpha / 100;
+  const loudBrightOut = document.getElementById("nodeUiDevStrokeLoudBrightnessValue");
+  if (loudBrightOut) loudBrightOut.textContent = `${loudBright}%`;
+  const loudAlphaOut = document.getElementById("nodeUiDevStrokeLoudAlphaValue");
+  if (loudAlphaOut) loudAlphaOut.textContent = `${loudAlpha}%`;
+  const followOut = document.getElementById("nodeUiDevStrokeAnimateValue");
+  if (followOut) followOut.textContent = follow > 0 ? `${follow}%` : "off";
+  if (follow > 0 && !nodeGraphModuleStrokeFollowFrame) nodeGraphModuleStrokeFollowFrame = requestAnimationFrame(nodeGraphModuleStrokeFollowTick);
+  const show = (id, text) => {
+    const out = document.getElementById(id);
+    if (out) out.textContent = text;
+  };
+  show("nodeUiDevModuleTopShapeValue", NODE_MODULE_CORNER_SHAPE_NAMES[look.topShape]);
+  show("nodeUiDevModuleTopRadiusValue", look.topShape === 2 ? "full" : `${look.topRadius}px`);
+  show("nodeUiDevModuleBottomShapeValue", NODE_MODULE_CORNER_SHAPE_NAMES[look.bottomShape]);
+  show("nodeUiDevModuleBottomRadiusValue", look.bottomShape === 2 ? "full" : `${look.bottomRadius}px`);
+  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
+  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+}
+
 function syncNodeUiDevModuleIdleStroke() {
   const colorInput = document.getElementById("nodeUiDevModuleStrokeColor");
   const colorOut = document.getElementById("nodeUiDevModuleStrokeColorValue");
@@ -339,8 +474,13 @@ function syncNodeUiDevModuleIdleStroke() {
   const selectedColorOut = document.getElementById("nodeUiDevModuleSelectedStrokeColorValue");
   const selectedAlphaInput = document.getElementById("nodeUiDevModuleSelectedStrokeAlpha");
   const selectedAlphaOut = document.getElementById("nodeUiDevModuleSelectedStrokeAlphaValue");
-  const color = normalizeNodeUiDevColor(colorInput?.value, "#a19b9b");
-  const selectedColor = normalizeNodeUiDevColor(selectedColorInput?.value, "#e2a86d");
+  const color = normalizeNodeUiDevColor(colorInput?.value, "#442f7f");
+  const idleAlphaInput = document.getElementById("nodeUiDevModuleStrokeAlpha");
+  const idleAlphaOut = document.getElementById("nodeUiDevModuleStrokeAlphaValue");
+  const idleAlphaRaw = Number(idleAlphaInput?.value);
+  const idleAlphaPercent = Number.isFinite(idleAlphaRaw) ? Math.max(0, Math.min(100, idleAlphaRaw)) : 16;
+  if (idleAlphaOut) idleAlphaOut.textContent = `${idleAlphaPercent}%`;
+  const selectedColor = normalizeNodeUiDevColor(selectedColorInput?.value, "#f9aeae");
   const selectedAlphaRaw = Number(selectedAlphaInput?.value);
   const selectedAlphaPercent = Number.isFinite(selectedAlphaRaw)
     ? Math.max(0, Math.min(100, selectedAlphaRaw))
@@ -367,12 +507,14 @@ function syncNodeUiDevModuleIdleStroke() {
   workspace?.style.setProperty("--node-module-idle-stroke-width", "1px");
   workspace?.style.setProperty(
     "--node-module-idle-stroke",
-    `rgb(${nodeUiDevHexColorToRgbTriplet(color)} / 0.9)`,
+    `rgb(${nodeUiDevHexColorToRgbTriplet(color)} / ${idleAlphaPercent / 100})`,
   );
   workspace?.style.setProperty(
     "--node-module-selected-stroke",
     `rgb(${nodeUiDevHexColorToRgbTriplet(selectedColor)} / ${selectedAlphaPercent / 100})`,
   );
+  // The plate stroke vars are read once per rebuild generation; bump it so this change shows now.
+  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
   if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
 }
 
@@ -425,8 +567,48 @@ function bindNodeUiDevModuleTitlePadding() {
 }
 
 function bindNodeUiDevModuleIdleStroke() {
+  // Click a colour's hex text in UI Dev to copy it; the text reads "copied!" for a second.
+  if (!document.documentElement.dataset.uiDevHexCopyBound) {
+    document.documentElement.dataset.uiDevHexCopyBound = "true";
+    document.addEventListener("click", (event) => {
+      const out = event.target?.closest?.("output[for]");
+      if (!out || !out.closest("#nodeUiDevPanel, .node-ui-dev, [id^='nodeUiDev']")) return;
+      const input = document.getElementById(out.getAttribute("for") || "");
+      if (input?.type !== "color") return;
+      const hex = out.dataset.hexCopyValue || out.textContent.trim();
+      if (!/^#[0-9a-f]{3,8}$/i.test(hex)) return;
+      out.dataset.hexCopyValue = hex;
+      const done = () => {
+        out.textContent = "copied!";
+        clearTimeout(out._hexCopyTimer);
+        out._hexCopyTimer = setTimeout(() => {
+          out.textContent = input.value || out.dataset.hexCopyValue;
+          delete out.dataset.hexCopyValue;
+        }, 1000);
+      };
+      const fallback = () => {
+        const t = document.createElement("textarea");
+        t.value = hex; t.style.position = "fixed"; t.style.opacity = "0";
+        document.body.appendChild(t); t.select();
+        try { document.execCommand("copy"); } catch (_) {}
+        t.remove();
+      };
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(hex).catch(fallback);
+      else fallback();
+      done();
+    });
+  }
+  for (const id of ["nodeUiDevModuleTopShape", "nodeUiDevModuleTopRadius", "nodeUiDevModuleBottomShape", "nodeUiDevModuleBottomRadius", "nodeUiDevStrokeAnimate", "nodeUiDevStrokeLoudBrightness", "nodeUiDevStrokeLoudAlpha"]) {
+    const input = document.getElementById(id);
+    if (!input || input.dataset.moduleCornerBound === "true") continue;
+    input.dataset.moduleCornerBound = "true";
+    input.addEventListener("input", syncNodeUiDevModuleCorners);
+    input.addEventListener("change", syncNodeUiDevModuleCorners);
+  }
+  syncNodeUiDevModuleCorners();
   for (const id of [
     "nodeUiDevModuleStrokeColor",
+    "nodeUiDevModuleStrokeAlpha",
     "nodeUiDevModuleSelectedStrokeColor",
     "nodeUiDevModuleSelectedStrokeAlpha",
   ]) {
@@ -765,10 +947,12 @@ function syncNodeUiDevModuleLightGridControls() {
   const gridBrightOut = document.getElementById("nodeUiDevMinimumGridBrightnessValue");
   const gridSpreadOut = document.getElementById("nodeUiDevGridSpreadValue");
 
-  const lightBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(lightBrightEl?.value)));
-  const lightSpread = Math.max(40, Math.min(220, nodeGraphFiniteNumber(lightSpreadEl?.value, 78)));
-  const gridBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridBrightEl?.value)));
-  const gridSpread = Math.max(40, Math.min(220, nodeGraphFiniteNumber(gridSpreadEl?.value, 78)));
+  // 100% is the default look; up to 300% for a much stronger module light.
+  const lightBright = Math.max(0, Math.min(300, nodeGraphFiniteNumber(lightBrightEl?.value, 100)));
+  // Module light spread: 10% (a tight rim) up to 220%.
+  const lightSpread = Math.max(10, Math.min(220, nodeGraphFiniteNumber(lightSpreadEl?.value, 10)));
+  const gridBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridBrightEl?.value, 43)));
+  const gridSpread = Math.max(40, Math.min(220, nodeGraphFiniteNumber(gridSpreadEl?.value, 220)));
 
   if (lightBrightOut) lightBrightOut.textContent = `${lightBright}%`;
   if (lightSpreadOut) lightSpreadOut.textContent = `${lightSpread}%`;
@@ -777,7 +961,7 @@ function syncNodeUiDevModuleLightGridControls() {
 
   const ws = document.getElementById("nodeGraphWorkspace");
   ws?.style.setProperty("--node-module-light-brightness", String(lightBright / 100));
-  ws?.style.setProperty("--node-module-light-spread", String(nodeUiDevSpreadRatioFromPercent(lightSpread)));
+  ws?.style.setProperty("--node-module-light-spread", String(Math.max(0.1, Math.min(2.2, lightSpread / 100))));
   ws?.style.setProperty("--node-grid-line-alpha", String(gridBright / 100));
   ws?.style.setProperty("--node-grid-reveal-spread", String(nodeUiDevSpreadRatioFromPercent(gridSpread)));
   // Never paint a full-workspace grid. Reveal is radius-around-modules only.
@@ -786,6 +970,11 @@ function syncNodeUiDevModuleLightGridControls() {
 
   if (typeof updateNodeGraphGridHeatmap === "function") {
     updateNodeGraphGridHeatmap({ force: true });
+  }
+  // The module lights and the grid are drawn on the GPU: rebuild the scene so it picks the values up.
+  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) {
+    nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
+    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
   }
 }
 
@@ -941,7 +1130,7 @@ function syncNodeUiDevSettingsHeaderControls() {
     ? Math.max(0, Math.min(20, nodeGraphFiniteNumber(moduleGridInsetInput.value)))
     : null;
   const gridColor = normalizeNodeUiDevColor(gridColorInput.value, "#ffffff");
-  const workspaceBackgroundColor = normalizeNodeUiDevColor(workspaceBackgroundColorInput.value, "#1d1b1b");
+  const workspaceBackgroundColor = normalizeNodeUiDevColor(workspaceBackgroundColorInput.value, "#1a1a1a");
   const moduleFillColor = normalizeNodeUiDevColor(moduleFillColorInput.value, "#171a1f");
   const moduleTitleFillColor = normalizeNodeUiDevColor(moduleTitleFillColorInput?.value, "#030113");
   const moduleFillAlphaRaw = Number(moduleFillAlphaInput.value);

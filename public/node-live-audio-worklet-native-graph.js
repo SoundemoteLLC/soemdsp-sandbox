@@ -288,6 +288,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   crossover5: 106,
   crossover6: 107,
   velvetNoise: 263,
+  velvetReverb: 265,
 });
 
 // Param IDs — keep in sync with graph_engine.cpp kParam*.
@@ -578,7 +579,16 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
   }
   if (t === "velvetNoise") {
-    if (k === "mode") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "shape") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "sign") return P.NATIVE_GRAPH_PARAM_WAVEFORM;
+    if (k === "cutoff") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "lobes") return P.NATIVE_GRAPH_PARAM_STAGES;
+    if (k === "density") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
+    if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+  }
+  if (t === "velvetReverb") {
     if (k === "density") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
     if (k === "tapCount") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "darkness") return P.NATIVE_GRAPH_PARAM_WIDTH;
@@ -586,6 +596,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
     if (k === "decay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "tailDarkness") return P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR;
   }
   if (t === "robinLeakyEnvelope") {
     if (k === "startDecay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
@@ -2832,13 +2843,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphWireChangeInPlace =
       this.pushNativeGraphScopeTaps(native, connections, prevIds, typesNow, hashById);
     }
     // New nodes need their parameters pushed (forces a full push for them only).
-    if (addedIds.size && this._nativeGraphParamCache && typeof this._nativeGraphParamCache === "object") {
-      for (const id of addedIds) {
-        try {
-          delete this._nativeGraphParamCache[id];
-        } catch (_e) { /* ignore */ }
-      }
-    }
+    if (addedIds.size) this.forgetNativeGraphParamCache(addedIds);
     this._nativeGraphParamCacheCold = false;
     this._planConnectionsByDst = null;
     this._nativeGraphTopologyKey = key;
@@ -3056,13 +3061,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         }
         this.nativeGraphCompiled = true;
         this._nativeGraphNodeIds = new Set(desired.keys());
-        if (addedIds.length && this._nativeGraphParamCache && typeof this._nativeGraphParamCache === "object") {
-          for (const id of addedIds) {
-            try {
-              delete this._nativeGraphParamCache[id];
-            } catch (_e) { /* ignore */ }
-          }
-        }
+        if (addedIds.length) this.forgetNativeGraphParamCache(addedIds);
         this._nativeGraphParamCacheCold = false;
         if (typeof this.syncNativeGraphParams === "function") {
           this.syncNativeGraphParams();
@@ -3351,13 +3350,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         this.snapNativeHostCvFeederSmoothing(native, hostFeeders);
       }
       // Keep param cache warm for survivors; only force push for newly added.
-      if (addedIds.length && this._nativeGraphParamCache && typeof this._nativeGraphParamCache === "object") {
-        for (const id of addedIds) {
-          try {
-            delete this._nativeGraphParamCache[id];
-          } catch (_e) { /* ignore */ }
-        }
-      }
+      if (addedIds.length) this.forgetNativeGraphParamCache(addedIds);
       this._nativeGraphParamCacheCold = false;
       // Same as the in-place path: a node re-added under an old id must not
       // read the removed node's cached port memory (scopes, MOD ghosts).
@@ -5451,6 +5444,20 @@ NodeLiveAudioProcessor.prototype.requireNativeParamIdForMod = function requireNa
   return undefined;
 };
 
+// A node that is (re)added to the engine starts at its defaults, so its cached "already pushed"
+// values must go or its parameters are never sent (the page shows the saved value, the audio
+// does not have it). The cache is a Map keyed by node id; `delete cache[id]` on a Map removes nothing.
+NodeLiveAudioProcessor.prototype.forgetNativeGraphParamCache = function forgetNativeGraphParamCache(ids) {
+  const cache = this._nativeGraphParamCache;
+  if (!cache) return;
+  for (const id of ids) {
+    try {
+      if (typeof cache.delete === "function") cache.delete(id);
+      else delete cache[id];
+    } catch (_e) { /* ignore */ }
+  }
+};
+
 NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGraphParams(_frames = 128, collectOnly = false) {
   if (!collectOnly && (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle)) {
     return;
@@ -6032,7 +6039,17 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "velvetNoise") {
-      push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
+      push("shape", P.NATIVE_GRAPH_PARAM_MODE, disc("shape", 0));
+      push("sign", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("sign", 0));
+      push("cutoff", P.NATIVE_GRAPH_PARAM_WIDTH, cont("cutoff", 2000));
+      push("lobes", P.NATIVE_GRAPH_PARAM_STAGES, disc("lobes", 8));
+      push("density", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("density", 2500));
+      push("stereoSpread", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("stereoSpread", 1));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      continue;
+    }
+    if (type === "velvetReverb") {
       push("density", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("density", 2500));
       push("tapCount", P.NATIVE_GRAPH_PARAM_STAGES, disc("tapCount", 64));
       push("darkness", P.NATIVE_GRAPH_PARAM_WIDTH, disc("darkness", 1));
@@ -10932,6 +10949,36 @@ NodeLiveAudioProcessor.prototype.bindNativeGraphNodePortView = function bindNati
   return view;
 };
 
+// Peak |sample| of each module's Mono / Left / Right over the last block, kept (max) until the
+// next display frame posts it. One pass over the ports the engine already holds: no DSP.
+NodeLiveAudioProcessor.prototype.accumulateNativeGraphNodeLevels = function accumulateNativeGraphNodeLevels(frames) {
+  const P = NodeLiveAudioProcessor;
+  const ports = [0, 1, 2, 3, 4, 5, 6, 7]; // every audio port the engine keeps per node
+  const peaks = this.nodeLevelPeaks || (this.nodeLevelPeaks = Object.create(null));
+  for (const [id, node] of this.nodes) {
+    const type = String(node?.type || "");
+    if (type === "output" || !Object.prototype.hasOwnProperty.call(P.NATIVE_GRAPH_TYPE_IDS, type)) continue;
+    const hash = this.fnv1aHash32(id);
+    // Linear magnitude: the largest |sample| of any audio port over the block, so the stroke
+    // follows the signal itself (a triangle LFO gives a triangle of brightness). Modules that
+    // hold a constant value (controllers) are pinned by the page, not metered here.
+    let peak = 0;
+    for (let pi = 0; pi < ports.length; pi += 1) {
+      const view = this.bindNativeGraphNodePortView(hash, ports[pi], frames);
+      if (!view) continue;
+      for (let i = 0; i < frames; i += 1) {
+        const v = view[i];
+        const a = v < 0 ? -v : v;
+        if (a > peak && a < 1e6) peak = a;
+      }
+    }
+    if (peak > (peaks[id] || 0)) peaks[id] = peak;
+  }
+  // Post at ~display rate: ride the held frame parts (latest state wins, peaks reset after).
+  this.postFramePart("levels", { peaks: { ...peaks } });
+  this.nodeLevelPeaks = null;
+};
+
 /**
  * Publish last-sample port values + append block samples into scope rings.
  * Observe-only — never walks JS DSP evaluators.
@@ -10942,6 +10989,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
   options = {},
 ) {
   if (!this.nativeGraphCompiled || !this.nativeGraphHandle || frames < 1) return;
+  if (this.nodeLevelsEnabled) this.accumulateNativeGraphNodeLevels(frames);
   const fillRings = options.fillRings !== false;
   const needModStrips = typeof this.processAdditiveYellowGraphSidecar === "function"
     && !this.nativeYellowGraphFullyNative?.();

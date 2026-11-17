@@ -1423,6 +1423,13 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
           // Unitless cells in the same row keep the same label and value lines.
           const step = NODE_GRAPH_FACE_UNIT_LINE_PX;
           const tcy = top + ch * 0.5;
+          // No unit: the Label / Value pair is centred in the cell (it used to
+          // keep the two upper lines so it lined up with a unit cell beside it).
+          if (!parts.unit && !(String(parts.text ?? "").indexOf(" ") > 0 && String(parts.text ?? "").length * 7.6 > cw - 4)) {
+            nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (tcy - step * 0.5) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
+            nodeGraphModuleFaceText(batch, String(parts.text ?? ""), ox + cx * z, oy + (tcy + step * 0.5) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+            continue;
+          }
           nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (tcy - step) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
           // A two-word value too wide for the cell ("Pitch Bend") wraps onto the
           // unit line instead of squashing; the label stays in place.

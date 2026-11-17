@@ -2714,9 +2714,10 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     label: "Blend",
     aria: "Stereo blend mode",
     id: "nodeTraceDisplayStereoBlend",
-    title: "How overlapping ink composites (same modes as 1D Waterfall). R+B=G = coverage mix (red+blue→green); on a single disc it is Add onto the plate.",
+    title: "How overlapping ink composites (same modes as 1D Waterfall). R+B=White = coverage mix (overlap of the two channels is white); R+B=G = the same with the classic complement (red+blue overlap is green); on a single disc it is Add onto the plate.",
     options: Object.freeze([
-      Object.freeze({ value: "combine", label: "R+B=G" }),
+      Object.freeze({ value: "combine", label: "R+B=White" }),
+      Object.freeze({ value: "combine-green", label: "R+B=G" }),
       Object.freeze({ value: "lighter", label: "Add" }),
       Object.freeze({ value: "screen", label: "Screen" }),
       Object.freeze({ value: "source-over", label: "Over" }),

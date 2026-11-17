@@ -3350,6 +3350,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "velvet_reverb",
+      "label": "Velvet Reverb",
+      "targetType": "velvetReverb",
+      "kind": "reverb",
+      "source": "native_modules/velvet_reverb/velvet_reverb.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/velvet_reverb/velvet_reverb.cpp",
+      "localSourceUrl": "/native_modules/velvet_reverb/velvet_reverb.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/velvet_reverb/velvet_reverb.wasm",
+      "wasmUrl": "native_modules/velvet_reverb/velvet_reverb.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "vibrato_generator",
       "label": "Vibrato Generator",
       "targetType": "vibratoGenerator",

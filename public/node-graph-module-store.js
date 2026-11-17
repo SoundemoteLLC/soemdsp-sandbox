@@ -1087,9 +1087,15 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   velvetNoise: {
     category: "noise",
-    description: "Real-time Velvet Noise generator and Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser.",
+    description: "Velvet Noise event generator: random events (trigger, sinc, PolyBLEP saw, half sine, sine, rect sine), random-sign or bipolar. A starting point for rain, weather and vinyl dust.",
     label: "Velvet Noise",
-    notes: ["velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "generator", "noise", "native"],
+    notes: ["velvet noise", "event generator", "sparse", "sinc", "polyblep", "saw", "rain", "vinyl", "dust", "crackle", "generator", "noise", "native"],
+  },
+  velvetReverb: {
+    category: "space",
+    description: "Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser: a sparse-tap reverb with Decay and Tail Darkness.",
+    label: "Velvet Reverb",
+    notes: ["velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
   randomWalk: {
     category: "noise",
@@ -3854,6 +3860,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   velvetNoise: {
     source: "native_modules/velvet_noise/velvet_noise.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/velvet_noise/velvet_noise.cpp",
+  },
+  velvetReverb: {
+    source: "native_modules/velvet_reverb/velvet_reverb.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/velvet_reverb/velvet_reverb.cpp",
   },
   pumpCurve: {
     source: "native_modules/pump_curve/pump_curve.cpp",

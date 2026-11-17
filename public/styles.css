@@ -7453,7 +7453,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   --node-grid-reveal-spread: 0.78;
   --node-grid-line-alpha: 0.2;
   --node-text-light-color-rgb: 243 241 236;
-  --node-workspace-bg: #1d1b1b;
+  --node-workspace-bg: #1a1a1a;
   --node-body-row-gap: 2px;
   --node-body-row-height: 30px;
   --node-header-gap: 0;
@@ -25884,4 +25884,18 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
 
 #nodeParameterMetadataPopover #metadataParameterSlider > .node-slider-readout .node-slider-readout-unit {
   color: var(--node-slider-unit-color, #7fc7d9);
+}
+
+/* UI Dev colour hex text: click to copy. */
+output[id^="nodeUiDev"][for] { cursor: copy; }
+
+/* Room light (phase 2): module halos and the mouse light, added over the modules. */
+.node-gl-graph-light {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: screen;
 }

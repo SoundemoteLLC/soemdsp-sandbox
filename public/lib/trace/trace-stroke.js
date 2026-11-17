@@ -179,7 +179,7 @@
    * painted a black meet stroke. Soft-mix toward screen(C_L, C_R) so the
    * meet never jumps black→white and stays bright when channels cover RGB.
    */
-  function meetColorFromPair(leftRgb01, rightRgb01) {
+  function meetColorClassic(leftRgb01, rightRgb01) {
     const cL = parseRgb01(leftRgb01, [1, 0, 0]);
     const cR = parseRgb01(rightRgb01, [0, 0, 1]);
     const comp = [
@@ -205,8 +205,26 @@
     ];
   }
 
+  /**
+   * Meet color for combine mode: WHITE wherever the two channels overlap.
+   * The two inputs are accepted for the old signature but no longer matter;
+   * the classic complement (red + blue = green) is meetColorClassic.
+   */
+  function meetColorFromPair() {
+    return [1, 1, 1];
+  }
+
+  // Overlap colour for a blend mode: R+B=G ("combine-green") keeps the classic
+  // complement, every other mode (R+B=White, "combine") paints white.
+  function meetColorForMode(mode, leftRgb01, rightRgb01) {
+    return String(mode || "") === "combine-green"
+      ? meetColorClassic(leftRgb01, rightRgb01)
+      : meetColorFromPair(leftRgb01, rightRgb01);
+  }
+
   const STEREO_BLEND_MODES = Object.freeze([
     "combine",
+    "combine-green",
     "lighter",
     "screen",
     "source-over",
@@ -231,6 +249,8 @@
     normalizeStereoBlend,
     STEREO_BLEND_MODES,
     meetColorFromPair,
+    meetColorClassic,
+    meetColorForMode,
     parseRgb01,
     budgetPoints,
     pointBudget,

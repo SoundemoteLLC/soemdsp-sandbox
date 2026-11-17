@@ -602,15 +602,15 @@ const shuffled = (n) => {
 
 // ---------------------------------------------------------------- 7. shared memory pool
 {
-  const VELVET = 263; // Velvet Noise: ~8.8 MB of buffers per instance, taken from the pool
-  check(x.soemdsp_graph_type_uses_pool(VELVET) === 1 && x.soemdsp_graph_type_uses_pool(CLIP) === 0, "pool: Velvet Noise is a pool module, Soft Clipper is not");
+  const VELVET = 265; // Velvet Reverb: ~8.8 MB of buffers per instance, taken from the pool
+  check(x.soemdsp_graph_type_uses_pool(VELVET) === 1 && x.soemdsp_graph_type_uses_pool(263) === 1 && x.soemdsp_graph_type_uses_pool(CLIP) === 0, "pool: Velvet Noise and Velvet Reverb are pool modules, Soft Clipper is not");
   const before = x.soemdsp_memory_stat(0);
   const cap = x.soemdsp_graph_type_capacity(VELVET);
   check(cap === x.soemdsp_graph_limit(1) && x.soemdsp_memory_stat(0) === before, `pool: capacity of a pool module is the node count (${cap}) and asking allocates nothing`);
   const h = fresh();
   for (let i = 0; i < 3; i++) x.soemdsp_graph_add_node(h, 300 + i, VELVET);
   const used = x.soemdsp_memory_stat(0) - before;
-  check(used > 20e6 && used < 30e6, `pool: 3 Velvet Noise instances took ${(used / 1048576).toFixed(1)} MB`);
+  check(used > 20e6 && used < 30e6, `pool: 3 Velvet Reverb instances took ${(used / 1048576).toFixed(1)} MB`);
   x.soemdsp_graph_destroy(h);
   const committed = x.soemdsp_memory_stat(1);
   const h2 = fresh();

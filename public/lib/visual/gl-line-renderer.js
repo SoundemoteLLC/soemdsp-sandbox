@@ -295,7 +295,9 @@ uniform vec2 uVp;
 uniform float uDevice;
 varying vec2 vUv;
 varying vec4 vTint;
+varying vec2 vWorld;
 void main() {
+  vWorld = position;
   if (uPixel > 0.5) {
     vec2 css = (position - uCam.xy) * max(uCam.z, 0.0001);
     vec2 dev = css * uDevice;
@@ -313,8 +315,13 @@ uniform sampler2D tex;
 uniform float alpha;
 uniform vec4 tint;
 uniform float mode;
+// Module text in a dark room: uTextDark is how much the text is dimmed (0 = not at all); the mouse lamp
+// (x, y, radius, strength) lifts that dimming around the cursor, so text near it gets brighter.
+uniform float uTextDark;
+uniform vec4 uLamp;
 varying vec2 vUv;
 varying vec4 vTint;
+varying vec2 vWorld;
 void main() {
   vec4 c = texture2D(tex, vUv);
   if (mode > 2.5) {
@@ -324,7 +331,16 @@ void main() {
     gl_FragColor = c;
   } else if (mode > 0.5) {
     // Per-vertex tint (batched glyphs / tinted sprites) x coverage.
-    gl_FragColor = vec4(vTint.rgb, vTint.a * c.a);
+    float textF = 1.0;
+    vec3 textRgb = vTint.rgb;
+    if (uTextDark > 0.0) {
+      float ld = length(vWorld - uLamp.xy) / max(uLamp.z, 1.0);
+      float lit = uLamp.w > 0.0 ? clamp(uLamp.w * exp(-1.6 * ld * ld), 0.0, 1.0) : 0.0;
+      textF = 1.0 - uTextDark * (1.0 - lit);
+      // Reflecting the lamp: past full brightness the glyph lifts toward white.
+      textRgb = mix(textRgb, vec3(1.0), 0.45 * lit * lit);
+    }
+    gl_FragColor = vec4(textRgb, vTint.a * c.a * textF);
   } else {
     gl_FragColor = vec4(c.rgb, c.a * alpha);
   }
@@ -383,6 +399,92 @@ void main() {
   gl_FragColor = vec4(0.886, 0.659, 0.427, 0.34);
 }
 `;
+  // Module lights, on the GPU. One pass over the view: for every module an inverse-square falloff of
+  // the distance to its rounded rectangle, I = 1 / (1 + (d / d0)^2) windowed to zero at the reach,
+  // in the original cyan-to-amber module light plus a light in the stroke colour.
+  const LIGHT_FS = `
+precision highp float;
+varying highp vec2 vPx;
+uniform int uCount;
+uniform highp vec4 uRect[64];
+// x: reach (world px), y: module light alpha, z: stroke light alpha, w: corner radius
+uniform highp vec4 uGlow[64];
+uniform vec4 uStrokeRgb[64];
+// The original ellipse: radii = max(uGridMin, (1.18 w, 1.35 h)) * uSpread.
+uniform vec2 uGridMin;
+uniform float uSpread;
+// Grid, revealed near modules and the mouse (was a CSS mask): world cell, colour + line alpha,
+// reveal spread, module reveal strength, mouse (x, y, radius, amount), screen px per world px.
+uniform float uGridOn;
+uniform vec2 uGridCell;
+uniform vec4 uGridRgba;
+uniform float uGridSpread;
+uniform float uModuleAmt;
+uniform highp vec4 uMouse;
+uniform float uZoomPx;
+void main() {
+  vec3 cyan = vec3(0.498, 0.780, 0.851);
+  vec3 amber = vec3(0.886, 0.659, 0.427);
+  vec4 acc = vec4(0.0);
+  float reveal = 0.0;
+  for (int i = 0; i < 64; i++) {
+    if (i >= uCount) break;
+    vec4 r = uRect[i];
+    vec2 half2 = r.zw * 0.5;
+    vec2 c = r.xy + half2;
+    float rad = min(uGlow[i].w, min(half2.x, half2.y));
+    vec2 q = abs(vPx - c) - half2 + vec2(rad);
+    float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - rad;
+    if (uGridOn > 0.5) {
+      vec2 radiiG = vec2(max(uGridMin.x, 1.18 * r.z), max(uGridMin.y, 1.35 * r.w)) * uGridSpread;
+      float tg = length((vPx - c) / radiiG);
+      float ug = max(tg - 0.5, 0.0) / 0.5;
+      float rg = (1.0 / (1.0 + (ug / 0.3) * (ug / 0.3))) * (1.0 - smoothstep(0.55, 1.0, ug));
+      reveal = max(reveal, rg);
+    }
+    // Module light (the original ellipse around the module centre; the module hides its inside).
+    vec2 radii = vec2(max(uGridMin.x, 1.18 * r.z), max(uGridMin.y, 1.35 * r.w)) * uSpread;
+    float te = length((vPx - c) / radii);
+    float ue = max(te - 0.5, 0.0) / 0.5;
+    if (ue < 1.0) {
+      float fe = (1.0 / (1.0 + (ue / 0.3) * (ue / 0.3))) * (1.0 - smoothstep(0.55, 1.0, ue));
+      vec3 baseCol = mix(cyan, amber, smoothstep(0.0, 0.7, ue));
+      float a1 = uGlow[i].y * fe;
+      acc.rgb += (1.0 - acc.a) * baseCol * a1;
+      acc.a += (1.0 - acc.a) * a1;
+    }
+    // Stroke light: the module's own shape (distance to its rounded rectangle), inverse-square.
+    float u = max(sd, 0.0) / max(uGlow[i].x, 1.0);
+    if (u < 1.0) {
+      float fall = (1.0 / (1.0 + (u / 0.3) * (u / 0.3))) * (1.0 - smoothstep(0.55, 1.0, u));
+      float a2 = uGlow[i].z * fall;
+      acc.rgb += (1.0 - acc.a) * uStrokeRgb[i].rgb * a2;
+      acc.a += (1.0 - acc.a) * a2;
+    }
+  }
+  if (uGridOn > 0.5) {
+    // Distance (device px) from this pixel to the nearest grid line, line one device px wide. Box
+    // filtered: a line that lands between pixels shares its energy instead of popping on and off while
+    // the zoom changes. Lines too dense to read (cells under ~5 px) fade out instead of aliasing.
+    vec2 cellDev = uGridCell * uZoomPx;
+    vec2 fd = mod(vPx, uGridCell) * uZoomPx;
+    vec2 dist = min(fd, cellDev - fd);
+    vec2 lineCov = clamp(vec2(1.0) - dist, 0.0, 1.0);
+    float cov = max(lineCov.x * smoothstep(4.0, 12.0, cellDev.x), lineCov.y * smoothstep(4.0, 12.0, cellDev.y));
+    float rv = reveal * uModuleAmt;
+    if (uMouse.w > 0.0) {
+      float mt = length(vPx - uMouse.xy) / max(uMouse.z, 1.0);
+      float mr = uMouse.w * (1.0 / (1.0 + (mt / 0.35) * (mt / 0.35))) * (1.0 - smoothstep(0.6, 1.0, mt));
+      rv = 1.0 - (1.0 - rv) * (1.0 - clamp(mr, 0.0, 1.0));
+    }
+    float gridA = uGridRgba.a * cov * rv;
+    acc.rgb += (1.0 - acc.a) * uGridRgba.rgb * gridA;
+    acc.a += (1.0 - acc.a) * gridA;
+  }
+  if (acc.a < 0.002) discard;
+  gl_FragColor = acc;
+}
+`;
   const OUT_VS = `
 attribute vec2 position;
 attribute vec2 pixel;
@@ -429,6 +531,9 @@ uniform highp vec4 uPlate;
 uniform vec4 uPlateColor;
 uniform vec4 uFill;
 uniform float uStroke;
+// Plate corners: (top radius, top shape, bottom radius, bottom shape). Radius in
+// plate units, shape 0 round, 1 squircle, 2 pill (full end). All zero = square.
+uniform vec4 uRound;
 uniform int uCount;
 uniform vec4 uJack[24];
 uniform vec4 uJackColor[24];
@@ -439,6 +544,10 @@ uniform highp vec4 uCut[16];
 uniform highp float uPixel;
 uniform highp vec3 uCam;
 uniform highp float uDevice;
+// Room light: the ambient dim quads (uDimShape = 1) are lifted around a lamp, so a lit spot shows
+// the surface at its own colour instead of having white added to it. (x, y, radius, strength).
+uniform highp vec4 uLight;
+uniform float uDimShape;
 void main() {
   vec2 plateMin = uPlate.xy;
   vec2 plateMax = uPlate.xy + uPlate.zw;
@@ -460,8 +569,24 @@ void main() {
   }
   vec2 c = (plateMin + plateMax) * 0.5;
   vec2 halfSize = (plateMax - plateMin) * 0.5;
-  vec2 q = abs(px - c) - halfSize;
-  float sdRect = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  vec2 pc = px - c;
+  bool topHalf = pc.y < 0.0;
+  float cornerR = topHalf ? uRound.x : uRound.z;
+  float cornerShape = topHalf ? uRound.y : uRound.w;
+  if (uPixel > 0.5) cornerR *= z * devScale;
+  float maxR = min(halfSize.x, halfSize.y);
+  cornerR = cornerShape > 1.5 ? maxR : min(max(cornerR, 0.0), maxR);
+  vec2 q = abs(pc) - halfSize + vec2(cornerR);
+  vec2 qm = max(q, 0.0);
+  float cornerLen;
+  if (cornerShape > 0.5 && cornerShape < 1.5) {
+    // Squircle (superellipse, exponent 4): a flatter corner that meets the walls more gently.
+    vec2 q2 = qm * qm;
+    cornerLen = sqrt(sqrt(q2.x * q2.x + q2.y * q2.y));
+  } else {
+    cornerLen = length(qm);
+  }
+  float sdRect = cornerLen + min(max(q.x, q.y), 0.0) - cornerR;
   // The plate is the rectangle minus the inside half of every jack (a disk,
   // or a square for param jacks, centred on the wall). sd > 0 is outside it.
   // Param and signal jacks take this one path.
@@ -485,9 +610,19 @@ void main() {
       : length(px - jack) - radius;
     if (-d > sd) {
       sd = -d;
-      strokeCol = vec4(uJackColor[i].rgb, uPlateColor.a);
+      strokeCol = vec4(uJackColor[i].rgb, uJackColor[i].a); // the plate passes each jack stroke its own alpha (lit jacks: 1)
       jackEdge = 1.0 - square;
     }
+  }
+  // Stroke glow (uDimShape 4): one smooth exponential falloff outside the plate, radius uStroke, in
+  // the plate colour. The stroke is a light source: this does not depend on the mouse lamp.
+  if (uDimShape > 3.5) {
+    float glowR = max(uPixel > 0.5 ? uStroke * z * devScale : uStroke, 1.0);
+    float g = sd > 0.0 ? exp(-sd / glowR) : 0.0;
+    float ga = uPlateColor.a * g;
+    if (ga < 0.004) discard;
+    gl_FragColor = vec4(uPlateColor.rgb, min(ga, 1.0));
+    return;
   }
   // One stroke for wall and jack: the band 0 < sd <= strokePx outside the
   // shape, where the plate stroke has always sat. A jack meets the wall in a
@@ -542,6 +677,18 @@ void main() {
   // Stroke and fill cover disjoint parts of the pixel, so they add.
   float strokeA = band * strokeCol.a;
   float plateA = (1.0 - inner) * uFill.a;
+  if (uDimShape > 0.5 && uLight.w > 0.0) {
+    float ld = length(vPx - uLight.xy) / max(uLight.z, 1.0);
+    float near = uLight.w * exp(-2.0 * ld * ld);
+    // 1: the ambient dark, lifted near the lamp. 2: a reflected shine, strongest near the lamp.
+    // 3: the stroke glow rim, brightened near the lamp.
+    float scale = uDimShape > 2.5 ? 1.0 + 2.5 * near : (uDimShape > 1.5 ? near : 1.0 - near);
+    strokeA *= scale;
+    plateA *= scale;
+  } else if (uDimShape > 1.5 && uDimShape < 2.5) {
+    strokeA = 0.0;
+    plateA = 0.0;
+  }
   float a = strokeA + plateA;
   if (a < 0.004) discard;
   vec3 rgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA) / a;
@@ -591,6 +738,7 @@ void main() {
       const imgProgram = link(gl, IMG_VS, IMG_FS);
       const outProgram = link(gl, OUT_VS, OUT_FS, { es3: true });
       const veilProgram = link(gl, OUT_VS, VEIL_FS);
+      const lightProgram = link(gl, OUT_VS, LIGHT_FS, { es3: true });
       state = {
         gl,
         dev,
@@ -603,6 +751,9 @@ void main() {
         outPlateColor: gl.getUniformLocation(outProgram, "uPlateColor"),
         outFill: gl.getUniformLocation(outProgram, "uFill"),
         outStroke: gl.getUniformLocation(outProgram, "uStroke"),
+        outRound: gl.getUniformLocation(outProgram, "uRound"),
+        outLight: gl.getUniformLocation(outProgram, "uLight"),
+        outDimShape: gl.getUniformLocation(outProgram, "uDimShape"),
         outCount: gl.getUniformLocation(outProgram, "uCount"),
         outCutCount: gl.getUniformLocation(outProgram, "uCutCount"),
         outCut: gl.getUniformLocation(outProgram, "uCut[0]"),
@@ -612,6 +763,27 @@ void main() {
         outCamCam: gl.getUniformLocation(outProgram, "uCam"),
         outCamVp: gl.getUniformLocation(outProgram, "uVp"),
         outCamDevice: gl.getUniformLocation(outProgram, "uDevice"),
+        lightProgram,
+        lightPos: gl.getAttribLocation(lightProgram, "position"),
+        lightPx: gl.getAttribLocation(lightProgram, "pixel"),
+        lightCount: gl.getUniformLocation(lightProgram, "uCount"),
+        lightRect: gl.getUniformLocation(lightProgram, "uRect[0]"),
+        lightGlow: gl.getUniformLocation(lightProgram, "uGlow[0]"),
+        lightStroke: gl.getUniformLocation(lightProgram, "uStrokeRgb[0]"),
+        lightGridMin: gl.getUniformLocation(lightProgram, "uGridMin"),
+        lightSpread: gl.getUniformLocation(lightProgram, "uSpread"),
+        lightGridOn: gl.getUniformLocation(lightProgram, "uGridOn"),
+        lightGridCell: gl.getUniformLocation(lightProgram, "uGridCell"),
+        lightGridRgba: gl.getUniformLocation(lightProgram, "uGridRgba"),
+        lightGridSpread: gl.getUniformLocation(lightProgram, "uGridSpread"),
+        lightModuleAmt: gl.getUniformLocation(lightProgram, "uModuleAmt"),
+        lightMouse: gl.getUniformLocation(lightProgram, "uMouse"),
+        lightZoomPx: gl.getUniformLocation(lightProgram, "uZoomPx"),
+        lightPlate: gl.getUniformLocation(lightProgram, "uPlate"),
+        lightCamPixel: gl.getUniformLocation(lightProgram, "uPixel"),
+        lightCamCam: gl.getUniformLocation(lightProgram, "uCam"),
+        lightCamVp: gl.getUniformLocation(lightProgram, "uVp"),
+        lightCamDevice: gl.getUniformLocation(lightProgram, "uDevice"),
         veilProgram,
         veilPos: veilProgram ? gl.getAttribLocation(veilProgram, "position") : -1,
         veilPx: veilProgram ? gl.getAttribLocation(veilProgram, "pixel") : -1,
@@ -640,6 +812,8 @@ void main() {
         imgTexLoc: gl.getUniformLocation(imgProgram, "tex"),
         imgAlphaLoc: gl.getUniformLocation(imgProgram, "alpha"),
         imgTintLoc: gl.getUniformLocation(imgProgram, "tint"),
+        imgTextDark: gl.getUniformLocation(imgProgram, "uTextDark"),
+        imgLamp: gl.getUniformLocation(imgProgram, "uLamp"),
         imgModeLoc: gl.getUniformLocation(imgProgram, "mode"),
         imgCamPixel: gl.getUniformLocation(imgProgram, "uPixel"),
         imgCamCam: gl.getUniformLocation(imgProgram, "uCam"),
@@ -759,6 +933,14 @@ void main() {
   }
 
   function push(batch, x, y, lu, lv, len, half, feather, c, caps) {
+    // A layer can send what is drawn "over" (a module's face: slider wells and fills) to a later layer,
+    // after the ambient dim, with its own strength: a weak light source of its own (no spill).
+    let alphaMul = 1;
+    if (batch._over && batch.overLayer) {
+      const target = batch.overLayer;
+      alphaMul = target.alphaMul > 0 ? target.alphaMul : 1;
+      batch = target;
+    }
     // Vertices go straight into a pooled Float32Array (no per-frame JS arrays).
     const glow = batch._glow === true;
     const over = !glow && batch._over === true;
@@ -777,7 +959,7 @@ void main() {
     }
     d[i + 2] = lu; d[i + 3] = lv; d[i + 4] = len; d[i + 5] = half; d[i + 6] = feather;
     d[i + 7] = caps || 0;
-    d[i + 8] = c[0]; d[i + 9] = c[1]; d[i + 10] = c[2]; d[i + 11] = c.length > 3 ? c[3] : 1;
+    d[i + 8] = c[0]; d[i + 9] = c[1]; d[i + 10] = c[2]; d[i + 11] = (c.length > 3 ? c[3] : 1) * alphaMul;
     if (glow) {
       batch.gdata = d;
       batch.gn = i + FLOATS;
@@ -2107,6 +2289,8 @@ void main() {
    * Drawn over the quads.
    */
   function nodeGraphGlLinesText(batch, text, x, y, options = {}) {
+    // A layer may route its text to a later layer (module text drawn after the ambient dim).
+    if (batch && batch.textLayer) batch = batch.textLayer;
     const str = String(text ?? "");
     if (!batch || !str) return;
     const family = options.family || TEXT_DEFAULT_FAMILY;
@@ -2407,6 +2591,12 @@ void main() {
     const { s, w, h } = batch;
     const gl = s.gl;
     useTexturedProgram(s);
+    if (s.imgTextDark) {
+      const dark = batch.textDark > 0 ? batch.textDark : 0;
+      gl.uniform1f(s.imgTextDark, dark);
+      const lamp = dark > 0 && typeof global.nodeGraphRoomLightUniform === "function" ? global.nodeGraphRoomLightUniform() : null;
+      if (s.imgLamp) gl.uniform4f(s.imgLamp, lamp ? lamp[0] : 0, lamp ? lamp[1] : 0, lamp ? lamp[2] : 1, lamp ? lamp[3] : 0);
+    }
     // One draw call per texture run (glyph atlas or colour emoji page).
     for (const t of batch.texts) {
       if (t.end <= t.start || !t.texture) continue;
@@ -2428,6 +2618,7 @@ void main() {
       drawTexturedTinted(s, w, h, batch.tdata, t.start, t.end, t.color ? 3 : 1);
     }
     gl.bindTexture(gl.TEXTURE_2D, null);
+    if (s.imgTextDark) gl.uniform1f(s.imgTextDark, 0);
     const dead = s.deadTextures;
     if (dead && dead.length) {
       for (let i = 0; i < dead.length; i += 1) {
@@ -2929,6 +3120,7 @@ void main() {
     s._drawBatch = batch;
     const colourDst = blend === "add" ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA;
     gl.enable(gl.BLEND);
+    if (batch.lightsOn) drawLights(batch);
     if (batch.images.length) {
       drawImages(batch, alphaDst);
     }
@@ -3203,6 +3395,94 @@ void main() {
 
   const OUT_MAX = 24;
   const CUT_MAX = 16;
+  // Module lights for this batch (camera mode only): items { x, y, w, h, id, base: [r, g, b], reach,
+  // round } in world units. Colours and strengths are resolved at draw time, so they follow the module
+  // levels on every replayed frame.
+  function nodeGraphGlLinesLights(batch, items, opts) {
+    if (!batch || !batch.camera) return;
+    batch.lights = Array.isArray(items) ? items.slice(0, 64) : null;
+    batch.lightOpts = opts || {};
+    batch.lightsOn = batch.lights !== null;
+  }
+
+  function drawLights(batch) {
+    const { s } = batch;
+    const gl = s.gl;
+    const cam = batch.camera;
+    const items = batch.lights;
+    if (!s.lightProgram || !cam || !items) return;
+    const grid = typeof global.nodeGraphGridLightParams === "function" ? global.nodeGraphGridLightParams() : null;
+    if (!items.length && !grid) return;
+    const rect = new Float32Array(64 * 4);
+    const glow = new Float32Array(64 * 4);
+    const stroke = new Float32Array(64 * 4);
+    const bright = typeof global.nodeGraphModuleLightBrightness === "function" ? global.nodeGraphModuleLightBrightness() : 1;
+    if (!(bright > 0) && !grid) return;
+    const levelOf = typeof global.nodeGraphModuleStrokeFollowLevel === "function" ? global.nodeGraphModuleStrokeFollowLevel : null;
+    const loudOf = typeof global.nodeGraphStrokeLoudColor === "function" ? global.nodeGraphStrokeLoudColor : null;
+    for (let i = 0; i < items.length; i += 1) {
+      const it = items[i];
+      const k = levelOf ? levelOf(it.id) : 0;
+      const loud = k > 0 && loudOf ? loudOf(it.id) : null;
+      rect.set([it.x, it.y, it.w, it.h], i * 4);
+      glow.set([it.reach, 0.16 * bright, bright * (0.1 + 0.25 * k), it.round || 0], i * 4);
+      stroke.set([
+        loud ? it.base[0] + (loud[0] - it.base[0]) * k : it.base[0],
+        loud ? it.base[1] + (loud[1] - it.base[1]) * k : it.base[1],
+        loud ? it.base[2] + (loud[2] - it.base[2]) * k : it.base[2],
+        0,
+      ], i * 4);
+    }
+    gl.useProgram(s.lightProgram);
+    bindCam(gl, { pixel: s.lightCamPixel, cam: s.lightCamCam, vp: s.lightCamVp, device: s.lightCamDevice }, batch);
+    gl.uniform1i(s.lightCount, items.length);
+    gl.uniform4fv(s.lightRect, rect);
+    gl.uniform4fv(s.lightGlow, glow);
+    gl.uniform4fv(s.lightStroke, stroke);
+    const lo = batch.lightOpts || {};
+    if (s.lightGridMin) gl.uniform2f(s.lightGridMin, lo.gridMinX || 140, lo.gridMinY || 140);
+    if (s.lightSpread) gl.uniform1f(s.lightSpread, lo.spread || 0.78);
+    const scalePx = batch.scale > 0 ? batch.scale : 1;
+    if (s.lightGridOn) gl.uniform1f(s.lightGridOn, grid ? 1 : 0);
+    if (grid) {
+      gl.uniform2f(s.lightGridCell, grid.cell[0], grid.cell[1]);
+      gl.uniform4f(s.lightGridRgba, grid.rgba[0], grid.rgba[1], grid.rgba[2], grid.rgba[3]);
+      gl.uniform1f(s.lightGridSpread, grid.spread);
+      gl.uniform1f(s.lightModuleAmt, grid.moduleAmt);
+      const mp = grid.mouse;
+      // Mouse point is workspace screen px: to world with this frame's camera.
+      if (mp) gl.uniform4f(s.lightMouse, cam.x + mp.x / cam.zoom, cam.y + mp.y / cam.zoom, grid.mouseRadius, grid.mouseAmount);
+      else gl.uniform4f(s.lightMouse, 0, 0, 1, 0);
+      gl.uniform1f(s.lightZoomPx, cam.zoom * scalePx);
+    }
+    if (s.lightPlate) gl.uniform4f(s.lightPlate, 0, 0, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, s.outBuf);
+    gl.enableVertexAttribArray(s.lightPos);
+    gl.enableVertexAttribArray(s.lightPx);
+    gl.vertexAttribPointer(s.lightPos, 2, gl.FLOAT, false, 16, 0);
+    gl.vertexAttribPointer(s.lightPx, 2, gl.FLOAT, false, 16, 8);
+    const scale = batch.scale > 0 ? batch.scale : 1;
+    const x0 = cam.x;
+    const y0 = cam.y;
+    const x1 = cam.x + batch.w / scale / cam.zoom;
+    const y1 = cam.y + batch.h / scale / cam.zoom;
+    const c = [[x0, y0], [x1, y0], [x0, y1], [x1, y0], [x1, y1], [x0, y1]];
+    const data = new Float32Array(24);
+    for (let i = 0; i < 6; i += 1) {
+      data[i * 4] = c[i][0];
+      data[i * 4 + 1] = c[i][1];
+      data[i * 4 + 2] = c[i][0];
+      data[i * 4 + 3] = c[i][1];
+    }
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
+    // Premultiplied light over whatever is below (transparent canvas: the wires and background show).
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(s.lightPos);
+    gl.disableVertexAttribArray(s.lightPx);
+  }
+
   function nodeGraphGlLinesVeil(batch, x, y, w, h, period) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
@@ -3254,7 +3534,7 @@ void main() {
     gl.disableVertexAttribArray(s.veilPx);
   }
 
-  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, cuts) {
+  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, cuts, round, nodeId, selected, dimShape, glow) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
     const sx = x * k;
@@ -3274,10 +3554,14 @@ void main() {
       list.push({ x: jx, y: jy, r: jack.square ? -r : r, rgba: color, inlet: jack.inlet === true });
     }
     batch.outlines.push({
-      x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
+      nodeId, selected: selected === true, dimShape: dimShape === true ? 1 : ([2, 3, 4].includes(Number(dimShape)) ? Number(dimShape) : 0), glow: Number(glow) > 0 ? Number(glow) : 0, x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
       fill: fill || [0.09, 0.1, 0.12, 1],
       jacks: list,
       cuts: (Array.isArray(cuts) ? cuts : []).slice(0, CUT_MAX).map((c) => [c.y0 * k, c.y1 * k, c.side < 0 ? -1 : 1, 0]),
+      // [top radius, top shape, bottom radius, bottom shape]; radius in the same units as x / y.
+      round: Array.isArray(round) && round.length >= 4
+        ? [Math.max(0, Number(round[0]) || 0) * k, Number(round[1]) || 0, Math.max(0, Number(round[2]) || 0) * k, Number(round[3]) || 0]
+        : null,
     });
   }
 
@@ -3297,7 +3581,7 @@ void main() {
     const colorData = new Float32Array(OUT_MAX * 4);
     for (let n = 0; n < batch.outlines.length; n += 1) {
       const shape = batch.outlines[n];
-      const pad = shape.stroke + 6;
+      const pad = shape.dimShape === 4 ? shape.stroke * 3.6 + 6 : shape.stroke + 6;
       const x0 = shape.x - pad;
       const y0 = shape.y - pad;
       const x1 = shape.x + shape.w + pad;
@@ -3318,10 +3602,53 @@ void main() {
       gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
       gl.uniform4f(s.outPlate, shape.x, shape.y, shape.w, shape.h);
       const col = shape.rgba || [1, 1, 1, 1];
-      gl.uniform4f(s.outPlateColor, col[0], col[1], col[2], col.length > 3 ? col[3] : 1);
+      // Stroke animation (UI Dev "animate stroke"): the stroke moves with the module's output
+      // level toward the amber-pink "loud" colour and toward full alpha. A selected module animates
+      // the same way from its brighter selected stroke, so it always reads as selected.
+      const baseA = col.length > 3 ? col[3] : 1;
+      let pc = [col[0], col[1], col[2], baseA];
+      if (!shape.erase && typeof globalThis.nodeGraphModuleStrokeFollowLevel === "function") {
+        const k = globalThis.nodeGraphModuleStrokeFollowLevel(shape.nodeId);
+        if (k > 0) {
+          const loud = (typeof globalThis.nodeGraphStrokeLoudColor === "function" && globalThis.nodeGraphStrokeLoudColor(shape.nodeId)) || [1, 1, 1, 1];
+          const loudA = loud.length > 3 ? loud[3] : 1;
+          pc = [col[0] + (loud[0] - col[0]) * k, col[1] + (loud[1] - col[1]) * k, col[2] + (loud[2] - col[2]) * k, baseA + (loudA - baseA) * k];
+        }
+      }
+      // Stroke glow rim: the stroke colour moving toward the loud colour with the module level, at a
+      // strength that is quiet at rest and a little stronger when active and in a dark room.
+      if (shape.glow > 0) {
+        const k = typeof globalThis.nodeGraphModuleStrokeFollowLevel === "function" ? globalThis.nodeGraphModuleStrokeFollowLevel(shape.nodeId) : 0;
+        const dark = typeof globalThis.nodeGraphRoomAmbientDark === "function" ? globalThis.nodeGraphRoomAmbientDark() : 0;
+        const loud = k > 0 && typeof globalThis.nodeGraphStrokeLoudColor === "function" ? globalThis.nodeGraphStrokeLoudColor(shape.nodeId) : null;
+        const gr = loud ? col[0] + (loud[0] - col[0]) * k : col[0];
+        const gg = loud ? col[1] + (loud[1] - col[1]) * k : col[1];
+        const gb = loud ? col[2] + (loud[2] - col[2]) * k : col[2];
+        pc = [gr, gg, gb, shape.glow * (0.35 + 0.65 * k) * (0.3 + 0.7 * dark) * 1.0];
+      }
+      // Output module: glows red while the ear protector is engaged.
+      let strokeW = shape.stroke;
+      if (!shape.erase && !(shape.glow > 0) && typeof globalThis.nodeGraphOutputOverLevel === "function" && globalThis.nodeGraphIsOutputModule?.(shape.nodeId)) {
+        const over = globalThis.nodeGraphOutputOverLevel();
+        if (over > 0) {
+          const hot = (typeof globalThis.nodeGraphOutputOverheatColor === "function" && globalThis.nodeGraphOutputOverheatColor()) || [1, 0.1, 0.1, 1];
+          pc = [pc[0] + (hot[0] - pc[0]) * over, pc[1] + (hot[1] - pc[1]) * over, pc[2] + (hot[2] - pc[2]) * over, pc[3] + ((hot.length > 3 ? hot[3] : 1) - pc[3]) * over];
+        }
+      }
+      gl.uniform4f(s.outPlateColor, pc[0], pc[1], pc[2], pc[3]);
       const fill = shape.fill || [0, 0, 0, 0];
       if (s.outFill) gl.uniform4f(s.outFill, fill[0], fill[1], fill[2], fill.length > 3 ? fill[3] : 1);
-      gl.uniform1f(s.outStroke, shape.stroke);
+      gl.uniform1f(s.outStroke, strokeW);
+      if (s.outDimShape) {
+        gl.uniform1f(s.outDimShape, shape.dimShape || 0);
+        // The mouse lamp brightens module TEXT only (see the glyph shader); the body is not lit by it.
+        const lamp = null;
+        if (s.outLight) gl.uniform4f(s.outLight, lamp ? lamp[0] : 0, lamp ? lamp[1] : 0, lamp ? lamp[2] : 1, lamp ? lamp[3] : 0);
+      }
+      if (s.outRound) {
+        const rd = shape.round || [0, 0, 0, 0];
+        gl.uniform4f(s.outRound, rd[0], rd[1], rd[2], rd[3]);
+      }
       jackData.fill(0);
       colorData.fill(0);
       const count = Math.min(OUT_MAX, shape.jacks.length);
@@ -3669,6 +3996,7 @@ void main() {
     nodeGraphGlLinesRect,
     nodeGraphGlLinesFadeRect,
     nodeGraphGlLinesModuleOutline,
+    nodeGraphGlLinesLights,
     nodeGraphGlLinesVeil,
     nodeGraphGlLinesTriangle,
     nodeGraphGlLinesFillUnder,

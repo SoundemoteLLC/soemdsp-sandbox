@@ -748,7 +748,14 @@ function updateNodeGraphGridHeatmap(options = {}) {
   const deep = typeof nodeGraphRoomDimDeep === "function"
     ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDimDeep())))
     : (roomDim <= 0.5 ? 0 : Math.min(1, (roomDim - 0.5) * 2));
-  const moduleAmt = Math.max(0, 1 - deep);
+  // The grid and the module lamps never go fully dark with the room: a dark room is a circuit board
+  // with its traces still faintly lit.
+  const moduleAmt = Math.max(NODE_GRID_DARK_FLOOR, 1 - deep);
+  // Stroke colours for the stroke-coloured module light (idle / selected), read once per update.
+  const strokeStyle = getComputedStyle(workspace);
+  const parseStroke = typeof nodeGraphGlGraphParseCssColor === "function" ? nodeGraphGlGraphParseCssColor : null;
+  const idleStroke = parseStroke ? parseStroke(strokeStyle.getPropertyValue("--node-module-idle-stroke"), [0.8, 0.8, 0.85, 0.6]) : [0.8, 0.8, 0.85, 0.6];
+  const selectedStroke = parseStroke ? parseStroke(strokeStyle.getPropertyValue("--node-module-selected-stroke"), [0.95, 0.7, 0.7, 1]) : [0.95, 0.7, 0.7, 1];
   const moduleBright = lightBright * moduleAmt;
   // Module world bounds cannot change during a pan/zoom gesture: reuse the
   // last measured box instead of forcing layout on every camera frame.
@@ -765,24 +772,8 @@ function updateNodeGraphGridHeatmap(options = {}) {
     const centerY = (bounds.top + (bounds.bottom - bounds.top) / 2) * zoom + (nodeGraphFiniteNumber(origin.y));
     const baseX = Math.max(nodeGraphGridWidth() * 5, (bounds.right - bounds.left) * 1.18) * zoom;
     const baseY = Math.max(nodeGraphGridHeight() * 5, (bounds.bottom - bounds.top) * 1.35) * zoom;
-    if (wantLight && moduleBright > 0) {
-      const radiusX = baseX * lightSpread;
-      const radiusY = baseY * lightSpread;
-      const a0 = (0.18 * moduleBright).toFixed(3);
-      const a1 = (0.15 * moduleBright).toFixed(3);
-      const a2 = (0.10 * moduleBright).toFixed(3);
-      const a3 = (0.045 * moduleBright).toFixed(3);
-      glowLayers.push(
-        `radial-gradient(ellipse ${radiusX.toFixed(2)}px ${radiusY.toFixed(2)}px at ${centerX.toFixed(2)}px ${centerY.toFixed(2)}px, rgba(127, 199, 217, ${a0}) 0%, rgba(127, 199, 217, ${a1}) 18%, rgba(226, 168, 109, ${a2}) 38%, rgba(226, 168, 109, ${a3}) 62%, transparent 92%)`,
-      );
-    }
-    if (wantGrid && moduleAmt > 0.001) {
-      const maskX = baseX * gridSpread;
-      const maskY = baseY * gridSpread;
-      maskLayers.push(
-        `radial-gradient(ellipse ${maskX.toFixed(2)}px ${maskY.toFixed(2)}px at ${centerX.toFixed(2)}px ${centerY.toFixed(2)}px, rgb(0 0 0 / ${moduleAmt.toFixed(3)}) 0%, rgb(0 0 0 / ${(0.95 * moduleAmt).toFixed(3)}) 22%, rgb(0 0 0 / ${(0.72 * moduleAmt).toFixed(3)}) 48%, rgb(0 0 0 / ${(0.28 * moduleAmt).toFixed(3)}) 74%, transparent 94%)`,
-      );
-    }
+    // Module lights are drawn on the GPU (gl-line-renderer: lights pass), not as CSS gradients.
+    // The grid reveal around modules is drawn on the GPU (gl-line-renderer lights pass).
   }
   // Screen glow is the veil SDF (sharp shape, smoothstep outward). Do not
   // stamp a CSS ellipse over the glass.
@@ -796,14 +787,8 @@ function updateNodeGraphGridHeatmap(options = {}) {
     && typeof nodeGraphRoomDim === "function") {
     const roomDim = Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDim())));
     if (roomDim > 0.0005) {
-      mouseAmount *= Math.max(0, 1 - roomDim);
+      mouseAmount *= Math.max(NODE_GRID_DARK_FLOOR, 1 - roomDim);
     }
-  }
-  if (mouseAmount > 0 && mouseSpread > 0 && mousePoint) {
-    const radius = Math.max(nodeGraphGridWidth(), nodeGraphGridHeight()) * (3 + 10.5 * mouseSpread) * zoom;
-    maskLayers.push(
-      `radial-gradient(circle ${radius.toFixed(2)}px at ${mousePoint.x.toFixed(2)}px ${mousePoint.y.toFixed(2)}px, rgb(0 0 0 / ${(0.92 * mouseAmount).toFixed(3)}) 0%, rgb(0 0 0 / ${(0.68 * mouseAmount).toFixed(3)}) 32%, rgb(0 0 0 / ${(0.24 * mouseAmount).toFixed(3)}) 72%, transparent 96%)`,
-    );
   }
   heatmap.style.setProperty("--node-grid-heatmap", glowLayers.length ? glowLayers.join(", ") : "none");
   const mask = maskLayers.length ? maskLayers.join(", ") : "linear-gradient(transparent, transparent)";
@@ -811,6 +796,78 @@ function updateNodeGraphGridHeatmap(options = {}) {
   heatmap.style.setProperty("--node-grid-heatmap-mask", mask);
 }
 
+// A module light with a physically plausible falloff. The light leaves the module's edge (t = 0.5 of
+// the gradient ellipse, the module hides the inside) and fades as an inverse-square law with a soft
+// knee, I = 1 / (1 + (d / d0)^2), windowed to reach zero at the rim. colorAt(t) -> [r, g, b] bytes.
+// More colour stops, same single CSS gradient: no extra layers, so no extra cost.
+function nodeGraphModuleLightGradient(radiusX, radiusY, cx, cy, colorAt, peak) {
+  const smooth = (a, b, x) => {
+    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  const stops = [0, 0.5, 0.54, 0.58, 0.63, 0.69, 0.76, 0.84, 0.92, 1];
+  const parts = stops.map((t) => {
+    const u = Math.max(0, t - 0.5) / 0.5;
+    const falloff = (1 / (1 + (u / 0.3) * (u / 0.3))) * (1 - smooth(0.55, 1, u));
+    const c = colorAt(t);
+    const a = (peak * falloff).toFixed(4);
+    return `rgba(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])}, ${a}) ${(t * 100).toFixed(1)}%`;
+  });
+  return `radial-gradient(ellipse ${radiusX.toFixed(2)}px ${radiusY.toFixed(2)}px at ${cx.toFixed(2)}px ${cy.toFixed(2)}px, ${parts.join(", ")})`;
+}
+
+// How much of the grid reveal / module light stays in a fully dark room (0..1).
+var NODE_GRID_DARK_FLOOR = 0.75;
+// Grid for the GPU lights pass, or null when the grid is off. World-space cell (the grid is anchored at
+// the world origin), line colour + alpha, how far modules reveal it, and the mouse reveal.
+var nodeGridParamsCache = { at: 0, base: null };
+globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
+  if (!nodeGraphHeatmapWantsGrid()) return null;
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  if (!workspace) return null;
+  const now = performance.now();
+  if (!nodeGridParamsCache.base || now - nodeGridParamsCache.at > 250) {
+    const cs = getComputedStyle(workspace);
+    const rgb = String(cs.getPropertyValue("--node-grid-color-rgb") || "255 255 255").trim().split(/[\s,]+/).map(Number);
+    const visualScale = nodeGraphGridVisualScaleCss(workspace);
+    nodeGridParamsCache = {
+      at: now,
+      base: {
+        cell: [nodeGraphGridWidth() * visualScale, nodeGraphGridHeight() * visualScale],
+        rgba: [(rgb[0] || 255) / 255, (rgb[1] || 255) / 255, (rgb[2] || 255) / 255, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha", 0.2)],
+        spread: Math.max(0.4, Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78))),
+        mouseSpread: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread"))),
+        mouseBase: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount"))),
+      },
+    };
+  }
+  const b = nodeGridParamsCache.base;
+  const roomDim = typeof nodeGraphRoomDim === "function" ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDim()))) : 0;
+  const deep = typeof nodeGraphRoomDimDeep === "function" ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDimDeep()))) : 0;
+  let mouseAmount = b.mouseBase;
+  if (mouseAmount > 0 && nodeGraphMvp?.dimmerCutoutMouseEnabled !== true && roomDim > 0.0005) {
+    mouseAmount *= Math.max(NODE_GRID_DARK_FLOOR, 1 - roomDim);
+  }
+  const mouse = nodeGraphMvp?.mouseLightPoint || null;
+  const active = Boolean(mouse) && mouseAmount > 0 && b.mouseSpread > 0;
+  return {
+    cell: b.cell,
+    rgba: b.rgba,
+    spread: b.spread,
+    moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
+    mouse: active ? mouse : null,
+    mouseRadius: Math.max(nodeGraphGridWidth(), nodeGraphGridHeight()) * (3 + 10.5 * b.mouseSpread),
+    mouseAmount: 0.92 * mouseAmount,
+  };
+};
+// The module light strength the GPU lights pass uses: the workspace brightness setting times how much
+// of the light survives the room being dark.
+globalThis.nodeGraphModuleLightBrightness = function nodeGraphModuleLightBrightness() {
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  const lightBright = Math.max(0, Math.min(3, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-brightness", 1)));
+  const deep = typeof nodeGraphRoomDimDeep === "function" ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDimDeep()))) : 0;
+  return lightBright * Math.max(NODE_GRID_DARK_FLOOR, 1 - deep);
+};
 var nodeGraphHeatmapBoundsCache = new WeakMap();
 
 // Heatmap only (marquee / drag repaint it every frame): node size from a
@@ -921,10 +978,12 @@ function updateNodeGraphMouseLight(event) {
     return;
   }
   scheduleNodeGraphGridHeatmapUpdate();
+  if (typeof nodeGraphGlGraphPresentDisplaysSoon === "function") nodeGraphGlGraphPresentDisplaysSoon();
 }
 
 function clearNodeGraphMouseLight() {
   nodeGraphMvp.mouseLightPoint = null;
+  if (typeof nodeGraphGlGraphPresentDisplaysSoon === "function") nodeGraphGlGraphPresentDisplaysSoon();
   if (nodeGraphHeatmapWantsGrid() || nodeGraphHeatmapWantsLight()) {
     updateNodeGraphGridHeatmap();
   }

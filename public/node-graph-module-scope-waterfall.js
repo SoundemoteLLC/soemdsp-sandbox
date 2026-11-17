@@ -912,12 +912,14 @@ function nodeGraphWaterfallLiveBuffer(spec, settings) {
   return best;
 }
 
-/** R+B=G meet. Same complement as TraceStroke (red+blue → green). */
-function nodeGraphWaterfallMeetRgb(leftRgb, rightRgb) {
+/** Overlap colour of the two channels: white, or the classic complement (red + blue = green) for mode "combine-green". */
+function nodeGraphWaterfallMeetRgb(leftRgb, rightRgb, mode) {
   const l = leftRgb || [255, 0, 0];
   const r = rightRgb || [0, 0, 255];
   let m = null;
-  if (typeof TraceStroke !== "undefined" && typeof TraceStroke.meetColorFromPair === "function") {
+  if (typeof TraceStroke !== "undefined" && typeof TraceStroke.meetColorForMode === "function") {
+    m = TraceStroke.meetColorForMode(mode, l, r);
+  } else if (typeof TraceStroke !== "undefined" && typeof TraceStroke.meetColorFromPair === "function") {
     m = TraceStroke.meetColorFromPair(l, r);
   }
   if (!m || m.length < 3) {
@@ -1007,7 +1009,7 @@ function nodeGraphWaterfallStampFilledSpan(canvas, x, ys, prevEdge, connect, rgb
  */
 function nodeGraphWaterfallStampColumnFills(canvas, x, spans, mode, stampComposite, filled) {
   if (!filled || typeof nodeGraphWaterfallGlStampBar !== "function") return;
-  const meet = (mode === "combine" || mode === "meet") && spans.length === 2;
+  const meet = (mode === "combine" || mode === "combine-green" || mode === "meet") && spans.length === 2;
   if (!meet) {
     for (let i = 0; i < spans.length; i += 1) {
       const span = spans[i];
@@ -1037,7 +1039,7 @@ function nodeGraphWaterfallStampColumnFills(canvas, x, spans, mode, stampComposi
       meetParts,
       left.rgb,
       right.rgb,
-      nodeGraphWaterfallMeetRgb(left.rgb, right.rgb),
+      nodeGraphWaterfallMeetRgb(left.rgb, right.rgb, mode),
     )) {
       return;
     }
@@ -1061,7 +1063,7 @@ function nodeGraphWaterfallStampColumnFills(canvas, x, spans, mode, stampComposi
       parts.overlap,
       null,
       false,
-      nodeGraphWaterfallMeetRgb(left.rgb, right.rgb),
+      nodeGraphWaterfallMeetRgb(left.rgb, right.rgb, mode),
       "source-over",
     );
   }
@@ -2226,7 +2228,7 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
   if (mode === "lighter" || mode === "screen") stampComposite = mode;
   else if (mode === "multiply" || mode === "difference" || mode === "exclusion" || mode === "xor") {
     stampComposite = mode;
-  } else if (mode === "combine" || mode === "meet") {
+  } else if (mode === "combine" || mode === "combine-green" || mode === "meet") {
     stampComposite = "lighter";
   }
   const connectEdge = true;

@@ -29,6 +29,7 @@ $modules = @(
   @{ Name = "noise_gate"; Simd = $false; Exports = @("soemdsp_noise_gate_create", "soemdsp_noise_gate_destroy", "soemdsp_noise_gate_sample", "soemdsp_noise_gate_left", "soemdsp_noise_gate_right", "soemdsp_noise_gate_gain", "soemdsp_noise_gate_env", "soemdsp_noise_gate_version") },
   @{ Name = "fluv_noise"; Simd = $false; Exports = @("soemdsp_fluv_noise_create", "soemdsp_fluv_noise_destroy", "soemdsp_fluv_noise_set_seed", "soemdsp_fluv_noise_sample_stereo", "soemdsp_fluv_noise_left", "soemdsp_fluv_noise_right", "soemdsp_fluv_noise_version") },
   @{ Name = "velvet_noise"; Simd = $false; Exports = @("soemdsp_velvet_noise_create", "soemdsp_velvet_noise_destroy", "soemdsp_velvet_noise_reset", "soemdsp_velvet_noise_set_seed", "soemdsp_velvet_noise_sample", "soemdsp_velvet_noise_right", "soemdsp_velvet_noise_trigger_pos", "soemdsp_velvet_noise_trigger_neg", "soemdsp_velvet_noise_version") },
+  @{ Name = "velvet_reverb"; Simd = $false; Exports = @("soemdsp_velvet_reverb_create", "soemdsp_velvet_reverb_destroy", "soemdsp_velvet_reverb_reset", "soemdsp_velvet_reverb_set_seed", "soemdsp_velvet_reverb_sample", "soemdsp_velvet_reverb_right", "soemdsp_velvet_reverb_version") },
   @{ Name = "pump_curve"; Simd = $false; Exports = @("soemdsp_pump_curve_create", "soemdsp_pump_curve_destroy", "soemdsp_pump_curve_sample", "soemdsp_pump_curve_right", "soemdsp_pump_curve_gain", "soemdsp_pump_curve_env", "soemdsp_pump_curve_version") },
   @{ Name = "sample_delay"; Simd = $false; Exports = @("soemdsp_sample_delay_create", "soemdsp_sample_delay_destroy", "soemdsp_sample_delay_sample", "soemdsp_sample_delay_max_samples", "soemdsp_sample_delay_max_seconds", "soemdsp_sample_delay_version") },
   @{ Name = "exponential_delay"; Simd = $false; Exports = @("soemdsp_exponential_delay_create", "soemdsp_exponential_delay_destroy", "soemdsp_exponential_delay_sample", "soemdsp_exponential_delay_right", "soemdsp_exponential_delay_voice_count", "soemdsp_exponential_delay_voice_delay", "soemdsp_exponential_delay_voice_pan", "soemdsp_exponential_delay_max_samples", "soemdsp_exponential_delay_max_seconds", "soemdsp_exponential_delay_version") },
@@ -589,7 +590,7 @@ foreach ($module in $modules) {
   # the 48MB default; live audio still loads only the combined binary (512MB).
   if ($module.Name -eq "graph_engine") {
     $clangArgs += "-Wl,--max-memory=134217728"
-  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise")) {
+  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb")) {
     $clangArgs += "-Wl,--max-memory=268435456"
   } else {
     $clangArgs += "-Wl,--max-memory=50331648"

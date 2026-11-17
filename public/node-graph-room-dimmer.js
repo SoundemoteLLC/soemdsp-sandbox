@@ -29,6 +29,8 @@
   const SHADER_REV = 16;
   // Inset punch by this many CSS px so 1px borders / AA don't open chrome.
   const PUNCH_INSET_CSS = 1.25;
+  // Soft bloom around the dimmer button's opening (CSS px).
+  const WIDGET_BLOOM_PX = 9;
 
   const SCREEN_SELECTOR = [
     ".node-sample-waveform-canvas",
@@ -157,6 +159,9 @@ void main() {
     const d = clampDim(dim);
     return d <= 0.5 ? 0 : Math.min(1, (d - 0.5) * 2);
   }
+
+  // 0 = full light, 1 = dark. Below half dim the workspace stays lit (the old second-stage curve).
+  globalThis.nodeGraphRoomAmbientDark = () => dimDeep(state.dim);
 
   function simulationOn() {
     if (typeof nodeGraphLiveEngineIsUp === "function") {
@@ -549,8 +554,14 @@ void main() {
     const bloomCss = glowOn
       ? Math.max(28, Math.min(52, 24 + 20 * (moduleLightSpread() - 0.4))) * screenSoft
       : 0;
-    const soft = glowOn ? -bloomCss : 0;
-    const round = punchCornerRadiusPx(punchEl, r.width, r.height);
+    let soft = glowOn ? -bloomCss : 0;
+    let round = punchCornerRadiusPx(punchEl, r.width, r.height);
+    if (opts.fitWidget === true) {
+      // The dimmer button is a light in the dark, not a hole in the veil: a tight, soft bloom around it
+      // (the opening fades out over a few px instead of ending in a hard rectangle), with rounder corners.
+      soft = -WIDGET_BLOOM_PX;
+      round = Math.max(round, Math.min(r.width, r.height) * 0.35);
+    }
     pushRectArrays(rects, strengths, softs, rounds, x, y, w, h, str, soft, round);
   }
 
@@ -716,7 +727,9 @@ void main() {
     }
 
     setVeilActive(true);
-    clipVeilOffWorkspace(canvas, dimDeep(dim) <= 0);
+    // The workspace is darkened inside the GL scene now (ambient light + emission), in step with
+    // pan and zoom. The veil only dims the chrome around it.
+    clipVeilOffWorkspace(canvas, true);
     if (!resizeCanvas(canvas)) {
       scheduleDraw();
       return;
@@ -869,6 +882,11 @@ void main() {
   function setDim(value, options = {}) {
     state.dim = clampDim(value);
     syncButton();
+    // The GL graph reads the ambient level when it builds its layers.
+    if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) {
+      nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
+      if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+    }
     // Keep workspace mouse-light amount in step with room dim when there is
     // no mouse cutout (heatmap rebuild reads nodeGraphRoomDim()).
     if (typeof scheduleNodeGraphGridHeatmapUpdate === "function") {

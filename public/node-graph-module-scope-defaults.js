@@ -211,12 +211,13 @@ const nodeGraphLineBurnSettingsDefaults = Object.freeze({
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
   trail: nodeGraphScopePhosphorLookDefaults.trail,
   scale: nodeGraphScopePhosphorLookDefaults.scale,
-  dot1Brightness: nodeGraphScopePhosphorLookDefaults.brightness,
+  // Line Burn look (PolyBLEP and the other Line Burn displays): Bright / Size / Blur.
+  dot1Brightness: 0.7273,
   // Cyan scope LUT (shared with scope2d) — not Instant Waterfall red.
   dot1Color: "#75ebff",
   dot1Enabled: true,
-  dot1Size: nodeGraphScopePhosphorLookDefaults.size,
-  lineThickness: nodeGraphScopePhosphorLookDefaults.blur,
+  dot1Size: 0.07,
+  lineThickness: 0.7636,
   pixelDensity: nodeGraphScopePhosphorLookDefaults.pixelDensity,
   dotBudget: nodeGraphScopePhosphorLookDefaults.dotBudget,
   // budget = solid line until the dots run out. length = dots across the full path.

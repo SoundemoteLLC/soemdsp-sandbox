@@ -138,6 +138,7 @@ const nodeGraphNodeLabels = Object.freeze({
   noiseGenerator: "Noise Generator",
   fluvNoise: "Fluv Noise",
   velvetNoise: "Velvet Noise",
+  velvetReverb: "Velvet Reverb",
   randomWalk: "Random Walk",
   cheapWalk: "Cheap Walk",
   piNoise: "Pi Noise",
@@ -1021,6 +1022,8 @@ const nodeGraphModuleDefinitions = (
         defaultValue: "1",
         displayChoices: true,
         divideChoicesVisibly: true,
+        // Hidden on spawn; the parameter's Show toggle brings it back.
+        hidden: true,
         key: "antialiasing",
         label: "Antialiasing",
         linearSmoothing: false,
@@ -6931,11 +6934,155 @@ const nodeGraphModuleDefinitions = (
   },
   velvetNoise: {
     face: [
-      { kind: "choices", param: "mode", labels: ["Gen", "Diff"], h: 26 },
+      { kind: "cells", params: [["shape", "Shape"]], h: 40 },
+      { kind: "cells", params: [["sign", "Sign"]], h: 40 },
+      { kind: "cells", params: [["density", "Density"]], h: 40 },
+      { kind: "cells", params: [["cutoff", "Sinc Hz"], ["lobes", "Lobes"]], h: 40 },
+      { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Amp"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
+    planRole: "source",
+    planFreeRun: true,
+    displayType: "waterfall",
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall" },
+    ],
+    defaultDisplayMode: "waterfall",
+    stereoWaterfallPorts: { left: "Left", right: "Right" },
+    displaySignals: [
+      { key: "Left", kind: "scalar" },
+      { key: "Right", kind: "scalar" },
+    ],
+    inputs: ["f"],
+    inputLabels: { f: "ƒ" },
+    inputAliases: { "ƒ": "f" },
+    inputTooltips: {
+      f: "Event density in Hz (replaces Density knob when wired).",
+    },
+    // Trigger + / Trigger -: one sample per Left event, split by sign (every shape).
+    outputs: ["Mono", "Left", "Right", "Trigger +", "Trigger -"],
+    outputAliases: { Out: "Mono", "+": "Trigger +", "-": "Trigger -" },
+    outputLabels: { Mono: "Mono", Left: "Left", Right: "Right", "Trigger +": "+⎍", "Trigger -": "-⎍" },
+    digitalOutputs: ["Trigger +", "Trigger -"],
+    outputTooltips: {
+      "Trigger +": "One-sample trigger on every positive event of the Left stream. Fires for every shape; Amp does not scale it. In Bipolar mode every event is positive.",
+      "Trigger -": "One-sample trigger on every negative event of the Left stream. Fires for every shape; Amp does not scale it. Never fires in Bipolar mode.",
+    },
+    parameters: [
+      {
+        choices: ["Trigger", "Sinc", "PolyBLEP Saw", "Half Sine", "Sine", "Rect Sine"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: false,
+        key: "shape",
+        label: "Shape",
+        linearSmoothing: false,
+        max: "5",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "What each event looks like. Trigger: one sample. Sinc: a band-limited impulse (windowed sinc, peak on the event). PolyBLEP Saw: a ramp that starts at the event and completes before the next one. Half Sine: the same ramp with a half-sine curve, a bassier saw. Sine: one full sine cycle from event to event. Rect Sine: a rectified sine arch, sharp at the bottom and rounded at the top. The ramp and sine shapes are anti-aliased at the event's exact time."
+      },
+      {
+        choices: ["Random ±", "Bipolar"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: false,
+        key: "sign",
+        label: "Sign",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Random: every event is flipped to + or - at random (classic velvet noise). Bipolar: every event is the shape's own bipolar form (a saw always runs -1 to +1, an impulse is always +1), so it works as a plain event generator."
+      },
+      {
+        defaultValue: "2500",
+        key: "density",
+        kind: "frequency",
+        label: "Density",
+        max: "20000",
+        mid: "2500",
+        min: "0",
+        nonlinearSlider: true,
+        step: "any",
+        unit: "Hz",
+        tooltip: "Events per second, one at a random place in every period. Low values give sparse events (rain, vinyl dust), high values smooth noise. 0 Hz pauses: no new events. Above the sample rate it fires every sample."
+      },
+      {
+        defaultValue: "2000",
+        key: "cutoff",
+        kind: "frequency",
+        label: "Sinc Cutoff",
+        max: "24000",
+        mid: "2000",
+        min: "20",
+        nonlinearSlider: true,
+        step: "any",
+        unit: "Hz",
+        tooltip: "Sinc shape only: the lowpass cutoff of the impulse. The lobes are 1 / (2 x Cutoff) seconds apart, so a low cutoff gives wide, slow ringing before and after each tick and a high cutoff is nearly a plain tick. At the Nyquist frequency it is an exact band-limited impulse."
+      },
+      {
+        defaultValue: "8",
+        key: "lobes",
+        label: "Lobes",
+        max: "64",
+        mid: "8",
+        min: "1",
+        nonlinearSlider: true,
+        step: "1",
+        tooltip: "Sinc shape only: how many ringing lobes are kept before and after the peak. More lobes ring longer; the kernel reaches at most about 1000 samples each side. CPU cost grows with the reach."
+      },
+      {
+        defaultValue: "1",
+        key: "stereoSpread",
+        label: "Stereo Spread",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        unit: "%",
+        tooltip: "0% = identical L/R events (mono). 100% = independent L/R events for decorrelated stereo."
+      },
+      {
+        defaultValue: "1",
+        key: "seed",
+        kind: "seed",
+        label: "Seed",
+        linearSmoothing: false,
+        max: "16777215",
+        maxDigits: 0,
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        smoothingType: "none",
+        step: "1",
+        tooltip: "RNG seed for event positions and signs. Same seed = identical sequence."
+      },
+      {
+        defaultValue: "1",
+        key: "mix",
+        label: "Amp",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Output level, 0.0 to 1.0."
+      },
+    ],
+  },
+  velvetReverb: {
+    face: [
       { kind: "cells", params: [["density", "Density"]], h: 40 },
       { kind: "cells", params: [["decay", "Decay", "horizontal"]], h: 26 },
       { kind: "cells", params: [["tapCount", "Taps"], ["darkness", "Darkness"]], h: 40 },
-      { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix/Gain"]], h: 40 },
+      { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "processor",
@@ -6955,37 +7102,15 @@ const nodeGraphModuleDefinitions = (
     inputLabels: { In: "Mono", f: "ƒ" },
     inputAliases: { Mono: "In", "ƒ": "f" },
     inputTooltips: {
-      In: "Mono audio in (for Diffuser mode). Alone feeds both L/R channels.",
-      Left: "Left audio in (for Diffuser mode).",
-      Right: "Right audio in (for Diffuser mode).",
-      f: "Pulse density in Hz (replaces Density knob when wired).",
+      In: "Mono audio in. Alone feeds both L/R channels.",
+      Left: "Left audio in.",
+      Right: "Right audio in.",
+      f: "Tap density in Hz (replaces Density knob when wired).",
     },
-    // Trigger + / Trigger -: one sample per Left impulse, split by sign (both modes).
-    outputs: ["Mono", "Left", "Right", "Trigger +", "Trigger -"],
-    outputAliases: { Out: "Mono", "+": "Trigger +", "-": "Trigger -" },
-    outputLabels: { Mono: "Mono", Left: "Left", Right: "Right", "Trigger +": "+⎍", "Trigger -": "-⎍" },
-    digitalOutputs: ["Trigger +", "Trigger -"],
-    outputTooltips: {
-      "Trigger +": "One-sample trigger on every positive impulse of the Left stream. Fires in both modes; Mix / Gain does not scale it.",
-      "Trigger -": "One-sample trigger on every negative impulse of the Left stream. Fires in both modes; Mix / Gain does not scale it.",
-    },
+    outputs: ["Mono", "Left", "Right"],
+    outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
     parameters: [
-      {
-        choices: ["Generator", "Diffuser"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "mode",
-        label: "Mode",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Generator: outputs real-time velvet noise impulses. Diffuser: convolves incoming audio with dark velvet noise taps."
-      },
       {
         defaultValue: "2500",
         key: "density",
@@ -6997,11 +7122,11 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "Hz",
-        tooltip: "Pulse density (impulse rate per second). Higher density = smoother, denser reflections/noise. 0 Hz pauses: no new impulses, and the Diffuser keeps the taps it has. At very low density in Diffuser mode the taps are far apart and only those that fit the delay line (about 5.5 s) are used."
+        tooltip: "Tap density (taps per second). Higher density = smoother, denser reflections. 0 Hz pauses: the reverb keeps the taps it has. At very low density the taps are far apart and only those that fit the delay line (about 5.5 s) are used."
       },
       {
         defaultValue: "64",
-        // Diffuser cost is O(taps) per sample: mark for the CPU debug overlay.
+        // Cost is O(taps) per sample: mark for the CPU debug overlay.
         constraint: "cpu",
         key: "tapCount",
         label: "Tap Count",
@@ -7012,7 +7137,7 @@ const nodeGraphModuleDefinitions = (
         min: "8",
         nonlinearSlider: true,
         step: "1",
-        tooltip: "Number of sparse taps in Diffuser mode. Tap Count / Density sets tail length. CPU cost grows with taps. Range here is 8 to 256; the engine allows up to 4096 if you raise Max in the parameter settings."
+        tooltip: "Number of sparse taps. Tap Count / Density sets tail length. CPU cost grows with taps. Range here is 8 to 256; the engine allows up to 4096 if you raise Max in the parameter settings."
       },
       {
         defaultValue: "1",
@@ -7024,7 +7149,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         unit: "smp",
-        tooltip: "Maximum randomized rectangular pulse width in Diffuser mode. 1 = bright velvet noise; higher values = wider rectangular pulses for natural 6 dB/oct high-frequency damping."
+        tooltip: "Maximum randomized rectangular pulse width. 1 = bright velvet noise; higher values = wider rectangular pulses for natural 6 dB/oct high-frequency damping."
       },
       {
         defaultValue: "0",
@@ -7036,7 +7161,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         unit: "smp",
-        tooltip: "Darkness at the end of the Diffuser tail. The widest pulse grows from Darkness at the first tap to this at the last, so the tail gets darker as it goes, like a room where the highs die first. The tail's level stays set by Decay; this only changes its colour. 0 = off (the whole tail uses Darkness)."
+        tooltip: "Darkness at the end of the tail. The widest pulse grows from Darkness at the first tap to this at the last, so the tail gets darker as it goes, like a room where the highs die first. The tail's level stays set by Decay; this only changes its colour. 0 = off (the whole tail uses Darkness)."
       },
       {
         defaultValue: "1",
@@ -7063,7 +7188,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         smoothingType: "none",
         step: "1",
-        tooltip: "RNG seed for impulse positions, signs, and pulse widths. Same seed = identical sequence."
+        tooltip: "RNG seed for tap positions, signs, and pulse widths. Same seed = identical taps."
       },
       {
         defaultValue: "0",
@@ -7075,19 +7200,19 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "dB/s",
-        tooltip: "Diffuser tail decay rate: tap level falls by this many dB every second, like a reverb tail (60 dB/s = a 1 s T60). 0 = flat; small values are almost flat. The tail length is still Tap Count / Density, so raise Tap Count or lower Density for a longer tail."
+        tooltip: "Tail decay rate: tap level falls by this many dB every second, like a reverb tail (60 dB/s = a 1 s T60). 0 = flat; small values are almost flat. The tail length is still Tap Count / Density, so raise Tap Count or lower Density for a longer tail."
       },
       {
         defaultValue: "1",
         key: "mix",
-        label: "Mix / Gain",
+        label: "Mix",
         max: "1",
         mid: "0.5",
         min: "0",
         nonlinearSlider: false,
         step: "any",
         unit: "%",
-        tooltip: "Dry/wet mix in Diffuser mode (0% = dry input, 100% = wet). Output level in Generator mode."
+        tooltip: "Dry/wet mix (0% = dry input, 100% = wet)."
       },
     ],
   },

@@ -970,7 +970,7 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       const raw = String(source.stereoBlend || defaults.stereoBlend || "combine").toLowerCase().trim();
       const ok = typeof TraceStroke !== "undefined" && Array.isArray(TraceStroke.STEREO_BLEND_MODES)
         ? TraceStroke.STEREO_BLEND_MODES
-        : ["combine", "lighter", "screen", "source-over", "multiply", "difference", "exclusion", "xor"];
+        : ["combine", "combine-green", "lighter", "screen", "source-over", "multiply", "difference", "exclusion", "xor"];
       return ok.includes(raw) ? raw : "combine";
     })(),
     // Always auto — derived from Left/Right via meetColorFromPair (no manual meet).
@@ -2024,7 +2024,7 @@ function normalizeNodeGraphVectorDotSettings(settings = {}) {
         const raw = String(source.stereoBlend || defaults.stereoBlend || "combine").toLowerCase().trim();
         const ok = typeof TraceStroke !== "undefined" && Array.isArray(TraceStroke.STEREO_BLEND_MODES)
           ? TraceStroke.STEREO_BLEND_MODES
-          : ["combine", "lighter", "screen", "source-over", "multiply", "difference", "exclusion", "xor"];
+          : ["combine", "combine-green", "lighter", "screen", "source-over", "multiply", "difference", "exclusion", "xor"];
         return ok.includes(raw) ? raw : "combine";
       })(),
     ...(function () {

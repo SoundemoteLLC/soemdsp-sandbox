@@ -79,16 +79,20 @@ function nodeGraphGlGraphParseCssColor(color, fallback) {
   return fallback;
 }
 
-function nodeGraphGlGraphPortBrightness(moduleEl, port) {
+function nodeGraphGlGraphPortConnected(moduleEl, port) {
   const name = String(port || "");
-  let connected = false;
   if (moduleEl && name && typeof CSS !== "undefined" && CSS.escape) {
     const esc = CSS.escape(name);
     const el = moduleEl.querySelector(
       `.node-port[data-port="${esc}"], .node-param-port[data-port="${esc}"]`,
     );
-    connected = Boolean(el?.classList.contains("connected-port"));
+    return Boolean(el?.classList.contains("connected-port"));
   }
+  return false;
+}
+
+function nodeGraphGlGraphPortBrightness(moduleEl, port) {
+  const connected = nodeGraphGlGraphPortConnected(moduleEl, port);
   const raw = getComputedStyle(moduleEl || document.documentElement).getPropertyValue(
     connected ? "--node-port-used-brightness" : "--node-port-unused-brightness",
   );
@@ -416,6 +420,7 @@ function nodeGraphGlGraphRebuildChrome() {
       if (jacks.some((jack) => jack.key === key)) continue;
       const rgba = nodeGraphGlGraphParseCssColor(color, nodeGraphGlGraphCssColor(color));
       rgba[3] *= nodeGraphGlGraphPortBrightness(el, port);
+      const lit = nodeGraphGlGraphPortConnected(el, port);
       const squareJack = typeof nodeGraphWireJackIsSquare === "function"
         && nodeGraphWireJackIsSquare(id, port, io);
       jacks.push({
@@ -433,6 +438,7 @@ function nodeGraphGlGraphRebuildChrome() {
           && nodeGraphModuleRailOwnsParam(id, pin.key),
         inwardRight: io !== "output",
         inlet: true,
+        lit,
         rgba,
       });
     }
@@ -788,7 +794,53 @@ function nodeGraphGlGraphDrawTextBox(batch, plate, toX, toY, zoom, cssW, cssH) {
   }
 }
 
-function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, plateStyle, borderOn, borderIdle) {
+// A connected jack lights its stroke in its own colour (before the used / unused brightness) at
+// full alpha. An outlet and the inlet it feeds keep their own colours, so a colour change along a
+// cable shows at the jacks.
+function nodeGraphGlGraphLitStroke(rgba) {
+  return [rgba[0], rgba[1], rgba[2], 1];
+}
+
+// mode: "" = the module plate; "dim" = the ambient-light darkening of that plate (black at alpha
+// `dark`); "emit" = only the stroke (and jack rings), drawn after the dim so it stays lit.
+// Soft light coming out of a module's stroke: one shape per module whose shader fades the light out
+// smoothly from the edge (like the module lights in the heatmap, but in the stroke colour). Their colour and strength are resolved at draw time (renderer, `glow`), so they follow the
+// module's stroke animation on every replayed frame.
+// Module text (and the rest of a module body) stays at least this visible however dark the room is.
+const NODE_TEXT_FLOOR = 0.25;
+// A module face (slider wells and fills) is a weak light source: this much of its brightness holds in
+// a fully dark room.
+const NODE_FACE_LIGHT = 0.6;
+// Pencil drawings stay at least this bright however dark the room is.
+const NODE_DRAWING_FLOOR = 0.9;
+// Smooth light out of a module's stroke: falloff radius in screen px, and its peak strength at the edge.
+const NODE_STROKE_GLOW_REACH_PX = 16;
+const NODE_STROKE_GLOW_ALPHA = 0.85;
+// Cables never go fully dark with the room: this much of them stays visible at full dark.
+const NODE_CABLE_FLOOR = 0.35;
+
+function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, borderOn, borderIdle) {
+  if (!layer || typeof nodeGraphGlLinesModuleOutline !== "function") return;
+  const look = typeof nodeGraphModulePlateLook === "function" ? nodeGraphModulePlateLook() : null;
+  const reach = NODE_STROKE_GLOW_REACH_PX / (camera ? Math.max(zoom, 1e-3) : 1); // screen px -> batch units
+  for (let i = 0; i < plates.length; i += 1) {
+    const plate = plates[i];
+    const x = Math.round(toX(plate.x));
+    const y = Math.round(toY(plate.y));
+    const w = Math.max(1, Math.round(plate.w * (camera ? 1 : zoom)));
+    const h = Math.max(1, Math.round(plate.h * (camera ? 1 : zoom)));
+    const selected = typeof nodeGraphNodeElement === "function"
+      && nodeGraphNodeElement(plate.id)?.classList.contains("selected");
+    const base = selected ? borderOn : borderIdle;
+    const round = look
+      ? [look.topRadius * (camera ? 1 : zoom), look.topShape, look.bottomRadius * (camera ? 1 : zoom), look.bottomShape]
+      : null;
+    // One smooth glow shape per module (mode 4): exponential falloff outside the plate.
+    nodeGraphGlLinesModuleOutline(layer, x, y, w, h, reach, base, [], [0, 0, 0, 0], null, round, plate.id, selected === true, 4, NODE_STROKE_GLOW_ALPHA);
+  }
+}
+
+function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, plateStyle, borderOn, borderIdle, mode = "", dark = 0) {
   const x = toX(plate.x);
   const y = toY(plate.y);
   const w = plate.w * zoom;
@@ -804,7 +856,10 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   const h0 = Math.max(1, Math.round(h));
   const selected = typeof nodeGraphNodeElement === "function"
     && nodeGraphNodeElement(plate.id)?.classList.contains("selected");
-  const color = selected ? borderOn : borderIdle;
+  let color = selected ? borderOn : borderIdle;
+  if (mode === "dim") color = [0, 0, 0, dark];
+  // "shine": the module reflecting the mouse lamp, in its own stroke colour (strongest near the lamp).
+  if (mode === "shine") color = [color[0], color[1], color[2], 0.5];
   const plateJacks = [];
   const allJacks = nodeGraphGlGraphState.chrome?.jacks || [];
   for (let j = 0; j < allJacks.length; j += 1) {
@@ -814,14 +869,25 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
       x: toX(jack.x),
       y: toY(jack.y),
       r: jack.r * zoom,
-      rgba: jack.rgba,
+      // Stroke only: a connected jack draws its stroke as the bright version of its colour; an
+      // unconnected one keeps the plate stroke alpha.
+      rgba: mode === "dim" || mode === "shine"
+        ? [0, 0, 0, 0]
+        : (jack.lit ? nodeGraphGlGraphLitStroke(jack.rgba) : [jack.rgba[0], jack.rgba[1], jack.rgba[2], color[3] ?? 1]),
       square: jack.square === true,
       inlet: jack.inlet === true,
     });
   }
   if (typeof nodeGraphGlLinesModuleOutline === "function") {
     const cuts = typeof nodeGraphModuleRailBorderCuts === "function" ? nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) : null;
-    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, cuts);
+    const look = typeof nodeGraphModulePlateLook === "function" ? nodeGraphModulePlateLook() : null;
+    const round = look
+      ? [look.topRadius * zoom, look.topShape, look.bottomRadius * zoom, look.bottomShape]
+      : null;
+    const fill = mode === "dim" ? [0, 0, 0, dark]
+      : (mode === "emit" ? [0, 0, 0, 0]
+        : (mode === "shine" ? [color[0], color[1], color[2], 0.28] : plate.fill));
+    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, fill, cuts, round, mode === "dim" || mode === "shine" ? "" : plate.id, selected === true, mode === "dim" ? true : (mode === "shine" ? 2 : false));
   }
 }
 
@@ -1430,6 +1496,14 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   // there is no destination colour (drag / port-connection previews). One
   // solid colour per wire, end dots included.
   const rgba = nodeGraphGlGraphCssColor(toColor || color);
+  // The first cable leaving a module gives its stroke animation its colour (nodeGraphStrokeLoudColor).
+  if (fromNode && nodeGraphGlGraphState.firstCable && !nodeGraphGlGraphState.firstCable.has(String(fromNode))) {
+    nodeGraphGlGraphState.firstCable.set(String(fromNode), rgba);
+  }
+  // A module with no outgoing cable (the Output module) takes the colour of its first incoming one.
+  if (toNode && nodeGraphGlGraphState.firstCableIn && !nodeGraphGlGraphState.firstCableIn.has(String(toNode))) {
+    nodeGraphGlGraphState.firstCableIn.set(String(toNode), rgba);
+  }
   // Curve tolerance in world px: 0.2 screen px at the rebuild zoom. A cable
   // with a patch slot under UIDEV pixelate wires is baked as a zoom-1
   // picture, so it uses 0.25 world px and stays the same at every zoom.
@@ -1457,6 +1531,8 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
 
 function nodeGraphGlGraphRebuild(options = {}) {
   nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
+  nodeGraphGlGraphState.firstCable = new Map();
+  nodeGraphGlGraphState.firstCableIn = new Map();
   const lite = options.lite === true;
   const wires = [];
   const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1;
@@ -2594,11 +2670,65 @@ function nodeGraphGlGraphPresent(options = {}) {
   const chromeAll = nodeGraphGlGraphState.chrome;
   const chromeById = chromeAll?.byId || null;
   const groups = nodeGraphGlGraphState.stack?.groups || [];
+  // Room light: how dark the workspace is (0 = full light). The Canvas / solo tiles keep the old veil.
+  const ambientDark = !view && typeof nodeGraphRoomAmbientDark === "function"
+    ? Math.max(0, Math.min(1, nodeGraphRoomAmbientDark())) : 0;
+  // Drawings (the pencil strokes on the snake canvas) are not dimmed below this fraction of their brightness.
+  if (!view && snakeCanvas) snakeCanvas.style.opacity = ambientDark > 0 ? String(1 - ambientDark * (1 - NODE_DRAWING_FLOOR)) : "";
+  // Stroke glow: a tight, soft rim of light just outside each module, in its stroke colour. It is the
+  // first layer, so every module stack draws over it and only the rim outside shows.
+  // Module lights on the GPU: one pass under every module stack (see the renderer). The base light is
+  // the original ellipse; the stroke light follows the module's own shape.
+  if (!view && frameCamera && typeof nodeGraphGlLinesLights === "function"
+    && (typeof nodeGraphHeatmapWantsLight !== "function" || nodeGraphHeatmapWantsLight()
+      || (typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid()))) {
+    const spread = typeof nodeGraphHeatmapFloatProperty === "function"
+      ? Math.max(0.1, Math.min(2.2, nodeGraphHeatmapFloatProperty(host, "--node-module-light-spread", 0.78))) : 0.78;
+    const gridMinX = (typeof nodeGraphGridWidth === "function" ? nodeGraphGridWidth() : 28) * 5;
+    const gridMinY = (typeof nodeGraphGridHeight === "function" ? nodeGraphGridHeight() : 28) * 5;
+    const look = typeof nodeGraphModulePlateLook === "function" ? nodeGraphModulePlateLook() : null;
+    const items = [];
+    const plates = nodeGraphGlGraphState.plates || [];
+    const wantsLight = typeof nodeGraphHeatmapWantsLight !== "function" || nodeGraphHeatmapWantsLight();
+    for (let i = 0; i < plates.length; i += 1) {
+      if (!wantsLight && !(typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid())) break;
+      const plate = plates[i];
+      const reach = 0.45 * spread * Math.max(gridMinX, 1.18 * Math.max(plate.w, plate.h));
+      // Skip modules whose light cannot reach the view.
+      if (plate.x + plate.w + reach < cam.x || plate.x - reach > cam.x + cssW / zoom
+        || plate.y + plate.h + reach < cam.y || plate.y - reach > cam.y + cssH / zoom) continue;
+      const selected = typeof nodeGraphNodeElement === "function"
+        && nodeGraphNodeElement(plate.id)?.classList.contains("selected");
+      const base = selected ? borderOn : borderIdle;
+      items.push({ x: plate.x, y: plate.y, w: plate.w, h: plate.h, id: plate.id, base: [base[0], base[1], base[2]], reach, round: look ? look.topRadius : 0 });
+    }
+    nodeGraphGlLinesLights(batch, items, { spread, gridMinX, gridMinY });
+  }
   try {
     for (let g = 0; g < groups.length; g += 1) {
       const group = groups[g];
       const body = nodeGraphGlLinesLayer(batch);
       if (!body) continue;
+      // Ambient light layers, created now so they draw after the body: the dim, the lit strokes, and
+      // the module text (routed out of the body so the dim does not double up on it).
+      let dimLayer = null;
+      let emitLayer = null;
+      if (ambientDark > 0) {
+        dimLayer = nodeGraphGlLinesLayer(batch);
+        emitLayer = nodeGraphGlLinesLayer(batch);
+        // The face (slider wells and fills) is a weak light source of its own: drawn after the dim,
+        // dimmed only a little, and it does not spill onto anything.
+        const faceLayer = nodeGraphGlLinesLayer(batch);
+        if (faceLayer) {
+          faceLayer.alphaMul = 1 - ambientDark * (1 - NODE_FACE_LIGHT);
+          body.overLayer = faceLayer;
+        }
+        const textLayer = nodeGraphGlLinesLayer(batch);
+        if (textLayer) {
+          textLayer.textDark = Math.min(ambientDark, 1 - NODE_TEXT_FLOOR);
+          body.textLayer = textLayer;
+        }
+      }
       const captions = [];
       const shapes = [];
       for (let i = 0; i < group.plates.length; i += 1) {
@@ -2617,6 +2747,25 @@ function nodeGraphGlGraphPresent(options = {}) {
       }
       if (typeof nodeGraphModuleRailsDrawGl === "function") {
         nodeGraphModuleRailsDrawGl(body, group.plates, toX, toY, layoutZoom, cssW, cssH);
+      }
+      // Ambient light: darken what the body drew (plate, chrome, parameter face), then redraw the
+      // strokes lit. Displays and their ink are drawn after this, so they stay lit too.
+      if (ambientDark > 0) {
+        if (dimLayer) {
+          // The body (plate, chrome) is darkened; text and the face are lit layers drawn after this.
+          for (let i = 0; i < group.plates.length; i += 1) {
+            nodeGraphGlGraphState.chrome = chromeById?.get(group.plates[i].id) || chromeById?.empty || chromeAll;
+            nodeGraphGlGraphDrawPlate(dimLayer, group.plates[i], toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "dim", ambientDark);
+          }
+          nodeGraphGlGraphState.chrome = chromeAll;
+        }
+        if (emitLayer) {
+          for (let i = 0; i < group.plates.length; i += 1) {
+            nodeGraphGlGraphState.chrome = chromeById?.get(group.plates[i].id) || chromeById?.empty || chromeAll;
+            nodeGraphGlGraphDrawPlate(emitLayer, group.plates[i], toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "emit");
+          }
+          nodeGraphGlGraphState.chrome = chromeAll;
+        }
       }
       if (group.displays.length) {
         // Pictures (cheap zoom-1 face textures), then their screen-res ink.
@@ -2706,12 +2855,25 @@ function nodeGraphGlGraphPresent(options = {}) {
   }
   nodeGraphGlGraphDrawConstraintBadges(veilBatch, toX, toY, layoutZoom, cssW, cssH);
   if (trailBatch) nodeGraphGlGraphDrawTrail(trailBatch, zoom);
+  // Cables sit on their own canvas under the module stacks: darken them the same amount, with a
+  // black quad over the view (a CSS filter would lift the canvas above the modules).
+  if (ambientDark > 0) {
+    const kx = frameCamera ? 1 : zoom;
+    nodeGraphGlLinesModuleOutline(
+      wireBatch, toX(cam.x - 16), toY(cam.y - 16), (cssW / zoom + 32) * kx, (cssH / zoom + 32) * kx,
+      0, [0, 0, 0, 0], [], [0, 0, 0, Math.min(ambientDark, 1 - NODE_CABLE_FLOOR)], null, null, "", false, true,
+    );
+  }
   batch._blend = "alpha";
   wireBatch._blend = "alpha";
   contactBatch._blend = "max";
   veilBatch._blend = "alpha";
   const platesOk = nodeGraphGlLinesEnd(batch, "alpha") !== false;
   const wiresOk = nodeGraphGlLinesEnd(wireBatch, "alpha") !== false;
+  if (!view) {
+    nodeGraphGlGraphBindRoomLight();
+    nodeGraphGlGraphPresentLight();
+  }
   if (wireBake || wireLiveBake) nodeGraphGlGraphWireBakeDraw(wireCanvas, frameCamera, zoom, scale);
   const contactOk = nodeGraphGlLinesEnd(contactBatch, "max") !== false;
   const veilOk = nodeGraphGlLinesEnd(veilBatch, "alpha") !== false;
@@ -2913,6 +3075,71 @@ function nodeGraphGlGraphPaint(options = {}) {
   nodeGraphGlGraphPresent();
   nodeGraphGlHitInstall();
   return true;
+}
+
+// The mouse is a lamp: it LIFTS the ambient darkness around it (the dim quads are lightened in the
+// shader), so what it lights shows at its own colour, never washed toward white.
+globalThis.nodeGraphRoomLightUniform = function nodeGraphRoomLightUniform() {
+  const mouse = nodeGraphRoomLight.mouse;
+  const host = document.getElementById("nodeGraphWorkspace");
+  const cam0 = nodeGraphGlGraphState.frameCamera;
+  if (!mouse || !host || !cam0) return null;
+  const rect = host.getBoundingClientRect();
+  const cssW = Math.max(1, host.clientWidth || 1);
+  const ratio = rect.width > 0 ? rect.width / cssW : 1;
+  const zoom = cam0.zoom || 1;
+  return [
+    cam0.x + (mouse.x - rect.left) / ratio / zoom,
+    cam0.y + (mouse.y - rect.top) / ratio / zoom,
+    280 / zoom,
+    1.0,
+  ];
+};
+
+// ---- Room light: the mouse lamp only -------------------------------------------------------------
+// (Module halos were tried and dropped: the module lamps in the heatmap already give each module its
+// subtle glow.) The lamp itself lives in the dim quads' shader; this keeps its state.
+const nodeGraphRoomLight = { mouse: null, frame: 0, had: false };
+
+// Kept as a no-op so the callers need no change; removes a leftover light canvas.
+function nodeGraphGlGraphPresentLight() {
+  const canvas = nodeGraphGlGraphState.lightCanvas;
+  if (canvas) {
+    canvas.remove();
+    nodeGraphGlGraphState.lightCanvas = null;
+  }
+}
+
+function nodeGraphGlGraphPresentLightSoon() {
+  if (nodeGraphRoomLight.frame) return;
+  nodeGraphRoomLight.frame = window.requestAnimationFrame(() => {
+    nodeGraphRoomLight.frame = 0;
+    nodeGraphGlGraphPresentLight();
+  });
+}
+
+// Re-draw the cached scene so the dim quads pick up the new lamp position.
+function nodeGraphGlGraphRoomLampSoon() {
+  if (nodeGraphRoomLight.lampFrame) return;
+  nodeGraphRoomLight.lampFrame = window.requestAnimationFrame(() => {
+    nodeGraphRoomLight.lampFrame = 0;
+    if (!nodeGraphGlGraphReplayMesh("all")) nodeGraphGlGraphPresent();
+    nodeGraphGlGraphPresentLight();
+  });
+}
+
+function nodeGraphGlGraphBindRoomLight() {
+  const host = document.getElementById("nodeGraphWorkspace");
+  if (!host || host.dataset.roomLightBound === "1") return;
+  host.dataset.roomLightBound = "1";
+  host.addEventListener("pointermove", (event) => {
+    nodeGraphRoomLight.mouse = { x: event.clientX, y: event.clientY };
+    if (typeof nodeGraphRoomAmbientDark === "function" && nodeGraphRoomAmbientDark() > 0) nodeGraphGlGraphRoomLampSoon();
+  }, { passive: true });
+  host.addEventListener("pointerleave", () => {
+    nodeGraphRoomLight.mouse = null;
+    nodeGraphGlGraphRoomLampSoon();
+  }, { passive: true });
 }
 
 function nodeGraphGlGraphPresentSoon() {
@@ -3513,7 +3740,8 @@ function nodeGraphGlHitPointerDown(event) {
     const last = nodeGraphGlHitState.lastTitleDown;
     const repeat = last && last.el === hit.el && now - last.time < 400;
     nodeGraphGlHitState.lastTitleDown = { el: hit.el, time: now };
-    if (repeat && typeof startNodeGraphModuleTitleEdit === "function") {
+    // Alt + click bypasses, so Alt + double click is two quick bypass toggles, never a rename.
+    if (repeat && !event.altKey && typeof startNodeGraphModuleTitleEdit === "function") {
       event.preventDefault();
       event.stopPropagation();
       startNodeGraphModuleTitleEdit(hit.el, event);

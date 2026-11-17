@@ -2094,6 +2094,9 @@ function resetNodeUiDevControlsToDeclaredDefaults() {
   if (typeof syncNodeUiDevModuleLightGridControls === "function") {
     syncNodeUiDevModuleLightGridControls();
   }
+  if (typeof syncNodeUiDevModuleCorners === "function") {
+    syncNodeUiDevModuleCorners();
+  }
   if (typeof syncNodeUiDevModuleIdleStroke === "function") {
     syncNodeUiDevModuleIdleStroke();
   }
