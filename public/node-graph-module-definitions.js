@@ -7082,7 +7082,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["density", "Taps"], ["densitySkew", "Skew"], ["minGap", "Min Gap"]], h: 40 },
       { kind: "cells", params: [["decay", "Length", "horizontal"]], h: 26 },
       { kind: "cells", params: [["ampDecay", "Amp Decay"], ["darkness", "Darkness"]], h: 40 },
-      { kind: "cells", params: [["tailDarkness", "Tail Dark"], ["tailRandom", "Tail Rand"]], h: 40 },
+      { kind: "cells", params: [["tailDarkness", "Tail Dark"], ["tailRandom", "Tail Rand"], ["tailCurve", "Tail Curve", "bipolar"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
@@ -7177,6 +7177,22 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         nonlinearSlider: false,
+        step: "any",
+      },
+      // Tail Curve: bends the Darkness -> Tail Darkness sweep over the tail
+      // (Step Graph rational curve, segment_rational01, same sign as Step Graph:
+      // + reaches Tail Dark sooner). The base sweep at 0 is geometric in width
+      // (log-domain lerp), so cutoff ~ 1/width falls exponentially over time.
+      {
+        curveAmount: "-0.9",
+        defaultValue: "0",
+        key: "tailCurve",
+        label: "Tail Curve",
+        max: "1",
+        mid: "0",
+        min: "-1",
+        nonlinearSlider: true,
+        sliderCurve: "bipolarRational",
         step: "any",
       },
       {

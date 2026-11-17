@@ -96,6 +96,7 @@ function nodeGraphVelvetTapsLayout(section, node) {
     nodeGraphVelvetTapsParam(node, "densitySkew", 0),
     nodeGraphVelvetTapsParam(node, "minGap", 1),
     nodeGraphVelvetTapsParam(node, "tailRandom", 1),
+    nodeGraphVelvetTapsParam(node, "tailCurve", 0),
   ];
   const key = args.join(",");
   if (section._velvetTapsKey === key && section._velvetTapsLayout) return section._velvetTapsLayout;

@@ -19,11 +19,11 @@ for (const i of WebAssembly.Module.imports(mod)) { imports[i.module] ??= {}; imp
 const x = (await WebAssembly.instantiate(mod, imports)).exports;
 
 const FS = 48000;
-check(x.soemdsp_velvet_reverb_version() >= 8, `velvet_reverb version ${x.soemdsp_velvet_reverb_version()}`);
+check(x.soemdsp_velvet_reverb_version() >= 9, `velvet_reverb version ${x.soemdsp_velvet_reverb_version()}`);
 
 // Wet impulse response (Mix 1): impulse on both channels at sample 0.
 const tapsOf = ({ taps, density, decay = 0.025 }) => taps ?? (density ?? 2500) * decay;
-function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, tailRand = 1, n } = {}) { // gap: a dense test Min Gap (~4 samples); the default is 1 ms. tailRand 1 = previous random widths
+function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, tailRand = 1, tailCurve = 0, n } = {}) { // gap: a dense test Min Gap (~4 samples); the default is 1 ms. tailRand 1 = previous random widths. tailCurve 0 = geometric width sweep
   const T = tapsOf({ taps, density, decay });
   const h = x.soemdsp_velvet_reverb_create(FS);
   if (!h) throw new Error("create failed");
@@ -32,14 +32,14 @@ function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed
   const L = new Float64Array(len), R = new Float64Array(len);
   for (let i = 0; i < len; i += 1) {
     const v = i === 0 ? 1 : 0;
-    L[i] = x.soemdsp_velvet_reverb_sample(h, v, v, T, dark, spread, 1, FS, decay, tail, amp, skew, gap, tailRand);
+    L[i] = x.soemdsp_velvet_reverb_sample(h, v, v, T, dark, spread, 1, FS, decay, tail, amp, skew, gap, tailRand, tailCurve);
     R[i] = x.soemdsp_velvet_reverb_right(h);
   }
   x.soemdsp_velvet_reverb_destroy(h);
   return { L, R };
 }
-function layout({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, tailRand = 1 } = {}) {
-  const count = x.soemdsp_velvet_reverb_layout(tapsOf({ taps, density, decay }), dark, spread, FS, decay, tail, seed, amp, skew, gap, tailRand);
+function layout({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, tailRand = 1, tailCurve = 0 } = {}) {
+  const count = x.soemdsp_velvet_reverb_layout(tapsOf({ taps, density, decay }), dark, spread, FS, decay, tail, seed, amp, skew, gap, tailRand, tailCurve);
   const pos = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_pos(), count).slice();
   const width = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_width(), count).slice();
   const level = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_level(), count).slice();
@@ -398,6 +398,47 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const a = ir({ ...opts, tailRand: 1, n: 12000 }).L, b = ir({ ...opts, n: 12000 }).L, c = ir({ ...opts, tailRand: 0, n: 12000 }).L;
   check(dist(a, b) === 0, "Tail Random 1 matches previous audio (default)");
   check(dist(a, c) > 1e-6, `Tail Random 0 differs from the previous random tail (dist ${dist(a, c).toFixed(4)})`);
+}
+
+// ---- Tail Curve: log-width Darkness->Tail Dark sweep, Step Graph rational bend
+{
+  const opts = { taps: 64, decay: 0.2, dark: 2, tail: 48, seed: 7, amp: 0, skew: 0, gap: 1, tailRand: 0 };
+  const mid = layout({ ...opts, tailCurve: 0 });
+  const plus = layout({ ...opts, tailCurve: 0.8 });
+  const minus = layout({ ...opts, tailCurve: -0.8 });
+  const firstW = mid.width[0] * FS, lastW = mid.width[mid.count - 1] * FS;
+  check(Math.abs(firstW - 2) < 1e-9, `Tail Curve 0: first width is Darkness (${firstW.toFixed(4)} smp)`);
+  check(lastW > 40 && lastW <= 48 + 1e-9, `Tail Curve 0: last width approaches Tail Dark (${lastW.toFixed(2)} smp, target 48)`);
+  const mono = (lay, up) => {
+    for (let i = 1; i < lay.count; i += 1) {
+      if (up && lay.width[i] + 1e-15 < lay.width[i - 1]) return false;
+      if (!up && lay.width[i] > lay.width[i - 1] + 1e-15) return false;
+    }
+    return lay.count >= 2;
+  };
+  check(mono(mid, true) && mono(plus, true) && mono(minus, true), `Tail Curve: widths stay monotonic 2 -> 48 at 0 / +0.8 / -0.8 (${mid.count}/${plus.count}/${minus.count} taps)`);
+  const down = layout({ ...opts, dark: 48, tail: 2, tailCurve: 0 });
+  check(mono(down, false) && Math.abs(down.width[0] * FS - 48) < 1e-9, `Tail Curve 0: a falling sweep is monotonic and starts at Darkness (${(down.width[0] * FS).toFixed(2)} -> ${(down.width[down.count - 1] * FS).toFixed(2)} smp)`);
+  // Mid-tail width at curve 0 is the geometric mean (log-domain), not the arithmetic mean.
+  const midIdx = Math.floor(mid.count / 2);
+  const midW = mid.width[midIdx] * FS;
+  const geo = Math.sqrt(2 * 48);
+  const arith = 0.5 * (2 + 48);
+  check(Math.abs(midW - geo) < 3 && Math.abs(midW - arith) > 8, `Tail Curve 0: mid-tail width is geometric (${midW.toFixed(2)} smp, geo ${geo.toFixed(2)}, arith ${arith.toFixed(1)})`);
+  // Positive curve raises mid-segment weight (Step Graph sign): mid width is closer to Tail Dark.
+  const plusW = plus.width[Math.floor(plus.count / 2)] * FS;
+  const minusW = minus.width[Math.floor(minus.count / 2)] * FS;
+  check(plusW > midW + 1 && midW > minusW + 1, `Tail Curve sign: +0.8 mid ${plusW.toFixed(2)} > 0 mid ${midW.toFixed(2)} > -0.8 mid ${minusW.toFixed(2)} ( + reaches Tail Dark sooner )`);
+  // Tail Random 0: every width sits on the curve (no scatter around the maxWidth).
+  const scatter = layout({ ...opts, tailRand: 1, tailCurve: 0 });
+  const uniqSmooth = new Set(mid.width.map((w) => w.toFixed(9))).size;
+  const uniqRand = new Set(scatter.width.map((w) => w.toFixed(9))).size;
+  check(uniqSmooth >= mid.count - 1 && uniqRand > 8, `Tail Random 0 + Tail Curve 0: widths stay on the curve (${uniqSmooth} distinct of ${mid.count}); random still varies (${uniqRand})`);
+  const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+  const i = defs.indexOf('key: "tailCurve",');
+  const tc = defs.slice(i - 80, i + 280);
+  check(/defaultValue: "0"/.test(tc) && /max: "1"/.test(tc) && /min: "-1"/.test(tc) && /sliderCurve: "bipolarRational"/.test(tc) && /curveAmount: "-0.9",/.test(tc),
+    "Tail Curve definition: -1..+1, default 0, bipolar rational knob (amount -0.9)");
 }
 
 // ---- 6 s Length (the definition max): the delay line is sized from the sample rate, so it always fits

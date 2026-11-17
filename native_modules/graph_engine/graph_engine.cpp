@@ -797,7 +797,8 @@ extern "C" double soemdsp_velvet_reverb_sample(
   double ampDecayDb,
   double densitySkew,
   double minGapMs,
-  double tailRandom
+  double tailRandom,
+  double tailCurve
 );
 extern "C" double soemdsp_velvet_reverb_right(int handle);
 extern "C" int soemdsp_velvet_reverb_version();
@@ -4612,6 +4613,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypePurr) ? 0.3 : // Rumble (Purr)
     (typeId == kTypeResonantCompressor) ? 1.0 : // Depth (Resonant Compressor)
     (typeId == kTypeModalSnare || typeId == kTypeElectroHat) ? 0.0 : // noiseTilt (Modal Snare / Electro Hat)
+    (typeId == kTypeVelvetReverb) ? 0.0 : // Tail Curve (Dark Velvet Reverb)
     (typeId == kTypeHypersaw2) ? 0.0 // vibratoDistanceTilt
       : 1.0,
     false
@@ -15735,7 +15737,8 @@ static void process_velvet_reverb(Circuit& g, Node& node, int frames) {
       control_audio(g, node.level, f), // Amp Decay: dB at the end of the tail (0 = gated)
       control_audio(g, node.shape, f), // Density Skew
       control_audio(g, node.offsetMs, f), // Min Gap ms (least spacing between taps)
-      control_audio(g, node.center, f) // Tail Random (0 = smooth tail dark, 1 = previous random widths)
+      control_audio(g, node.center, f), // Tail Random (0 = smooth tail dark, 1 = previous random widths)
+      control_audio(g, node.saturate, f) // Tail Curve (-1..+1 log-width sweep bend; 0 = geometric)
     );
     const double outR = soemdsp_velvet_reverb_right(node.nativeHandle);
 
