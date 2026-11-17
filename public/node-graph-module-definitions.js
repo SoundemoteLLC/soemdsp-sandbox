@@ -7079,12 +7079,10 @@ const nodeGraphModuleDefinitions = (
   },
   velvetReverb: {
     face: [
-      // Amp Decay sits left of Darkness, Tail Dark under Darkness; Skew is a horizontal slider like Length.
-      { kind: "cells", params: [["density", "Taps"], ["mix", "Mix"]], h: 40 },
+      { kind: "cells", params: [["density", "Taps"], ["densitySkew", "Skew"], ["minGap", "Min Gap"]], h: 40 },
       { kind: "cells", params: [["decay", "Length", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["densitySkew", "Skew", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["darkness", "Darkness"]], h: 40 },
-      { kind: "cells", params: [["stereoSpread", "Spread"], ["tailDarkness", "Tail Dark"]], h: 40 },
+      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["darkness", "Darkness"], ["tailDarkness", "Tail Dark"]], h: 40 },
+      { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "processor",
@@ -7219,20 +7217,41 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         unit: "dB",
       },
-      // Density Skew: where the taps sit along Length (Step Graph bipolar
-      // rational curve, segment_bipolar_rational01 with contour = -skew).
-      // + packs them toward the middle of the tail, - toward both ends; 0 = even.
-      // -0.9..0.9 keeps it off the curve's steep ends. Taps that would bunch
-      // closer than the cell floor are not used (the face reads "48 / 64 taps").
+      // Density Skew: where the taps sit along Length (Step Graph rational curve,
+      // segment_rational01 with contour = -skew). + packs them toward the start,
+      // - toward the end; 0 = even. -0.9..0.9 keeps it off the curve's step at
+      // +-1 (every tap on one sample). The knob is scaled by the bipolar rational
+      // slider curve (amount -0.9, like Pulse Sawmorph width) for fine control
+      // near 0. Taps that would bunch closer than the cell floor are not used
+      // (the face reads "48 / 64 taps").
       {
+        curveAmount: "-0.9",
         defaultValue: "0",
         key: "densitySkew",
         label: "Density Skew",
         max: "0.9",
         mid: "0",
         min: "-0.9",
-        nonlinearSlider: false,
+        nonlinearSlider: true,
+        sliderCurve: "bipolarRational",
         step: "any",
+      },
+      // Min Gap: the least spacing between consecutive taps in ms (never less
+      // than the pulse width there). Taps that would sit closer are not used, so
+      // dense or skewed settings keep velvet dispersion instead of flanging.
+      // Default ~4 samples at 48 kHz.
+      {
+        defaultValue: "0.083",
+        key: "minGap",
+        kind: "time",
+        label: "Min Gap",
+        max: "10",
+        maxDigits: 5,
+        mid: "1",
+        min: "0",
+        nonlinearSlider: true,
+        step: "any",
+        unit: "ms",
       },
       {
         defaultValue: "1",

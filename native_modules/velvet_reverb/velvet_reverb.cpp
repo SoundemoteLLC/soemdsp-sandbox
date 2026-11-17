@@ -117,6 +117,7 @@ struct VelvetReverbState {
   double builtTail;
   double builtAmp;
   double builtSkew;
+  double builtGap;
   double builtRate;
   unsigned int builtSeed;
 
@@ -241,7 +242,7 @@ static const int kLayoutLengthLimit = 2; // Length longer than the delay line: t
 static const int kLayoutThinned = 4;     // fewer taps play than Taps asks: they would bunch up (cell floor)
 
 // Cell floor (velvet_reverb v6): no tap's cell is narrower than its widest
-// pulse, and never under kMinCellSamples, so every pulse fits its own cell with
+// pulse, and never under Min Gap (ms, a parameter), so every pulse fits its own cell with
 // room for its jitter and taps never stack or overlap. Where Density Skew (or
 // simply many Taps in a short Length) would pack cells tighter, the taps there
 // are not used: the tap count follows the floor instead of the setting, which
@@ -249,7 +250,11 @@ static const int kLayoutThinned = 4;     // fewer taps play than Taps asks: they
 // min(Taps share, section length / floor) taps; the running sum is continuous
 // in every parameter, and its fraction fades the last tap in exactly like a
 // fractional Taps, so moving Skew never pops.
-static const double kMinCellSamples = 4.0;
+static const double kDefaultMinGapMs = 0.083; // ~4 samples at 48 kHz (the Min Gap definition default)
+static inline double clean_min_gap_ms(double ms) {
+  if (!(ms == ms)) return kDefaultMinGapMs;
+  return ms > 0.0 ? ms : 0.0;
+}
 static const int kWarpSteps = 1024;
 static double gWarpX[kWarpSteps + 1]; // warped position (samples) at section edges
 static double gWarpN[kWarpSteps + 1]; // taps kept up to each edge (running sum)
@@ -257,19 +262,20 @@ static double gWarpN[kWarpSteps + 1]; // taps kept up to each edge (running sum)
 static void build_table(
   TapTable& t, double taps, double headWidth, double spread, unsigned int seed,
   double lengthSeconds, double sampleRate, double tailWidth, double ampDecayDb,
-  double densitySkew, int delaySize, Layout* out
+  double densitySkew, double minGapMs, int delaySize, Layout* out
 ) {
   // Each parameter has one job (velvet_reverb v4):
   //   Taps        how many taps (continuous: the last one fades in by its fraction)
   //   Length      spreads those taps over the tail (s); longer = sparser, not more
   //   Amp Decay   tap level at the end of the tail (dB), an exponential fade
   //               along it: 0 dB = flat (gated), -60 dB = RT60
-  //   Density Skew where the taps sit: the Step Graph bipolar rational curve
-  //               (segment_bipolar_rational01, contour = -skew) warps the even
-  //               grid, so + packs them toward the middle of the tail and -
-  //               toward both ends; taps that would pack under the cell floor
-  //               are not used (v6). The definition range (-0.9..0.9) keeps it
-  //               off the curve's steep ends.
+  //   Density Skew where the taps sit: the Step Graph rational curve
+  //               (segment_rational01, contour = -skew) warps the even grid, so
+  //               + packs them toward the start and - toward the end; taps
+  //               that would pack under the cell floor are not used (v6). The
+  //               definition range (-0.9..0.9) keeps it off the curve's step
+  //               at +-1; the knob's bipolar rational scaling gives fine
+  //               control near 0.
   // A tail is at least one sample long and has to fit the delay line with its
   // widest pulse (physical limits only).
   int flags = 0;
@@ -290,9 +296,13 @@ static void build_table(
     const double m = headWidth + (x / length) * (tailWidth - headWidth);
     return m < 1.0 ? 1.0 : m;
   };
+  // Min Gap: the least spacing between consecutive taps (never less than the
+  // pulse there, and at least one sample).
+  double minGap = clean_min_gap_ms(minGapMs) * 0.001 * sampleRate;
+  if (minGap < 1.0) minGap = 1.0;
   auto floorAt = [&](double x) {
     const double m = widestAt(x);
-    return m > kMinCellSamples ? m : kMinCellSamples;
+    return m > minGap ? m : minGap;
   };
 
   // Kept taps along the warped tail (see kWarpSteps). Without the floor this is
@@ -301,7 +311,7 @@ static void build_table(
   gWarpN[0] = 0.0;
   const double share = exactTaps / (double)kWarpSteps;
   for (int j = 1; j <= kWarpSteps; ++j) {
-    gWarpX[j] = length * soemdsp_maths::segment_bipolar_rational01((double)j / (double)kWarpSteps, contour);
+    gWarpX[j] = length * soemdsp_maths::segment_rational01((double)j / (double)kWarpSteps, contour);
     if (gWarpX[j] < gWarpX[j - 1]) gWarpX[j] = gWarpX[j - 1];
     const double dx = gWarpX[j] - gWarpX[j - 1];
     const double fit = dx / floorAt(0.5 * (gWarpX[j] + gWarpX[j - 1]));
@@ -545,6 +555,7 @@ int soemdsp_velvet_reverb_create(double sampleRate) {
       s.builtTail = 0.0;
       s.builtAmp = -60.0;
       s.builtSkew = 0.0;
+      s.builtGap = kDefaultMinGapMs;
       s.builtRate = 0.0;
       s.builtSeed = 0u;
       s.tables[0].countL = 0;
@@ -593,7 +604,8 @@ double soemdsp_velvet_reverb_sample(
   double decay,         // Length: the tail in seconds the taps spread over
   double tailDarkness,  // max pulse width at the last tap, 0 = same as Darkness
   double ampDecayDb,    // level at the end of the tail in dB (0 = flat / gated)
-  double densitySkew    // -1 .. +1: + packs taps toward the start, - toward the end
+  double densitySkew,   // + packs taps toward the start, - toward the end
+  double minGapMs       // Min Gap: least spacing between consecutive taps (ms)
 ) {
   if (handle <= 0 || handle > kMaxInstances) return 0.0;
   VelvetReverbState& s = gPool[handle - 1];
@@ -607,6 +619,7 @@ double soemdsp_velvet_reverb_sample(
   const double grid = paused ? s.builtGrid : taps; // built tap count
   if (!(ampDecayDb == ampDecayDb)) ampDecayDb = -60.0;
   if (!(densitySkew == densitySkew)) densitySkew = 0.0;
+  const double minGapMsC = clean_min_gap_ms(minGapMs);
 
   // Continuous width: 1.66 is 1.66 samples. Below 1 a pulse is still one sample.
   const double width = clean_width(darkness);
@@ -623,20 +636,20 @@ double soemdsp_velvet_reverb_sample(
   if (paused) {
     // nothing to build; a module that starts paused has no taps yet (wet is silent)
   } else if (s.builtGrid < 0.0) {
-    build_table(s.tables[s.cur], grid, width, spread, s.seed, decay, sampleRate, tail, ampDecayDb, densitySkew, s.delaySize, nullptr);
+    build_table(s.tables[s.cur], grid, width, spread, s.seed, decay, sampleRate, tail, ampDecayDb, densitySkew, minGapMsC, s.delaySize, nullptr);
     s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
-    s.builtAmp = ampDecayDb; s.builtSkew = densitySkew;
+    s.builtAmp = ampDecayDb; s.builtSkew = densitySkew; s.builtGap = minGapMsC;
     s.builtGrid = grid; s.builtWidth = width;
     s.builtSpread = spread; s.builtSeed = s.seed;
   } else if (!s.fading && (
     grid != s.builtGrid || width != s.builtWidth
     || spread != s.builtSpread || s.seed != s.builtSeed
     || decay != s.builtDecay || sampleRate != s.builtRate || tail != s.builtTail
-    || ampDecayDb != s.builtAmp || densitySkew != s.builtSkew
+    || ampDecayDb != s.builtAmp || densitySkew != s.builtSkew || minGapMsC != s.builtGap
   )) {
-    build_table(s.tables[1 - s.cur], grid, width, spread, s.seed, decay, sampleRate, tail, ampDecayDb, densitySkew, s.delaySize, nullptr);
+    build_table(s.tables[1 - s.cur], grid, width, spread, s.seed, decay, sampleRate, tail, ampDecayDb, densitySkew, minGapMsC, s.delaySize, nullptr);
     s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
-    s.builtAmp = ampDecayDb; s.builtSkew = densitySkew;
+    s.builtAmp = ampDecayDb; s.builtSkew = densitySkew; s.builtGap = minGapMsC;
     s.builtGrid = grid; s.builtWidth = width;
     s.builtSpread = spread; s.builtSeed = s.seed;
     s.fading = true;
@@ -690,7 +703,8 @@ double soemdsp_velvet_reverb_sample(
 // when a setting changes.
 int soemdsp_velvet_reverb_layout(
   double taps, double darkness, double stereoSpread, double sampleRate,
-  double decay, double tailDarkness, double seed, double ampDecayDb, double densitySkew
+  double decay, double tailDarkness, double seed, double ampDecayDb, double densitySkew,
+  double minGapMs
 ) {
   if (!(sampleRate >= 1000.0)) sampleRate = 48000.0;
   if (!(taps == taps)) taps = 64.0;
@@ -703,7 +717,7 @@ int soemdsp_velvet_reverb_layout(
   if (!(densitySkew == densitySkew)) densitySkew = 0.0;
   const unsigned int seedU = seed > 0.0 ? (unsigned int)seed : 0u;
   build_table(gLayoutTable, taps, clean_width(darkness), clean_spread(stereoSpread),
-    seedU, decay, sampleRate, clean_tail(tailDarkness), ampDecayDb, densitySkew, delay_size_for(sampleRate), &gLayout);
+    seedU, decay, sampleRate, clean_tail(tailDarkness), ampDecayDb, densitySkew, clean_min_gap_ms(minGapMs), delay_size_for(sampleRate), &gLayout);
   return gLayoutTable.countL;
 }
 double* soemdsp_velvet_reverb_layout_pos() { return gLayoutPos; }
@@ -728,7 +742,7 @@ double soemdsp_velvet_reverb_right(int handle) {
 }
 
 int soemdsp_velvet_reverb_version() {
-  return 6; // 6: Density Skew is the bipolar rational curve (+ packs toward the middle, - toward both ends); cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
+  return 7; // 7: Min Gap parameter (ms; sample and layout take it last): the cell floor is max(Min Gap, widest pulse); Density Skew back to the one-sided rational warp. 6: cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
 }
 
 } // extern "C"
