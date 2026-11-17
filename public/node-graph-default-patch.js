@@ -211,6 +211,7 @@ function createNodeGraphPatchNode(type, options = {}, creation = {}) {
     || ui.modRailAlwaysOn
     || ui.slidersHidden
     || ui.slidersForceShow
+    || ui.collapsed
     || ui.interfaceControlsHidden
     || ui.interfaceControlsForceShow
     || ui.movementLocked

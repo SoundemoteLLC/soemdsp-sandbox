@@ -639,7 +639,7 @@ function nodeGraphModuleIsTitleOnlyUi(type, ui = {}) {
   return displayOff && slidersOff && ioOff && buttonsOff && surfaceOff;
 }
 
-/** Display + title + buttons + I/O + sliders all hidden. */
+/** Independent collapsed flag; does not infer from other hide settings. */
 function nodeGraphModuleIsCollapsedUi(type, ui = {}) {
   if (nodeGraphModuleDefinitions[type]?.layout === "textBox") {
     return false;
@@ -647,23 +647,7 @@ function nodeGraphModuleIsCollapsedUi(type, ui = {}) {
   const effective = typeof nodeGraphEffectivePatchNodeUi === "function"
     ? nodeGraphEffectivePatchNodeUi(ui, type)
     : ui;
-  if (!effective) {
-    return false;
-  }
-  const displayOff = typeof nodeGraphModuleHasFace === "function"
-    ? !nodeGraphModuleDisplayVisibleForUi(type, ui)
-    : Boolean(effective.oscilloscopeHidden);
-  const slidersOff = typeof nodeGraphModuleTypeHasHideableSliders === "function"
-    ? !nodeGraphModuleTypeHasHideableSliders(type) || Boolean(effective.slidersHidden)
-    : Boolean(effective.slidersHidden);
-  const ioOff = typeof nodeGraphModuleTypeHasIoPorts === "function"
-    ? !nodeGraphModuleTypeHasIoPorts(type) || Boolean(effective.ioHidden)
-    : Boolean(effective.ioHidden);
-  return Boolean(effective.titleHidden)
-    && Boolean(effective.buttonsHidden)
-    && displayOff
-    && slidersOff
-    && ioOff;
+  return Boolean(effective?.collapsed);
 }
 
 /**
