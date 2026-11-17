@@ -37,12 +37,25 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     },
     outputAliases: { "ƒ": "f", Frequency: "f" },
     outputs: ["Kick", "Snare", "Hat", "Melody", "Pitch", "f"],
+    // Param-band face (under the grid, not on it). Compact common-slider rows.
+    // There is no separate View Plane control: Plane is the first View choice.
+    face: [
+      { kind: "cells", params: [["rate", "Rate"], ["semitoneOffset", "Semi"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["alpha", "α"], ["beta", "β"], ["rho", "ρ"]], h: 40 },
+      { kind: "cells", params: [["drift", "Drift"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["steps", "Steps"], ["reset", "Reset After"]], h: 40 },
+      { kind: "cells", params: [["spread", "Track Spread"], ["walk", "Bar Walk"]], h: 40 },
+      { kind: "cells", params: [["snap", "Rational Snap"]], horizontal: true },
+      { kind: "cells", params: [["view", "View"]], horizontal: true },
+    ],
     parameters: [
+      { key: "rate", label: "Rate", defaultValue: "8", min: "0", max: "20000", mid: "8", step: "any", nonlinearSlider: true, linearSmoothing: false, kind: "frequency", unit: "Hz" },
+      // Same convention as Pitch Quantizer / Acid Sequencer: integer st, -48..+48.
+      { key: "semitoneOffset", label: "Semitone Offset", defaultValue: "0", min: "-48", mid: "0", max: "48", step: "1", nonlinearSlider: false, linearSmoothing: false, showSign: true, unit: "st" },
       { key: "alpha", label: "α", defaultValue: "0.2955977425", min: "0.001", max: "0.999", mid: "0.3", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
       { key: "beta", label: "β", defaultValue: "0.1607132448", min: "0.001", max: "0.999", mid: "0.2", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
       { key: "rho", label: "ρ", defaultValue: "0", min: "0", max: "1", mid: "0.5", step: "0.0001", nonlinearSlider: false, linearSmoothing: false, wraparound: true },
-      { key: "drift", label: "ρ drift", defaultValue: "0", min: "-0.2", max: "0.2", mid: "0", step: "0.0005", nonlinearSlider: false, linearSmoothing: false },
-      { key: "rate", label: "Rate", defaultValue: "8", min: "0", max: "20000", mid: "8", step: "any", nonlinearSlider: true, linearSmoothing: false, kind: "frequency", unit: "Hz" },
+      { key: "drift", label: "Drift", defaultValue: "0", min: "-0.2", max: "0.2", mid: "0", step: "0.0005", nonlinearSlider: false, linearSmoothing: false },
       { key: "steps", label: "Steps", defaultValue: "16", min: "2", max: "32", mid: "16", step: "1", nonlinearSlider: false, linearSmoothing: false },
       // Spawn 0–128, mid-skew 8 at slider center, default 8. 0 = never reset.
       // hardMax keeps the previous 65536 typed/load ceiling so old patches hold.

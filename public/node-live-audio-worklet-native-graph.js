@@ -530,6 +530,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "snap") return P.NATIVE_GRAPH_PARAM_MIX;
     if (k === "view") return P.NATIVE_GRAPH_PARAM_MODE;
     if (k === "cell") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
+    if (k === "semitoneOffset") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
     return undefined;
   }
   if (t === "pitchQuantizer") {
@@ -7831,6 +7832,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("view", P.NATIVE_GRAPH_PARAM_MODE, disc("view", 0));
       push("cell", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("cell", 14));
       push("stepPattern", P.NATIVE_GRAPH_PARAM_STURMIAN_PATTERN, disc("stepPattern", 3170));
+      push("semitoneOffset", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, disc("semitoneOffset", 0));
       continue;
     }
     if (type === "blitTrigger") {
