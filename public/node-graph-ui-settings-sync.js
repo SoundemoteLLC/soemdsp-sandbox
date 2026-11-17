@@ -481,7 +481,9 @@ function syncNodeUiDevLightingLevels() {
     const def = typeof nodeUiDevSettingControls !== "undefined" ? nodeUiDevSettingControls.find((d) => d.id === id) : null;
     if (!def) continue;
     const input = document.getElementById(id);
-    if (input) {
+    if (input && typeof nodeUiDevApplyDefinitionLimits === "function") {
+      nodeUiDevApplyDefinitionLimits(input, def);
+    } else if (input) {
       input.min = String(def.min);
       input.max = String(def.max);
       input.step = String(def.step ?? 1);
