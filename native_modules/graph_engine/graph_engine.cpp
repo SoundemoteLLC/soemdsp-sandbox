@@ -826,7 +826,8 @@ extern "C" int soemdsp_velvet_reverb_version();
 extern "C" int soemdsp_noise_conv_reverb_create(double sampleRate);
 extern "C" int soemdsp_convolution_resonator_create();
 extern "C" void soemdsp_convolution_resonator_destroy(int handle);
-extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right);
+extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
+  double frequency, double periods, double mix, double sampleRate);
 extern "C" double soemdsp_convolution_resonator_right(int handle);
 extern "C" void soemdsp_noise_conv_reverb_destroy(int handle);
 extern "C" void soemdsp_noise_conv_reverb_reset(int handle);
@@ -3834,7 +3835,7 @@ static void init_node_defaults(Node& n, int typeId) {
           || typeId == kTypeResonatorFilter || typeId == kTypeChaoticPhaseLockingFilter)
         ? 0.5
       : (typeId == kTypeModeResonator) ? 440.0
-      : (typeId == kTypeCombResonator || typeId == kTypeCombPluck) ? 110.0
+      : (typeId == kTypeCombResonator || typeId == kTypeCombPluck || typeId == kTypeConvolutionResonator) ? 110.0
       : (typeId == kTypeInertialFilter) ? 20000.0 // attack Hz
       : (typeId == kTypeRobinSinepulse) ? 10000.0 // highFreq Hz
       : (typeId == kTypeElectroSnare || typeId == kTypeModalSnare) ? 180.0 // tune Hz
@@ -4223,7 +4224,7 @@ static void init_node_defaults(Node& n, int typeId) {
       && typeId != kTypeFm
       && typeId != kTypeDsfMorphingOsc
       && typeId != kTypeDsfOscillator
-      && typeId != kTypePulseTrain)
+      && typeId != kTypePulseTrain && typeId != kTypeConvolutionResonator)
   );
   init_control(
     n.center,
@@ -4396,6 +4397,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeFilterMorphOscillator || typeId == kTypeFlowerChildFilterRev3 || typeId == kTypeFluvNoise) ? 1.0 // Amount (dither depth at Full)
       : (typeId == kTypePumpCurve) ? 1.0 // Mix wet
       : (typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb) ? 1.0 // Mix wet / gain
+      : (typeId == kTypeConvolutionResonator) ? 1.0 // Mix
       : (typeId == kTypeNoiseConvReverb) ? 0.5 // Mix
       : (typeId == kTypeDsfOscillator) ? 0.5 // Square↔Saw blend
       : (typeId == kTypeBradley2a) ? 0.0 // interfLevel
@@ -15845,19 +15847,23 @@ static void process_velvet_noise(Circuit& g, Node& node, int frames) {
 //   node.seed: Seed
 //   node.mix: Dry / Wet (0 .. 1)
 //   node.timeNumerator: Decay (dB/s); node.timeDenominator: Tail Darkness (0 = off)
-// Stage 1: exact latency-aligned dry path; Body and vocoder follow separately.
+// Buzz Body: frequency = Hz, stages = finite train periods, mix = dry/wet.
 static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   using namespace soemdsp::routing;
   const StereoRoute route = stereo_route(probe_stereo_route_wiring(g, node));
   mix_node_inputs(g, node, frames);
+  const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const double sr = g.sampleRate > 0 ? g.sampleRate : 48000;
   for (int f = 0; f < frames; ++f) {
     control_frame(g, node, f);
     const double m = g.mixMono[f], l = g.mixLeft[f], r = g.mixRight[f];
     const double a = stereo_route_feed(route.runMono ? route.feedMono : route.feedL, m, l, r);
     const double b = stereo_route_feed(route.feedR, m, l, r);
     const double y = soemdsp_convolution_resonator_sample(node.nativeHandle,
-      route.runMono || route.runL ? a : 0.0, route.runR ? b : 0.0);
+      route.runMono || route.runL ? a : 0.0, route.runR ? b : 0.0,
+      resolve_osc_hz(g, f, liveF, false, node.frequency, 0.0, sr),
+      control_audio(g, node.stages, f), control_audio(g, node.mix, f), sr);
     const double yr = soemdsp_convolution_resonator_right(node.nativeHandle);
     node.buf[kPortMono][f] = stereo_route_out(route.outMono, y, y, yr);
     node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, y, y, yr);

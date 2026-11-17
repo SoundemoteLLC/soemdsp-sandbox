@@ -6,7 +6,8 @@ const { instance } = await WebAssembly.instantiate(fs.readFileSync(file));
 const x = instance.exports;
 const create = x.soemdsp_convolution_resonator_create;
 const destroy = x.soemdsp_convolution_resonator_destroy;
-const sample = x.soemdsp_convolution_resonator_sample;
+const sample = (h, l, r, frequency = 110, periods = 4, mix = 0, sr = 48000) =>
+  x.soemdsp_convolution_resonator_sample(h, l, r, frequency, periods, mix, sr);
 const right = x.soemdsp_convolution_resonator_right;
 const reset = x.soemdsp_convolution_resonator_reset;
 const latency = x.soemdsp_convolution_resonator_latency();

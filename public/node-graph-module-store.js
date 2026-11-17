@@ -1099,7 +1099,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   convolutionResonator: {
     category: "space",
-    description: "Development timing proof: stereo dry signal delayed by 2048 samples. Resonant body and spectral processing are not implemented yet.",
+    description: "Development Buzz body: pitch-tuned finite impulse train with fractional delays, stereo routing and delay-aligned Mix. STFT vocoder and Crunch are not implemented yet.",
     label: "Convolution Resonator",
     notes: ["vocoder", "convolution", "robot", "crunch", "resonator", "voice", "native"],
   },

@@ -6100,6 +6100,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 1));
       continue;
     }
+    if (type === "convolutionResonator") {
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
+      push("bodySize", P.NATIVE_GRAPH_PARAM_STAGES, cont("bodySize", 4));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      continue;
+    }
     if (type === "noiseConvReverb") {
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1.5));
       push("ampShape", P.NATIVE_GRAPH_PARAM_SHAPE, cont("ampShape", 0));

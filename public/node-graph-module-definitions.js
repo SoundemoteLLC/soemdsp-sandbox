@@ -7341,14 +7341,26 @@ const nodeGraphModuleDefinitions = (
   convolutionResonator: {
     planRole: "processor",
     planFreeRun: true,
-    inputs: ["In", "Left", "Right"],
-    inputLabels: { In: "Mono" },
+    face: [
+      { kind: "cells", params: [["frequency", "Frequency"], ["bodySize", "Size"]], h: 40 },
+      { kind: "cells", params: [["mix", "Mix"]], horizontal: true, h: 30 },
+    ],
+    inputs: ["In", "Left", "Right", "f"],
+    inputLabels: { In: "Mono", f: "\u0192" },
     inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right"],
     outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
     displayType: "lineBurn",
-    parameters: [],
+    parameters: [
+      { key: "frequency", label: "Frequency", kind: "frequency", defaultValue: "110",
+        min: "10", mid: "110", max: "20000", step: "any", nonlinearSlider: true, unit: "Hz",
+        tooltip: "Buzz body fundamental and BLIT carrier pitch in Hz. A wired f input replaces this value sample by sample." },
+      { key: "bodySize", label: "Size", defaultValue: "4", min: "1", mid: "4", max: "8", step: "any", unit: "cycles",
+        tooltip: "Length of the finite Buzz pulse train in periods. Fractional values fade the last pulse continuously; more periods make narrower harmonic teeth." },
+      { key: "mix", label: "Mix", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "any",
+        tooltip: "Dry/wet balance. Both paths retain the same 2048-sample timing reference. Wet is the Buzz body only at this development stage; no vocoder yet." },
+    ],
   },
   noiseConvReverb: {
     face: [
