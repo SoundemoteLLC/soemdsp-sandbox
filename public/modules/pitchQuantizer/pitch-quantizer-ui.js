@@ -118,22 +118,64 @@ function nodeGraphPitchQuantizerKeyAt(layout, x, y) {
   return null;
 }
 
+/**
+ * Vertical natural-key traces. A seam that a sharp covers is clipped so it
+ * only runs in the lip below that sharp (the E-F joint has no sharp and
+ * stays the full exposed height). Seams are also inset by `stroke` so they
+ * do not form a T-cap on the natural top or bottom borders.
+ */
+function nodeGraphPitchQuantizerSeamRects(layout, strokeDev) {
+  const stroke = Math.max(1, strokeDev | 0);
+  if (!layout || !Array.isArray(layout.keys)) return [];
+  const naturals = layout.keys.filter((k) => !k.black);
+  const sharps = layout.keys.filter((k) => k.black);
+  const seams = [];
+  for (let i = 1; i < naturals.length; i += 1) {
+    const left = naturals[i - 1];
+    const right = naturals[i];
+    const x = Math.round(right.x - stroke * 0.5);
+    let y0 = Math.max(left.y, right.y) + stroke;
+    let y1 = Math.min(left.y + left.h, right.y + right.h) - stroke;
+    const midX = right.x;
+    for (let s = 0; s < sharps.length; s += 1) {
+      const sharp = sharps[s];
+      if (sharp.x < midX + stroke && sharp.x + sharp.w > midX) {
+        y0 = Math.max(y0, sharp.y + sharp.h);
+      }
+    }
+    const h = y1 - y0;
+    if (h > 0) seams.push({ x, y: y0, w: stroke, h });
+  }
+  return seams;
+}
+
 if (typeof globalThis !== "undefined") {
   globalThis.NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
   globalThis.nodeGraphPitchQuantizerKeyLayout = nodeGraphPitchQuantizerKeyLayout;
   globalThis.nodeGraphPitchQuantizerKeyAt = nodeGraphPitchQuantizerKeyAt;
+  globalThis.nodeGraphPitchQuantizerSeamRects = nodeGraphPitchQuantizerSeamRects;
+}
+
+function nodeGraphPitchQuantizerGlStrokeEdges(batch, x, y, w, h, rgba, stroke, edges) {
+  const s = Math.max(1, Number(stroke) || 1);
+  if (!(w > 0) || !(h > 0) || typeof nodeGraphGlLinesRect !== "function") return;
+  const top = !edges || edges.top !== false;
+  const bottom = !edges || edges.bottom !== false;
+  const left = !edges || edges.left !== false;
+  const right = !edges || edges.right !== false;
+  if (top) nodeGraphGlLinesRect(batch, x, y, w, s, rgba);
+  if (bottom) nodeGraphGlLinesRect(batch, x, y + h - s, w, s, rgba);
+  const midTop = y + (top ? s : 0);
+  const midBot = y + h - (bottom ? s : 0);
+  const midH = Math.max(0, midBot - midTop);
+  if (midH > 0) {
+    if (left) nodeGraphGlLinesRect(batch, x, midTop, s, midH, rgba);
+    if (right) nodeGraphGlLinesRect(batch, x + w - s, midTop, s, midH, rgba);
+  }
 }
 
 function nodeGraphPitchQuantizerGlStrokeRect(batch, x, y, w, h, rgba, stroke) {
-  const s = Math.max(1, Number(stroke) || 1);
-  if (!(w > 0) || !(h > 0) || typeof nodeGraphGlLinesRect !== "function") return;
-  nodeGraphGlLinesRect(batch, x, y, w, s, rgba);
-  nodeGraphGlLinesRect(batch, x, y + h - s, w, s, rgba);
-  const midH = Math.max(0, h - s * 2);
-  if (midH > 0) {
-    nodeGraphGlLinesRect(batch, x, y + s, s, midH, rgba);
-    nodeGraphGlLinesRect(batch, x + w - s, y + s, s, midH, rgba);
-  }
+  nodeGraphPitchQuantizerGlStrokeEdges(batch, x, y, w, h, rgba, stroke, null);
 }
 
 function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev) {
@@ -174,23 +216,36 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
     }
   }
 
-  for (const key of layers) {
+  // Naturals first: opaque fills, no interior vertical strokes (those are
+  // a single shared seam, not a double key border).
+  for (let i = 0; i < naturals.length; i += 1) {
+    const key = naturals[i];
     const on = has(key.pc);
-    const fill = on
-      ? (key.black ? L.electricFillSharp : L.electricFillNatural)
-      : (key.black ? L.sharpFill : L.naturalFill);
-    const ink = on
-      ? L.electric
-      : (key.black ? L.sharpStroke : L.naturalStroke);
+    const fill = on ? L.electricFillNatural : L.naturalFill;
+    const ink = on ? L.electric : L.naturalStroke;
     nodeGraphGlLinesRect(batch, key.x, key.y, key.w, key.h, fill);
-    nodeGraphPitchQuantizerGlStrokeRect(batch, key.x, key.y, key.w, key.h, ink, stroke);
+    nodeGraphPitchQuantizerGlStrokeEdges(batch, key.x, key.y, key.w, key.h, ink, stroke, {
+      top: true,
+      bottom: true,
+      left: i === 0,
+      right: i === naturals.length - 1,
+    });
   }
 
-  // Natural-key seams (thin traces on the shared edges).
+  // Seams next, already clipped to the lip below any covering sharp.
   const seam = L.naturalStroke;
-  for (let i = 1; i < naturals.length; i += 1) {
-    const x = naturals[i].x;
-    nodeGraphGlLinesRect(batch, x - stroke * 0.5, naturals[i].y, stroke, naturals[i].h, seam);
+  const seams = nodeGraphPitchQuantizerSeamRects(layout, stroke);
+  for (const seg of seams) {
+    nodeGraphGlLinesRect(batch, seg.x, seg.y, seg.w, seg.h, seam);
+  }
+
+  // Sharps last and fully opaque so no seam or natural stroke shows through.
+  for (const key of sharps) {
+    const on = has(key.pc);
+    const fill = on ? L.electricFillSharp : L.sharpFill;
+    const ink = on ? L.electric : L.sharpStroke;
+    nodeGraphGlLinesRect(batch, key.x, key.y, key.w, key.h, fill);
+    nodeGraphPitchQuantizerGlStrokeRect(batch, key.x, key.y, key.w, key.h, ink, stroke);
   }
 
   const textOpts = {

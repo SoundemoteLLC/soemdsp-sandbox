@@ -119,4 +119,32 @@ assert(frontLip && frontLip.pc === 0, "the natural front lip remains hittable un
 const miss = ctx.nodeGraphPitchQuantizerKeyAt(layout, -8, -8);
 assert(miss === null, "outside the keyboard is not a key");
 
+assert(typeof ctx.nodeGraphPitchQuantizerSeamRects === "function", "seam rects are exported");
+const stroke = 1;
+const seams = ctx.nodeGraphPitchQuantizerSeamRects(layout, stroke);
+assert(seams.length === 6, "one seam at each of the 6 natural-key joints");
+const sharps = layout.keys.filter((k) => k.black);
+function overlaps(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+for (const seam of seams) {
+  for (const sharp of sharps) {
+    assert(!overlaps(seam, sharp), "natural seam must not cross a sharp key rect");
+  }
+}
+const tall = [...seams].sort((a, b) => b.h - a.h)[0];
+assert(
+  seams.filter((s) => Math.abs(s.h - tall.h) < 0.5).length === 1,
+  "only the E-F joint (no sharp) runs the full exposed natural height",
+);
+for (const sharp of sharps) {
+  const lip = seams.filter((s) => s.x < sharp.x + sharp.w && s.x + s.w > sharp.x);
+  assert(lip.length === 1, "each sharp has one seam in the lip below it");
+  assert(lip[0].y >= sharp.y + sharp.h, "seam starts at or below the sharp bottom edge");
+}
+assert(
+  /nodeGraphPitchQuantizerSeamRects\(layout, stroke\)/.test(ui),
+  "draw path must paint the clipped seam rects, not a full-height raw trace",
+);
+
 console.log("ok  pitch quantizer WebGL face: inverted keys, shared hit layout, no rogue DOM");
