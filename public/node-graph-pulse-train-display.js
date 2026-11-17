@@ -18,7 +18,8 @@
 // phase-locked so a Frequency sweep does not modulo-reset the stems.
 // Display Settings `pulseTrainFace`: Background, Line, Dot, Playhead, Lit;
 // Line thickness, Dot size, Fade time (s). Left / Right lamps (red / blue) are
-// the Dark Velvet Reverb tap face's channel inks (its form shows them).
+// the Dark Velvet Reverb tap face's channel inks (its form shows them, plus
+// optional Line blur / tapLineBlur, 0 = off, time-axis only).
 // Module definition defaultDisplaySettings fill any key the node has not stored. Fade 0 holds the lit dots until
 // retrigger; >0 is PhosphorResidual.energyAfterSeconds.
 // GPU only
@@ -37,6 +38,9 @@ const nodeGraphPulseTrainFaceDisplaySettingsDefaults = Object.freeze({
   rightHue: 238.5,
   rightBrightness: 0.59,
   rightSaturation: 0.96,
+  // Dark Velvet Reverb only (form hides this on Pulse Train): time-axis
+  // Expo blur of the tap rectangles, CSS px. 0 = off.
+  tapLineBlur: 0,
 });
 const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = Object.freeze([...NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS, "left", "right"]);
 

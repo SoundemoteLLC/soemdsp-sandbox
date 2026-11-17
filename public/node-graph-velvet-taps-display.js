@@ -10,9 +10,8 @@
 // colour (red), Right in the Right lamp colour (blue), drawn additively so a
 // Left+Right overlap sums toward R+B=White and a dense cluster bursts.
 // Spread 0 = the channels are identical, so every pulse adds toward white.
-// Darker (wider) pulses draw dimmer on a log-width scale (Wref = 64 samples, the spawn
-// Darkness max) so a geometric Darkness-to-Tail-Dark sweep falls evenly across the tail,
-// floored at 0.2.
+// Darker (wider) pulses draw dimmer as 1 / pulse width in samples, floored at 0.2
+// (the original sharper brightness curve).
 // Text: the tap count ("64 taps"; "48 / 64 taps" when taps that would bunch up
 // under the cell floor are not used; "4096 taps max" past the engine's table) and
 // the tail length ("25.0 ms"; "... s max" only when the delay line truly cannot
@@ -24,11 +23,16 @@
 // (xorshift from the Seed, no clock or Math.random).
 // Look: the Pulse Train face settings (Background, Text = the line lamp, shown as
 // "Text" on this face: tap count / length readouts and the held-length bar,
-// Left, Right, Line thickness, Dot size) over the module definition's
-// defaultDisplaySettings (Dot size 0) for any key the node has not stored.
+// Left, Right, Line thickness, Dot size, optional Line blur) over the module
+// definition's defaultDisplaySettings (Dot size 0, Line blur 0 / off) for any
+// key the node has not stored. Line blur (tapLineBlur, CSS px, default 0)
+// smears each pulse only along the time axis with the shared display Expo
+// skirt (nodeGraphGlLinesExpoSkirt in gl-line-renderer, APP_POLICY §3),
+// 4-sample box in X. It never spreads up or down, so the Amp Decay
+// envelope stays crisp.
 // Live tap flash is currently off (NODE_GRAPH_VELVET_TAP_LIVE_FLASH). Taps
 // draw static only: height is amplitude, width is the real pulse (1 device
-// px minimum), brightness is the log-width darkness map. The flash helpers
+// px minimum), brightness is 1/width floored at 0.2. The flash helpers
 // and worklet peak-hold path are kept but not armed. To re-enable, set that
 // flag true and also NODE_LIVE_VELVET_TAP_LIVE_FLASH in
 // node-live-audio-worklet-native-graph.js, and (optionally) idle alpha back
@@ -41,8 +45,8 @@
 // strobe if paints run faster than snapshots). After a quiet snapshot, and
 // once the hit has been painted at least once, the tap goes dark promptly.
 // Height stays the static amplitude layout. A tap narrower than 1 device px
-// is drawn as a 1 px bar at full coverage (brightness follows the log-width
-// darkness map, and the trigger flash when it is on, never Length or zoom). Wider taps keep exact
+// is drawn as a 1 px bar at full coverage (brightness follows 1/width,
+// and the trigger flash when it is on, never Length or zoom). Wider taps keep exact
 // fractional edges with coverage-weighted alpha. Taps go in a GL layer with
 // quadBlend "add" (SRC_ALPHA, ONE)
 // so overlaps accumulate: sparse taps stay distinct thin lines, dense clusters
@@ -60,7 +64,7 @@ function nodeGraphVelvetTapsLoad() {
   if (nodeGraphVelvetTapsWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphVelvetTapsWasm.promise;
   }
-  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1-v6s1-skw1-gap1-trand1-vtaps1-vfit1-vblk1-vflt1")
+  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1-v6s1-skw1-gap1-trand1-vtaps1-vfit1-vblk1-vflt1-vfltdef1")
     .then((response) => {
       if (!response.ok) throw new Error(`velvet_reverb wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -311,7 +315,7 @@ function nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, countL, countR, armFromB
 if (NODE_GRAPH_VELVET_TAP_LIVE_FLASH) nodeGraphVelvetTapsInstallIngestArm();
 
 
-// Idle fill is the log-width darkness shade at solid alpha (no flash
+// Idle fill is the 1/width darkness shade at solid alpha (no flash
 // headroom while LIVE_FLASH is off). When the flash is on, 0.92 leaves
 // room for an alpha pop. A lit tap is opaque; its lift toward white
 // follows the snapshot peak on a 60 dB map. Overlaps still add and may
@@ -322,21 +326,16 @@ const NODE_GRAPH_VELVET_TAP_ON_LIFT = 0.4;
 // 0 dB (peak 1) = full lift; -60 dB = no lift over idle. Peaks above 1
 // (a clipped signal) stay at the full lift; we do not invent extra headroom.
 const NODE_GRAPH_VELVET_TAP_FLASH_DB = 60;
-// Spawn Darkness slider max (samples). Width 1 is full shade, width 64 is
-// the 0.2 floor, so typical Darkness 1-64 uses the whole range. A fixed
-// Wref keeps a uniform-width patch from collapsing to the floor (which
-// "current max width" would do). Widths past 64 stay at the floor.
-const NODE_GRAPH_VELVET_TAP_DARKNESS_WREF = 64;
 const NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR = 0.2;
 
-// Darkness dim: log-width, floored at 0.2. Wider is always dimmer until
-// the floor. Matches the geometric (log-width) Darkness-to-Tail-Dark sweep,
-// so Tail Curve 0 falls roughly linearly across the tail on screen.
+// Darkness dim: 1 / pulse width in samples, floored at 0.2. Wider is always
+// dimmer until the floor. This is the original sharper map (width 2 is
+// already half-bright; the floor is hit at width 5).
 function nodeGraphVelvetTapsDarknessShade(widthSeconds, sampleRate) {
-  const w = Math.max(1, widthSeconds * sampleRate);
-  const t = Math.log(w) / Math.log(NODE_GRAPH_VELVET_TAP_DARKNESS_WREF);
-  const span = 1 - NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR;
-  return Math.max(NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR, 1 - span * t);
+  return Math.max(
+    NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR,
+    Math.min(1, 1 / Math.max(1, widthSeconds * sampleRate)),
+  );
 }
 
 // 0 dB -> 1, -60 dB -> 0. Below the window (including a just-triggered
@@ -394,15 +393,87 @@ function nodeGraphVelvetTapsAxisSpans(a, b, minFull) {
   return spans;
 }
 
+// 4-sample box filter along X only (same sub-pixel offsets as coverageEdge
+// in the shared line shader). dist is 0 inside [x0, x1], else the distance
+// to the nearest vertical edge. No Y term: height stays a hard coverage AA
+// edge so the decay envelope does not blob. The skirt is the shared
+// nodeGraphGlLinesExpoSkirt (t=0 -> 1, t=1 -> 0).
+function nodeGraphVelvetTapsXCov(pxCenter, x0, x1, feather) {
+  let acc = 0;
+  for (let i = 0; i < 4; i += 1) {
+    const o = (i + 0.5) * 0.25 - 0.5;
+    const x = pxCenter + o;
+    let dist = 0;
+    if (x < x0) dist = x0 - x;
+    else if (x > x1) dist = x - x1;
+    acc += dist <= 0 || !(feather > 0)
+      ? (dist <= 0 ? 1 : 0)
+      : nodeGraphGlLinesExpoSkirt(Math.min(1, dist / feather));
+  }
+  return acc * 0.25;
+}
+
+// Horizontal Expo spans around a solid core [coreA, coreB) in device px.
+function nodeGraphVelvetTapsXBlurSpans(coreA, coreB, feather) {
+  const spans = [];
+  if (!(coreB > coreA)) return spans;
+  if (!(feather > 0)) {
+    const first = Math.floor(coreA);
+    const last = Math.ceil(coreB) - 1;
+    if (last < first) return spans;
+    if (first === last) {
+      spans.push({ p: first, c: coreB - coreA, w: 1 });
+      return spans;
+    }
+    spans.push({ p: first, c: (first + 1) - coreA, w: 1 });
+    if (last - first > 1) spans.push({ p: first + 1, c: 1, w: last - first - 1 });
+    spans.push({ p: last, c: coreB - last, w: 1 });
+    return spans;
+  }
+  const first = Math.floor(coreA - feather);
+  const last = Math.ceil(coreB + feather) - 1;
+  let runP = 0;
+  let runC = 0;
+  let runW = 0;
+  const flush = () => {
+    if (runW > 0 && runC > 0) spans.push({ p: runP, c: runC, w: runW });
+    runW = 0;
+  };
+  for (let p = first; p <= last; p += 1) {
+    const c = nodeGraphVelvetTapsXCov(p + 0.5, coreA, coreB, feather);
+    if (!(c > 1 / 255)) {
+      flush();
+      continue;
+    }
+    if (runW > 0 && Math.abs(c - runC) < 1 / 255) {
+      runW += 1;
+    } else {
+      flush();
+      runP = p;
+      runC = c;
+      runW = 1;
+    }
+  }
+  flush();
+  return spans;
+}
+
 // Sharp-cornered rectangle at exact CSS-pixel edges. Horizontal spans no
 // wider than 1 device px are a 1 px bar at full coverage; wider spans keep
-// fractional edge coverage. Height still uses coverage AA. Device pixels
-// follow batch.scale / dpr.
-function nodeGraphVelvetTapsCoverageRect(batch, xa, ya, wa, ha, rgba) {
+// fractional edge coverage. Height still uses coverage AA (never a vertical
+// skirt). Optional featherCss is a time-axis-only Expo blur in CSS px, using
+// the same curve as the dots; 0 keeps the sharp rect. Device pixels follow
+// batch.scale / dpr.
+function nodeGraphVelvetTapsCoverageRect(batch, xa, ya, wa, ha, rgba, featherCss) {
   if (!batch || typeof nodeGraphGlLinesRect !== "function") return;
   if (!(wa > 0) || !(ha > 0)) return;
   const k = Number(batch.scale) > 0 ? Number(batch.scale) : 1;
-  const xs = nodeGraphVelvetTapsAxisSpans(xa * k, (xa + wa) * k, 1);
+  const xsSharp = nodeGraphVelvetTapsAxisSpans(xa * k, (xa + wa) * k, 1);
+  if (!xsSharp.length) return;
+  const coreA = xsSharp[0].p;
+  const coreB = xsSharp[xsSharp.length - 1].p + xsSharp[xsSharp.length - 1].w;
+  const feather = Math.max(0, Number(featherCss) || 0) * k;
+  const xs = feather > 0 ? nodeGraphVelvetTapsXBlurSpans(coreA, coreB, feather) : xsSharp;
   const ys = nodeGraphVelvetTapsAxisSpans(ya * k, (ya + ha) * k);
   if (!xs.length || !ys.length) return;
   const saved = batch.scale;
@@ -444,6 +515,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     : Math.max(0, Number(look.lineSmoothing) || 1);
   const halfPx = Math.max(0, Number(look.lineThickness) || 0) * 0.5;
   const dotR = Math.max(0, Number(look.dotThickness) || 0) * 0.5;
+  const lineBlur = Math.max(0, Number(look.tapLineBlur) || 0);
   const line = rgba(look.strokePaint);
   const inkL = rgba(look.leftPaint);
   const inkR = rgba(look.rightPaint);
@@ -486,7 +558,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     for (let i = 0; i < layout.countR; i += 1) peak = Math.max(peak, Math.abs(layout.levelR[i]));
     const span = x1 - x0;
     const at = (t) => x0 + span * Math.max(0, Math.min(1, t / layout.length));
-    // Darker taps draw dimmer on the log-width map (Wref 64, floor 0.2).
+    // Darker taps draw dimmer as 1 / width in samples, floored at 0.2.
     // Width stays the real pulse; a sub-pixel pulse is a 1 device-px bar at
     // full coverage. Live flash (when NODE_GRAPH_VELVET_TAP_LIVE_FLASH) lifts
     // a hit from this shade; it is off, so every tap stays on this shade.
@@ -544,7 +616,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     if (taps && taps !== batch) taps.quadBlend = "add";
     const fill = (r, ink) => {
       if (!(r.hh > 0) || !(r.xb > r.xa) || !r.s) return;
-      nodeGraphVelvetTapsCoverageRect(taps, r.xa, r.s > 0 ? mid - r.hh : mid, r.xb - r.xa, r.hh, shade(ink, r));
+      nodeGraphVelvetTapsCoverageRect(taps, r.xa, r.s > 0 ? mid - r.hh : mid, r.xb - r.xa, r.hh, shade(ink, r), lineBlur);
     };
     for (const r of rl) fill(r, inkL);
     for (const r of rr) fill(r, inkR);

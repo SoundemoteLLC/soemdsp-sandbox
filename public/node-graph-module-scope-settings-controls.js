@@ -932,6 +932,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   pulseTrainFace: Object.freeze({
     ...nodeGraphPulseFaceValueClamps,
     fadeTime: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 60),
+    tapLineBlur: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 32),
   }),
   robinSinepulseFace: Object.freeze({
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),

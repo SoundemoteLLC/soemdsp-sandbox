@@ -1049,7 +1049,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   }),
   // Pulse Train: the Pulse Explosion set plus Fade time (lit-dot hang).
   pulseTrainFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness", "fadeTime"]),
+    fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness", "fadeTime", "tapLineBlur"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1971,6 +1971,12 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplayLineSmoothing",
     title:
       "Expo antialiasing skirt in CSS pixels (0–8, default 1), outside the line's thickness. 0 = hard core; larger values fade the edge over more pixels. Different faces need different amounts.",
+  }),
+  tapLineBlur: Object.freeze({
+    label: "Line blur",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayTapLineBlur",
+    title: "",
   }),
   lineBrightness: Object.freeze({
     label: "Line",

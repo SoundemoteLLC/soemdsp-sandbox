@@ -567,6 +567,15 @@ function validateNodeGraphPatch(patch) {
         node.paramMeta.skewOffset = node.paramMeta.curveOffset;
         delete node.paramMeta.curveOffset;
       }
+      // Noise Convolution Reverb: Decorrelate renamed Spread.
+      if (type === "noiseConvReverb" && node.params) {
+        if (Object.prototype.hasOwnProperty.call(node.params, "decorrelate") && !Object.prototype.hasOwnProperty.call(node.params, "spread")) {
+          node.params.spread = node.params.decorrelate;
+        }
+        delete node.params.decorrelate;
+        if (node.paramMeta?.decorrelate && !node.paramMeta.spread) node.paramMeta.spread = node.paramMeta.decorrelate;
+        if (node.paramMeta) delete node.paramMeta.decorrelate;
+      }
       if (type === "smoothGraph" && parameter.key === "smoothingMode") {
         const sourceMax = Number(node.paramMeta?.[parameter.key]?.max);
         const n = Math.round(Number(value));
@@ -1019,7 +1028,7 @@ function validateNodeGraphPatch(patch) {
       const sourceNode = String(modulation.sourceNode || "").trim();
       let sourcePort = String(modulation.sourcePort || "").trim();
       const destinationNode = String(modulation.destinationNode || "").trim();
-      const destinationParam = String(modulation.destinationParam || "").trim();
+      let destinationParam = String(modulation.destinationParam || "").trim();
       if (!sourceNode || !sourcePort || !destinationNode || !destinationParam) {
         throw new Error("modulation entries require sourceNode, sourcePort, destinationNode, destinationParam");
       }
@@ -1041,6 +1050,7 @@ function validateNodeGraphPatch(patch) {
         return [];
       }
       const destinationPatchNode = nodeById.get(destinationNode);
+      if (destinationPatchNode?.type === "noiseConvReverb" && destinationParam === "decorrelate") destinationParam = "spread";
       if (!nodeGraphPatchNodeParameterDefinitions(destinationPatchNode).some((parameter) => parameter.key === destinationParam)) {
         loadWarnings.push(`modulation destination parameter invalid: ${destinationNode}.${destinationParam}`);
         return [];

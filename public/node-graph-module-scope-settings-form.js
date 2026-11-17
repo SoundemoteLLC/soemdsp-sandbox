@@ -188,6 +188,22 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Line blur";
     title = "Expo antialiasing skirt in CSS pixels (0–8, default 1), outside the line's thickness. 0 = hard core.";
   }
+  if (formType === "pulseTrainFace" && (key === "lineSmoothing" || key === "tapLineBlur")) {
+    const velvetNode = typeof nodeGraphPatchNode === "function"
+      && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
+      ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())
+      : null;
+    if (velvetNode?.type === "velvetReverb") {
+      if (key === "lineSmoothing") {
+        label = "Dot blur";
+        title = "";
+      }
+      if (key === "tapLineBlur") {
+        label = "Line blur";
+        title = "";
+      }
+    }
+  }
   if (formType === "robinSinepulseFace" && key === "lineSmoothing") {
     label = "Envelope blur";
     title = "Expo fade on the baseline and top edge (CSS pixels, 0–8, default 1). Thin bars fade to 0 instead of a hard line.";
@@ -2427,6 +2443,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace") && section === "waterfall") {
       fieldKeys = [
         "lineThickness",
+        ...(type === "pulseTrainFace" && node?.type === "velvetReverb" ? ["tapLineBlur"] : []),
         "lineSmoothing",
         ...(type === "clockFace" ? ["startThickness", "blinkTime", "gateHeight"] : []),
         "dotThickness",

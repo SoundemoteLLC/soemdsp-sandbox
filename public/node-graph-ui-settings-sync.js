@@ -344,12 +344,61 @@ const nodeGraphStrokeLoudFallbackRgb = [252 / 255, 190 / 255, 161 / 255];
 let nodeGraphStrokeLoudBrightness = 0;
 let nodeGraphStrokeLoudAlpha = 0.31;
 
-// A module's loud colour is the colour of its first outgoing cable; the UI Dev colour is the
-// fallback (the Output module, or a module with no cable yet).
+// Stereo light: a module with both a Left (red) and a Right (blue) cable glows in their additive
+// mix, the way two lamps add: the two colours summed in linear light, scaled back so the brighter
+// channel sits where the brighter lamp's did (purple, not white-hot). Only red + blue mixes; Left
+// alone stays red, Right alone blue, every other cable colour as before. Cached per cable rebuild.
+const nodeGraphStrokeStereoMixCache = { gen: -1, map: new Map() };
+function nodeGraphStrokeStereoRgbOf(channel, fallbacks) {
+  const list = [];
+  const css = typeof nodeGraphJackChannelCssColor === "function" ? nodeGraphJackChannelCssColor(channel) : "";
+  if (css && typeof nodeGraphGlGraphCssColor === "function") list.push(nodeGraphGlGraphCssColor(css));
+  for (const hex of fallbacks) {
+    const n = Number.parseInt(hex.slice(1), 16);
+    list.push([(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]);
+  }
+  return list;
+}
+function nodeGraphStrokeStereoMix(cables) {
+  if (!Array.isArray(cables) || cables.length < 2) return null;
+  // The Left / Right jack colours (stereo red / blue), and the app-wide L / R inks.
+  const reds = nodeGraphStrokeStereoRgbOf("red", ["#ff7171"]);
+  const blues = nodeGraphStrokeStereoRgbOf("blue", ["#5454f9"]);
+  const same = (a, b) => Math.abs(a[0] - b[0]) < 2e-3 && Math.abs(a[1] - b[1]) < 2e-3 && Math.abs(a[2] - b[2]) < 2e-3;
+  const red = cables.find((c) => reds.some((r) => same(c, r)));
+  const blue = cables.find((c) => blues.some((b) => same(c, b)));
+  if (!red || !blue) return null;
+  const toLin = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const toSrgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  const lr = [toLin(red[0]), toLin(red[1]), toLin(red[2])];
+  const lb = [toLin(blue[0]), toLin(blue[1]), toLin(blue[2])];
+  const sum = [lr[0] + lb[0], lr[1] + lb[1], lr[2] + lb[2]];
+  const peak = Math.max(lr[0], lr[1], lr[2], lb[0], lb[1], lb[2]);
+  const top = Math.max(sum[0], sum[1], sum[2]);
+  const k = top > peak && top > 0 ? peak / top : 1;
+  return [toSrgb(sum[0] * k), toSrgb(sum[1] * k), toSrgb(sum[2] * k), 1];
+}
+
+// A module's loud colour is the colour of its first outgoing cable (a Left + Right pair: their
+// additive mix, see above); the UI Dev colour is the fallback (a module with no cable yet).
 function nodeGraphStrokeLoudColor(nodeId) {
   const cableState = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
   // First outgoing cable; a module with none (the Output module) uses its first incoming cable.
-  const cable = cableState?.firstCable?.get?.(String(nodeId)) || cableState?.firstCableIn?.get?.(String(nodeId)) || null;
+  const id = String(nodeId);
+  const outFirst = cableState?.firstCable?.get?.(id) || null;
+  let cable = outFirst || cableState?.firstCableIn?.get?.(id) || null;
+  if (cable && cableState) {
+    if (nodeGraphStrokeStereoMixCache.gen !== cableState.gen) {
+      nodeGraphStrokeStereoMixCache.gen = cableState.gen;
+      nodeGraphStrokeStereoMixCache.map = new Map();
+    }
+    let mix = nodeGraphStrokeStereoMixCache.map.get(id);
+    if (mix === undefined) {
+      mix = nodeGraphStrokeStereoMix((outFirst ? cableState.cablesOut : cableState.cablesIn)?.get?.(id)) || null;
+      nodeGraphStrokeStereoMixCache.map.set(id, mix);
+    }
+    if (mix) cable = mix;
+  }
   const rgb = cable || nodeGraphStrokeLoudFallbackRgb;
   const lift = nodeGraphStrokeLoudBrightness;
   return [rgb[0] + (1 - rgb[0]) * lift, rgb[1] + (1 - rgb[1]) * lift, rgb[2] + (1 - rgb[2]) * lift, nodeGraphStrokeLoudAlpha];
@@ -422,7 +471,7 @@ function nodeGraphModuleStrokeFollowTick() {
   nodeGraphModuleStrokeFollowFrame = requestAnimationFrame(nodeGraphModuleStrokeFollowTick);
 }
 
-let nodeGraphModulePlateLookState = { topShape: 1, topRadius: 6, bottomShape: 1, bottomRadius: 6 };
+let nodeGraphModulePlateLookState = { topShape: 1, topRadius: 6, strokeTopRadius: 6, bottomShape: 1, bottomRadius: 6 };
 
 function nodeGraphModulePlateLook() {
   return nodeGraphModulePlateLookState;
@@ -440,6 +489,15 @@ function syncNodeUiDevModuleCorners() {
     bottomShape: read("nodeUiDevModuleBottomShape", 1, 0, 2),
     bottomRadius: read("nodeUiDevModuleBottomRadius", 6, 0, 60),
   };
+  // Stroke top radius: range and default from its definition.
+  {
+    const def = typeof nodeUiDevSettingControls !== "undefined" ? nodeUiDevSettingControls.find((d) => d.id === "nodeUiDevModuleStrokeTopRadius") : null;
+    const n = Number(document.getElementById("nodeUiDevModuleStrokeTopRadius")?.value);
+    const lo = Number(def?.min);
+    const hi = Number(def?.max);
+    const v = Number.isFinite(n) ? n : Number(def?.defaultValue ?? look.topRadius);
+    look.strokeTopRadius = Math.min(Number.isFinite(hi) ? hi : v, Math.max(Number.isFinite(lo) ? lo : v, v));
+  }
   nodeGraphModulePlateLookState = look;
   const follow = read("nodeUiDevStrokeAnimate", 92, 0, 100);
   nodeGraphModuleStrokeFollowAmount = follow / 100;
@@ -461,6 +519,7 @@ function syncNodeUiDevModuleCorners() {
   };
   show("nodeUiDevModuleTopShapeValue", NODE_MODULE_CORNER_SHAPE_NAMES[look.topShape]);
   show("nodeUiDevModuleTopRadiusValue", look.topShape === 2 ? "full" : `${look.topRadius}px`);
+  show("nodeUiDevModuleStrokeTopRadiusValue", look.topShape === 2 ? "full" : `${look.strokeTopRadius}px`);
   show("nodeUiDevModuleBottomShapeValue", NODE_MODULE_CORNER_SHAPE_NAMES[look.bottomShape]);
   show("nodeUiDevModuleBottomRadiusValue", look.bottomShape === 2 ? "full" : `${look.bottomRadius}px`);
   if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
@@ -630,7 +689,7 @@ function bindNodeUiDevModuleIdleStroke() {
       done();
     });
   }
-  for (const id of ["nodeUiDevModuleTopShape", "nodeUiDevModuleTopRadius", "nodeUiDevModuleBottomShape", "nodeUiDevModuleBottomRadius", "nodeUiDevStrokeAnimate", "nodeUiDevStrokeLoudBrightness", "nodeUiDevStrokeLoudAlpha"]) {
+  for (const id of ["nodeUiDevModuleTopShape", "nodeUiDevModuleTopRadius", "nodeUiDevModuleStrokeTopRadius", "nodeUiDevModuleBottomShape", "nodeUiDevModuleBottomRadius", "nodeUiDevStrokeAnimate", "nodeUiDevStrokeLoudBrightness", "nodeUiDevStrokeLoudAlpha"]) {
     const input = document.getElementById(id);
     if (!input || input.dataset.moduleCornerBound === "true") continue;
     input.dataset.moduleCornerBound = "true";

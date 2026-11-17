@@ -926,7 +926,7 @@ function normalizeNodeUiDevSettings(settings = {}) {
     controls: Object.fromEntries(
       nodeUiDevSettingControls.map((definition) => [
         definition.key,
-        normalizeNodeUiDevControlValue(definition, controls[definition.key]),
+        normalizeNodeUiDevControlValue(definition, controls[definition.key] ?? (definition.defaultFromKey ? controls[definition.defaultFromKey] : undefined)),
       ]),
     ),
     exposedControls: Object.fromEntries(

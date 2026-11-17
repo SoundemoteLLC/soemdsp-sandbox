@@ -1097,6 +1097,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
+  noiseConvReverb: {
+    category: "space",
+    description: "Reverb from a generated, shaped noise impulse response and zero-latency partitioned convolution. Length and Amp Shape set the decay, Spectral Shape / Darkness / Brightness colour the tail, and Spread sets how independent the L/R IRs are.",
+    label: "Noise Convolution Reverb",
+    notes: ["reverb", "convolution", "noise ir", "partitioned convolution", "space", "native"],
+  },
   randomWalk: {
     category: "noise",
     description: "Controlled wander CV—smooth drift, steps, or filtered noise motion for parameters.",
@@ -3891,6 +3897,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   velvetReverb: {
     source: "native_modules/velvet_reverb/velvet_reverb.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/velvet_reverb/velvet_reverb.cpp",
+  },
+  noiseConvReverb: {
+    source: "native_modules/noise_conv_reverb/noise_conv_reverb.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/noise_conv_reverb/noise_conv_reverb.cpp",
   },
   pumpCurve: {
     source: "native_modules/pump_curve/pump_curve.cpp",

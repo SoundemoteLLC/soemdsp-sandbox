@@ -1496,7 +1496,9 @@ function createNodeGraphModuleElement(type, node) {
         ? createNodeGraphPulseTrainDisplay(node, type)
         : type === "velvetReverb" && typeof createNodeGraphVelvetTapsDisplay === "function"
           ? createNodeGraphVelvetTapsDisplay(node, type)
-          : createNodeGraphPulseCurveDisplay(node, type));
+          : type === "noiseConvReverb" && typeof createNodeGraphNoiseConvDisplay === "function"
+            ? createNodeGraphNoiseConvDisplay(node, type)
+            : createNodeGraphPulseCurveDisplay(node, type));
     }
     appendNodeGraphModuleIoSection(
       article,

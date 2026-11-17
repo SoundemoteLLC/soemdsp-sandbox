@@ -1043,7 +1043,7 @@ function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, b
       && nodeGraphNodeElement(plate.id)?.classList.contains("selected");
     const base = selected ? borderOn : borderIdle;
     const round = look
-      ? [look.topRadius * (camera ? 1 : zoom), look.topShape, look.bottomRadius * (camera ? 1 : zoom), look.bottomShape]
+      ? [look.topRadius * (camera ? 1 : zoom), look.topShape, look.bottomRadius * (camera ? 1 : zoom), look.bottomShape, (look.strokeTopRadius ?? look.topRadius) * (camera ? 1 : zoom)]
       : null;
     // One smooth glow shape per module (mode 4): exponential falloff outside the plate.
     nodeGraphGlLinesModuleOutline(layer, x, y, w, h, reach, base, [], [0, 0, 0, 0], null, round, plate.id, selected === true, 4, NODE_STROKE_GLOW_ALPHA);
@@ -1100,7 +1100,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     const cuts = typeof nodeGraphModuleRailBorderCuts === "function" ? nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) : null;
     const look = typeof nodeGraphModulePlateLook === "function" ? nodeGraphModulePlateLook() : null;
     const round = look
-      ? [look.topRadius * zoom, look.topShape, look.bottomRadius * zoom, look.bottomShape]
+      ? [look.topRadius * zoom, look.topShape, look.bottomRadius * zoom, look.bottomShape, (look.strokeTopRadius ?? look.topRadius) * zoom]
       : null;
     const fill = mode === "dim" ? [0, 0, 0, dark]
       : (mode === "emit" ? [0, 0, 0, 0]
@@ -1757,6 +1757,17 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   if (toNode && nodeGraphGlGraphState.firstCableIn && !nodeGraphGlGraphState.firstCableIn.has(String(toNode))) {
     nodeGraphGlGraphState.firstCableIn.set(String(toNode), rgba);
   }
+  // Every cable colour per module, out and in: Left (red) plus Right (blue) cables mix the
+  // stroke light additively (nodeGraphStrokeLoudColor).
+  const addCable = (map, node) => {
+    if (!node || !map) return;
+    const key = String(node);
+    const list = map.get(key);
+    if (!list) map.set(key, [rgba]);
+    else if (list.length < 16) list.push(rgba);
+  };
+  addCable(nodeGraphGlGraphState.cablesOut, fromNode);
+  addCable(nodeGraphGlGraphState.cablesIn, toNode);
   // Curve tolerance in world px: 0.2 screen px at the rebuild zoom. A cable
   // with a patch slot under UIDEV pixelate wires is baked as a zoom-1
   // picture, so it uses 0.25 world px and stays the same at every zoom.
@@ -1830,6 +1841,8 @@ function nodeGraphGlGraphRebuild(options = {}) {
   nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
   nodeGraphGlGraphState.firstCable = new Map();
   nodeGraphGlGraphState.firstCableIn = new Map();
+  nodeGraphGlGraphState.cablesOut = new Map();
+  nodeGraphGlGraphState.cablesIn = new Map();
   const lite = options.lite === true;
   const wires = [];
   const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1;

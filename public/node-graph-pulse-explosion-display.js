@@ -34,8 +34,8 @@ function normalizeNodeGraphPulseExplosionFaceSettings(settings = {}) {
 
 /**
  * Pulse face settings (Pulse Explosion, Pulse Train): RoundShape background /
- * line / dot, the extra HBS lamps, Line thickness, Dot size, and Fade time /
- * Ghost opacity when the defaults carry them.
+ * line / dot, the extra HBS lamps, Line thickness, Dot size, Fade time /
+ * Ghost opacity, and (Pulse Train / Velvet) tapLineBlur when the defaults carry them.
  */
 function nodeGraphPulseFaceNormalize(settings, d, lamps) {
   const source = settings && typeof settings === "object" ? settings : {};
@@ -61,6 +61,7 @@ function nodeGraphPulseFaceNormalize(settings, d, lamps) {
   out.dotThickness = span(merged.dotThickness, 0, 32, d.dotThickness);
   if ("ghostOpacity" in d) out.ghostOpacity = span(merged.ghostOpacity, 0, 1, d.ghostOpacity);
   if ("fadeTime" in d) out.fadeTime = span(merged.fadeTime, 0, 60, d.fadeTime);
+  if ("tapLineBlur" in d) out.tapLineBlur = span(merged.tapLineBlur, 0, 32, d.tapLineBlur);
   return out;
 }
 

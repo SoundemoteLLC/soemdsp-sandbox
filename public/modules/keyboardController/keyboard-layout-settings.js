@@ -11,7 +11,7 @@ const nodeGraphKeyboardLayoutDefaults = Object.freeze({
   blackKeyHeight: 62,
   keyboardHeight: 112,
   keyLabels: "name",
-  keyLabelSize: 100,
+  keyLabelSize: 315,
   hideKeyboardInfo: true,
 });
 

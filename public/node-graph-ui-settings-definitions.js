@@ -174,6 +174,9 @@ const nodeUiDevSettingControls = Object.freeze([
   // Module corners, top and bottom apart. Shape: 0 Round, 1 Squircle, 2 Pill (full end, ignores Radius).
   { defaultValue: 1, id: "nodeUiDevModuleTopShape", key: "moduleTopShape", max: 2, min: 0, step: 1, type: "number" },
   { defaultValue: 6, id: "nodeUiDevModuleTopRadius", key: "moduleTopRadius", max: 60, min: 0, step: 1, type: "number" },
+  // The stroke's own top corner radius (the plate fill keeps Module Top Radius). Rounder than the
+  // plate, its curve sits behind the plate's corners. Default 22.
+  { defaultValue: 22, id: "nodeUiDevModuleStrokeTopRadius", key: "moduleStrokeTopRadius", max: 60, min: 0, step: 1, type: "number" },
   { defaultValue: 1, id: "nodeUiDevModuleBottomShape", key: "moduleBottomShape", max: 2, min: 0, step: 1, type: "number" },
   { defaultValue: 6, id: "nodeUiDevModuleBottomRadius", key: "moduleBottomRadius", max: 60, min: 0, step: 1, type: "number" },
   // How much the module strokes animate with their output, 0 (off) to 100.
@@ -319,6 +322,7 @@ const nodeUiDevSettingSections = Object.freeze([
       "nodeUiDevModuleTitleFillColor",
       "nodeUiDevModuleTopShape",
       "nodeUiDevModuleTopRadius",
+      "nodeUiDevModuleStrokeTopRadius",
       "nodeUiDevModuleBottomShape",
       "nodeUiDevModuleBottomRadius",
       "nodeUiDevViewModuleButtons",
