@@ -138,6 +138,9 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
     if (typeof this.syncNativeSoftpopPublish === "function") {
       try { this.syncNativeSoftpopPublish(); } catch (_e) { /* keep prior publish */ }
     }
+    if (typeof this.syncNativeVelvetTapsPublish === "function") {
+      try { this.syncNativeVelvetTapsPublish(); } catch (_e) { /* keep prior publish */ }
+    }
     if (typeof this.syncNativeEffectiveHzPublish === "function") {
       try { this.syncNativeEffectiveHzPublish(); } catch (_e) { /* keep prior publish */ }
     }
@@ -154,6 +157,12 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
       for (const [nodeId, snap] of this.softpopPublish) {
         dataPorts.push([nodeId, "SoftpopBins", snap.bins]);
         dataPorts.push([nodeId, "SoftpopInfo", snap.info]);
+      }
+    }
+    if (this.velvetTapsPublish) {
+      for (const [nodeId, snap] of this.velvetTapsPublish) {
+        if (snap?.levelsL) dataPorts.push([nodeId, "TapLevelsL", snap.levelsL]);
+        if (snap?.levelsR) dataPorts.push([nodeId, "TapLevelsR", snap.levelsR]);
       }
     }
     if (this.hypersaw2States) {

@@ -8914,6 +8914,88 @@ NodeLiveAudioProcessor.prototype.syncNativeHypersawPublish =
   };
 
 /**
+ * Dark Velvet Reverb face telemetry: copy per-tap peak-hold levels (L/R)
+ * from the graph-hosted native instance and reset the peaks. Runs at the
+ * existing display-telemetry rate (postModuleScopeSnapshot / Simulation FPS).
+ * Peak-hold is armed only while the node is in scopeCaptureNodeIds (visible face).
+ */
+NodeLiveAudioProcessor.prototype.syncNativeVelvetTapsPublish =
+  function syncNativeVelvetTapsPublish() {
+    if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) {
+      return;
+    }
+    const native = this.nativeGraph;
+    const handleFn = native?.soemdsp_graph_node_native_handle;
+    const setDisplay = native?.soemdsp_velvet_reverb_set_display;
+    const takeFn = native?.soemdsp_velvet_reverb_take_levels;
+    const ptrL = native?.soemdsp_velvet_reverb_levels_l;
+    const ptrR = native?.soemdsp_velvet_reverb_levels_r;
+    const countRFn = native?.soemdsp_velvet_reverb_levels_count_r;
+    if (!handleFn || !setDisplay || !takeFn || !ptrL || !ptrR || !native?.memory?.buffer) return;
+    if (!this.velvetTapsPublish) this.velvetTapsPublish = new Map();
+    const capture = Array.isArray(this.scopeCaptureNodeIds) && this.scopeCaptureNodeIds.length
+      ? new Set(this.scopeCaptureNodeIds.map((id) => String(id)))
+      : null;
+    for (const [id, node] of this.nodes || []) {
+      if (String(node?.type || "") !== "velvetReverb") continue;
+      const nodeId = String(id);
+      const ownedMeta = String(node?.ownerMetamoduleId || "");
+      const sourceId = ownedMeta
+        ? this.nativeVoicePreviewSourceId(id)
+        : nodeId;
+      if (sourceId == null) continue;
+      let handle = 0;
+      try {
+        handle = handleFn(this.nativeGraphHandle, this.fnv1aHash32(sourceId)) | 0;
+      } catch (_e) {
+        handle = 0;
+      }
+      if (!(handle > 0) && sourceId !== nodeId) {
+        try {
+          handle = handleFn(this.nativeGraphHandle, this.fnv1aHash32(nodeId)) | 0;
+        } catch (_e) {
+          handle = 0;
+        }
+      }
+      if (!(handle > 0)) continue;
+      const visible = Boolean(capture && capture.has(nodeId));
+      try {
+        setDisplay(handle, visible ? 1 : 0);
+      } catch (_e) { /* leave prior arming */ }
+      if (!visible) {
+        this.velvetTapsPublish.delete(nodeId);
+        continue;
+      }
+      let nL = 0;
+      let nR = 0;
+      try {
+        nL = takeFn(handle) | 0;
+      } catch (_e) {
+        nL = 0;
+      }
+      try {
+        nR = countRFn ? (countRFn() | 0) : 0;
+      } catch (_e) {
+        nR = 0;
+      }
+      if (nL < 0) nL = 0;
+      if (nR < 0) nR = 0;
+      if (nL > 4096) nL = 4096;
+      if (nR > 4096) nR = 4096;
+      const levelsL = new Float32Array(nL);
+      const levelsR = new Float32Array(nR);
+      try {
+        const buf = native.memory.buffer;
+        const pL = ptrL() >>> 0;
+        const pR = ptrR() >>> 0;
+        if (nL) levelsL.set(new Float64Array(buf, pL, nL));
+        if (nR) levelsR.set(new Float64Array(buf, pR, nR));
+      } catch (_e) { /* leave zeros */ }
+      this.velvetTapsPublish.set(nodeId, { levelsL, levelsR });
+    }
+  };
+
+/**
  * Copy native Yellow GraphPayload arrays into additiveGraphPublish for the
  * scope → main-thread data-bus face relay (harmonicLines, waveform, etc.).
  */

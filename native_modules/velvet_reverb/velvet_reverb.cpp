@@ -134,7 +134,14 @@ struct VelvetReverbState {
   int delaySize;    // cells per delay line (delay_size_for the creation rate)
   Cell* delayL;     // delaySize cells each, in the pool block
   Cell* delayR;
-  void* block;      // the one pool block that holds tables and both delay lines
+  void* block;      // the one pool block that holds tables, delay lines, and display peaks
+
+  // Face telemetry: peak-hold of |width-filtered pulse x gain x table norm|
+  // per tap, L and R, until the worklet takes a snapshot. Off unless the face
+  // is visible (soemdsp_velvet_reverb_set_display).
+  double* peakL;
+  double* peakR;
+  bool displayOn;
 
   double outRight;
 };
@@ -142,7 +149,9 @@ struct VelvetReverbState {
 static VelvetReverbState gPool[kMaxInstances];
 
 static inline unsigned long long block_bytes_for(int delaySize) {
-  return 2ULL * sizeof(TapTable) + 2ULL * (unsigned long long)delaySize * sizeof(Cell);
+  return 2ULL * sizeof(TapTable)
+    + 2ULL * (unsigned long long)delaySize * sizeof(Cell)
+    + 2ULL * (unsigned long long)kMaxTaps * sizeof(double);
 }
 
 static inline unsigned int next_rand(unsigned int& state) {
@@ -556,8 +565,13 @@ static inline double clean_spread(double stereoSpread) {
 
 static inline int wrap_index(int i, int size) { return i < 0 ? i + size : i; }
 
-static inline double read_taps(const Cell* line, int size, int write, const Tap* taps, int count) {
+// peaks != nullptr: also peak-hold |y * scale| at each tap (scale is the table
+// norm, so the level is the audible wet contribution of that already
+// width-filtered pulse). Cheap: one compare in the existing per-tap loop.
+static inline double read_taps(const Cell* line, int size, int write, const Tap* taps, int count, double* peaks, double scale) {
   double sum = 0.0;
+  const bool hold = peaks != nullptr;
+  const double magScale = scale < 0.0 ? -scale : scale;
   for (int i = 0; i < count; ++i) {
     const Tap& tap = taps[i];
     // Every tap delay is < size (build_table keeps them inside the line), so one add wraps.
@@ -565,7 +579,12 @@ static inline double read_taps(const Cell* line, int size, int write, const Tap*
     const Cell& c = line[wrap_index(write - tap.end, size)];
     if (a.count == c.count) continue; // window saw only silence: exactly 0
     const Cell& b = line[wrap_index(write - tap.mid, size)];
-    sum += (a.v - tap.cMid * b.v - tap.cEnd * c.v) * tap.gain;
+    const double y = (a.v - tap.cMid * b.v - tap.cEnd * c.v) * tap.gain;
+    if (hold) {
+      const double mag = (y < 0.0 ? -y : y) * magScale;
+      if (mag > peaks[i]) peaks[i] = mag;
+    }
+    sum += y;
   }
   return sum;
 }
@@ -585,6 +604,12 @@ static void clear_state(VelvetReverbState& s) {
     s.delayL[i].count = 0u;
     s.delayR[i].v = 0.0;
     s.delayR[i].count = 0u;
+  }
+  if (s.peakL && s.peakR) {
+    for (int i = 0; i < kMaxTaps; ++i) {
+      s.peakL[i] = 0.0;
+      s.peakR[i] = 0.0;
+    }
   }
   s.integralL = 0.0;
   s.integralR = 0.0;
@@ -613,6 +638,9 @@ int soemdsp_velvet_reverb_create(double sampleRate) {
       s.tables = (TapTable*)block;
       s.delayL = (Cell*)((unsigned char*)block + 2UL * sizeof(TapTable));
       s.delayR = s.delayL + delaySize;
+      s.peakL = (double*)(s.delayR + delaySize);
+      s.peakR = s.peakL + kMaxTaps;
+      s.displayOn = false;
       s.active = true;
       s.seed = 1u;
       s.cur = 0;
@@ -649,6 +677,9 @@ void soemdsp_velvet_reverb_destroy(int handle) {
   s.tables = nullptr;
   s.delayL = nullptr;
   s.delayR = nullptr;
+  s.peakL = nullptr;
+  s.peakR = nullptr;
+  s.displayOn = false;
   s.active = false;
 }
 
@@ -749,13 +780,17 @@ double soemdsp_velvet_reverb_sample(
 
   {
     const TapTable& a = s.tables[s.cur];
-    double wetL = read_taps(s.delayL, s.delaySize, w, a.left, a.countL) * a.normL;
-    double wetR = read_taps(s.delayR, s.delaySize, w, a.right, a.countR) * a.normR;
+    double* peaksL = s.displayOn ? s.peakL : nullptr;
+    double* peaksR = s.displayOn ? s.peakR : nullptr;
+    double wetL = read_taps(s.delayL, s.delaySize, w, a.left, a.countL, peaksL, a.normL) * a.normL;
+    double wetR = read_taps(s.delayR, s.delaySize, w, a.right, a.countR, peaksR, a.normR) * a.normR;
     if (s.fading) {
       const TapTable& b = s.tables[1 - s.cur];
       const double g = s.fade;
-      wetL += g * (read_taps(s.delayL, s.delaySize, w, b.left, b.countL) * b.normL - wetL);
-      wetR += g * (read_taps(s.delayR, s.delaySize, w, b.right, b.countR) * b.normR - wetR);
+      // Peak-hold both tables during a crossfade (max of the two contributions
+      // at the same index). Mid-fade index mismatch is acceptable for the face.
+      wetL += g * (read_taps(s.delayL, s.delaySize, w, b.left, b.countL, peaksL, b.normL) * b.normL - wetL);
+      wetR += g * (read_taps(s.delayR, s.delaySize, w, b.right, b.countR, peaksR, b.normR) * b.normR - wetR);
     }
     outL = inL + mix * (wetL - inL);
     outR = inR + mix * (wetR - inR);
@@ -808,7 +843,7 @@ double soemdsp_velvet_reverb_layout_length() { return gLayout.length; }
 int soemdsp_velvet_reverb_layout_flags() { return gLayout.flags; }
 int soemdsp_velvet_reverb_max_taps() { return kMaxTaps; }
 double soemdsp_velvet_reverb_max_length() { return kMaxLengthSeconds; }
-// Pool bytes one instance takes at a sample rate (tap tables + both delay lines).
+// Pool bytes one instance takes at a sample rate (tap tables + both delay lines + two peak-hold buffers).
 double soemdsp_velvet_reverb_block_bytes(double sampleRate) {
   return (double)block_bytes_for(delay_size_for(sampleRate));
 }
@@ -818,8 +853,66 @@ double soemdsp_velvet_reverb_right(int handle) {
   return gPool[handle - 1].outRight;
 }
 
+// Face telemetry. Off by default so hidden instances skip the peak compares.
+void soemdsp_velvet_reverb_set_display(int handle, int on) {
+  if (handle <= 0 || handle > kMaxInstances) return;
+  VelvetReverbState& s = gPool[handle - 1];
+  if (!s.active) return;
+  const bool want = on != 0;
+  if (s.displayOn && !want && s.peakL && s.peakR) {
+    const int nL = s.tables ? s.tables[s.cur].countL : 0;
+    const int nR = s.tables ? s.tables[s.cur].countR : 0;
+    const int n = nL > nR ? nL : nR;
+    for (int i = 0; i < n; ++i) {
+      s.peakL[i] = 0.0;
+      s.peakR[i] = 0.0;
+    }
+  }
+  s.displayOn = want;
+}
+
+static double gLevelsL[kMaxTaps];
+static double gLevelsR[kMaxTaps];
+static int gLevelsCountR = 0;
+
+// Copy peak-hold since the last take (or since display was turned on) into the
+// static level buffers and clear the instance peaks. Returns the Left count;
+// Right count is soemdsp_velvet_reverb_levels_count_r().
+int soemdsp_velvet_reverb_take_levels(int handle) {
+  gLevelsCountR = 0;
+  if (handle <= 0 || handle > kMaxInstances) return 0;
+  VelvetReverbState& s = gPool[handle - 1];
+  if (!s.active || !s.tables || !s.peakL || !s.peakR) return 0;
+  int nL = s.tables[s.cur].countL;
+  int nR = s.tables[s.cur].countR;
+  if (s.fading) {
+    const int bL = s.tables[1 - s.cur].countL;
+    const int bR = s.tables[1 - s.cur].countR;
+    if (bL > nL) nL = bL;
+    if (bR > nR) nR = bR;
+  }
+  if (nL < 0) nL = 0;
+  if (nR < 0) nR = 0;
+  if (nL > kMaxTaps) nL = kMaxTaps;
+  if (nR > kMaxTaps) nR = kMaxTaps;
+  for (int i = 0; i < nL; ++i) {
+    gLevelsL[i] = s.peakL[i];
+    s.peakL[i] = 0.0;
+  }
+  for (int i = 0; i < nR; ++i) {
+    gLevelsR[i] = s.peakR[i];
+    s.peakR[i] = 0.0;
+  }
+  gLevelsCountR = nR;
+  return nL;
+}
+
+double* soemdsp_velvet_reverb_levels_l() { return gLevelsL; }
+double* soemdsp_velvet_reverb_levels_r() { return gLevelsR; }
+int soemdsp_velvet_reverb_levels_count_r() { return gLevelsCountR; }
+
 int soemdsp_velvet_reverb_version() {
-  return 9; // 9: Tail Curve (-1..+1, default 0): Step Graph rational bend (segment_rational01, same sign as Step Graph) on a log-width Darkness->Tail Darkness sweep, so cutoff falls exponentially over time at curve 0. 8: Tail Random (0 = smooth Darkness->Tail Darkness pulse widths, 1 = previous per-tap random widths; default 1) and Density Skew is -1..+1 (the rational warp is soft-capped just inside +-1 so the endpoints stay finite; Min Gap still drops bunched taps). 7: Min Gap parameter (default 1 ms) (ms; sample and layout take it last): the cell floor is max(Min Gap, widest pulse); Density Skew back to the one-sided rational warp. 6: cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
+  return 10; // 10: per-tap display peak-hold (width-filtered pulse x gain x norm, L/R, taken by the worklet at the face telemetry rate; off when the face is hidden). 9: Tail Curve (-1..+1, default 0): Step Graph rational bend (segment_rational01, same sign as Step Graph) on a log-width Darkness->Tail Darkness sweep, so cutoff falls exponentially over time at curve 0. 8: Tail Random (0 = smooth Darkness->Tail Darkness pulse widths, 1 = previous per-tap random widths; default 1) and Density Skew is -1..+1 (the rational warp is soft-capped just inside +-1 so the endpoints stay finite; Min Gap still drops bunched taps). 7: Min Gap parameter (default 1 ms) (ms; sample and layout take it last): the cell floor is max(Min Gap, widest pulse); Density Skew back to the one-sided rational warp. 6: cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
 }
 
 } // extern "C"

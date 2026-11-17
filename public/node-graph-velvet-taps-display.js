@@ -24,8 +24,15 @@
 // (xorshift from the Seed, no clock or Math.random).
 // Look: the Pulse Train face settings (Background, Text = the line lamp, shown as
 // "Text" on this face: tap count / length readouts and the held-length bar,
-// Left, Right, Line thickness, Dot size) over the module definition's
-// defaultDisplaySettings (Dot size 0) for any key the node has not stored.
+// Left, Right, Line thickness, Dot size, Fade) over the module definition's
+// defaultDisplaySettings (Dot size 0, Fade 0.15 s) for any key the node has not stored.
+// Live glow: the worklet posts per-tap peak-hold levels (TapLevelsL / TapLevelsR)
+// at the display-telemetry rate. Idle taps draw dim (darkness shade * idle);
+// active taps brighten toward full channel ink from a fixed 60 dB map of
+// |width-filtered pulse x gain x norm| (1 at 0 dB, 0 at -60 dB). Height and
+// width stay the static layout; glow never raises a rectangle past the face
+// or pretends the audio clipped. Fade is exponential persistence of the last
+// peak (0 = no hang past the current snapshot).
 // GPU only (gl-line-renderer).
 
 const nodeGraphVelvetTapsWasm = { promise: null, exports: null, failed: false };
@@ -34,7 +41,7 @@ function nodeGraphVelvetTapsLoad() {
   if (nodeGraphVelvetTapsWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphVelvetTapsWasm.promise;
   }
-  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1-v6s1-skw1-gap1-trand1")
+  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1-v6s1-skw1-gap1-trand1-vtaps1")
     .then((response) => {
       if (!response.ok) throw new Error(`velvet_reverb wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -133,6 +140,68 @@ function nodeGraphVelvetTapsSeconds(s) {
   return `${s.toFixed(2)} s`;
 }
 
+
+// Held per-tap levels for the glow: new snapshots peak-hold into the residual,
+// then Fade (seconds) decays it exponentially between posts. fadeTime 0 keeps
+// the current snapshot only. Index-aligned with the live layout.
+function nodeGraphVelvetTapsHeldLevels(section, node, countL, countR, fadeTime) {
+  const id = String(node?.id || section?.dataset?.node || "");
+  const rawL = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
+    ? nodeGraphDataBus.get(nodeGraphDataBusKey(id, "TapLevelsL"))
+    : null;
+  const rawR = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
+    ? nodeGraphDataBus.get(nodeGraphDataBusKey(id, "TapLevelsR"))
+    : null;
+  const now = (typeof performance !== "undefined" && typeof performance.now === "function")
+    ? performance.now()
+    : Date.now();
+  const prev = section._velvetHeldAt;
+  const dt = Number.isFinite(prev) ? Math.max(0, (now - prev) * 0.001) : 0;
+  section._velvetHeldAt = now;
+  const tau = Number(fadeTime);
+  const decay = (Number.isFinite(tau) && tau > 0 && dt > 0) ? Math.exp(-dt / tau) : 0;
+  const nL = Math.max(0, countL | 0);
+  const nR = Math.max(0, countR | 0);
+  let heldL = section._velvetHeldL;
+  let heldR = section._velvetHeldR;
+  if (!heldL || heldL.length !== nL) {
+    const next = new Float32Array(nL);
+    if (heldL) next.set(heldL.subarray(0, Math.min(heldL.length, nL)));
+    heldL = next;
+    section._velvetHeldL = heldL;
+  }
+  if (!heldR || heldR.length !== nR) {
+    const next = new Float32Array(nR);
+    if (heldR) next.set(heldR.subarray(0, Math.min(heldR.length, nR)));
+    heldR = next;
+    section._velvetHeldR = heldR;
+  }
+  const newSnap = section._velvetLevelsL !== rawL || section._velvetLevelsR !== rawR;
+  section._velvetLevelsL = rawL;
+  section._velvetLevelsR = rawR;
+  const apply = (held, raw, n) => {
+    for (let i = 0; i < n; i += 1) {
+      const incoming = raw && i < raw.length ? Number(raw[i]) || 0 : 0;
+      if (newSnap) {
+        held[i] = Math.max(decay > 0 ? held[i] * decay : 0, incoming);
+      } else if (decay > 0) {
+        held[i] *= decay;
+      }
+    }
+  };
+  apply(heldL, rawL, nL);
+  apply(heldR, rawR, nR);
+  return { heldL, heldR };
+}
+
+// Fixed dB map of a posted |contribution|: 1 at 0 dB (and above; a display
+// ceiling, not a clip of the audio), 0 at -60 dB and below.
+function nodeGraphVelvetTapsGlow(level) {
+  const v = Number(level);
+  if (!(v > 0) || !Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(1, 1 + (20 * Math.log10(v)) / 60));
+}
+
 function drawNodeGraphVelvetTapsDisplay(section) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(section?.dataset?.node || "") : null;
   const canvas = section?.querySelector?.(".node-display-face");
@@ -199,13 +268,17 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     const minW = Math.max(0.5, halfPx * 2);
     // Darker taps draw dimmer: the audio gain of a pulse is 1 / width (in
     // samples), so the ink is scaled by 1 / w, floored at kDimFloor so the
-    // darkest pulses stay visible.
+    // darkest pulses stay visible. Live glow (kIdleScale..1) sits on top of
+    // that shade and does not change height.
     const kDimFloor = 0.2;
+    const kIdleScale = 0.45;
     const sr = layout.sampleRate || 48000;
+    const fadeTime = Number(look.fadeTime);
+    const held = nodeGraphVelvetTapsHeldLevels(section, node, layout.count, layout.countR, fadeTime);
     const shade = (ink, g) => [ink[0] * g, ink[1] * g, ink[2] * g, ink[3]];
     // One sharp rectangle per tap: x range = the real pulse, y = zero line to
     // the mirrored dB height (lvl <= 1 of the peak, so it stays in the face).
-    const rect = (p, wd, signed) => {
+    const rect = (p, wd, signed, live) => {
       const lvl = Math.abs(signed) / (peak || 1);
       const db = lvl > 0 ? 20 * Math.log10(lvl) : -120;
       const hNorm = Math.max(0, 1 + db / 60);
@@ -213,12 +286,15 @@ function drawNodeGraphVelvetTapsDisplay(section) {
       let xb = at(p + wd);
       if (xb - xa < minW) { const c = (xa + xb) * 0.5; xa = c - minW * 0.5; xb = c + minW * 0.5; }
       const g = Math.max(kDimFloor, Math.min(1, 1 / Math.max(1, wd * sr)));
-      return { xa, xb, s: Math.sign(signed), hh: hNorm * reach, hNorm, g };
+      const idle = g * kIdleScale;
+      const glow = nodeGraphVelvetTapsGlow(live);
+      const shadeG = idle + (1 - idle) * glow;
+      return { xa, xb, s: Math.sign(signed), hh: hNorm * reach, hNorm, g: shadeG };
     };
     const rl = [];
     const rr = [];
-    for (let i = 0; i < layout.count; i += 1) rl.push(rect(layout.pos[i], layout.width[i], layout.level[i]));
-    for (let i = 0; i < layout.countR; i += 1) rr.push(rect(layout.posR[i], layout.widthR[i], layout.levelR[i]));
+    for (let i = 0; i < layout.count; i += 1) rl.push(rect(layout.pos[i], layout.width[i], layout.level[i], held.heldL[i]));
+    for (let i = 0; i < layout.countR; i += 1) rr.push(rect(layout.posR[i], layout.widthR[i], layout.levelR[i], held.heldR[i]));
     const fill = (r, xa, xb, hh, ink) => {
       if (!(hh > 0) || !(xb > xa) || !r.s) return;
       nodeGraphGlLinesRect(batch, xa, r.s > 0 ? mid - hh : mid, xb - xa, hh, ink);
