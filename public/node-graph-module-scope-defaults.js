@@ -123,8 +123,9 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   backgroundBrightness: 0,
   // Full-ish ink so Left/Right colors read as chosen (Brightness still 0–1).
   brightness: 0.95,
-  // Mono / primary ink (Output Left). Pure red so Meet (red+blue) is green.
-  color: "#ff0000",
+  // Mono / primary ink (Output Left): the Dark Velvet Reverb Left ink, red
+  // lifted toward white (velvetReverb defaultDisplaySettings). Meet stays auto.
+  color: "#ff7171",
   dot1Enabled: true,
   // Legacy Size (CSS px @ 96). Filled-bar path ignores Size; kept for old patches / preview.
   dot1Size: 2,
@@ -133,7 +134,8 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   // Meet always auto from Left/Right (complement + soft screen lift).
   meetColor: "auto",
   secondaryBrightness: 0.95,
-  secondaryColor: "#0000ff",
+  // Right ink: the Dark Velvet Reverb Right ink (#5454F9).
+  secondaryColor: "#5454f9",
   secondaryEnabled: true,
   secondarySize: 2,
   secondaryLineThickness: 0,

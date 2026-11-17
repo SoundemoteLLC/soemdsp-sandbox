@@ -28,13 +28,15 @@ const nodeGraphPulseTrainFaceDisplaySettingsDefaults = Object.freeze({
   ...nodeGraphPulseExplosionFaceDisplaySettingsDefaults,
   lineThickness: 1.5,
   fadeTime: 0,
-  // Brightness 0.5 = the pure hue, so a full L/R overlap is white (R+B=White).
+  // App-wide stereo L/R inks = Dark Velvet Reverb's: Left #FF7171, Right #5454F9
+  // (hue / brightness / saturation; brightness above 0.5 mixes toward white).
+  // A full L/R overlap still blends toward white (R+B=White).
   leftHue: 0,
-  leftBrightness: 0.5,
+  leftBrightness: 0.63,
   leftSaturation: 1,
-  rightHue: 240,
-  rightBrightness: 0.5,
-  rightSaturation: 1,
+  rightHue: 238.5,
+  rightBrightness: 0.59,
+  rightSaturation: 0.96,
 });
 const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = Object.freeze([...NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS, "left", "right"]);
 

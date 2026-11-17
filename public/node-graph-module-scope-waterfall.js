@@ -1778,9 +1778,17 @@ function nodeGraphWaterfallChannelList(spec, settings) {
     ];
   }
   if (spec?.xyzBuffers) {
+    // XYZ keeps its pure red / blue / green axes: the stereo Left / Right
+    // defaults (Dark Velvet inks) are not X / Y colours. A colour the user
+    // picked still wins.
+    const wfDefaults = typeof nodeGraphWaterfallSettingsDefaults !== "undefined" ? nodeGraphWaterfallSettingsDefaults : null;
+    const axis = (value, stereoDefault, pure) => {
+      const v = String(value || "").toLowerCase();
+      return !v || v === String(stereoDefault || "").toLowerCase() ? pure : value;
+    };
     const colors = {
-      X: settings.dot1Color || settings.color || "#ff0000",
-      Y: settings.secondaryColor || "#0000ff",
+      X: axis(settings.dot1Color || settings.color, wfDefaults?.color, "#ff0000"),
+      Y: axis(settings.secondaryColor, wfDefaults?.secondaryColor, "#0000ff"),
       Z: settings.tertiaryColor || "#00ff00",
     };
     return ["X", "Y", "Z"].map((port) => ({

@@ -308,7 +308,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
   const { cssWidth: w, cssHeight: h, pixelRatio } = metrics;
   const look = typeof nodeGraphPulseTrainFaceSettingsForNode === "function"
     ? nodeGraphPulseTrainFaceSettingsForNode(node)
-    : { backgroundPaint: "#000", strokePaint: "#fff", leftPaint: "#f00", rightPaint: "#00f", lineThickness: 1.5, dotThickness: 0 };
+    : { backgroundPaint: "#000", strokePaint: "#fff", leftPaint: "#ff7171", rightPaint: "#5454f9", lineThickness: 1.5, dotThickness: 0 };
   const rgba = (css) => nodeGraphGlGraphParseCssColor(css, [1, 1, 1, 1]);
   const batch = nodeGraphGlLinesBegin(canvas, rgba(look.backgroundPaint), { scale: pixelRatio });
   if (!batch) {
