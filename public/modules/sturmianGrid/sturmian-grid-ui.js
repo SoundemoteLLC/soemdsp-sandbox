@@ -1,7 +1,7 @@
 // Packed sounding-bar grid on the shared face texture; standard parameter
 // rows (not shader-drawn sliders) live in the module body. Zoom samples
 // nearest past the existing 2.5x threshold like other shader faces.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "cell", "stepPattern"];
 const STURMIAN_PRESET_VALUES = [
   [0.2955977425, 0.1607132448], [0.4142135624, 0.1830127019], [0.3819660113, 0.2360679775],
@@ -131,8 +131,10 @@ function sturmianPaint(face) {
   if (!plate) return;
   // Layout CSS box x dpr, never workspace zoom. The shared face-texture path
   // then samples that zoom-1 picture nearest past the existing 2.5x threshold.
+  // Size the texture to the plate, not the whole face (the side strip of
+  // toggles and presets must not stretch the squares).
   const sized = typeof nodeGraphDisplayCanvasSize === "function"
-    ? nodeGraphDisplayCanvasSize(face, plate)
+    ? nodeGraphDisplayCanvasSize(plate, plate)
     : null;
   if (!sized) return;
   const logicalWidth = Math.max(1, sized.cssWidth);
@@ -248,7 +250,10 @@ function sturmianCreateBody(node) {
   const plate = nodeGraphDisplayCanvasCreate("node-sturmian-grid-canvas");
   plate.setAttribute("aria-hidden", "true");
   face._sturmianPlate = plate;
-  face.append(plate, sturmianCreateLaneMap(), sturmianCreatePresets());
+  const side = document.createElement("div");
+  side.className = "sturmian-side";
+  side.append(sturmianCreateLaneMap(), sturmianCreatePresets());
+  face.append(plate, side);
   sturmianLoadShader().then((shader) => {
     face._sturmianShader = shader;
     if (!face.isConnected) return;
@@ -282,7 +287,10 @@ registerNodeGraphChromelessModuleUi("sturmianGrid", {
 document.addEventListener("pointerdown", (event) => {
   const button = event.target.closest?.(".sturmian-lane-toggle, .sturmian-preset");
   if (!button || event.button !== 0) return;
-  const nodeId = button.closest(".node-sturmian-grid")?.dataset.node;
+  // By id, not closest('.dsp-node'): Canvas view moves the face out of its module.
+  const face = button.closest(".node-sturmian-grid");
+  const nodeId = face?.dataset.node || "";
+  if (!nodeId) return;
   if (button.dataset.sturmianPreset !== undefined) {
     const preset = STURMIAN_PRESET_VALUES[Number(button.dataset.sturmianPreset)];
     sturmianCommit(nodeId, { alpha: preset[0], beta: preset[1] }, "Sturmian preset");
