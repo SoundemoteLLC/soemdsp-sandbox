@@ -11,8 +11,8 @@ registerNodeGraphChromelessModule("sturmianGrid", {
   definition: {
     planRole: "source",
     planFreeRun: true,
-    defaultWidthGu: 32,
-    displayHeightGu: 26,
+    defaultWidthGu: 16,
+    displayHeightGu: 8,
     chrome: "LayoutB",
     customDisplayArea: true,
     // LayoutB side-band labels (jack + short text; not labels-hidden).
@@ -41,15 +41,15 @@ registerNodeGraphChromelessModule("sturmianGrid", {
       { key: "reset", label: "Reset after", defaultValue: "16", min: "0", max: "65536", mid: "16", step: "1", nonlinearSlider: false, linearSmoothing: false },
       { key: "spread", label: "Track spread", defaultValue: "1", min: "1", max: "16", mid: "1", step: "1", nonlinearSlider: false, linearSmoothing: false },
       { key: "walk", label: "Bar walk", defaultValue: "1", min: "0", max: "8", mid: "1", step: "1", nonlinearSlider: false, linearSmoothing: false },
-      { key: "snap", label: "Rational snap", defaultValue: "0", min: "0", max: "1", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false },
-      { key: "view", label: "View", defaultValue: "0", min: "0", max: "2", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false },
-      { key: "cell", label: "Cell size", defaultValue: "14", min: "2", max: "48", mid: "14", step: "1", nonlinearSlider: false, linearSmoothing: false },
+      { key: "snap", label: "Rational snap", defaultValue: "0", min: "0", max: "1", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false, choices: ["Off", "On"], displayChoices: true },
+      { key: "view", label: "View", defaultValue: "0", min: "0", max: "2", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false, choices: ["Plane", "Binary", "Level"], displayChoices: true },
+      { key: "cell", label: "Cell size", defaultValue: "14", min: "2", max: "48", mid: "14", step: "1", nonlinearSlider: false, linearSmoothing: false, hidden: true },
       { key: "stepPattern", label: "Track map", defaultValue: String(STURMIAN_DEFAULT_MASK), min: "0", max: "65535", mid: String(STURMIAN_DEFAULT_MASK), step: "1", nonlinearSlider: false, linearSmoothing: false, hidden: true },
     ],
   },
   catalog: {
     category: "Sequence",
-    description: "A shader-drawn 2D Sturmian grid with four trigger lanes, a pentatonic pitch output, and ƒ in Hz. Patch it into separate sound modules.",
+    description: "A compact 2D Sturmian grid with four trigger lanes, a pentatonic pitch output, and ƒ in Hz. Patch it into separate sound modules.",
     notes: ["sturmian", "grid", "sequence", "kick trigger", "snare trigger", "hat trigger", "melody trigger", "pitch", "frequency", "webgl"],
   },
 });
