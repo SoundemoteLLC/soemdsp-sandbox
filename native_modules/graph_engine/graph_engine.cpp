@@ -793,7 +793,9 @@ extern "C" double soemdsp_velvet_reverb_sample(
   double mix,
   double sampleRate,
   double decay,
-  double tailDarkness
+  double tailDarkness,
+  double ampDecayDb,
+  double densitySkew
 );
 extern "C" double soemdsp_velvet_reverb_right(int handle);
 extern "C" int soemdsp_velvet_reverb_version();
@@ -3829,7 +3831,8 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeCrossover6) ? 100.0
       : (typeId == kTypeAudioPlayer || typeId == kTypeSamplePlayer) ? 1.0 // speed ×
 : (typeId == kTypePitchHz || typeId == kTypePitchManager) ? 440.0 // A4 tuning Hz
-      : (typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb) ? 2500.0 // density Hz
+      : (typeId == kTypeVelvetNoise) ? 2500.0 // density Hz
+      : (typeId == kTypeVelvetReverb) ? 64.0 // Taps (tap count)
             : 220.0,
     false
   );
@@ -3882,6 +3885,7 @@ static void init_node_defaults(Node& n, int typeId) {
     n.shape,
     (typeId == kTypePurr) ? 1.0 : // Unevenness (Purr)
     (typeId == kTypePulseTrain) ? 3.0 : // curve (Pulse Train)
+    (typeId == kTypeVelvetReverb) ? 0.0 : // Density Skew (even spacing)
     (typeId == kTypeStepRegister) ? 1.0 : // Antialias On
     (typeId == kTypeResonantCompressor) ? 0.0 : // Impulse (Resonant Compressor)
     (typeId == kTypeXyPad) ? 0.35 // Smoothing (Papoulis amount)
@@ -4451,6 +4455,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeModalSnare) ? 0.3 : // click (Modal Snare)
     (typeId == kTypeElectroSnare) ? 0.4 : // Click (Electro Snare)
     (typeId == kTypeChorus) ? 0.0 // randomAmp
+      : (typeId == kTypeVelvetReverb) ? -60.0 // Amp Decay dB at the end of the tail
       : (typeId == kTypeVactrol) ? 0.0 // memoryBright
       : 1.0,
     false
@@ -4465,7 +4470,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeSlewLimiter) ? 0.05
       : (typeId == kTypeNoteGlide) ? 0.05
       : (typeId == kTypeSampleDelay) ? 0.0
-      : (typeId == kTypeVelvetReverb) ? 0.025 // Decay: tail length s (RT60)
+      : (typeId == kTypeVelvetReverb) ? 0.025 // Length: tail s the taps spread over
       : (typeId == kTypeExponentialDelay) ? 0.1
       : (typeId == kTypeTriggerDivider || typeId == kTypeTriggerCounter) ? 0.01
       : (typeId == kTypeDelayedTrigger) ? 0.1
@@ -15670,7 +15675,8 @@ static void process_velvet_reverb(Circuit& g, Node& node, int frames) {
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
-    const double densityHz = resolve_osc_hz(
+    // Taps (tap count; the f input replaces the knob when wired).
+    const double taps = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
     );
     const double m = g.mixMono[f];
@@ -15687,13 +15693,15 @@ static void process_velvet_reverb(Circuit& g, Node& node, int frames) {
       node.nativeHandle,
       inL,
       inR,
-      densityHz,
+      taps,
       darkness,
       spread,
       mix,
       sr,
-      control_audio(g, node.timeNumerator, f), // Decay: tail length s (RT60)
-      control_audio(g, node.timeDenominator, f) // Tail Darkness (0 = off)
+      control_audio(g, node.timeNumerator, f), // Length: the tail s the taps spread over
+      control_audio(g, node.timeDenominator, f), // Tail Darkness (0 = off)
+      control_audio(g, node.level, f), // Amp Decay: dB at the end of the tail (0 = gated)
+      control_audio(g, node.shape, f) // Density Skew -1 .. +1
     );
     const double outR = soemdsp_velvet_reverb_right(node.nativeHandle);
 

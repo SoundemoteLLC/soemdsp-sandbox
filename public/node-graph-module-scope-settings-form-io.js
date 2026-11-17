@@ -2397,6 +2397,9 @@ const NODE_GRAPH_HSL_LAMPS = Object.freeze({
   blink: ["blinkHue", "blinkBrightness", "blinkSaturation"],
   playhead: ["playheadHue", "playheadBrightness", "playheadSaturation"],
   lit: ["litHue", "litBrightness", "litSaturation"],
+  // Dark Velvet Reverb tap face channel inks.
+  left: ["leftHue", "leftBrightness", "leftSaturation"],
+  right: ["rightHue", "rightBrightness", "rightSaturation"],
   // Formant Filter face lamps.
   curve: ["curveHue", "curveBrightness", "curveSaturation"],
   body: ["bodyHue", "bodyBrightness", "bodySaturation"],

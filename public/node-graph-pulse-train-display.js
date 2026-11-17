@@ -17,7 +17,9 @@
 // retime the playhead. Free: the plate follows the knobs; Loop playhead is
 // phase-locked so a Frequency sweep does not modulo-reset the stems.
 // Display Settings `pulseTrainFace`: Background, Line, Dot, Playhead, Lit;
-// Line thickness, Dot size, Fade time (s). Fade 0 holds the lit dots until
+// Line thickness, Dot size, Fade time (s). Left / Right lamps (red / blue) are
+// the Dark Velvet Reverb tap face's channel inks (its form shows them).
+// Module definition defaultDisplaySettings fill any key the node has not stored. Fade 0 holds the lit dots until
 // retrigger; >0 is PhosphorResidual.energyAfterSeconds.
 // GPU only
 // (gl-line-renderer); canvas size comes from the tile.
@@ -26,15 +28,27 @@ const nodeGraphPulseTrainFaceDisplaySettingsDefaults = Object.freeze({
   ...nodeGraphPulseExplosionFaceDisplaySettingsDefaults,
   lineThickness: 1.5,
   fadeTime: 0,
+  // Brightness 0.5 = the pure hue, so a full L/R overlap is white (R+B=White).
+  leftHue: 0,
+  leftBrightness: 0.5,
+  leftSaturation: 1,
+  rightHue: 240,
+  rightBrightness: 0.5,
+  rightSaturation: 1,
 });
-const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS;
+const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = Object.freeze([...NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS, "left", "right"]);
 
 function normalizeNodeGraphPulseTrainFaceSettings(settings = {}) {
   return nodeGraphPulseFaceNormalize(settings, nodeGraphPulseTrainFaceDisplaySettingsDefaults, NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS);
 }
 
 function nodeGraphPulseTrainFaceSettingsForNode(node) {
-  return normalizeNodeGraphPulseTrainFaceSettings(node?.traceDisplaySettings);
+  const typeDefaults = typeof nodeGraphModuleDefinitions === "object"
+    ? nodeGraphModuleDefinitions?.[node?.type]?.defaultDisplaySettings
+    : null;
+  return normalizeNodeGraphPulseTrainFaceSettings(typeDefaults
+    ? { ...typeDefaults, ...(node?.traceDisplaySettings || {}) }
+    : node?.traceDisplaySettings);
 }
 
 const nodeGraphPulseTrainPreviewWasm = { promise: null, exports: null, failed: false };

@@ -2389,7 +2389,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         ...(type === "clockFace" ? ["startThickness", "blinkTime", "gateHeight"] : []),
         "dotThickness",
         ...(type === "sinCosFace" ? ["padExtra"] : []),
-        ...(type === "pulseTrainFace" ? ["fadeTime"] : []),
+        ...(type === "pulseTrainFace" && node?.type !== "velvetReverb" ? ["fadeTime"] : []),
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
     }
@@ -2750,8 +2750,16 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         ["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"],
         ["line", clock ? "Pulse" : divider ? "Ring" : "Line", "lineHue", "lineBrightness", "lineSaturation"],
       ];
-      lamps.push(["dot", clock ? "Playhead" : divider ? "Count" : "Dot", "dotHue", "dotBrightness", "dotSaturation"]);
-      if (type === "pulseExplosionFace" || type === "pulseTrainFace") {
+      // Dark Velvet Reverb tap face (pulseTrainFace look): Background, Line
+      // (zero line + text), Left / Right channel inks; no playhead.
+      const velvetTaps = type === "pulseTrainFace" && node?.type === "velvetReverb";
+      if (velvetTaps) {
+        lamps.push(["left", "Left", "leftHue", "leftBrightness", "leftSaturation"]);
+        lamps.push(["right", "Right", "rightHue", "rightBrightness", "rightSaturation"]);
+      } else {
+        lamps.push(["dot", clock ? "Playhead" : divider ? "Count" : "Dot", "dotHue", "dotBrightness", "dotSaturation"]);
+      }
+      if ((type === "pulseExplosionFace" || type === "pulseTrainFace") && !velvetTaps) {
         lamps.push(["playhead", "Playhead", "playheadHue", "playheadBrightness", "playheadSaturation"]);
         lamps.push(["lit", "Lit", "litHue", "litBrightness", "litSaturation"]);
       }

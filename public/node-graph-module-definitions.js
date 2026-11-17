@@ -7079,8 +7079,8 @@ const nodeGraphModuleDefinitions = (
   },
   velvetReverb: {
     face: [
-      { kind: "cells", params: [["density", "Density"]], h: 40 },
-      { kind: "cells", params: [["decay", "Decay", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["density", "Taps"]], h: 40 },
+      { kind: "cells", params: [["decay", "Length", "horizontal"]], h: 26 },
       { kind: "cells", params: [["darkness", "Darkness"], ["tailDarkness", "Tail Dark"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
@@ -7089,9 +7089,10 @@ const nodeGraphModuleDefinitions = (
     planFreeRun: true,
     // Face: where the taps land (node-graph-velvet-taps-display.js), from the
     // native layout (soemdsp_velvet_reverb_layout), plus the live tap count.
-    // Same look settings as the Pulse Train face.
+    // Same look settings as the Pulse Train face; Dot size 0 by default (stems only).
     layout: "pulseCurve",
     displayType: "pulseTrainFace",
+    defaultDisplaySettings: { dotThickness: 0 },
     spectrumCompanion: false,
     displayModes: [
       { key: "face", label: "Taps", renderer: "pulseTrainFace", settingsSchema: "pulseTrainFace" },
@@ -7104,26 +7105,26 @@ const nodeGraphModuleDefinitions = (
       In: "Mono audio in. Alone feeds both L/R channels.",
       Left: "Left audio in.",
       Right: "Right audio in.",
-      f: "Tap density in Hz (replaces Density knob when wired).",
+      f: "Tap count (replaces the Taps knob when wired).",
     },
     outputs: ["Mono", "Left", "Right"],
     outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
     parameters: [
+      // Taps (velvet_reverb v4): how many taps; Length only spreads them. Key stays
+      // "density" (engine slot). Continuous: the last tap fades in by its fraction.
+      // 0 pauses (the reverb keeps the taps it has). Max = the engine's tap table.
       {
-        defaultValue: "2500",
-        // Cost is O(taps) per sample and taps = Density x Decay: mark for the CPU debug overlay.
+        defaultValue: "64",
+        // Cost is O(taps) per sample: mark for the CPU debug overlay.
         constraint: "cpu",
         key: "density",
-        kind: "frequency",
-        label: "Density",
-        max: "20000",
-        mid: "2500",
+        label: "Taps",
+        max: "4096",
+        mid: "64",
         min: "0",
         nonlinearSlider: true,
         step: "any",
-        unit: "Hz",
-        tooltip: "Taps per second, evenly spread over the tail. The tail has Density x Decay taps (shown on the face); more taps = smoother and more CPU. 0 Hz pauses: the reverb keeps the taps it has."
       },
       {
         defaultValue: "1",
@@ -7148,7 +7149,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         unit: "smp",
-        tooltip: "Darkness at the end of the tail. The widest pulse grows from Darkness at the first tap to this at the last, so the tail gets darker as it goes, like a room where the highs die first. The tail's level stays set by Decay; this only changes its colour. 0 = off (the whole tail uses Darkness)."
+        tooltip: "Darkness at the end of the tail. The widest pulse grows from Darkness at the first tap to this at the last, so the tail gets darker as it goes, like a room where the highs die first. The tail's level stays set by Amp Decay; this only changes its colour. 0 = off (the whole tail uses Darkness)."
       },
       {
         defaultValue: "1",
@@ -7177,14 +7178,15 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         tooltip: "RNG seed for tap positions, signs, and pulse widths. Same seed = identical taps."
       },
-      // Decay is the tail length (velvet_reverb v2): taps span Decay seconds and
-      // fall to -60 dB at the end, so the tail always fades out (no gating).
-      // Was a dB/s rate with the length set by Tap Count / Density.
+      // Length (velvet_reverb v4; key stays "decay"): the tail in seconds the Taps
+      // spread over, so longer = sparser, not more taps. The delay line holds
+      // about 5.4 s at 48 kHz (2.7 s at 96 kHz); a longer Length is held there
+      // (the face marks it).
       {
         defaultValue: "0.025",
         key: "decay",
         kind: "time",
-        label: "Decay",
+        label: "Length",
         max: "5",
         maxDigits: 5,
         mid: "0.5",
@@ -7192,7 +7194,6 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "s",
-        tooltip: "Tail length (RT60): the taps span this many seconds and their level falls to -60 dB at the end, so more Decay = a longer tail that always fades out. Decay does not change the spacing (Density does), so a longer tail has more taps. The delay line holds about 5.4 s at 48 kHz (2.7 s at 96 kHz); a longer Decay is held there."
       },
       {
         defaultValue: "1",

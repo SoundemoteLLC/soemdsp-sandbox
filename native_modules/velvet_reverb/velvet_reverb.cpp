@@ -7,10 +7,12 @@
 // generator is its own module, velvet_noise / Dark Velvet Noise.)
 //
 // Diffuser (Dark Velvet Noise):
-//   Sparse FIR of rectangular pulses, one per 1/Density period over the tail
-//   (Decay seconds long, so Density x Decay pulses), with random position, sign
-//   and width (1 .. Darkness samples). Tap level falls exponentially to -60 dB
-//   at the end of the tail, so it never stops dead. Each pulse is read
+//   Sparse FIR of Taps rectangular pulses spread over the tail (Length = the
+//   decay param, seconds; longer = sparser, not more taps), one per grid cell
+//   (Density Skew warps the grid toward the start or the end), with random
+//   position, sign and width (1 .. Darkness samples). Tap level falls
+//   exponentially to Amp Decay (dB) at the end of the tail: -60 dB = RT60,
+//   0 dB = flat, a gated reverb. Each pulse is read
 //   from a leaky running sum of the input:
 //
 //     I[n]   = leak * I[n-1] + x[n]
@@ -30,7 +32,7 @@
 //   One more read per tap; still O(1) for any width. Gain is 1 / w.
 //
 // Click-free changes:
-//   Density, Decay, Darkness, Tail Darkness, Stereo Spread, Seed and the sample rate all
+//   Taps, Length, Amp Decay, Density Skew, Darkness, Tail Darkness, Stereo Spread, Seed and the sample rate all
 //   rebuild the tap table. A rebuild goes into the idle one of two tables and
 //   the wet signal crossfades to it (kFadeSeconds). While a fade is running,
 //   further changes wait for it, so a swept knob costs one rebuild per fade.
@@ -46,7 +48,7 @@ namespace {
 // Slots are tiny now: the big buffers (tap tables and delay lines, ~8.8 MB per instance) come
 // from the shared memory pool when an instance is created and go back when it is destroyed.
 static const int kMaxInstances = 128;
-// Physical limits only. Density, Decay and Darkness ranges belong to the parameters;
+// Physical limits only. Taps, Length and Darkness ranges belong to the parameters;
 // the DSP follows whatever they allow up to what fits in memory / the delay line.
 static const int kMaxTaps = 4096;
 static const int kMaxPulseWidth = 65536; // a pulse must fit well inside the delay line
@@ -99,6 +101,8 @@ struct VelvetReverbState {
   double builtSpread;
   double builtDecay;
   double builtTail;
+  double builtAmp;
+  double builtSkew;
   double builtRate;
   unsigned int builtSeed;
 
@@ -202,46 +206,49 @@ static double mean_width_energy(double W) {
 static const double kLn1000 = 6.907755278982137;
 
 // What a table build reports for the face (velvet_reverb_layout): every Left
-// tap's delay, width and level, the tail length used and which physical limit
-// (if any) shaped it.
+// and Right tap's delay, width and signed level, the tail length used and which
+// physical limit (if any) shaped it.
 struct Layout {
   double* pos;    // seconds
   double* width;  // seconds
-  double* level;  // linear, before the 1/width pulse gain (1 = first-tap level)
+  double* level;  // linear and signed (the tap's +/- sign, as the audio plays it), before the 1/width pulse gain (|1| = first-tap level)
+  double* posR;   // Right taps, same units
+  double* widthR;
+  double* levelR;
   double length;  // seconds actually used
   int flags;      // kLayoutTapLimit | kLayoutLengthLimit
+  int countR;     // Right tap count (Left = the layout call's return)
 };
-static const int kLayoutTapLimit = 1;    // Density x Decay > kMaxTaps: taps spread to cover the tail
-static const int kLayoutLengthLimit = 2; // Decay longer than the delay line: the tail is held there
+static const int kLayoutTapLimit = 1;    // Taps > kMaxTaps (the engine's table size)
+static const int kLayoutLengthLimit = 2; // Length longer than the delay line: the tail is held there
 
 static void build_table(
-  TapTable& t, double rawGrid, double headWidth, double spread, unsigned int seed,
-  double decaySeconds, double sampleRate, double tailWidth, Layout* out
+  TapTable& t, double taps, double headWidth, double spread, unsigned int seed,
+  double lengthSeconds, double sampleRate, double tailWidth, double ampDecayDb,
+  double densitySkew, Layout* out
 ) {
-  // Decay is the tail length: the time (s) from the input to the end of the
-  // tail, and the tap level falls exponentially to -60 dB there (an RT60).
+  // Each parameter has one job (velvet_reverb v4):
+  //   Taps        how many taps (continuous: the last one fades in by its fraction)
+  //   Length      spreads those taps over the tail (s); longer = sparser, not more
+  //   Amp Decay   tap level at the end of the tail (dB), an exponential fade
+  //               along it: 0 dB = flat (gated), -60 dB = RT60
+  //   Density Skew where the taps sit: the Step Graph rational curve
+  //               (segment_rational01, contour = -skew) warps the even grid, so
+  //               +1 packs them toward the start and -1 toward the end
   // A tail is at least one sample long and has to fit the delay line with its
   // widest pulse (physical limits only).
   int flags = 0;
-  double length = decaySeconds * sampleRate;
+  double length = lengthSeconds * sampleRate;
   if (!(length >= 1.0)) length = 1.0;
   const double widest = headWidth > tailWidth ? headWidth : tailWidth;
   const double maxLength = (double)(kDelaySize - 4) - widest;
   if (length > maxLength) { length = maxLength; flags |= kLayoutLengthLimit; }
 
-  // Density sets the spacing (one tap per 1/Density period) and Decay the
-  // length, so the tap count is Density x Decay. It is continuous: the last
-  // tap's period is the part of the length that is left, and that tap is
-  // scaled by the same fraction, so it fades in and out. Past kMaxTaps (the
-  // engine's physical table size) the taps spread evenly over the length and
-  // the face says so.
-  double grid = rawGrid;
-  if (grid * (double)kMaxTaps < length) { grid = length / (double)kMaxTaps; flags |= kLayoutTapLimit; }
-  double exactTaps = length / grid;
-  if (exactTaps > (double)kMaxTaps) exactTaps = (double)kMaxTaps;
+  double exactTaps = taps;
+  if (exactTaps > (double)kMaxTaps) { exactTaps = (double)kMaxTaps; flags |= kLayoutTapLimit; }
   int count = (int)exactTaps;
   double lastPart = exactTaps - (double)count;
-  // A leftover below 1e-6 of a tap is float round-off (76 x 1/76 s), not a tap.
+  // A leftover below 1e-6 of a tap is float round-off, not a tap.
   if (lastPart > 1e-6) {
     count += 1;
   } else {
@@ -249,8 +256,16 @@ static void build_table(
   }
   if (count > kMaxTaps) { count = kMaxTaps; lastPart = 1.0; }
   if (count < 1) { count = 1; lastPart = 1.0; }
+  // One grid cell per tap in the unwarped 0..1 tail; the last cell is the part
+  // that is left, so a fractional count glides instead of popping.
+  const double cell = 1.0 / (exactTaps > 1e-6 ? exactTaps : 1.0);
+  const double contour = -soemdsp_maths::clamp11(densitySkew == densitySkew ? densitySkew : 0.0);
+  auto warp = [&](double u) { return length * soemdsp_maths::segment_rational01(u, contour); };
 
-  const double decayK = kLn1000 / length; // per sample: -60 dB at the end
+  // Amp Decay: level falls exponentially from 0 dB at the input to ampDecayDb at
+  // the end of the tail (per sample in nepers).
+  const double ampDb = ampDecayDb == ampDecayDb ? ampDecayDb : -60.0;
+  const double decayK = -ampDb * (kLn1000 / 60.0) / length;
   double sumL = 0.0;
   double sumR = 0.0;
   unsigned int sL = seed_left(seed);
@@ -264,24 +279,17 @@ static void build_table(
   // tail to Tail Darkness at its end (0 = off), so the tail darkens over time
   // the way a room's highs die first (Dark Velvet Noise, Fagerstrom et al.,
   // DAFx 2022), and wide late pulses smear sparse late taps. Each tap also
-  // gets back the energy wider pulses lose, so Decay alone sets the tail's
+  // gets back the energy wider pulses lose, so Amp Decay alone sets the tail's
   // level and Tail Darkness only its colour.
   const bool ramp = tailWidth > 0.0 && tailWidth != headWidth;
   const double headEnergy = mean_width_energy(headWidth);
 
   for (int i = 0; i < count; ++i) {
     const bool last = (i == count - 1);
-    const double blockStart = (double)i * grid;
-    const double block = last ? grid * lastPart : grid; // the last period is what is left
+    const double cellStart = (double)i * cell;
+    double cellSize = last ? cell * lastPart : cell; // the last cell is what is left
+    if (cellStart + cellSize > 1.0) cellSize = 1.0 - cellStart;
     const double part = last ? lastPart : 1.0;
-    double maxWidth = headWidth;
-    double rampGain = 1.0;
-    if (ramp) {
-      const double u = blockStart / length;
-      maxWidth = headWidth + u * (tailWidth - headWidth);
-      if (maxWidth < 1.0) maxWidth = 1.0; // a pulse covers at least one sample
-      rampGain = __builtin_sqrt(headEnergy / mean_width_energy(maxWidth));
-    }
 
     const double jitterL = next_unit(sL);
     const double widthUnitL = next_unit(sL);
@@ -292,16 +300,26 @@ static void build_table(
     const double ownSignR = (next_rand(sR) & 0x10000u) ? 1.0 : -1.0;
     const double ownR = next_unit(sR);
 
-    const double posL = blockStart + jitterL * block;
-    const double posR = blockStart + jitterR * block;
+    // Right follows Left at Spread 0 and its own draw at Spread 1 (in the
+    // unwarped grid, so Skew moves both the same way).
+    const double uL = cellStart + jitterL * cellSize;
+    const double uR = cellStart + (jitterL + spread * (jitterR - jitterL)) * cellSize;
+    const double posL = warp(uL);
+    const double blendPosR = warp(uR);
+
+    double maxWidth = headWidth;
+    double rampGain = 1.0;
+    if (ramp) {
+      const double u = warp(cellStart) / length; // where the cell starts in the tail
+      maxWidth = headWidth + u * (tailWidth - headWidth);
+      if (maxWidth < 1.0) maxWidth = 1.0; // a pulse covers at least one sample
+      rampGain = __builtin_sqrt(headEnergy / mean_width_energy(maxWidth));
+    }
     // Widths are drawn uniformly over [1, maxWidth].
     const double widthL = 1.0 + widthUnitL * (maxWidth - 1.0);
     const double rawWidthR = 1.0 + widthUnitR * (maxWidth - 1.0);
-
-    // Right follows Left at Spread 0 and its own draw at Spread 1. The sign
-    // goes independent on a per-tap threshold, so decorrelation grows evenly.
-    const double blendPosR = posL + spread * (posR - posL);
     const double widthR = widthL + spread * (rawWidthR - widthL); // stays in [1, maxWidth]
+    // The sign goes independent on a per-tap threshold, so decorrelation grows evenly.
     const double signR = (ownR < spread) ? ownSignR : signL;
 
     if (openL) {
@@ -310,7 +328,7 @@ static void build_table(
         if (out) {
           out->pos[countL] = (double)(int)posL / sampleRate;
           out->width[countL] = widthL / sampleRate;
-          out->level[countL] = envL;
+          out->level[countL] = signL * envL;
         }
         set_tap(t.left[countL++], (int)posL, widthL, signL * envL);
         // A tap averages `width` samples (gain 1/width), so its energy on
@@ -324,6 +342,11 @@ static void build_table(
     if (openR) {
       if (blendPosR + widthR < (double)(kDelaySize - 1)) {
         const double envR = part * rampGain * soemdsp_maths::dsp_exp(-decayK * (blendPosR + 0.5 * widthR));
+        if (out) {
+          out->posR[countR] = (double)(int)blendPosR / sampleRate;
+          out->widthR[countR] = widthR / sampleRate;
+          out->levelR[countR] = signR * envR;
+        }
         set_tap(t.right[countR++], (int)blendPosR, widthR, signR * envR);
         sumR += envR * envR * width_energy(widthR);
       } else {
@@ -341,6 +364,7 @@ static void build_table(
   if (out) {
     out->length = length / sampleRate;
     out->flags = flags;
+    out->countR = countR;
   }
 }
 
@@ -349,7 +373,10 @@ static TapTable gLayoutTable;
 static double gLayoutPos[kMaxTaps];
 static double gLayoutWidth[kMaxTaps];
 static double gLayoutLevel[kMaxTaps];
-static Layout gLayout = { gLayoutPos, gLayoutWidth, gLayoutLevel, 0.0, 0 };
+static double gLayoutPosR[kMaxTaps];
+static double gLayoutWidthR[kMaxTaps];
+static double gLayoutLevelR[kMaxTaps];
+static Layout gLayout = { gLayoutPos, gLayoutWidth, gLayoutLevel, gLayoutPosR, gLayoutWidthR, gLayoutLevelR, 0.0, 0, 0 };
 
 // Same sanitising as the audio path (soemdsp_velvet_reverb_sample).
 static inline double clean_width(double darkness) {
@@ -422,6 +449,8 @@ int soemdsp_velvet_reverb_create() {
       s.builtSpread = 0.0;
       s.builtDecay = 0.0;
       s.builtTail = 0.0;
+      s.builtAmp = -60.0;
+      s.builtSkew = 0.0;
       s.builtRate = 0.0;
       s.builtSeed = 0u;
       s.tables[0].countL = 0;
@@ -462,24 +491,28 @@ double soemdsp_velvet_reverb_sample(
   int handle,
   double inL,
   double inR,
-  double densityHz,     // taps per second
+  double taps,          // tap count (continuous; 0 pauses)
   double darkness,      // max pulse width in samples (continuous, >= 1)
   double stereoSpread,  // 0 .. 1
   double mix,           // dry/wet
   double sampleRate,
-  double decay,         // tail length in seconds (RT60: -60 dB at the last tap)
-  double tailDarkness   // max pulse width at the last tap, 0 = same as Darkness
+  double decay,         // Length: the tail in seconds the taps spread over
+  double tailDarkness,  // max pulse width at the last tap, 0 = same as Darkness
+  double ampDecayDb,    // level at the end of the tail in dB (0 = flat / gated)
+  double densitySkew    // -1 .. +1: + packs taps toward the start, - toward the end
 ) {
   if (handle <= 0 || handle > kMaxInstances) return 0.0;
   VelvetReverbState& s = gPool[handle - 1];
   if (!s.active) return 0.0;
 
   if (!(sampleRate >= 1000.0)) sampleRate = 48000.0;
-  if (!(densityHz == densityHz)) densityHz = 2500.0;
-  // Density 0 (or below) pauses: the diffuser keeps the taps it has. No hidden
-  // floor: 0 means stopped, not "1 Hz".
-  const bool paused = !(densityHz > 0.0);
-  const double grid = paused ? s.builtGrid : sampleRate / densityHz;
+  if (!(taps == taps)) taps = 64.0;
+  // Taps 0 (or below) pauses: the diffuser keeps the taps it has. No hidden
+  // floor: 0 means stopped, not "1 tap".
+  const bool paused = !(taps > 0.0);
+  const double grid = paused ? s.builtGrid : taps; // built tap count
+  if (!(ampDecayDb == ampDecayDb)) ampDecayDb = -60.0;
+  if (!(densitySkew == densitySkew)) densitySkew = 0.0;
 
   // Continuous width: 1.66 is 1.66 samples. Below 1 a pulse is still one sample.
   const double width = clean_width(darkness);
@@ -496,17 +529,20 @@ double soemdsp_velvet_reverb_sample(
   if (paused) {
     // nothing to build; a module that starts paused has no taps yet (wet is silent)
   } else if (s.builtGrid < 0.0) {
-    build_table(s.tables[s.cur], grid, width, spread, s.seed, decay, sampleRate, tail, nullptr);
+    build_table(s.tables[s.cur], grid, width, spread, s.seed, decay, sampleRate, tail, ampDecayDb, densitySkew, nullptr);
     s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
+    s.builtAmp = ampDecayDb; s.builtSkew = densitySkew;
     s.builtGrid = grid; s.builtWidth = width;
     s.builtSpread = spread; s.builtSeed = s.seed;
   } else if (!s.fading && (
     grid != s.builtGrid || width != s.builtWidth
     || spread != s.builtSpread || s.seed != s.builtSeed
     || decay != s.builtDecay || sampleRate != s.builtRate || tail != s.builtTail
+    || ampDecayDb != s.builtAmp || densitySkew != s.builtSkew
   )) {
-    build_table(s.tables[1 - s.cur], grid, width, spread, s.seed, decay, sampleRate, tail, nullptr);
+    build_table(s.tables[1 - s.cur], grid, width, spread, s.seed, decay, sampleRate, tail, ampDecayDb, densitySkew, nullptr);
     s.builtDecay = decay; s.builtRate = sampleRate; s.builtTail = tail;
+    s.builtAmp = ampDecayDb; s.builtSkew = densitySkew;
     s.builtGrid = grid; s.builtWidth = width;
     s.builtSpread = spread; s.builtSeed = s.seed;
     s.fading = true;
@@ -555,27 +591,34 @@ double soemdsp_velvet_reverb_sample(
 }
 
 // Face: build the Left tap layout the audio would use for these settings into a
-// static table and return the tap count (0 while Density pauses). Read it with
+// static table and return the Left tap count (0 while Taps pauses). Read it with
 // the _layout_* pointers / values below. Costs one table build; call it only
 // when a setting changes.
 int soemdsp_velvet_reverb_layout(
-  double densityHz, double darkness, double stereoSpread, double sampleRate,
-  double decay, double tailDarkness, double seed
+  double taps, double darkness, double stereoSpread, double sampleRate,
+  double decay, double tailDarkness, double seed, double ampDecayDb, double densitySkew
 ) {
   if (!(sampleRate >= 1000.0)) sampleRate = 48000.0;
-  if (!(densityHz == densityHz)) densityHz = 2500.0;
+  if (!(taps == taps)) taps = 64.0;
   gLayout.length = 0.0;
   gLayout.flags = 0;
-  if (!(densityHz > 0.0)) return 0;
+  gLayout.countR = 0;
+  if (!(taps > 0.0)) return 0;
   if (!(decay == decay)) decay = 0.025;
+  if (!(ampDecayDb == ampDecayDb)) ampDecayDb = -60.0;
+  if (!(densitySkew == densitySkew)) densitySkew = 0.0;
   const unsigned int seedU = seed > 0.0 ? (unsigned int)seed : 0u;
-  build_table(gLayoutTable, sampleRate / densityHz, clean_width(darkness), clean_spread(stereoSpread),
-    seedU, decay, sampleRate, clean_tail(tailDarkness), &gLayout);
+  build_table(gLayoutTable, taps, clean_width(darkness), clean_spread(stereoSpread),
+    seedU, decay, sampleRate, clean_tail(tailDarkness), ampDecayDb, densitySkew, &gLayout);
   return gLayoutTable.countL;
 }
 double* soemdsp_velvet_reverb_layout_pos() { return gLayoutPos; }
 double* soemdsp_velvet_reverb_layout_width() { return gLayoutWidth; }
 double* soemdsp_velvet_reverb_layout_level() { return gLayoutLevel; }
+int soemdsp_velvet_reverb_layout_count_r() { return gLayout.countR; }
+double* soemdsp_velvet_reverb_layout_pos_r() { return gLayoutPosR; }
+double* soemdsp_velvet_reverb_layout_width_r() { return gLayoutWidthR; }
+double* soemdsp_velvet_reverb_layout_level_r() { return gLayoutLevelR; }
 double soemdsp_velvet_reverb_layout_length() { return gLayout.length; }
 int soemdsp_velvet_reverb_layout_flags() { return gLayout.flags; }
 int soemdsp_velvet_reverb_max_taps() { return kMaxTaps; }
@@ -586,7 +629,7 @@ double soemdsp_velvet_reverb_right(int handle) {
 }
 
 int soemdsp_velvet_reverb_version() {
-  return 2; // 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
+  return 4; // 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
 }
 
 } // extern "C"
