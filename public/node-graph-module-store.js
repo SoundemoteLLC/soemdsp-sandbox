@@ -1093,7 +1093,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   velvetReverb: {
     category: "space",
-    description: "Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser: a sparse-tap reverb; Decay is the tail length (RT60), and Tail Darkness darkens the tail.",
+    description: "Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser: a sparse-tap reverb: Density spaces the taps, Decay is the tail length (RT60), Tail Darkness darkens the tail. The face shows where the taps land.",
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },

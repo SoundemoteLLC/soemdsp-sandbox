@@ -7081,23 +7081,22 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["density", "Density"]], h: 40 },
       { kind: "cells", params: [["decay", "Decay", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["tapCount", "Taps"], ["darkness", "Darkness"]], h: 40 },
+      { kind: "cells", params: [["darkness", "Darkness"], ["tailDarkness", "Tail Dark"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "processor",
     planFreeRun: true,
-    displayType: "waterfall",
+    // Face: where the taps land (node-graph-velvet-taps-display.js), from the
+    // native layout (soemdsp_velvet_reverb_layout), plus the live tap count.
+    // Same look settings as the Pulse Train face.
+    layout: "pulseCurve",
+    displayType: "pulseTrainFace",
     spectrumCompanion: false,
     displayModes: [
-      { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall" },
+      { key: "face", label: "Taps", renderer: "pulseTrainFace", settingsSchema: "pulseTrainFace" },
     ],
-    defaultDisplayMode: "waterfall",
-    stereoWaterfallPorts: { left: "Left", right: "Right" },
-    displaySignals: [
-      { key: "Left", kind: "scalar" },
-      { key: "Right", kind: "scalar" },
-    ],
+    defaultDisplayMode: "face",
     inputs: ["In", "Left", "Right", "f"],
     inputLabels: { In: "Mono", f: "ƒ" },
     inputAliases: { Mono: "In", "ƒ": "f" },
@@ -7113,6 +7112,8 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       {
         defaultValue: "2500",
+        // Cost is O(taps) per sample and taps = Density x Decay: mark for the CPU debug overlay.
+        constraint: "cpu",
         key: "density",
         kind: "frequency",
         label: "Density",
@@ -7122,22 +7123,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "Hz",
-        tooltip: "Tap density (taps per second) over the tail. Higher density = smoother, denser reflections. When Density x Decay is more than Tap Count, Density still sets the spacing at the start of the tail and the spacing widens toward the end, so higher Density keeps packing the early reflections tighter. 0 Hz pauses: the reverb keeps the taps it has."
-      },
-      {
-        defaultValue: "64",
-        // Cost is O(taps) per sample: mark for the CPU debug overlay.
-        constraint: "cpu",
-        key: "tapCount",
-        label: "Tap Count",
-        // Spawn range 8..256 (CPU grows with taps). The engine takes up to 4096:
-        // raise Max in the parameter settings for longer tails.
-        max: "256",
-        mid: "64",
-        min: "8",
-        nonlinearSlider: true,
-        step: "1",
-        tooltip: "Most taps the tail uses. A long Decay at high Density needs Density x Decay taps; with fewer, the spacing widens along the tail (the late tail gets sparser). CPU cost grows with taps. Range here is 8 to 256; the engine allows up to 4096 if you raise Max in the parameter settings."
+        tooltip: "Taps per second, evenly spread over the tail. The tail has Density x Decay taps (shown on the face); more taps = smoother and more CPU. 0 Hz pauses: the reverb keeps the taps it has."
       },
       {
         defaultValue: "1",
@@ -7206,7 +7192,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "s",
-        tooltip: "Tail length (RT60): the taps span this many seconds and their level falls to -60 dB at the end, so more Decay = a longer tail that always fades out. The delay line holds about 5.4 s at 48 kHz (2.7 s at 96 kHz); a longer Decay is held there."
+        tooltip: "Tail length (RT60): the taps span this many seconds and their level falls to -60 dB at the end, so more Decay = a longer tail that always fades out. Decay does not change the spacing (Density does), so a longer tail has more taps. The delay line holds about 5.4 s at 48 kHz (2.7 s at 96 kHz); a longer Decay is held there."
       },
       {
         defaultValue: "1",
