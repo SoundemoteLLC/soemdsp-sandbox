@@ -2,7 +2,7 @@
 // samples nearest past the existing 2.5x threshold like other shader faces.
 // Transparent standard control surfaces use the sandbox's shared slider
 // gestures and modifier rules.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "cell", "stepPattern"];
 const STURMIAN_PARAMS = [
   { key: "alpha", min: 0.001, max: 0.999, scale: "linear" }, { key: "beta", min: 0.001, max: 0.999, scale: "linear" },
@@ -113,7 +113,7 @@ function sturmianEnsureGpu(shader) {
     return shaderObj;
   };
   const uniforms = STURMIAN_FLOATS.map((key) => `uniform float ${key};`).join("\n")
-    + "\nuniform float playStep; uniform float playBar; uniform float playing;";
+    + "\nuniform float playStep; uniform float playBar; uniform float playing; uniform float pixelRatio;";
   const vertex = compile(gl.VERTEX_SHADER, "#version 300 es\nin vec2 aPos; out vec2 vUv; void main(){vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);}");
   const fragment = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\nin vec2 vUv; out vec4 out_color; uniform vec2 resolution; uniform float time;\n${sturmianGlslConstants()}\n${uniforms}\n${shader.functions}\nvoid main(){ vec2 uv=vUv; ${shader.body}\n}`);
   const program = gl.createProgram();
@@ -136,6 +136,7 @@ function sturmianEnsureGpu(shader) {
     playStep: gl.getUniformLocation(program, "playStep"),
     playBar: gl.getUniformLocation(program, "playBar"),
     playing: gl.getUniformLocation(program, "playing"),
+    pixelRatio: gl.getUniformLocation(program, "pixelRatio"),
     floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])),
   };
   return sturmianSharedGpu;
@@ -185,6 +186,7 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.playStep, play.playStep);
   gl.uniform1f(gpu.playBar, play.playBar);
   gl.uniform1f(gpu.playing, play.playing);
+  gl.uniform1f(gpu.pixelRatio, Math.max(1, Number(sized.pixelRatio) || 1));
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   if (typeof nodeGraphSharedGlEndPresent === "function") nodeGraphSharedGlEndPresent(gl);
   const ctx = typeof nodeGraphSharedGlPresentTarget === "function"

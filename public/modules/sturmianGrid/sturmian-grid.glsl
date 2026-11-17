@@ -159,33 +159,49 @@ if (px.y < h * STURM_MAP_TOP) {
   else base = mix(vec3(18.0,20.0,30.0)/255.0, vec3(255.0,42.0,101.0)/255.0, z);
   // Dim columns outside the sounding bar, like soundemote-dev.
   if (col < -0.5 || col >= steps) base *= 0.55;
-  // 1 CSS-pixel gutter between blocks (soundemote-dev's 1px grid lines).
+  // Grid lines match soundemote-dev: 1 CSS-pixel stroke centered on
+  // c * cell + 0.5 (the first CSS pixel of each cell, plus the closing line
+  // at the next boundary). Adjacent cells share that one pixel; nothing is
+  // drawn on the right/bottom interior of a cell. Snapped to whole device
+  // pixels via pixelRatio so the band is exactly 1 CSS px at zoom 1.
+  float pr = max(1.0, pixelRatio);
+  float devX = floor(gridX * pr + 1e-4);
+  float devY = floor(gridY * pr + 1e-4);
+  float cellDev = cellWidth * pr;
+  float gridH = h * STURM_MAP_TOP;
   float fx = mod(gridX, cellWidth);
   float fy = mod(gridY, cellHeight);
-  float gridH = h * STURM_MAP_TOP;
-  if (cellWidth >= 8.0 && (fx < 1.0 || fy < 1.0)) base = mix(base, vec3(0.0), 0.45);
-  // Dashed bar bounds at 0 and steps.
-  if ((abs(gridX) < 1.0 || abs(gridX - steps * cellWidth) < 1.0) && mod(gridY, 8.0) < 4.0)
+  if (cellWidth >= 8.0 && (mod(devX, cellDev) < pr || (gridY < gridH && mod(devY, cellDev) < pr)))
+    base = mix(base, vec3(0.0), 0.45);
+  // Dashed bar bounds at 0 and steps (1px at +0.5, like soundemote-dev).
+  if (((devX >= 0.0 && devX < pr) || (devX >= steps * cellDev && devX < steps * cellDev + pr))
+      && mod(devY, 8.0 * pr) < 4.0 * pr)
     base = mix(base, vec3(1.0), 0.35);
-  // Track-row frames across the sounding bar.
+  // One 2px stroke around the whole sounding-bar track row (strokeRect
+  // inset by 1 with lineWidth 2), not a per-cell inset on both sides.
   for (int track = 0; track < 4; track++) {
     float trackN = playBar * walk + float(track) * spread;
     if (abs(n - trackN) > 0.5 || col < -0.5 || col >= steps) continue;
     bool muted = mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5;
     vec3 tc = muted ? vec3(0.55) : laneColor(track);
-    bool edge = (col < 0.5 && fx < 2.0) || (col > steps - 1.5 && fx > cellWidth - 2.0) || fy < 2.0 || fy > cellHeight - 2.0;
+    bool edge = (devX >= 0.0 && devX < 2.0 * pr)
+      || (devX >= steps * cellDev - 2.0 * pr && devX < steps * cellDev)
+      || mod(devY, cellDev) < 2.0 * pr
+      || mod(devY, cellDev) >= cellDev - 2.0 * pr;
     if (edge) base = mix(base, tc, 0.85);
   }
-  // Playhead: pale full-height column, 1px white outline, inset hits on firing tracks.
+  // Playhead: pale full-height column, 1px white outline inside the column
+  // (strokeRect(x+0.5, 0.5, cs-1, H-1)), inset hits (x+2, y+2, cs-4, cs-4).
   if (playing > 0.5 && abs(col - playStep) < 0.5) {
     base = mix(base, vec3(1.0), 0.16);
-    if (fx < 1.0 || fx > cellWidth - 1.0 || gridY < 1.0 || gridY > gridH - 1.0) base = vec3(1.0);
+    if (mod(devX, cellDev) < pr || mod(devX, cellDev) >= cellDev - pr
+        || devY < pr || devY >= floor(gridH * pr + 1e-4) - pr) base = vec3(1.0);
     for (int track = 0; track < 4; track++) {
       float trackN = playBar * walk + float(track) * spread;
       if (abs(n - trackN) > 0.5) continue;
       if (mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5) continue;
       if (mod(floor(mask / exp2(float(track * 3) + tile)), 2.0) < 0.5) continue;
-      if (fx >= 2.0 && fx <= cellWidth - 2.0 && fy >= 2.0 && fy <= cellHeight - 2.0)
+      if (fx >= 2.0 && fx < cellWidth - 2.0 && fy >= 2.0 && fy < cellHeight - 2.0)
         base = mix(laneColor(track), base, 0.15);
     }
   }
