@@ -879,6 +879,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "pitch" || p === "\u266f/\u266d") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
     if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
     if (p === "__phase") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
+    if (p === "__bar") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
   }
   if (t === "vactrol") {
     if (p === "tone") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
@@ -10872,6 +10873,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Square"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_TRI) {
+    if (type === "sturmianGrid") return ["__Bar"];
     if (type === "transport") return ["Click R", "Click Right"];
     if (type === "hostBpm") return ["T", "Trigger", "Pulse"];
     if (type === "phoneTone") return ["Digital Thru"];
@@ -11096,6 +11098,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         || type === "clockDivider" || type === "triggerDivider"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
+    if (type === "sturmianGrid") ports.push(P.NATIVE_GRAPH_PORT_PHASE01);
     if (type === "stepRegister") ports.push(P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_PHASE01);
     if (type === "pitchManager") ports.push(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW);
     if (type === "blitTrigger") ports.push(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_PHASE01);
@@ -11273,6 +11276,15 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
           P.NATIVE_GRAPH_PORT_TRI,
           P.NATIVE_GRAPH_PORT_SINE,
           P.NATIVE_GRAPH_PORT_TRISAW,
+          P.NATIVE_GRAPH_PORT_PHASE01,
+        );
+      } else if (type === "sturmianGrid") {
+        // Melody / Pitch / f plus hidden __Phase and __Bar face taps.
+        ports = facePorts.concat(
+          P.NATIVE_GRAPH_PORT_SAW,
+          P.NATIVE_GRAPH_PORT_RAMP,
+          P.NATIVE_GRAPH_PORT_SQUARE,
+          P.NATIVE_GRAPH_PORT_TRI,
           P.NATIVE_GRAPH_PORT_PHASE01,
         );
       } else if (

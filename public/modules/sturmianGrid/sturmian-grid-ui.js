@@ -1,17 +1,13 @@
 // Packed sounding-bar grid on the shared face texture; standard parameter
-// rows (not shader-drawn sliders) live in the module body. Zoom samples
-// nearest past the existing 2.5x threshold like other shader faces.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5";
-const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "cell", "stepPattern"];
-const STURMIAN_PRESET_VALUES = [
-  [0.2955977425, 0.1607132448], [0.4142135624, 0.1830127019], [0.3819660113, 0.2360679775],
-  [0.3337, 0.2004], [0.0213, 0.4991], [5 / 16, 3 / 16],
-];
-const STURMIAN_PRESET_NAMES = ["TRIB", "ROOT", "GOLD", "NEAR", "MOIRE", "EUCLID"];
+// rows live in the module body. Zoom samples nearest past the existing 2.5x
+// threshold like other shader faces. Steps sets the square cell size.
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6";
+const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_LANE_NAMES = ["Kick", "Snare", "Hat", "Melody"];
 const STURMIAN_LANE_SHORT = ["K", "S", "H", "M"];
 const STURMIAN_UI_DEFAULT_MASK = 3170;
 let sturmianShaderPromise = null;
+let sturmianDrag = null;
 
 function sturmianLoadShader() {
   if (!sturmianShaderPromise) {
@@ -57,9 +53,77 @@ function sturmianPlayhead(nodeId, steps) {
     playStep = Math.max(0, Math.min(stepCount - 1, Math.floor(phase * stepCount + 1e-6)));
     playing = 1;
   }
-  // playBar stays 0 until a native hidden bar tap exists. Default Reset after
-  // == Steps already keeps the engine bar at 0, which matches this view.
+  const bar = read("__Bar");
+  if (Number.isFinite(bar)) playBar = Math.max(0, Math.floor(bar + 1e-6));
   return { playStep, playBar, playing };
+}
+
+// Same integer-square packing as the shader: Steps columns fill the width,
+// whole rows stack in the leftover height, equal margins, no half cells.
+function sturmianGridLayout(width, height, steps) {
+  const cols = Math.max(2, Math.floor(Number(steps) + 0.5) || 2);
+  const cell = Math.max(2, Math.floor(Math.max(1, width) / cols));
+  const rows = Math.max(1, Math.floor(Math.max(1, height) / cell));
+  return {
+    cols,
+    rows,
+    cell,
+    ox: Math.floor((width - cols * cell) * 0.5),
+    oy: Math.floor((height - rows * cell) * 0.5),
+  };
+}
+
+function sturmianNTop(playBar, walk, spread, rows) {
+  const spreadN = Math.max(1, Math.floor(Number(spread) + 0.5) || 1);
+  const walkN = Math.max(0, Math.floor(Number(walk) + 0.5) || 0);
+  const firstN = playBar * walkN;
+  const span = 3 * spreadN + 1;
+  const above = Math.max(0, Math.floor((rows - span) * 0.5));
+  return { firstN, spreadN, nTop: firstN - above };
+}
+
+function sturmianTileAt(values, col, n, time) {
+  const steps = Math.max(1, Number(values.steps) || 1);
+  let aa = Number(values.alpha) || 0;
+  let bb = Number(values.beta) || 0;
+  if (Number(values.snap) > 0.5) {
+    aa = Math.floor(aa * steps + 0.5) / steps;
+    bb = Math.floor(bb * steps + 0.5) / steps;
+  }
+  const rho = Number(values.rho) || 0;
+  const drift = Number(values.drift) || 0;
+  const z = (col * aa + n * bb + rho + drift * time) % 1;
+  const frac = z < 0 ? z + 1 : z;
+  if (frac >= 1 - aa) return 1;
+  if (frac >= 1 - aa - bb) return 2;
+  return 0;
+}
+
+function sturmianTrackAtRow(row, firstN, spreadN, nTop) {
+  const n = nTop + row;
+  for (let track = 0; track < 4; track += 1) {
+    if (Math.abs(n - (firstN + track * spreadN)) < 0.5) return track;
+  }
+  return -1;
+}
+
+function sturmianHitCell(face, plate, event, values, play, time) {
+  if (!face || !plate) return null;
+  const rect = plate.getBoundingClientRect();
+  if (!(rect.width > 0) || !(rect.height > 0)) return null;
+  const x = (event.clientX - rect.left) * (plate._sturmianCssW || rect.width) / rect.width;
+  const y = (event.clientY - rect.top) * (plate._sturmianCssH || rect.height) / rect.height;
+  const layout = sturmianGridLayout(plate._sturmianCssW || rect.width, plate._sturmianCssH || rect.height, values.steps);
+  const gx = x - layout.ox;
+  const gy = y - layout.oy;
+  if (gx < 0 || gy < 0 || gx >= layout.cols * layout.cell || gy >= layout.rows * layout.cell) return null;
+  const col = Math.floor(gx / layout.cell);
+  const row = Math.floor(gy / layout.cell);
+  const win = sturmianNTop(play.playBar, values.walk, values.spread, layout.rows);
+  const track = sturmianTrackAtRow(row, win.firstN, win.spreadN, win.nTop);
+  if (track < 0) return null;
+  const tile = sturmianTileAt(values, col, win.nTop + row, time);
+  return { col, row, track, tile, bit: track * 3 + tile };
 }
 
 function sturmianSharedGl() {
@@ -87,7 +151,8 @@ function sturmianEnsureGpu(shader) {
     return shaderObj;
   };
   const uniforms = STURMIAN_FLOATS.map((key) => `uniform float ${key};`).join("\n")
-    + "\nuniform float playStep; uniform float playBar; uniform float playing; uniform float pixelRatio;";
+    + "\nuniform float playStep; uniform float playBar; uniform float playing; uniform float pixelRatio;"
+    + " uniform float flashStep; uniform float flashMask; uniform float flashAmt;";
   const vertex = compile(gl.VERTEX_SHADER, "#version 300 es\nin vec2 aPos; out vec2 vUv; void main(){vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);}");
   const fragment = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\nin vec2 vUv; out vec4 out_color; uniform vec2 resolution; uniform float time;\n${uniforms}\n${shader.functions}\nvoid main(){ vec2 uv=vUv; ${shader.body}\n}`);
   const program = gl.createProgram();
@@ -111,9 +176,41 @@ function sturmianEnsureGpu(shader) {
     playBar: gl.getUniformLocation(program, "playBar"),
     playing: gl.getUniformLocation(program, "playing"),
     pixelRatio: gl.getUniformLocation(program, "pixelRatio"),
+    flashStep: gl.getUniformLocation(program, "flashStep"),
+    flashMask: gl.getUniformLocation(program, "flashMask"),
+    flashAmt: gl.getUniformLocation(program, "flashAmt"),
     floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])),
   };
   return sturmianSharedGpu;
+}
+
+function sturmianUpdateFlash(face, values, play, time) {
+  if (face._sturmianFlash === undefined) {
+    face._sturmianFlash = { playStep: play.playStep, playBar: play.playBar, step: play.playStep, mask: 0, at: 0 };
+  } else if (play.playing > 0.5 && (face._sturmianFlash.playStep !== play.playStep || face._sturmianFlash.playBar !== play.playBar)) {
+    const mask = Math.round(values.stepPattern);
+    const walk = Math.max(0, Math.floor(values.walk + 0.5) || 0);
+    const spread = Math.max(1, Math.floor(values.spread + 0.5) || 1);
+    let fired = 0;
+    for (let track = 0; track < 4; track += 1) {
+      if ((mask >> (12 + track)) & 1) continue;
+      const n = play.playBar * walk + track * spread;
+      const tile = sturmianTileAt(values, play.playStep, n, time);
+      if ((mask >> (track * 3 + tile)) & 1) fired |= (1 << track);
+    }
+    face._sturmianFlash = {
+      playStep: play.playStep,
+      playBar: play.playBar,
+      step: play.playStep,
+      mask: fired,
+      at: performance.now(),
+    };
+  }
+  const flash = face._sturmianFlash;
+  if (!flash || !flash.mask) return { step: 0, mask: 0, amt: 0 };
+  const beatMs = 60000 / Math.max(1, Number(values.rate) || 120);
+  const amt = Math.max(0, Math.min(1, 1 - (performance.now() - flash.at) / beatMs));
+  return { step: flash.step, mask: flash.mask, amt };
 }
 
 function sturmianSyncLanes(face, values) {
@@ -129,16 +226,16 @@ function sturmianPaint(face) {
   if (!face?.isConnected || !face._sturmianShader) return;
   const plate = face._sturmianPlate || face.querySelector(".node-sturmian-grid-canvas");
   if (!plate) return;
-  // Layout CSS box x dpr, never workspace zoom. The shared face-texture path
-  // then samples that zoom-1 picture nearest past the existing 2.5x threshold.
-  // Size the texture to the plate, not the whole face (the side strip of
-  // toggles and presets must not stretch the squares).
+  // Layout CSS box x dpr, never workspace zoom. Size the texture to the plate,
+  // not the whole face (the lane strip below must not stretch the squares).
   const sized = typeof nodeGraphDisplayCanvasSize === "function"
     ? nodeGraphDisplayCanvasSize(plate, plate)
     : null;
   if (!sized) return;
   const logicalWidth = Math.max(1, sized.cssWidth);
   const logicalHeight = Math.max(1, sized.cssHeight);
+  plate._sturmianCssW = logicalWidth;
+  plate._sturmianCssH = logicalHeight;
   const width = Math.max(1, sized.width);
   const height = Math.max(1, sized.height);
   let gpu;
@@ -164,7 +261,8 @@ function sturmianPaint(face) {
   gl.enableVertexAttribArray(gpu.position);
   gl.vertexAttribPointer(gpu.position, 2, gl.FLOAT, false, 0, 0);
   gl.uniform2f(gpu.resolution, logicalWidth, logicalHeight);
-  gl.uniform1f(gpu.time, (performance.now() - face._sturmianStarted) / 1000);
+  const time = (performance.now() - face._sturmianStarted) / 1000;
+  gl.uniform1f(gpu.time, time);
   const values = sturmianValues(nodeId, face._sturmianPreview);
   for (const key of STURMIAN_FLOATS) gl.uniform1f(gpu.floats[key], values[key]);
   const play = sturmianPlayhead(nodeId, values.steps);
@@ -172,6 +270,10 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.playBar, play.playBar);
   gl.uniform1f(gpu.playing, play.playing);
   gl.uniform1f(gpu.pixelRatio, Math.max(1, Number(sized.pixelRatio) || 1));
+  const flash = sturmianUpdateFlash(face, values, play, time);
+  gl.uniform1f(gpu.flashStep, flash.step);
+  gl.uniform1f(gpu.flashMask, flash.mask);
+  gl.uniform1f(gpu.flashAmt, flash.amt);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   if (typeof nodeGraphSharedGlEndPresent === "function") nodeGraphSharedGlEndPresent(gl);
   const ctx = typeof nodeGraphSharedGlPresentTarget === "function"
@@ -196,6 +298,15 @@ function sturmianCommit(nodeId, values, status = "Sturmian Grid") {
   patchNode.params = next;
   commitNodeGraphPatch(patch, { status });
   return true;
+}
+
+function sturmianApplyBit(nodeId, face, bit, turnOn) {
+  const current = Math.round(sturmianValues(nodeId, face?._sturmianPreview).stepPattern);
+  const next = turnOn ? (current | (1 << bit)) : (current & ~(1 << bit));
+  if (next === current) return current;
+  face._sturmianPreview = { ...(face._sturmianPreview || {}), stepPattern: next };
+  sturmianCommit(nodeId, { stepPattern: next }, "Sturmian lane map");
+  return next;
 }
 
 function sturmianCreateLaneMap() {
@@ -225,21 +336,6 @@ function sturmianCreateLaneMap() {
   return map;
 }
 
-function sturmianCreatePresets() {
-  const row = document.createElement("div");
-  row.className = "sturmian-presets";
-  STURMIAN_PRESET_NAMES.forEach((name, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "sturmian-preset";
-    button.dataset.sturmianPreset = String(index);
-    button.setAttribute("aria-label", `Sturmian preset ${name}`);
-    button.textContent = name;
-    row.append(button);
-  });
-  return row;
-}
-
 function sturmianCreateBody(node) {
   const face = document.createElement("div");
   face.className = "node-sturmian-grid node-module-scope-window node-module-face";
@@ -252,7 +348,7 @@ function sturmianCreateBody(node) {
   face._sturmianPlate = plate;
   const side = document.createElement("div");
   side.className = "sturmian-side";
-  side.append(sturmianCreateLaneMap(), sturmianCreatePresets());
+  side.append(sturmianCreateLaneMap());
   face.append(plate, side);
   sturmianLoadShader().then((shader) => {
     face._sturmianShader = shader;
@@ -284,19 +380,63 @@ registerNodeGraphChromelessModuleUi("sturmianGrid", {
   },
 });
 
-document.addEventListener("pointerdown", (event) => {
-  const button = event.target.closest?.(".sturmian-lane-toggle, .sturmian-preset");
-  if (!button || event.button !== 0) return;
+function sturmianPointerFace(event) {
+  return event.target.closest?.(".node-sturmian-grid") || sturmianDrag?.face || null;
+}
+
+function sturmianOnPointerDown(event) {
+  if (event.button !== 0) return;
+  const face = sturmianPointerFace(event);
   // By id, not closest('.dsp-node'): Canvas view moves the face out of its module.
-  const face = button.closest(".node-sturmian-grid");
   const nodeId = face?.dataset.node || "";
-  if (!nodeId) return;
-  if (button.dataset.sturmianPreset !== undefined) {
-    const preset = STURMIAN_PRESET_VALUES[Number(button.dataset.sturmianPreset)];
-    sturmianCommit(nodeId, { alpha: preset[0], beta: preset[1] }, "Sturmian preset");
-  } else {
+  if (!face || !nodeId) return;
+  const button = event.target.closest?.(".sturmian-lane-toggle");
+  if (button) {
     sturmianCommit(nodeId, { stepPattern: Math.round(sturmianValues(nodeId).stepPattern) ^ (1 << Number(button.dataset.sturmianBit)) }, "Sturmian lane map");
+    event.preventDefault();
+    event.stopPropagation();
+    return;
   }
+  const plate = face._sturmianPlate || face.querySelector(".node-sturmian-grid-canvas");
+  const values = sturmianValues(nodeId, face._sturmianPreview);
+  const play = sturmianPlayhead(nodeId, values.steps);
+  const time = (performance.now() - face._sturmianStarted) / 1000;
+  const hit = sturmianHitCell(face, plate, event, values, play, time);
+  if (!hit) return;
+  const mask = Math.round(values.stepPattern);
+  const turnOn = ((mask >> hit.bit) & 1) === 0;
+  sturmianDrag = { face, nodeId, turnOn, lastBit: hit.bit, pointerId: event.pointerId };
+  face._sturmianPreview = { stepPattern: mask };
+  sturmianApplyBit(nodeId, face, hit.bit, turnOn);
+  try { face.setPointerCapture?.(event.pointerId); } catch (_error) { /* ignore */ }
   event.preventDefault();
   event.stopPropagation();
-}, true);
+}
+
+function sturmianOnPointerMove(event) {
+  if (!sturmianDrag || event.pointerId !== sturmianDrag.pointerId) return;
+  const { face, nodeId, turnOn } = sturmianDrag;
+  const plate = face._sturmianPlate || face.querySelector(".node-sturmian-grid-canvas");
+  const values = sturmianValues(nodeId, face._sturmianPreview);
+  const play = sturmianPlayhead(nodeId, values.steps);
+  const time = (performance.now() - face._sturmianStarted) / 1000;
+  const hit = sturmianHitCell(face, plate, event, values, play, time);
+  if (!hit || hit.bit === sturmianDrag.lastBit) return;
+  sturmianDrag.lastBit = hit.bit;
+  sturmianApplyBit(nodeId, face, hit.bit, turnOn);
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function sturmianOnPointerUp(event) {
+  if (!sturmianDrag || event.pointerId !== sturmianDrag.pointerId) return;
+  const face = sturmianDrag.face;
+  try { face?.releasePointerCapture?.(event.pointerId); } catch (_error) { /* ignore */ }
+  if (face) delete face._sturmianPreview;
+  sturmianDrag = null;
+}
+
+document.addEventListener("pointerdown", sturmianOnPointerDown, true);
+document.addEventListener("pointermove", sturmianOnPointerMove, true);
+document.addEventListener("pointerup", sturmianOnPointerUp, true);
+document.addEventListener("pointercancel", sturmianOnPointerUp, true);

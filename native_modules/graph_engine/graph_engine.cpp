@@ -18493,6 +18493,8 @@ static void process_sturmian_grid(Circuit& g, Node& node, int frames) {
     node.buf[kPortRamp][f] = node.sturmPitch;
     node.buf[kPortSquare][f] = soemdsp::math::midi_to_hz(node.sturmPitch);
     node.buf[kPortPhase01][f] = (double)(step % steps) / (double)steps;
+    // Hidden __Bar tap: integer bar count for the face (pattern scroll + bar walk).
+    node.buf[kPortTri][f] = (double)node.sturmBar;
   }
 }
 
