@@ -278,6 +278,12 @@
       colors: ["#000000", "#001a4d", "#0066cc", "#66ccff", "#ffffff"],
     },
     {
+      // Twilight sky: black, dark purple, blue, icy light blue.
+      id: "dusk",
+      label: "dusk",
+      colors: ["#000000", "#3d1350", "#343e77", "#2a5e8b", "#3889ab", "#afd5e3"],
+    },
+    {
       id: "bone",
       label: "bone",
       colors: ["#000000", "#2b2b4d", "#7a7a9a", "#d0c8c0", "#ffffff"],
