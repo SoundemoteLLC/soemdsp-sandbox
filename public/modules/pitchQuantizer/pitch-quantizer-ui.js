@@ -5,28 +5,42 @@
 // the mask rotated by Semitone Offset (Octave Offset keeps the pitch class).
 // Clicking a key toggles the class that lands on that output note.
 //
-// Look: inverted piano (dark natural keys, light sharps), flat circuit-board
-// fills, thin trace strokes, electric accent on enabled notes. No radial
-// gradients and no hover titles.
+// Look: inverted piano (dark natural keys, light sharps) drawn through the
+// shared Keyboard helper (public/lib/visual/piano-keys-draw.js): the same
+// vertical gradients, key proportions, rounded sharp bottoms, and seams
+// under opaque sharps. Electric teal highlight on enabled notes, red plate
+// stroke when the Scale jack is connected. No hover titles.
 
-const NODE_GRAPH_PITCH_QUANTIZER_GL_FONT = '"Cascadia Mono", "Cascadia Code", Consolas, sans-serif';
+const NODE_GRAPH_PITCH_QUANTIZER_GL_FONT = typeof NODE_GRAPH_PIANO_KEYS_LABEL_FONT === "string"
+  ? NODE_GRAPH_PIANO_KEYS_LABEL_FONT
+  : "\"Cascadia Mono\", Consolas, monospace";
 
 const NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK = Object.freeze({
   bg: [0.027, 0.035, 0.043, 1],
+  bedGlow: [0.239, 1, 0.816, 0.06],
   plateStroke: [0.498, 0.780, 0.851, 0.28],
   plateStrokeJacked: [0.89, 0.36, 0.36, 0.8],
-  // Natural (formerly white) keys: dark pads.
+  seam: [0.01960784, 0.02352941, 0.02745098, 0.72],
+  // Natural (formerly white) keys: dark pads, Keyboard-style top-to-bottom gradient.
   naturalFill: [0.071, 0.086, 0.102, 1],
+  naturalTop: [0.118, 0.141, 0.161, 1],
+  naturalBottom: [0.071, 0.086, 0.102, 1],
   naturalStroke: [0.173, 0.208, 0.227, 1],
   naturalLabel: [0.55, 0.62, 0.65, 1],
-  // Sharp (formerly black) keys: light pads.
+  // Sharp (formerly black) keys: light pads, same gradient shape.
   sharpFill: [0.773, 0.808, 0.827, 1],
+  sharpTop: [0.890, 0.910, 0.922, 1],
+  sharpBottom: [0.773, 0.808, 0.827, 1],
   sharpStroke: [0.55, 0.60, 0.63, 1],
   sharpLabel: [0.086, 0.102, 0.118, 1],
   // Enabled notes: electric teal accent, flat glow (outset rect, not radial).
   electric: [0.239, 1, 0.816, 1],
   electricFillNatural: [0.055, 0.184, 0.173, 1],
   electricFillSharp: [0.847, 1, 0.965, 1],
+  electricTopNatural: [0.090, 0.310, 0.270, 1],
+  electricBottomNatural: [0.055, 0.184, 0.173, 1],
+  electricTopSharp: [0.92, 1, 0.98, 1],
+  electricBottomSharp: [0.847, 1, 0.965, 1],
   electricLabelNatural: [0.91, 1, 0.985, 1],
   electricLabelSharp: [0.024, 0.133, 0.118, 1],
   glow: [0.239, 1, 0.816, 0.28],
@@ -59,94 +73,107 @@ function nodeGraphPitchQuantizerGlNames() {
 
 /**
  * Key rectangles in the same space as width/height (backing or CSS px).
- * Shared by the GL draw and the pointer hit test.
+ * Geometry comes from the shared Keyboard helper (same inset, sharp
+ * centering, 62% sharp height, 10/16 sharp-to-natural width). Used by
+ * both the GL draw and the pointer hit test.
  */
-function nodeGraphPitchQuantizerKeyLayout(width, height, insetPx = 0) {
+function nodeGraphPitchQuantizerKeyLayout(width, height) {
   const W = Math.max(1, Number(width) || 1);
   const H = Math.max(1, Number(height) || 1);
-  const inset = Math.max(0, Math.round(Number(insetPx) || 0));
-  const x0 = inset;
-  const y0 = inset;
-  const innerW = Math.max(1, W - inset * 2);
-  const innerH = Math.max(1, H - inset * 2);
-  const whites = nodeGraphPitchQuantizerGlWhites();
-  const blacks = nodeGraphPitchQuantizerGlBlacks();
+  const whitesSrc = nodeGraphPitchQuantizerGlWhites();
+  const blacksSrc = nodeGraphPitchQuantizerGlBlacks();
   const names = nodeGraphPitchQuantizerGlNames();
-  const n = Math.max(1, whites.length);
-  const whiteW = innerW / n;
+  const blacks = blacksSrc.map((key) => ({
+    leftWhiteIndex: key.leftWhiteIndex != null ? key.leftWhiteIndex : key.afterWhite,
+  }));
+  const computed = typeof nodeGraphPianoKeysComputeRects === "function"
+    ? nodeGraphPianoKeysComputeRects({
+      width: W,
+      height: H,
+      inModuleFace: true,
+      whiteW: typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_WHITE_W === "number" ? NODE_GRAPH_PIANO_KEYS_DEFAULT_WHITE_W : 16,
+      blackW: typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W === "number" ? NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W : 10,
+      blackH: 0,
+      blackKeyHeight: typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT === "number"
+        ? NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT
+        : 62,
+      totalUnits: Math.max(1, whitesSrc.length),
+      leadPad: 0,
+      whites: whitesSrc,
+      blacks,
+    })
+    : { w: W, h: H, inset: 0, inModuleFace: true, whites: [], blacks: [] };
   const keys = [];
-  whites.forEach((pc, i) => {
+  computed.whites.forEach((r, i) => {
+    const pc = whitesSrc[i];
     keys.push({
       pc,
       black: false,
       label: names[pc] || String(pc),
-      x: x0 + i * whiteW,
-      y: y0,
-      w: whiteW,
-      h: innerH,
+      x: r.x,
+      y: r.y,
+      w: r.w,
+      h: r.h,
+      last: r.last,
     });
   });
-  for (const key of blacks) {
-    const left = x0 + ((key.afterWhite + 0.65) / n) * innerW;
-    const widthFrac = (0.62 / n) * innerW;
-    const pc = key.pitchClass;
+  computed.blacks.forEach((r, i) => {
+    if (!r) return;
+    const src = blacksSrc[i];
+    const pc = src.pitchClass;
     keys.push({
       pc,
       black: true,
       label: names[pc] || String(pc),
-      x: left,
-      y: y0,
-      w: widthFrac,
-      h: innerH * 0.58,
+      x: r.x,
+      y: r.y,
+      w: r.w,
+      h: r.h,
     });
-  }
-  return { width: W, height: H, inset, x0, y0, innerW, innerH, keys };
+  });
+  return {
+    width: computed.w,
+    height: computed.h,
+    inset: computed.inset,
+    x0: computed.inset,
+    y0: computed.inset,
+    innerW: Math.max(0, computed.w - computed.inset * 2),
+    innerH: Math.max(0, computed.h - computed.inset * 2),
+    keys,
+    computed,
+  };
 }
 
 /** Hit test: sharps first (they overlap the natural key bed). */
 function nodeGraphPitchQuantizerKeyAt(layout, x, y) {
-  if (!layout || !Array.isArray(layout.keys)) return null;
+  if (!layout) return null;
+  if (typeof nodeGraphPianoKeysHit === "function" && layout.computed) {
+    const hit = nodeGraphPianoKeysHit(layout.computed, x, y, { whiteYCheck: true });
+    if (!hit) return null;
+    const group = hit.black
+      ? layout.keys.filter((k) => k.black)
+      : layout.keys.filter((k) => !k.black);
+    return group[hit.index] || null;
+  }
+  if (!Array.isArray(layout.keys)) return null;
   const blacks = layout.keys.filter((k) => k.black);
   const whites = layout.keys.filter((k) => !k.black);
-  const hit = (key) => x >= key.x && x < key.x + key.w && y >= key.y && y < key.y + key.h;
+  const inside = (key) => x >= key.x && x < key.x + key.w && y >= key.y && y < key.y + key.h;
   for (let i = blacks.length - 1; i >= 0; i -= 1) {
-    if (hit(blacks[i])) return blacks[i];
+    if (inside(blacks[i])) return blacks[i];
   }
   for (let i = 0; i < whites.length; i += 1) {
-    if (hit(whites[i])) return whites[i];
+    if (inside(whites[i])) return whites[i];
   }
   return null;
 }
 
-/**
- * Vertical natural-key traces. A seam that a sharp covers is clipped so it
- * only runs in the lip below that sharp (the E-F joint has no sharp and
- * stays the full exposed height). Seams are also inset by `stroke` so they
- * do not form a T-cap on the natural top or bottom borders.
- */
-function nodeGraphPitchQuantizerSeamRects(layout, strokeDev) {
-  const stroke = Math.max(1, strokeDev | 0);
-  if (!layout || !Array.isArray(layout.keys)) return [];
-  const naturals = layout.keys.filter((k) => !k.black);
-  const sharps = layout.keys.filter((k) => k.black);
-  const seams = [];
-  for (let i = 1; i < naturals.length; i += 1) {
-    const left = naturals[i - 1];
-    const right = naturals[i];
-    const x = Math.round(right.x - stroke * 0.5);
-    let y0 = Math.max(left.y, right.y) + stroke;
-    let y1 = Math.min(left.y + left.h, right.y + right.h) - stroke;
-    const midX = right.x;
-    for (let s = 0; s < sharps.length; s += 1) {
-      const sharp = sharps[s];
-      if (sharp.x < midX + stroke && sharp.x + sharp.w > midX) {
-        y0 = Math.max(y0, sharp.y + sharp.h);
-      }
-    }
-    const h = y1 - y0;
-    if (h > 0) seams.push({ x, y: y0, w: stroke, h });
+/** Visible natural seams (the lip below a sharp, or full height at E-F). */
+function nodeGraphPitchQuantizerSeamRects(layout) {
+  if (typeof nodeGraphPianoKeysVisibleSeamRects === "function" && layout?.computed) {
+    return nodeGraphPianoKeysVisibleSeamRects(layout.computed);
   }
-  return seams;
+  return [];
 }
 
 if (typeof globalThis !== "undefined") {
@@ -156,26 +183,45 @@ if (typeof globalThis !== "undefined") {
   globalThis.nodeGraphPitchQuantizerSeamRects = nodeGraphPitchQuantizerSeamRects;
 }
 
-function nodeGraphPitchQuantizerGlStrokeEdges(batch, x, y, w, h, rgba, stroke, edges) {
-  const s = Math.max(1, Number(stroke) || 1);
-  if (!(w > 0) || !(h > 0) || typeof nodeGraphGlLinesRect !== "function") return;
-  const top = !edges || edges.top !== false;
-  const bottom = !edges || edges.bottom !== false;
-  const left = !edges || edges.left !== false;
-  const right = !edges || edges.right !== false;
-  if (top) nodeGraphGlLinesRect(batch, x, y, w, s, rgba);
-  if (bottom) nodeGraphGlLinesRect(batch, x, y + h - s, w, s, rgba);
-  const midTop = y + (top ? s : 0);
-  const midBot = y + h - (bottom ? s : 0);
-  const midH = Math.max(0, midBot - midTop);
-  if (midH > 0) {
-    if (left) nodeGraphGlLinesRect(batch, x, midTop, s, midH, rgba);
-    if (right) nodeGraphGlLinesRect(batch, x + w - s, midTop, s, midH, rgba);
+function nodeGraphPitchQuantizerKeyPaint(key, mask) {
+  const L = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
+  const on = typeof nodeGraphPitchQuantizerMaskHasClass === "function"
+    ? nodeGraphPitchQuantizerMaskHasClass(mask, key.pc)
+    : false;
+  const mix = typeof nodeGraphPianoKeysMix === "function"
+    ? nodeGraphPianoKeysMix
+    : (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
+  const over = typeof nodeGraphPianoKeysOver === "function"
+    ? nodeGraphPianoKeysOver
+    : (top, under) => [
+      top[0] * top[3] + under[0] * (1 - top[3]),
+      top[1] * top[3] + under[1] * (1 - top[3]),
+      top[2] * top[3] + under[2] * (1 - top[3]),
+      1,
+    ];
+  if (!key.black) {
+    const top = on ? L.electricTopNatural : L.naturalTop;
+    const bottom = on ? L.electricBottomNatural : L.naturalBottom;
+    const mid = mix(top, bottom, 0.5);
+    return {
+      top,
+      bottom,
+      stroke: on ? 1 : 0,
+      strokeRgba: on ? over(L.electric, mid) : mid,
+      text: on ? L.electricLabelNatural : L.naturalLabel,
+    };
   }
-}
-
-function nodeGraphPitchQuantizerGlStrokeRect(batch, x, y, w, h, rgba, stroke) {
-  nodeGraphPitchQuantizerGlStrokeEdges(batch, x, y, w, h, rgba, stroke, null);
+  const top = on ? L.electricTopSharp : L.sharpTop;
+  const bottom = on ? L.electricBottomSharp : L.sharpBottom;
+  const mid = mix(top, bottom, 0.5);
+  const border = on ? L.electric : L.sharpStroke;
+  return {
+    top,
+    bottom,
+    stroke: 1,
+    strokeRgba: over(border, mid),
+    text: on ? L.electricLabelSharp : L.sharpLabel,
+  };
 }
 
 function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev) {
@@ -186,17 +232,9 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
   const has = (pc) => (typeof nodeGraphPitchQuantizerMaskHasClass === "function"
     ? nodeGraphPitchQuantizerMaskHasClass(mask, pc)
     : false);
-  const plate = jacked ? L.plateStrokeJacked : L.plateStroke;
-  nodeGraphGlLinesRect(batch, 0, 0, layout.width, layout.height, L.bg);
-  nodeGraphPitchQuantizerGlStrokeRect(batch, 0, 0, layout.width, layout.height, plate, stroke);
-
-  const naturals = layout.keys.filter((k) => !k.black);
-  const sharps = layout.keys.filter((k) => k.black);
-  const layers = [...naturals, ...sharps];
-
-  for (const key of layers) {
-    const on = has(key.pc);
-    if (on) {
+  if (typeof nodeGraphGlLinesRect === "function") {
+    for (const key of layout.keys) {
+      if (!has(key.pc)) continue;
       nodeGraphGlLinesRect(
         batch,
         key.x - glowPadOuter,
@@ -215,68 +253,40 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
       );
     }
   }
-
-  // Naturals first: opaque fills, no interior vertical strokes (those are
-  // a single shared seam, not a double key border).
-  for (let i = 0; i < naturals.length; i += 1) {
-    const key = naturals[i];
-    const on = has(key.pc);
-    const fill = on ? L.electricFillNatural : L.naturalFill;
-    const ink = on ? L.electric : L.naturalStroke;
-    nodeGraphGlLinesRect(batch, key.x, key.y, key.w, key.h, fill);
-    nodeGraphPitchQuantizerGlStrokeEdges(batch, key.x, key.y, key.w, key.h, ink, stroke, {
-      top: true,
-      bottom: true,
-      left: i === 0,
-      right: i === naturals.length - 1,
-    });
+  const whites = layout.keys.filter((k) => !k.black);
+  const blacks = layout.keys.filter((k) => k.black);
+  const rects = new Map();
+  for (const key of layout.keys) {
+    rects.set(key, { x: key.x, y: key.y, w: key.w, h: key.h, last: key.last });
   }
-
-  // Seams next, already clipped to the lip below any covering sharp.
-  const seam = L.naturalStroke;
-  const seams = nodeGraphPitchQuantizerSeamRects(layout, stroke);
-  for (const seg of seams) {
-    nodeGraphGlLinesRect(batch, seg.x, seg.y, seg.w, seg.h, seam);
-  }
-
-  // Sharps last and fully opaque so no seam or natural stroke shows through.
-  for (const key of sharps) {
-    const on = has(key.pc);
-    const fill = on ? L.electricFillSharp : L.sharpFill;
-    const ink = on ? L.electric : L.sharpStroke;
-    nodeGraphGlLinesRect(batch, key.x, key.y, key.w, key.h, fill);
-    nodeGraphPitchQuantizerGlStrokeRect(batch, key.x, key.y, key.w, key.h, ink, stroke);
-  }
-
-  const textOpts = {
-    px: 12,
-    weight: 700,
-    family: NODE_GRAPH_PITCH_QUANTIZER_GL_FONT,
-    align: "center",
-    baseline: "alphabetic",
-    maxWidth: 0,
-    rgba: null,
+  const geom = {
+    w: layout.width,
+    h: layout.height,
+    inset: layout.inset,
+    inModuleFace: true,
+    rects,
   };
-  for (const key of layers) {
-    const on = has(key.pc);
-    const labelRgba = on
-      ? (key.black ? L.electricLabelSharp : L.electricLabelNatural)
-      : (key.black ? L.sharpLabel : L.naturalLabel);
-    const maxW = Math.max(4, key.w - stroke * 4);
-    const maxH = Math.max(4, key.h * 0.28);
-    let fontPx = Math.max(4, Math.min(key.w * (key.black ? 0.42 : 0.36), maxH));
-    if (typeof nodeGraphGlLinesMeasureText === "function") {
-      const width = nodeGraphGlLinesMeasureText(key.label, fontPx, NODE_GRAPH_PITCH_QUANTIZER_GL_FONT, 700);
-      if (width > maxW && width > 0) fontPx = Math.max(4, fontPx * (maxW / width));
-    }
-    textOpts.px = fontPx;
-    textOpts.maxWidth = maxW;
-    textOpts.rgba = labelRgba;
-    const baseline = key.y + key.h - Math.max(stroke * 3, fontPx * 0.45);
-    if (typeof nodeGraphGlLinesText === "function") {
-      nodeGraphGlLinesText(batch, key.label, key.x + key.w * 0.5, baseline, textOpts);
-    }
-  }
+  if (typeof nodeGraphPianoKeysDraw !== "function") return false;
+  return nodeGraphPianoKeysDraw(batch, geom, {
+    x: 0,
+    y: 0,
+    w: layout.width,
+    h: layout.height,
+    look: {
+      bed: L.bg,
+      bedGlow: L.bedGlow,
+      ring: jacked ? L.plateStrokeJacked : L.plateStroke,
+      whiteSeam: L.seam,
+    },
+    whites,
+    blacks,
+    keys: layout.keys,
+    labels: "name",
+    totalUnits: Math.max(1, whites.length),
+    labelSizeK: 1,
+    labelFont: NODE_GRAPH_PITCH_QUANTIZER_GL_FONT,
+    paintKey: (key) => nodeGraphPitchQuantizerKeyPaint(key, mask),
+  });
 }
 
 function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
@@ -352,7 +362,6 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     const bw = Math.max(1, m.width);
     const bh = Math.max(1, m.height);
     const strokeDev = Math.max(1, Math.round(dpr));
-    const inset = Math.max(strokeDev * 2, Math.round(Math.min(bw, bh) * 0.03));
     const sig = `${bw}x${bh}:s${strokeDev}:m${mask}:j${jacked ? 1 : 0}`;
     if (sig === lastSig) return;
     lastSig = sig;
@@ -364,7 +373,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
       if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
       return;
     }
-    const layout = nodeGraphPitchQuantizerKeyLayout(bw, bh, inset);
+    const layout = nodeGraphPitchQuantizerKeyLayout(bw, bh);
     hitLayout = layout;
     nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev);
     if (typeof nodeGraphGlLinesEnd === "function" && !nodeGraphGlLinesEnd(batch)) {

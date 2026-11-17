@@ -1,4 +1,8 @@
 // Keyboard face, drawn by WebGL (docs/APP_POLICY.md section 3).
+// Key geometry, vertical gradients, rounded sharp bottoms, and seam layering
+// live in public/lib/visual/piano-keys-draw.js and are shared with the
+// Pitch Quantizer face. This file owns the Keyboard model, state paint, and
+// the callers that pass the Keyboard palette into that helper.
 //
 // No key elements exist. Each .node-keyboard-surface carries a key model
 // (surface._midiKeyModel): one plain object per key with its MIDI note, its
@@ -139,45 +143,37 @@ function nodeGraphKeyboardSetKeyLabels(surface, labels) {
  */
 function nodeGraphKeyboardLayoutKeyRects(surface, layout) {
   const model = nodeGraphKeyboardKeyModel(surface);
-  if (!model) return false;
-  const W = Math.max(0, Number(layout.width) || 0);
-  const H = Math.max(0, Number(layout.height) || 0);
-  // The key bed sits inside the 0.101627cqi ring (1px at the 984px reference).
-  const inset = W * 0.00101627;
-  const iw = Math.max(0, W - inset * 2);
-  const ih = Math.max(0, H - inset * 2);
-  const units = Math.max(1, model.totalUnits);
-  const unitW = iw / units;
-  const lead = model.leadPad;
-  const rects = new Map();
-  model.whites.forEach((key, i) => {
-    rects.set(key, { x: inset + (lead + i) * unitW, y: inset, w: unitW, h: ih, last: i === model.whites.length - 1 });
+  if (!model || typeof nodeGraphPianoKeysComputeRects !== "function") return false;
+  const computed = nodeGraphPianoKeysComputeRects({
+    width: layout.width,
+    height: layout.height,
+    inModuleFace: layout.inModuleFace,
+    whiteW: layout.whiteW,
+    blackW: layout.blackW,
+    blackH: layout.blackH,
+    blackKeyHeight: layout.blackKeyHeight,
+    totalUnits: model.totalUnits,
+    leadPad: model.leadPad,
+    whites: model.whites,
+    blacks: model.blacks,
   });
-  const whiteW = Math.max(1, Number(layout.whiteW) || 1);
-  const blackW = Math.max(1, Number(layout.blackW) || 1);
-  const widthFrac = Math.min(0.9 / units, (blackW / whiteW) / units);
-  const bw = widthFrac * iw;
-  const pct = Math.max(28, Math.min(82, Number(layout.blackKeyHeight) || 62));
-  const blackH = Number(layout.blackH) || 0;
-  const bh = Math.max(0, (layout.inModuleFace || !(blackH > 0))
-    ? Math.min(ih * (pct / 100), ih - 12)
-    : Math.min(blackH, ih));
-  for (const key of model.blacks) {
-    const leftIdx = key.leftWhiteIndex;
-    // A black key needs a white on its left (or the half-white lead bed).
-    if (!(leftIdx >= 0 || (leftIdx === -1 && lead > 0))) continue;
-    let centre = ((leftIdx + 1 + lead) / units) * iw;
-    centre = Math.max(bw * 0.5, Math.min(iw - bw * 0.5, centre));
-    rects.set(key, { x: inset + centre - bw * 0.5, y: inset, w: bw, h: bh });
-  }
+  const W = computed.w;
+  const H = computed.h;
+  const rects = new Map();
+  computed.whites.forEach((r, i) => {
+    rects.set(model.whites[i], r);
+  });
+  computed.blacks.forEach((r, i) => {
+    if (r) rects.set(model.blacks[i], r);
+  });
   const sig = [W, H, model.sig, ...[...rects.values()].map((r) => `${r.x.toFixed(2)},${r.w.toFixed(2)},${r.h.toFixed(2)}`)].join("|");
   const changed = model.geom?.sig !== sig;
   model.geom = {
     sig,
     w: W,
     h: H,
-    inset,
-    inModuleFace: Boolean(layout.inModuleFace),
+    inset: computed.inset,
+    inModuleFace: computed.inModuleFace,
     rects,
   };
   if (changed) {
@@ -261,32 +257,20 @@ function nodeGraphKeyboardRequestGlRebuild() {
 // ---------------------------------------------------------------- look
 
 function nodeGraphKeyboardHex(hex, alpha = 1) {
-  const h = String(hex).replace("#", "");
-  return [
-    Number.parseInt(h.slice(0, 2), 16) / 255,
-    Number.parseInt(h.slice(2, 4), 16) / 255,
-    Number.parseInt(h.slice(4, 6), 16) / 255,
-    alpha,
-  ];
+  return nodeGraphPianoKeysHex(hex, alpha);
 }
 
 function nodeGraphKeyboardRgba(r, g, b, a = 1) {
-  return [r / 255, g / 255, b / 255, a];
+  return nodeGraphPianoKeysRgba(r, g, b, a);
 }
 
 /** `top` composited over an opaque `under` (straight alpha). */
 function nodeGraphKeyboardOver(top, under) {
-  const a = top[3];
-  return [
-    top[0] * a + under[0] * (1 - a),
-    top[1] * a + under[1] * (1 - a),
-    top[2] * a + under[2] * (1 - a),
-    1,
-  ];
+  return nodeGraphPianoKeysOver(top, under);
 }
 
 function nodeGraphKeyboardMix(a, b, t) {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
+  return nodeGraphPianoKeysMix(a, b, t);
 }
 
 // The old styles.css key gradients (top stop, bottom stop) and label colours.
@@ -443,80 +427,26 @@ function nodeGraphKeyboardGlDraw(batch, surface, x, y, w, h) {
   const model = nodeGraphKeyboardKeyModel(surface);
   const geom = model?.geom;
   if (!batch || !geom || !(geom.w > 0) || !(geom.h > 0) || !(w > 0) || !(h > 0)) return false;
-  if (typeof nodeGraphGlLinesRoundRect !== "function") return false;
+  if (typeof nodeGraphPianoKeysDraw !== "function") return false;
   const L = NODE_GRAPH_MIDI_KEY_LOOK;
-  const sx = w / geom.w;
-  const sy = h / geom.h;
-  const rr = (rx, ry, rw, rh, spec) => nodeGraphGlLinesRoundRect(batch, x + rx * sx, y + ry * sy, rw * sx, rh * sy, spec);
-  const outerRadius = 6 * Math.min(sx, sy);
-  // Bed: module faces are square-cornered (styles.css), loose keyboards keep 6px.
-  rr(0, 0, geom.w, geom.h, { radius: geom.inModuleFace ? 0 : outerRadius, fill: L.bed, feather: 1 });
-  rr(0, 0, geom.w, geom.h * 0.34, {
-    radius: 0, fill: L.bedGlow, fillBottom: [L.bedGlow[0], L.bedGlow[1], L.bedGlow[2], 0], feather: 0,
+  const sizeK = Math.max(0.5, Math.min(4, (Number(model.keys[0]?.surface?.dataset?.keyLabelSize) || 100) / 100));
+  const textOpts = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts : (o) => o;
+  return nodeGraphPianoKeysDraw(batch, geom, {
+    x,
+    y,
+    w,
+    h,
+    look: L,
+    whites: model.whites,
+    blacks: model.blacks,
+    keys: model.keys,
+    labels: model.labels,
+    totalUnits: model.totalUnits,
+    labelSizeK: sizeK,
+    labelFont: NODE_GRAPH_MIDI_KEY_LABEL_FONT,
+    paintKey: (key) => nodeGraphKeyboardKeyPaint(key, geom.w >= 520),
+    textOpts,
   });
-  for (const key of model.whites) {
-    const r = geom.rects.get(key);
-    if (!r) continue;
-    const paint = nodeGraphKeyboardKeyPaint(key, geom.w >= 520);
-    rr(r.x, r.y, r.w, r.h, {
-      radius: 0,
-      fill: paint.top,
-      fillBottom: paint.bottom,
-      stroke: paint.stroke * Math.min(sx, sy),
-      strokeRgba: paint.strokeRgba,
-      feather: 0.75,
-    });
-    if (!r.last) {
-      rr(r.x + r.w - 1, r.y, 1, r.h, { radius: 0, fill: L.whiteSeam, feather: 0.5 });
-    }
-  }
-  for (const key of model.blacks) {
-    const r = geom.rects.get(key);
-    if (!r) continue;
-    const paint = nodeGraphKeyboardKeyPaint(key, geom.w >= 520);
-    rr(r.x, r.y, r.w, r.h, {
-      radius: 4 * Math.min(sx, sy),
-      radiusTop: 0,
-      fill: paint.top,
-      fillBottom: paint.bottom,
-      stroke: paint.stroke * Math.min(sx, sy),
-      strokeRgba: paint.strokeRgba,
-      feather: 1,
-    });
-  }
-  rr(0, 0, geom.w, geom.h, {
-    radius: outerRadius,
-    stroke: Math.max(0.75, geom.inset * Math.min(sx, sy)),
-    fill: [0, 0, 0, 0],
-    strokeRgba: L.ring,
-    feather: 1,
-  });
-  if (model.labels !== "off" && typeof nodeGraphGlLinesText === "function") {
-    const units = Math.max(1, model.totalUnits);
-    // Old per-key label sizes: 17.560976cqi / units (white), 14.146342cqi / units (black).
-    // Label size setting (percent); the maxWidth below still shrinks a label to its key.
-    const sizeK = Math.max(0.5, Math.min(4, (Number(model.keys[0]?.surface?.dataset?.keyLabelSize) || 100) / 100));
-    const whitePx = (0.17560976 * geom.w / units) * sx * sizeK;
-    const blackPx = (0.14146342 * geom.w / units) * sx * sizeK;
-    const textOpts = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts : (o) => o;
-    for (const key of model.keys) {
-      const r = geom.rects.get(key);
-      if (!r || !key.label) continue;
-      const px = key.black ? blackPx : whitePx;
-      if (px < 1) continue;
-      const paint = nodeGraphKeyboardKeyPaint(key, geom.w >= 520);
-      nodeGraphGlLinesText(batch, key.label, x + (r.x + r.w * 0.5) * sx, y + (r.y + r.h - (key.black ? 2 : 1)) * sy, textOpts({
-        px,
-        rgba: paint.text,
-        align: "center",
-        baseline: "bottom",
-        weight: 700,
-        family: NODE_GRAPH_MIDI_KEY_LABEL_FONT,
-        maxWidth: Math.max(1, (r.w - 2) * sx),
-      }));
-    }
-  }
-  return true;
 }
 
 // ---------------------------------------------------------------- face canvases
