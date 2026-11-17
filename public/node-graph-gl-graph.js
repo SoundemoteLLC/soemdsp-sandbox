@@ -801,8 +801,9 @@ function nodeGraphGlGraphLitStroke(rgba) {
   return [rgba[0], rgba[1], rgba[2], 1];
 }
 
-// mode: "" = the module plate; "dim" = the ambient-light darkening of that plate (black at alpha
-// `dark`); "emit" = only the stroke (and jack rings), drawn after the dim so it stays lit.
+// mode: "" = the module plate; "dim" = the ambient-light darkening of that plate's body (black fill
+// at alpha `dark`, no stroke: the stroke band and jack rings are left alone, so the stroke and its
+// loudness animation keep full strength under the dimmer); "emit" = only the stroke (and jack rings).
 // Soft light coming out of a module's stroke: one shape per module whose shader fades the light out
 // smoothly from the edge (like the module lights in the heatmap, but in the stroke colour). Their colour and strength are resolved at draw time (renderer, `glow`), so they follow the
 // module's stroke animation on every replayed frame.
@@ -857,7 +858,9 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   const selected = typeof nodeGraphNodeElement === "function"
     && nodeGraphNodeElement(plate.id)?.classList.contains("selected");
   let color = selected ? borderOn : borderIdle;
-  if (mode === "dim") color = [0, 0, 0, dark];
+  // The dim covers the body only. Its stroke is transparent: darkening the stroke band and then
+  // redrawing a translucent stroke over it left the (loudness-animated) stroke dimmed by the room.
+  if (mode === "dim") color = [0, 0, 0, 0];
   // "shine": the module reflecting the mouse lamp, in its own stroke colour (strongest near the lamp).
   if (mode === "shine") color = [color[0], color[1], color[2], 0.5];
   const plateJacks = [];
@@ -2716,13 +2719,12 @@ function nodeGraphGlGraphPresent(options = {}) {
       const group = groups[g];
       const body = nodeGraphGlLinesLayer(batch);
       if (!body) continue;
-      // Ambient light layers, created now so they draw after the body: the dim, the lit strokes, and
-      // the module text (routed out of the body so the dim does not double up on it).
+      // Ambient light layers, created now so they draw after the body: the dim and the module text
+      // (routed out of the body so the dim does not double up on it). The dim skips the stroke band,
+      // so the body's own stroke stays lit; no second "emit" stroke is drawn over it.
       let dimLayer = null;
-      let emitLayer = null;
       if (ambientDark > 0) {
         dimLayer = nodeGraphGlLinesLayer(batch);
-        emitLayer = nodeGraphGlLinesLayer(batch);
         // The face (slider wells and fills) is a weak light source of its own: drawn after the dim,
         // dimmed only a little, and it does not spill onto anything.
         const faceLayer = nodeGraphGlLinesLayer(batch);
@@ -2755,21 +2757,14 @@ function nodeGraphGlGraphPresent(options = {}) {
       if (typeof nodeGraphModuleRailsDrawGl === "function") {
         nodeGraphModuleRailsDrawGl(body, group.plates, toX, toY, layoutZoom, cssW, cssH);
       }
-      // Ambient light: darken what the body drew (plate, chrome, parameter face), then redraw the
-      // strokes lit. Displays and their ink are drawn after this, so they stay lit too.
+      // Ambient light: darken what the body drew inside the plate (plate, chrome, parameter face); the
+      // stroke is outside the dim. Displays and their ink are drawn after this, so they stay lit too.
       if (ambientDark > 0) {
         if (dimLayer) {
           // The body (plate, chrome) is darkened; text and the face are lit layers drawn after this.
           for (let i = 0; i < group.plates.length; i += 1) {
             nodeGraphGlGraphState.chrome = chromeById?.get(group.plates[i].id) || chromeById?.empty || chromeAll;
             nodeGraphGlGraphDrawPlate(dimLayer, group.plates[i], toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "dim", ambientDark);
-          }
-          nodeGraphGlGraphState.chrome = chromeAll;
-        }
-        if (emitLayer) {
-          for (let i = 0; i < group.plates.length; i += 1) {
-            nodeGraphGlGraphState.chrome = chromeById?.get(group.plates[i].id) || chromeById?.empty || chromeAll;
-            nodeGraphGlGraphDrawPlate(emitLayer, group.plates[i], toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "emit");
           }
           nodeGraphGlGraphState.chrome = chromeAll;
         }

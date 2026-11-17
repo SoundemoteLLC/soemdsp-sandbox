@@ -868,6 +868,12 @@ globalThis.nodeGraphModuleLightBrightness = function nodeGraphModuleLightBrightn
   const deep = typeof nodeGraphRoomDimDeep === "function" ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDimDeep()))) : 0;
   return lightBright * Math.max(NODE_GRID_DARK_FLOOR, 1 - deep);
 };
+// The stroke light's strength: the same brightness setting, but not dimmed by the room (the module
+// stroke and its loudness animation stay at full strength under the dimmer).
+globalThis.nodeGraphModuleStrokeLightBrightness = function nodeGraphModuleStrokeLightBrightness() {
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  return Math.max(0, Math.min(3, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-brightness", 1)));
+};
 var nodeGraphHeatmapBoundsCache = new WeakMap();
 
 // Heatmap only (marquee / drag repaint it every frame): node size from a

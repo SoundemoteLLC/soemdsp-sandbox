@@ -10949,18 +10949,63 @@ NodeLiveAudioProcessor.prototype.bindNativeGraphNodePortView = function bindNati
   return view;
 };
 
-// Peak |sample| of each module's Mono / Left / Right over the last block, kept (max) until the
-// next display frame posts it. One pass over the ports the engine already holds: no DSP.
+// Output port names that carry a number in its own unit (a frequency in Hz, a pitch, a tempo, a
+// level in dB), not a signal level. Drums put their f (Hz) on the Saw slot, Robin Sinepulse on Left:
+// metering those pinned the stroke at full brightness while the module was silent.
+const NODE_LEVEL_NOT_A_LEVEL_PORTS = new Set(["f", "\u0192", "frequency", "hz", "bpm", "pitch", "\u266f/\u266d", "0.1v/oct", "db"]);
+function nodeLevelPortIsNotALevel(name) {
+  const p = String(name || "").trim().toLowerCase();
+  return p.startsWith("__") || NODE_LEVEL_NOT_A_LEVEL_PORTS.has(p);
+}
+
+// The engine ports a module's stroke follows: the ports its outgoing cables read (what actually
+// leaves the module), minus ports that are not a signal level. Without the cable list, every audio
+// tap (0-7) whose names are not all such ports. Cached per cable list.
+NodeLiveAudioProcessor.prototype.nativeGraphNodeLevelPorts = function nativeGraphNodeLevelPorts(id, type) {
+  const conns = Array.isArray(this._planConnections) ? this._planConnections : null;
+  if (this._nodeLevelPortsFor !== conns || this._nodeLevelPortsLen !== (conns ? conns.length : -1)) {
+    this._nodeLevelPortsFor = conns;
+    this._nodeLevelPortsLen = conns ? conns.length : -1;
+    this._nodeLevelPorts = new Map();
+  }
+  const cache = this._nodeLevelPorts;
+  const key = `${id}\0${type}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const ports = [];
+  if (conns) {
+    for (let i = 0; i < conns.length; i += 1) {
+      const c = conns[i];
+      if (String(c?.sourceNode || "") !== id) continue;
+      const name = String(c?.sourcePort || "");
+      if (nodeLevelPortIsNotALevel(name)) continue;
+      const port = this.mapNativeGraphSrcPortId(name, type, id);
+      if (Number.isInteger(port) && port >= 0 && port < 16 && !ports.includes(port)) ports.push(port);
+    }
+  } else {
+    for (let pi = 0; pi < 8; pi += 1) {
+      const names = typeof this.nativeGraphPortNames === "function" ? this.nativeGraphPortNames(type, pi) : [];
+      if (Array.isArray(names) && names.length && names.every(nodeLevelPortIsNotALevel)) continue;
+      ports.push(pi);
+    }
+  }
+  cache.set(key, ports);
+  return ports;
+};
+
+// Peak |sample| of what each module sends out over the last block, kept (max) until the next display
+// frame posts it. One pass over the ports the engine already holds: no DSP.
 NodeLiveAudioProcessor.prototype.accumulateNativeGraphNodeLevels = function accumulateNativeGraphNodeLevels(frames) {
   const P = NodeLiveAudioProcessor;
-  const ports = [0, 1, 2, 3, 4, 5, 6, 7]; // every audio port the engine keeps per node
   const peaks = this.nodeLevelPeaks || (this.nodeLevelPeaks = Object.create(null));
   for (const [id, node] of this.nodes) {
     const type = String(node?.type || "");
     if (type === "output" || !Object.prototype.hasOwnProperty.call(P.NATIVE_GRAPH_TYPE_IDS, type)) continue;
+    const ports = this.nativeGraphNodeLevelPorts(String(id), type);
+    if (!ports.length) continue;
     const hash = this.fnv1aHash32(id);
-    // Linear magnitude: the largest |sample| of any audio port over the block, so the stroke
-    // follows the signal itself (a triangle LFO gives a triangle of brightness). Modules that
+    // Linear magnitude: the largest |sample| of the module's outgoing ports over the block, so the
+    // stroke follows the signal itself (a triangle LFO gives a triangle of brightness). Modules that
     // hold a constant value (controllers) are pinned by the page, not metered here.
     let peak = 0;
     for (let pi = 0; pi < ports.length; pi += 1) {

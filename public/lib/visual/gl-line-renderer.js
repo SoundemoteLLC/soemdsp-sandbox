@@ -3417,7 +3417,10 @@ void main() {
     const glow = new Float32Array(64 * 4);
     const stroke = new Float32Array(64 * 4);
     const bright = typeof global.nodeGraphModuleLightBrightness === "function" ? global.nodeGraphModuleLightBrightness() : 1;
-    if (!(bright > 0) && !grid) return;
+    // The stroke light (and its loudness part) is not dimmed by the room: the module light brightness
+    // setting only.
+    const strokeBright = typeof global.nodeGraphModuleStrokeLightBrightness === "function" ? global.nodeGraphModuleStrokeLightBrightness() : bright;
+    if (!(bright > 0) && !(strokeBright > 0) && !grid) return;
     const levelOf = typeof global.nodeGraphModuleStrokeFollowLevel === "function" ? global.nodeGraphModuleStrokeFollowLevel : null;
     const loudOf = typeof global.nodeGraphStrokeLoudColor === "function" ? global.nodeGraphStrokeLoudColor : null;
     for (let i = 0; i < items.length; i += 1) {
@@ -3425,7 +3428,7 @@ void main() {
       const k = levelOf ? levelOf(it.id) : 0;
       const loud = k > 0 && loudOf ? loudOf(it.id) : null;
       rect.set([it.x, it.y, it.w, it.h], i * 4);
-      glow.set([it.reach, 0.16 * bright, bright * (0.1 + 0.25 * k), it.round || 0], i * 4);
+      glow.set([it.reach, 0.16 * bright, strokeBright * (0.1 + 0.25 * k), it.round || 0], i * 4);
       stroke.set([
         loud ? it.base[0] + (loud[0] - it.base[0]) * k : it.base[0],
         loud ? it.base[1] + (loud[1] - it.base[1]) * k : it.base[1],
@@ -3607,7 +3610,7 @@ void main() {
       // the same way from its brighter selected stroke, so it always reads as selected.
       const baseA = col.length > 3 ? col[3] : 1;
       let pc = [col[0], col[1], col[2], baseA];
-      if (!shape.erase && typeof globalThis.nodeGraphModuleStrokeFollowLevel === "function") {
+      if (!shape.erase && !shape.dimShape && typeof globalThis.nodeGraphModuleStrokeFollowLevel === "function") {
         const k = globalThis.nodeGraphModuleStrokeFollowLevel(shape.nodeId);
         if (k > 0) {
           const loud = (typeof globalThis.nodeGraphStrokeLoudColor === "function" && globalThis.nodeGraphStrokeLoudColor(shape.nodeId)) || [1, 1, 1, 1];
