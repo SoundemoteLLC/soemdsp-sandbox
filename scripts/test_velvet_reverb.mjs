@@ -19,11 +19,11 @@ for (const i of WebAssembly.Module.imports(mod)) { imports[i.module] ??= {}; imp
 const x = (await WebAssembly.instantiate(mod, imports)).exports;
 
 const FS = 48000;
-check(x.soemdsp_velvet_reverb_version() >= 7, `velvet_reverb version ${x.soemdsp_velvet_reverb_version()}`);
+check(x.soemdsp_velvet_reverb_version() >= 8, `velvet_reverb version ${x.soemdsp_velvet_reverb_version()}`);
 
 // Wet impulse response (Mix 1): impulse on both channels at sample 0.
 const tapsOf = ({ taps, density, decay = 0.025 }) => taps ?? (density ?? 2500) * decay;
-function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, n } = {}) { // gap: a dense test Min Gap (~4 samples); the default is 1 ms
+function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, tailRand = 1, n } = {}) { // gap: a dense test Min Gap (~4 samples); the default is 1 ms. tailRand 1 = previous random widths
   const T = tapsOf({ taps, density, decay });
   const h = x.soemdsp_velvet_reverb_create(FS);
   if (!h) throw new Error("create failed");
@@ -32,14 +32,14 @@ function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed
   const L = new Float64Array(len), R = new Float64Array(len);
   for (let i = 0; i < len; i += 1) {
     const v = i === 0 ? 1 : 0;
-    L[i] = x.soemdsp_velvet_reverb_sample(h, v, v, T, dark, spread, 1, FS, decay, tail, amp, skew, gap);
+    L[i] = x.soemdsp_velvet_reverb_sample(h, v, v, T, dark, spread, 1, FS, decay, tail, amp, skew, gap, tailRand);
     R[i] = x.soemdsp_velvet_reverb_right(h);
   }
   x.soemdsp_velvet_reverb_destroy(h);
   return { L, R };
 }
-function layout({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083 } = {}) {
-  const count = x.soemdsp_velvet_reverb_layout(tapsOf({ taps, density, decay }), dark, spread, FS, decay, tail, seed, amp, skew, gap);
+function layout({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, tailRand = 1 } = {}) {
+  const count = x.soemdsp_velvet_reverb_layout(tapsOf({ taps, density, decay }), dark, spread, FS, decay, tail, seed, amp, skew, gap, tailRand);
   const pos = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_pos(), count).slice();
   const width = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_width(), count).slice();
   const level = new Float64Array(x.memory.buffer, x.soemdsp_velvet_reverb_layout_level(), count).slice();
@@ -160,7 +160,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const l1 = layout({ taps: 100, decay: 0.5, skew: 0.5 }), l2 = layout({ taps: 100, decay: 0.5, skew: 0.5, amp: 0 });
   check(l1.pos.every((p, i) => p === l2.pos[i]), "Density Skew and Amp Decay are independent (same positions at any Amp Decay)");
   let prev = null, maxMove = 0;
-  // The definition range is -0.9..+0.9 (off the curve's steep ends).
+  // Mid range stays smooth (the knob's fine control near 0).
   for (let k = 0; k <= 90; k += 1) {
     const l = layout({ taps: 64, decay: 0.2, skew: -0.9 + k * 0.02 });
     if (prev) for (let i = 0; i < l.count; i += 1) maxMove = Math.max(maxMove, Math.abs(l.pos[i] - prev.pos[i]));
@@ -168,12 +168,32 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   }
   check(maxMove < 0.2 / 6, `Skew sweep -0.9..+0.9 in 0.02 steps moves taps smoothly (largest move ${(maxMove * 1000).toFixed(2)} ms)`);
   const e1 = layout({ taps: 64, decay: 0.2, skew: 0.9 }), e0 = layout({ taps: 64, decay: 0.2, skew: -0.9 });
-  // At the range ends the taps crowd the start / the end.
+  // At the previous range ends the taps already crowd the start / the end.
   const mean = (a) => a.reduce((p, q) => p + q, 0) / Math.max(1, a.length);
   check(mean(e1.pos) < 0.05 && mean(e0.pos) > 0.15, `Skew +0.9 packs toward the start, -0.9 toward the end (mean ${(mean(e1.pos) * 1000).toFixed(1)} / ${(mean(e0.pos) * 1000).toFixed(1)} ms of 200, ${e1.count} / ${e0.count} taps)`);
+  // Full range -1..+1: well-behaved at the endpoints (no NaN, no infinite cells;
+  // Min Gap still drops bunched taps). +1 packs at least as hard to the start
+  // as +0.9; -1 at least as hard to the end as -0.9.
+  const finiteLay = (l) => l.count >= 1
+    && l.pos.every((p) => Number.isFinite(p) && p >= -1e-15 && p <= l.length + 1e-9)
+    && l.width.every((w) => Number.isFinite(w) && w > 0)
+    && l.level.every((v) => Number.isFinite(v));
+  const p1 = layout({ taps: 64, decay: 0.2, skew: 1 }), n1 = layout({ taps: 64, decay: 0.2, skew: -1 });
+  check(finiteLay(p1) && finiteLay(n1), `Skew +-1 stays finite (${p1.count} / ${n1.count} taps, no NaN)`);
+  check(mean(p1.pos) <= mean(e1.pos) + 1e-12 && mean(n1.pos) >= mean(e0.pos) - 1e-12, `Skew +1 packs toward the start at least as hard as +0.9, -1 toward the end at least as hard as -0.9 (mean ${(mean(p1.pos) * 1000).toFixed(1)} / ${(mean(n1.pos) * 1000).toFixed(1)} ms of 200, ${p1.count} / ${n1.count} taps)`);
+  const denseP = layout({ taps: 4096, decay: 0.05, skew: 1, dark: 1 });
+  const denseN = layout({ taps: 4096, decay: 0.05, skew: -1, dark: 1 });
+  const noShare = (l) => {
+    const at = new Set();
+    let shared = 0;
+    for (let i = 0; i < l.count; i += 1) { const s = Math.round(l.pos[i] * FS); if (at.has(s)) shared += 1; at.add(s); }
+    return shared;
+  };
+  check((denseP.flags & 4) && (denseN.flags & 4) && denseP.count < 4096 && denseN.count < 4096 && finiteLay(denseP) && finiteLay(denseN) && noShare(denseP) === 0 && noShare(denseN) === 0,
+    `Skew +-1, 4096 taps in 50 ms: Min Gap still drops bunched taps (${denseP.count} / ${denseN.count} play, flags ${denseP.flags} / ${denseN.flags})`);
   const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
-  const sk = defs.slice(defs.indexOf('key: "densitySkew",'), defs.indexOf('key: "densitySkew",') + 200);
-  check(/max: "0.9"/.test(sk) && /min: "-0.9"/.test(sk) && /sliderCurve: "bipolarRational"/.test(sk) && /curveAmount: "-0.9"/.test(defs.slice(defs.indexOf('key: "densitySkew",') - 120, defs.indexOf('key: "densitySkew",'))), "Density Skew: range -0.9..+0.9, knob scaled by the bipolar rational slider curve (amount -0.9)");
+  const sk = defs.slice(defs.indexOf('key: "densitySkew",'), defs.indexOf('key: "densitySkew",') + 220);
+  check(/max: "1"/.test(sk) && /min: "-1"/.test(sk) && /sliderCurve: "bipolarRational"/.test(sk) && /curveAmount: "-0.99"/.test(defs.slice(defs.indexOf('key: "densitySkew",') - 160, defs.indexOf('key: "densitySkew",'))), "Density Skew: range -1..+1, knob scaled by the bipolar rational slider curve (amount -0.99)");
 }
 
 // ---- Face height is amplitude only: sign x the Amp Decay envelope at the pulse
@@ -247,7 +267,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const level = (dark) => {
     const h = x.soemdsp_velvet_reverb_create(FS); x.soemdsp_velvet_reverb_set_seed(h, 3);
     let e = 0;
-    for (let i = 0; i < input.length; i += 1) { const v = x.soemdsp_velvet_reverb_sample(h, input[i], input[i], 256, dark, 1, 1, FS, 0.1, 0, -60, 0); if (i > FS / 4) e += v * v; }
+    for (let i = 0; i < input.length; i += 1) { const v = x.soemdsp_velvet_reverb_sample(h, input[i], input[i], 256, dark, 1, 1, FS, 0.1, 0, -60, 0, 0, 1); if (i > FS / 4) e += v * v; }
     x.soemdsp_velvet_reverb_destroy(h);
     return e;
   };
@@ -348,8 +368,36 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const mg = defs.slice(defs.indexOf('key: "minGap",') - 60, defs.indexOf('key: "minGap",') + 320);
   check(/defaultValue: "1"/.test(mg) && /max: "10"/.test(mg) && /min: "0"/.test(mg) && /unit: "ms"/.test(mg), "Min Gap definition: 0..10 ms, default 1 ms");
   // Defaults everywhere (Taps 64, Length 25 ms, Min Gap 1 ms via NaN -> the native default): 1200 / 48 samples = 25 taps play.
-  const dc = x.soemdsp_velvet_reverb_layout(64, 1, 1, FS, 0.025, 0, 1, -60, 0, NaN);
+  const dc = x.soemdsp_velvet_reverb_layout(64, 1, 1, FS, 0.025, 0, 1, -60, 0, NaN, 1);
   check(dc === 25 && (x.soemdsp_velvet_reverb_layout_flags() & 4), `default Taps 64 / Length 25 ms / Min Gap 1 ms: ${dc} / 64 taps play`);
+}
+
+// ---- Darkness spawn range: slider max 64, mid 2, mid-skew curve; hardMax 1024
+{
+  const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+  const dk = defs.slice(defs.indexOf('key: "darkness",'), defs.indexOf('key: "darkness",') + 280);
+  const before = defs.slice(defs.indexOf('key: "darkness",') - 280, defs.indexOf('key: "darkness",'));
+  check(/max: "64"/.test(dk) && /mid: "2"/.test(dk) && /sliderCurve: "skew"/.test(dk) && /hardMax: "1024"/.test(before) && /nonlinearSlider: true/.test(dk),
+    "Darkness: spawn max 64, mid 2, mid-skew curve, hardMax 1024");
+}
+
+// ---- Tail Random: 0 = smooth monotonic widths along the tail; 1 = previous random widths
+{
+  const opts = { taps: 64, decay: 0.2, dark: 2, tail: 48, seed: 7, amp: 0, skew: 0, gap: 1 };
+  const smooth = layout({ ...opts, tailRand: 0 });
+  const random = layout({ ...opts, tailRand: 1 });
+  const prev = layout({ ...opts }); // default tailRand 1
+  check(smooth.count >= 2 && random.count >= 2, `Tail Random layouts play taps (0: ${smooth.count}, 1: ${random.count})`);
+  let monoUp = true;
+  for (let i = 1; i < smooth.count; i += 1) if (smooth.width[i] + 1e-15 < smooth.width[i - 1]) monoUp = false;
+  const firstW = smooth.width[0] * FS, lastW = smooth.width[smooth.count - 1] * FS;
+  check(monoUp && lastW > firstW + 1, `Tail Random 0: widths are smooth and increase along the tail (${firstW.toFixed(2)} -> ${lastW.toFixed(2)} smp, ${smooth.count} taps)`);
+  const uniq = new Set(random.width.map((w) => w.toFixed(9))).size;
+  check(uniq > 8, `Tail Random 1: per-tap widths still vary (${uniq} distinct widths of ${random.count})`);
+  check(random.width.every((w, i) => w === prev.width[i]) && random.count === prev.count, "Tail Random 1 matches the previous (default) layout");
+  const a = ir({ ...opts, tailRand: 1, n: 12000 }).L, b = ir({ ...opts, n: 12000 }).L, c = ir({ ...opts, tailRand: 0, n: 12000 }).L;
+  check(dist(a, b) === 0, "Tail Random 1 matches previous audio (default)");
+  check(dist(a, c) > 1e-6, `Tail Random 0 differs from the previous random tail (dist ${dist(a, c).toFixed(4)})`);
 }
 
 // ---- 6 s Length (the definition max): the delay line is sized from the sample rate, so it always fits
@@ -360,7 +408,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const defMax = Number(/max: "([^"]+)"/.exec(dec.slice(dec.indexOf('key: "decay",')))?.[1]);
   check(defMax === 6 && x.soemdsp_velvet_reverb_max_length() === defMax, `Length definition max ${defMax} s = the delay line's design length ${x.soemdsp_velvet_reverb_max_length()} s`);
   const fits = [44100, 48000, 96000, 192000].map((sr) => {
-    const count = x.soemdsp_velvet_reverb_layout(64, 1024, 1, sr, 6, 1024, 1, -60, 0);
+    const count = x.soemdsp_velvet_reverb_layout(64, 1024, 1, sr, 6, 1024, 1, -60, 0, 1, 1);
     return [sr, count, x.soemdsp_velvet_reverb_layout_length(), x.soemdsp_velvet_reverb_layout_flags()];
   });
   check(fits.every(([, c, len, fl]) => c === 64 && Math.abs(len - 6) < 1e-9 && fl === 0), `6 s with the widest pulses (Darkness / Tail Darkness 1024) fits unflagged at ${fits.map(([sr, c, len, fl]) => `${sr / 1000} kHz (${c} taps, ${len} s, flags ${fl})`).join(", ")}`);
@@ -377,7 +425,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   let lastHi = 0;
   for (let i = 0; i < 6 * 96000 + 4096; i += 1) {
     const v = i === 0 ? 1 : 0;
-    const o = x.soemdsp_velvet_reverb_sample(h, v, v, 32, 1, 1, 1, 96000, 6, 0, 0, 0);
+    const o = x.soemdsp_velvet_reverb_sample(h, v, v, 32, 1, 1, 1, 96000, 6, 0, 0, 0, 1, 1);
     if (o !== 0) lastHi = i;
   }
   x.soemdsp_velvet_reverb_destroy(h);

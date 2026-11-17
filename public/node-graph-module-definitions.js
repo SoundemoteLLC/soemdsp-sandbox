@@ -7081,7 +7081,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["density", "Taps"], ["densitySkew", "Skew"], ["minGap", "Min Gap"]], h: 40 },
       { kind: "cells", params: [["decay", "Length", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["darkness", "Darkness"], ["tailDarkness", "Tail Dark"]], h: 40 },
+      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["darkness", "Darkness"], ["tailDarkness", "Tail Dark"], ["tailRandom", "Tail Rand"]], h: 52 },
       { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
@@ -7136,12 +7136,16 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "1",
+        // max = the spawn slider max (user-editable); hardMax keeps the previous
+        // typed ceiling (1024 samples). The engine allows up to kMaxPulseWidth.
+        hardMax: "1024",
         key: "darkness",
         label: "Darkness",
-        max: "1024",
-        mid: "8",
+        max: "64",
+        mid: "2",
         min: "1",
-        nonlinearSlider: false,
+        nonlinearSlider: true,
+        sliderCurve: "skew",
         // Continuous (velvet_reverb v2): 1.66 is a 1.66-sample pulse.
         step: "any",
         unit: "smp",
@@ -7158,6 +7162,21 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         unit: "smp",
         tooltip: "Darkness at the end of the tail. The widest pulse grows from Darkness at the first tap to this at the last, so the tail gets darker as it goes, like a room where the highs die first. The tail's level stays set by Amp Decay; this only changes its colour. 0 = off (the whole tail uses Darkness)."
+      },
+      // Tail Random: how much per-tap width randomness sits on the Darkness /
+      // Tail Darkness curve. 1 = the previous behaviour (widths drawn uniformly
+      // in [1, the curve]); 0 = every pulse follows the smooth curve, no
+      // randomness, so the filter closes as a clean 'pow'. In between, the
+      // random draw is crossfaded in. Default 1 keeps existing patches.
+      {
+        defaultValue: "1",
+        key: "tailRandom",
+        label: "Tail Random",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
       },
       {
         defaultValue: "1",
@@ -7219,19 +7238,22 @@ const nodeGraphModuleDefinitions = (
       },
       // Density Skew: where the taps sit along Length (Step Graph rational curve,
       // segment_rational01 with contour = -skew). + packs them toward the start,
-      // - toward the end; 0 = even. -0.9..0.9 keeps it off the curve's step at
-      // +-1 (every tap on one sample). The knob is scaled by the bipolar rational
-      // slider curve (amount -0.9, like Pulse Sawmorph width) for fine control
-      // near 0. Taps that would bunch closer than the cell floor are not used
-      // (the face reads "48 / 64 taps").
+      // - toward the end (a reverse-reverb build-up); 0 = even. The range is
+      // -1..+1. At exactly +-1 the DSP soft-caps the contour just inside the
+      // curve's step so packing stays extreme but finite (Min Gap still drops
+      // bunched taps; no NaN, no infinite cells). The knob is scaled by the
+      // bipolar rational slider curve (amount -0.99, like Pulse Sawmorph width)
+      // for fine control near 0 — knob scaling only, not the DSP warp. Taps
+      // that would bunch closer than the cell floor are not used (the face
+      // reads "48 / 64 taps").
       {
-        curveAmount: "-0.9",
+        curveAmount: "-0.99",
         defaultValue: "0",
         key: "densitySkew",
         label: "Density Skew",
-        max: "0.9",
+        max: "1",
         mid: "0",
-        min: "-0.9",
+        min: "-1",
         nonlinearSlider: true,
         sliderCurve: "bipolarRational",
         step: "any",
