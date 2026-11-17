@@ -218,15 +218,38 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
     faceSrc.slice(covStart, covEnd) + `
       this.NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = NODE_GRAPH_VELVET_TAP_IDLE_ALPHA;
       this.NODE_GRAPH_VELVET_TAP_ON_ALPHA = NODE_GRAPH_VELVET_TAP_ON_ALPHA;
+      this.NODE_GRAPH_VELVET_TAP_ON_LIFT = NODE_GRAPH_VELVET_TAP_ON_LIFT;
       this.nodeGraphVelvetTapsAxisSpans = nodeGraphVelvetTapsAxisSpans;
+      this.nodeGraphVelvetTapsDarknessShade = nodeGraphVelvetTapsDarknessShade;
+      this.nodeGraphVelvetTapsShade = nodeGraphVelvetTapsShade;
     `,
     cov,
   );
   const idleA = cov.NODE_GRAPH_VELVET_TAP_IDLE_ALPHA;
   const onA = cov.NODE_GRAPH_VELVET_TAP_ON_ALPHA;
-  check(idleA > 0.3 && idleA < 1, `idle alpha ${idleA} is visible but below 1 so overlaps can stack`);
-  check(onA > idleA && onA < 1, `triggered alpha ${onA} is brighter than idle and still below 1`);
-  check(idleA * 3 >= 1, `three idle overlaps reach a burst (3 x ${idleA} = ${idleA * 3})`);
+  check(idleA >= 0.85 && idleA <= 1, `idle alpha ${idleA} is near the pre-animation solid look`);
+  check(onA === 1 && onA >= idleA, `triggered alpha ${onA} is full/opaque`);
+  check(idleA * 2 >= 1, `two idle overlaps reach a burst (2 x ${idleA} = ${idleA * 2})`);
+
+  const dim = cov.nodeGraphVelvetTapsDarknessShade;
+  const d1 = dim(1 / 48000, 48000);
+  const d2 = dim(2 / 48000, 48000);
+  const d3 = dim(3 / 48000, 48000);
+  const d4 = dim(4 / 48000, 48000);
+  const d8 = dim(8 / 48000, 48000);
+  check(d1 === 1, `width 1 sample is full brightness (${d1})`);
+  check(d2 > d3 && d3 > d4 && d4 > d8 && d8 === 0.2, `darkness dim is monotonic and floors at 0.2 (${d2} > ${d3} > ${d4} > ${d8})`);
+
+  const ink = [0.8, 0.15, 0.15, 1];
+  const idle1 = cov.nodeGraphVelvetTapsShade(ink, 1, false);
+  const idle2 = cov.nodeGraphVelvetTapsShade(ink, d2, false);
+  const idle4 = cov.nodeGraphVelvetTapsShade(ink, d4, false);
+  const on1 = cov.nodeGraphVelvetTapsShade(ink, 1, true);
+  const onDark = cov.nodeGraphVelvetTapsShade(ink, d8, true);
+  check(idle1[0] === ink[0] && idle1[3] === idleA, "idle width-1 uses full channel ink at idle alpha");
+  check(idle2[0] < idle1[0] && idle4[0] < idle2[0], "idle rgb follows the monotonic darkness shade");
+  check(on1[0] > idle1[0] && on1[3] === 1, "triggered width-1 is brighter (lifted toward white) than idle");
+  check(onDark[0] === on1[0] && onDark[0] > idle4[0], "triggered wide taps also lift to the same near-white channel colour");
 
   const spans = cov.nodeGraphVelvetTapsAxisSpans;
   const compact = (s) => s.map((x) => `${x.p}:${x.c.toFixed(4)}x${x.w}`).join(",");
