@@ -7453,7 +7453,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   --node-grid-reveal-spread: 0.78;
   --node-grid-line-alpha: 0.2;
   --node-text-light-color-rgb: 243 241 236;
-  --node-workspace-bg: #1a1a1a;
+  --node-workspace-bg: #19191a;
   --node-body-row-gap: 2px;
   --node-body-row-height: 30px;
   --node-header-gap: 0;
@@ -7732,7 +7732,7 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   height: var(--magnifier-size);
   overflow: hidden;
   border-radius: 50%;
-  background: var(--node-workspace-bg, #1d1b1b);
+  background: var(--node-workspace-bg, #19191a);
 }
 
 /* Soft black ring. Thickness + blur come from UIDEV. */

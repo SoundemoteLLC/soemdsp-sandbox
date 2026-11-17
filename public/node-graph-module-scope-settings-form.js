@@ -14,8 +14,8 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Span °";
     title = "Centered arc sweep across Bias 0…1 (degrees). Opens left and right together; gap stays opposite center.";
   }
-  // Window row in Beats: the Cycles value counts beats (lib/visual/scope-sync.js).
-  if (key === "windowCycles" && nodeGraphDisplaySettingsWindowRowIsBeats(formType)) {
+  // Window row in Beats: its own value, windowBeats (lib/visual/scope-sync.js).
+  if (key === "windowBeats") {
     label = "Beats";
     title = "";
   }
@@ -365,7 +365,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     ? ""
     : ((key === "historySeconds" || key === "zoomSeconds" || key === "historyHz" || key === "historyCycles")
       ? `<span data-trace-display-history-label>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`
-      : (key === "timeMs" || key === "windowCycles")
+      : (key === "timeMs" || key === "windowCycles" || key === "windowBeats")
         ? `<span data-trace-display-window-label>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`
         : `<span>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`);
   const rowClass = options.hideLabel
@@ -776,7 +776,7 @@ function nodeGraphPlotDisplaySettingsRows(type, choiceKeys, toggleKeys, fieldKey
   if (hasChoice("syncChannel")) {
     rows.push(nodeGraphDisplaySettingsBuildSwitchRowHtml("syncChannel", { label: "Sync" }));
   }
-  const windowKey = fieldKeys.find((key) => key === "timeMs" || key === "windowCycles");
+  const windowKey = fieldKeys.find((key) => key === "timeMs" || key === "windowCycles" || key === "windowBeats");
   if (windowKey) rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(windowKey, type));
   // Signal: how the samples map onto the face.
   rows.push(sub("Signal"));
@@ -1425,12 +1425,17 @@ function paintNodeGraphStampPreview(root, settings = {}) {
 }
 
 /** Hide Shape param for Circle; retitle Stretch/Corners/Sides/… from live Shape. */
-/** Window row key: windowCycles in Cycles / Beats mode, else timeMs (lib/visual/scope-sync.js). */
+/** Window row key per mode: windowCycles (Cycles), windowBeats (Beats), timeMs (Time) (lib/visual/scope-sync.js). */
+function nodeGraphScopeWindowKeyForMode(mode) {
+  const m = nodeGraphScopeWindowMode(mode);
+  return m === "time" ? "timeMs" : (m === "beats" ? "windowBeats" : "windowCycles");
+}
+
 function nodeGraphDisplaySettingsWindowRowKey(formType) {
   const settings = typeof nodeGraphTraceDisplayCurrentSettingsForFormType === "function"
     ? nodeGraphTraceDisplayCurrentSettingsForFormType(formType)
     : null;
-  return nodeGraphScopeWindowMode(settings?.windowMode) === "time" ? "timeMs" : "windowCycles";
+  return nodeGraphScopeWindowKeyForMode(settings?.windowMode);
 }
 
 /** Instant Waterfall / RGB / XYZ form whose History is Beats. */
@@ -1454,21 +1459,21 @@ function nodeGraphDisplaySettingsWindowRowIsBeats(formType) {
 }
 
 /**
- * Window: Cycles / Beats <-> Time. Retargets the one stepper to windowCycles
- * (labelled Beats in Beats) or timeMs so both values stay stored.
+ * Window: Cycles / Beats / Time. Retargets the one stepper to windowCycles,
+ * windowBeats or timeMs, so each mode keeps its own stored value.
  */
 function syncNodeGraphScopeWindowRow(root, settings = {}) {
   const host = root?.querySelector?.("[data-trace-display-window-label]")
     ? root
     : document.getElementById("nodeTraceDisplaySettingsPopover");
-  const field = host?.querySelector?.(`[data-trace-display-field="timeMs"], [data-trace-display-field="windowCycles"]`);
+  const field = host?.querySelector?.(`[data-trace-display-field="timeMs"], [data-trace-display-field="windowCycles"], [data-trace-display-field="windowBeats"]`);
   if (!field) {
     return;
   }
   const mode = nodeGraphScopeWindowMode(settings?.windowMode);
-  const key = mode === "time" ? "timeMs" : "windowCycles";
+  const key = nodeGraphScopeWindowKeyForMode(mode);
   const fieldMeta = nodeGraphDisplaySettingsFieldMeta[key] || { label: key };
-  // Beats: the same Cycles value, counted in beats.
+  // Beats: its own value, no hover text.
   const meta = mode === "beats" ? { label: "Beats", title: "" } : fieldMeta;
   const titleSpan = host.querySelector("[data-trace-display-window-label]");
   if (titleSpan) {

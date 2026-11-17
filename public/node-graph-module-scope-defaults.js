@@ -233,6 +233,7 @@ const nodeGraphLineBurnSettingsDefaults = Object.freeze({
   // Window: Cycles (default 3) or Time (ms), Sync on or off (lib/visual/scope-sync.js).
   windowMode: "cycles",
   windowCycles: 3,
+  windowBeats: 4,
   timeMs: 20,
   gradientStops: nodeGraphScopeCyanGradientStops,
 });
@@ -688,6 +689,7 @@ const nodeGraphScope1dTraceSettingsDefaults = Object.freeze({
   // Window: Cycles (default 3) or Time (ms), Sync on or off (lib/visual/scope-sync.js).
   windowMode: "cycles",
   windowCycles: 3,
+  windowBeats: 4,
   timeMs: 20,
   // Shared colormap LUT: |sample| energy → color on TraceWoscope. Tube Sat overrides crt-amber.
   gradientStops: nodeGraphScopePhosphorLookDefaults.gradientStops,

@@ -1023,6 +1023,7 @@ function applyNodeGraphTraceDisplaySettingsForm(options = {}) {
         || k === "historyMode"
         || k === "timeMs"
         || k === "windowCycles"
+        || k === "windowBeats"
         || k === "windowMode"
         || k === "plotDraw"
         || k === "barInk"

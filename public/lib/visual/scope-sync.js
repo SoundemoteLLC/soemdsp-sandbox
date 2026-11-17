@@ -5,10 +5,11 @@
 //   Cycles (default, 3): a fixed number of periods. The period is measured
 //          from the time between edges (median of the last few, smoothed);
 //          until one is measured, Time is used.
-//   Beats: a number of beats at the transport tempo (the same Cycles value,
-//          shown as Beats), so a rhythm sits in a frame that never resizes.
+//   Beats (default 4): a number of beats at the transport tempo, so a rhythm
+//          sits in a frame that never resizes. Its own value (windowBeats);
+//          a Beats window saved before it had one reads windowCycles.
 //   Time:  a fixed length in ms; more cycles show as the pitch rises.
-// Both values are stored (windowCycles, timeMs), so switching keeps them.
+// All three values are stored (windowCycles, windowBeats, timeMs), so switching keeps them.
 //
 // Beats: the transport is the engine's beat position (Circuit::projectBeats,
 // the one Host BPM and the sequencers read) and its tempo, sent with every
@@ -58,6 +59,8 @@
   const CYCLES_MIN = 0.05;
   const CYCLES_MAX = 100;
   const CYCLES_DEFAULT = 3;
+  // Beats: the same range as Cycles, its own default.
+  const BEATS_DEFAULT = 4;
   const WINDOW_MODES = Object.freeze(["cycles", "beats", "time"]);
   // Beats window without the engine's tempo: the patch tempo, else this.
   const TEMPO_BPM_DEFAULT = 120;
@@ -100,6 +103,25 @@
     return Math.max(CYCLES_MIN, Math.min(CYCLES_MAX, Number.isFinite(v) ? v : CYCLES_DEFAULT));
   }
 
+  function nodeGraphScopeClampWindowBeats(value, fallback = BEATS_DEFAULT) {
+    return nodeGraphScopeClampWindowCycles(value, Number.isFinite(Number(fallback)) ? fallback : BEATS_DEFAULT);
+  }
+
+  /**
+   * Stored Beats of a settings bag. A bag from before windowBeats existed that
+   * is in Beats mode counted its beats in windowCycles: that value, so its
+   * window does not change. Otherwise the default.
+   */
+  function storedWindowBeats(source, fallback = BEATS_DEFAULT) {
+    const own = Number(source?.windowBeats);
+    if (source?.windowBeats != null && Number.isFinite(own)) return own;
+    const legacy = Number(source?.windowCycles);
+    if (String(source?.windowMode ?? "").toLowerCase() === "beats" && source?.windowCycles != null && Number.isFinite(legacy)) {
+      return legacy;
+    }
+    return fallback;
+  }
+
   function nodeGraphScopeWindowMode(value, fallback = WINDOW_MODE_DEFAULT) {
     const mode = String(value ?? "").toLowerCase();
     return WINDOW_MODES.includes(mode) ? mode : fallback;
@@ -110,6 +132,7 @@
     return {
       windowMode: nodeGraphScopeWindowMode(source?.windowMode, nodeGraphScopeWindowMode(defaults.windowMode)),
       windowCycles: nodeGraphScopeClampWindowCycles(source?.windowCycles, defaults.windowCycles ?? CYCLES_DEFAULT),
+      windowBeats: nodeGraphScopeClampWindowBeats(storedWindowBeats(source, defaults.windowBeats ?? BEATS_DEFAULT)),
       timeMs: nodeGraphScopeClampTimeMs(source?.timeMs, defaults.timeMs ?? TIME_MS_DEFAULT),
     };
   }
@@ -127,10 +150,10 @@
       : 0;
   }
 
-  /** Beats to show, or 0 unless the Window is Beats. */
+  /** Beats to show (windowBeats, else a legacy windowCycles), or 0 unless the Window is Beats. */
   function nodeGraphScopeWindowBeats(settings) {
     return nodeGraphScopeWindowMode(settings?.windowMode) === "beats"
-      ? nodeGraphScopeClampWindowCycles(settings?.windowCycles)
+      ? nodeGraphScopeClampWindowBeats(storedWindowBeats(settings))
       : 0;
   }
 
@@ -597,6 +620,7 @@
     NODE_GRAPH_SCOPE_WINDOW_CYCLES_MIN: CYCLES_MIN,
     NODE_GRAPH_SCOPE_WINDOW_CYCLES_MAX: CYCLES_MAX,
     NODE_GRAPH_SCOPE_WINDOW_CYCLES_DEFAULT: CYCLES_DEFAULT,
+    NODE_GRAPH_SCOPE_WINDOW_BEATS_DEFAULT: BEATS_DEFAULT,
     NODE_GRAPH_SCOPE_WINDOW_MODE_DEFAULT: WINDOW_MODE_DEFAULT,
     NODE_GRAPH_SCOPE_SYNC_HYSTERESIS: HYSTERESIS,
     NODE_GRAPH_SCOPE_PEN_DRAW: PEN_DRAW,
@@ -605,6 +629,7 @@
     NODE_GRAPH_SCOPE_PEN_WAIT: PEN_WAIT,
     nodeGraphScopeClampTimeMs,
     nodeGraphScopeClampWindowCycles,
+    nodeGraphScopeClampWindowBeats,
     nodeGraphScopeWindowMode,
     nodeGraphScopeWindowSettings,
     nodeGraphScopeTimeSamples,

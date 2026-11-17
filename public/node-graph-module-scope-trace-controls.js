@@ -1849,6 +1849,11 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplayWindowCycles",
     title: "Periods in one pass / window (0.05–100, e.g. 1.5 = 1½ periods), Sync on or off. The period is measured from the edges; until then Time is used.",
   }),
+  windowBeats: Object.freeze({
+    label: "Beats",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayWindowBeats",
+  }),
   plotOffset: Object.freeze({
     label: "Offset",
     inputmode: "decimal",

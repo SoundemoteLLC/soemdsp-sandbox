@@ -36,6 +36,7 @@ const nodeGraphPlotFaceDisplaySettingsDefaults = Object.freeze({
   backgroundSaturation: 1,
   windowMode: "cycles",
   windowCycles: 3,
+  windowBeats: 4,
   timeMs: 20,
   scale: 1,
   plotOffset: 0,
@@ -60,7 +61,8 @@ function normalizeNodeGraphPlotFaceSettings(settings = {}) {
   const on = (v, fallback) => (typeof nodeGraphDisplaySettingsToggleIsOn === "function"
     ? nodeGraphDisplaySettingsToggleIsOn(v ?? fallback)
     : (v === undefined ? fallback : v !== false && v !== 0 && v !== "0" && v !== "false"));
-  Object.assign(out, nodeGraphScopeWindowSettings(merged, d));
+  // The saved bag, not `merged`: a Beats window saved before windowBeats reads its windowCycles.
+  Object.assign(out, nodeGraphScopeWindowSettings(source, d));
   out.scale = span(merged.scale, 0, 16, d.scale);
   out.plotOffset = span(merged.plotOffset, -1, 1, d.plotOffset);
   out.sourceSync = on(merged.sourceSync, d.sourceSync);

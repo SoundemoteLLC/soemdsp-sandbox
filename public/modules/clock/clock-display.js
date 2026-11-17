@@ -23,9 +23,10 @@ const nodeGraphClockFaceDisplaySettingsDefaults = Object.freeze({
   dotHue: 0,
   dotBrightness: 1,
   dotSaturation: 0,
-  fillHue: 191.5,
-  fillBrightness: 0.075,
-  fillSaturation: 0.67,
+  // #138CAB.
+  fillHue: 192,
+  fillBrightness: 0.24,
+  fillSaturation: 0.84,
   startHue: 44.5,
   startBrightness: 0.16,
   startSaturation: 0.49,

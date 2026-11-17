@@ -288,7 +288,8 @@ function nodeGraphTraceDisplayHistoryControlRange(key, type = null) {
   if (key === "timeMs") {
     return { min: NODE_GRAPH_SCOPE_TIME_MS_MIN, max: NODE_GRAPH_SCOPE_TIME_MS_MAX };
   }
-  if (key === "windowCycles") {
+  // Beats: the same range as Cycles.
+  if (key === "windowCycles" || key === "windowBeats") {
     return { min: NODE_GRAPH_SCOPE_WINDOW_CYCLES_MIN, max: NODE_GRAPH_SCOPE_WINDOW_CYCLES_MAX };
   }
   // Cycles dials.
@@ -337,6 +338,7 @@ const NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT = 4 / NODE_GRAPH_DISPLAY_SETTINGS_
 const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
   timeMs: { min: 0.1, max: 10000, taper: "log", step: 0.025 },
   windowCycles: { min: 0.05, max: 100, taper: "log", step: 0.025 },
+  windowBeats: { min: 0.05, max: 100, taper: "log", step: 0.025 },
   historyHz: { min: 0, max: 100, taper: "log", logMin: 0.01, zeroDetent: NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT, step: 0.025 },
   historyCycles: { min: 0.05, max: 100, taper: "log", step: 0.025 },
   cycles: { min: 1, max: 64, taper: "linear", step: 1, integer: true },
@@ -632,6 +634,7 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   secondarySize: nodeGraphTraceDisplayClampInkPx,
   timeMs: (value) => nodeGraphScopeClampTimeMs(value),
   windowCycles: (value) => nodeGraphScopeClampWindowCycles(value),
+  windowBeats: (value) => nodeGraphScopeClampWindowBeats(value),
   historyHz: (value) => {
     // Non-waterfall faces only. Instant Waterfall uses historySeconds.
     const n = Number(value);
@@ -914,6 +917,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     timeMs: (value) => nodeGraphScopeClampTimeMs(value),
     windowCycles: (value) => nodeGraphScopeClampWindowCycles(value),
+    windowBeats: (value) => nodeGraphScopeClampWindowBeats(value),
     scale: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 16),
     plotOffset: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), -1, 1),
   }),

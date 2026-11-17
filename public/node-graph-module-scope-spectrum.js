@@ -218,6 +218,7 @@ const nodeGraphTraceDisplaySettingFields = Object.freeze([
   ["scale", "Scale"],
   ["timeMs", "Time (ms)"],
   ["windowCycles", "Cycles"],
+  ["windowBeats", "Beats"],
   ["fftSize", "FFT size"],
   ["minFreq", "Min freq (Hz)"],
   ["maxFreq", "Max freq (Hz)"],

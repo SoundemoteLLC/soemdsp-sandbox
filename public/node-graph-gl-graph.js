@@ -798,7 +798,7 @@ function nodeGraphGlGraphDrawTextBox(batch, plate, toX, toY, zoom, cssW, cssH) {
 // unconnected jack's (how far its colour shows over the workspace background). syncNodeUiDevLightingLevels
 // sets them from their definitions; these are only the values before it runs.
 var nodeGraphJackActiveLight = 1;
-var nodeGraphJackInactiveLight = 0.25;
+var nodeGraphJackInactiveLight = 0.55;
 // A jack below full light keeps at least this much of its colour's own saturation (HSV), so a dim red
 // jack still reads red and a dim blue one blue (a white jack stays grey).
 const NODE_JACK_MIN_SATURATION = 0.8;
@@ -962,6 +962,8 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   for (let j = 0; j < allJacks.length; j += 1) {
     const jack = allJacks[j];
     if (jack.id !== plate.id || jack.rail) continue;
+    // Connected, or a wire is being dragged out of it right now.
+    const lit = jack.lit || nodeGraphGlGraphJackDragging(jack);
     plateJacks.push({
       x: toX(jack.x),
       y: toY(jack.y),
@@ -970,12 +972,12 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
       // at the inactive jack light (UI Dev "lighting: jacks").
       rgba: mode === "dim" || mode === "shine"
         ? [0, 0, 0, 0]
-        : (jack.lit ? nodeGraphGlGraphLitStroke(jack.rgba) : nodeGraphGlGraphUnlitStroke(jack.rgba)),
+        : (lit ? nodeGraphGlGraphLitStroke(jack.rgba) : nodeGraphGlGraphUnlitStroke(jack.rgba)),
       square: jack.square === true,
       inlet: jack.inlet === true,
       // Below full light: the plate shader fills the hole this jack cuts in the plate with the workspace
       // background, so the module's stroke light (it follows loudness) does not show through.
-      backdrop: mode === "" && (jack.lit ? Number(nodeGraphJackActiveLight) : Number(nodeGraphJackInactiveLight)) < 1
+      backdrop: mode === "" && (lit ? Number(nodeGraphJackActiveLight) : Number(nodeGraphJackInactiveLight)) < 1
         ? nodeGraphGlGraphJackBackdrop() : null,
     });
   }
@@ -1572,6 +1574,30 @@ function nodeGraphGlGraphDragFrom(point, endpoint) {
     return { x: point.x, y: point.y, departSign: -1 };
   }
   return point;
+}
+
+/**
+ * Whether a wire is being dragged out of this jack (a new wire, or the wires a port-connection
+ * gesture holds): the jack shows the active jack light at once, not only once the wire lands.
+ * Read every frame, so a cancelled drag (wireDragging cleared) is inactive again on the next draw.
+ */
+function nodeGraphGlGraphJackDragging(jack) {
+  const state = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp : null;
+  if (!state || !jack) return false;
+  const match = (endpoint) => {
+    if (!endpoint || String(endpoint.node ?? "") !== String(jack.id ?? "")) return false;
+    const port = String(endpoint.port || endpoint.param || endpoint.graphInput || "");
+    return port === String(jack.port || "") && (endpoint.io === "output") === (jack.io === "output");
+  };
+  const drag = state.wireDragging;
+  if (drag?.active && match(drag.endpoint)) return true;
+  const mode = state.portConnectionMode;
+  if (mode?.cursorPoint && mode.selected && typeof mode.selected.values === "function") {
+    for (const entry of mode.selected.values()) {
+      if (entry?.from && match(entry.endpoint)) return true;
+    }
+  }
+  return false;
 }
 
 /** One wire end dot (square jack or round) into `batch`. */
@@ -2832,8 +2858,6 @@ function nodeGraphGlGraphPresent(options = {}) {
       // (routed out of the body so the dim does not double up on it). The dim skips the stroke band,
       // so the body's own stroke stays lit; no second "emit" stroke is drawn over it.
       let dimLayer = null;
-      let dimTextLayer = null;
-      let litTextLayer = null;
       if (ambientDark > 0) {
         dimLayer = nodeGraphGlLinesLayer(batch);
         // The face (slider wells and fills) is a weak light source of its own: drawn after the dim,
@@ -2847,25 +2871,13 @@ function nodeGraphGlGraphPresent(options = {}) {
         if (textLayer) {
           textLayer.textDark = Math.min(ambientDark, 1 - NODE_TEXT_FLOOR);
           body.textLayer = textLayer;
-          dimTextLayer = textLayer;
-          // The module under the mouse has its text (title, labels, values) fully lit: not darkened by
-          // the room, as if lit by looking at it.
-          litTextLayer = nodeGraphGlLinesLayer(batch);
         }
       }
-      // Route each module's text to the lit or the dimmed text layer by the hovered module
-      // (nodeGraphGlGraphHoverModuleId; a hover change presents again).
-      const routeText = (plate) => {
-        if (!dimTextLayer) return;
-        const lit = litTextLayer && nodeGraphGlGraphHoverModuleId && plate.id === nodeGraphGlGraphHoverModuleId;
-        body.textLayer = lit ? litTextLayer : dimTextLayer;
-      };
       const captions = [];
       const shapes = [];
       for (let i = 0; i < group.plates.length; i += 1) {
         const plate = group.plates[i];
         nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
-        routeText(plate);
         nodeGraphGlGraphDrawPlate(body, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle);
         nodeGraphGlGraphDrawChrome(body, toX, toY, layoutZoom, cssW, cssH);
         const ownCaptions = captionsById.get(plate.id);
@@ -2874,16 +2886,12 @@ function nodeGraphGlGraphPresent(options = {}) {
         if (ownShapes) shapes.push(...ownShapes);
       }
       nodeGraphGlGraphState.chrome = chromeAll;
-      for (let i = 0; i < group.plates.length; i += 1) {
-        routeText(group.plates[i]);
-        if (typeof nodeGraphModuleFaceDrawAllGl === "function") {
-          nodeGraphModuleFaceDrawAllGl(body, [group.plates[i]], toX, toY, layoutZoom, cssW, cssH);
-        }
-        if (typeof nodeGraphModuleRailsDrawGl === "function") {
-          nodeGraphModuleRailsDrawGl(body, [group.plates[i]], toX, toY, layoutZoom, cssW, cssH);
-        }
+      if (typeof nodeGraphModuleFaceDrawAllGl === "function") {
+        nodeGraphModuleFaceDrawAllGl(body, group.plates, toX, toY, layoutZoom, cssW, cssH);
       }
-      if (dimTextLayer) body.textLayer = dimTextLayer;
+      if (typeof nodeGraphModuleRailsDrawGl === "function") {
+        nodeGraphModuleRailsDrawGl(body, group.plates, toX, toY, layoutZoom, cssW, cssH);
+      }
       // Ambient light: darken what the body drew inside the plate (plate, chrome, parameter face); the
       // stroke is outside the dim. Displays and their ink are drawn after this, so they stay lit too.
       if (ambientDark > 0) {
@@ -3248,41 +3256,6 @@ function nodeGraphGlGraphRoomLampSoon() {
   });
 }
 
-// The module under the mouse ("" = none): its text is drawn on the lit text layer in a dark room.
-// Its jacks, face, sliders and title count as the module. It follows the pointer while dragging too
-// (a dragged module stays lit; a wire being dragged lights the module it is over).
-var nodeGraphGlGraphHoverModuleId = "";
-
-function nodeGraphGlGraphHoverModuleAt(x, y) {
-  const jacks = nodeGraphGlGraphState.chrome?.jacks || [];
-  const jackRadius = typeof nodeGraphJackHitRadiusPx === "function" ? nodeGraphJackHitRadiusPx() : 8;
-  let best = "";
-  let bestDist = Infinity;
-  for (let i = 0; i < jacks.length; i += 1) {
-    const jack = jacks[i];
-    const dist = Math.max(Math.abs(jack.x - x), Math.abs(jack.y - y));
-    if (dist > Math.max(jack.r || 0, jackRadius) || dist >= bestDist || nodeGraphGlHitCovered(jack.id, x, y)) continue;
-    bestDist = dist;
-    best = jack.id;
-  }
-  if (best) return String(best);
-  const plates = nodeGraphGlGraphState.plates || [];
-  for (let i = plates.length - 1; i >= 0; i -= 1) {
-    const plate = plates[i];
-    if (x >= plate.x && x <= plate.x + plate.w && y >= plate.y && y <= plate.y + plate.h) return String(plate.id);
-  }
-  return "";
-}
-
-// Only a change of hovered module presents again (one rebuild, next frame), and only when the room
-// is dark enough for the text to be dimmed at all.
-function nodeGraphGlGraphSetHoverModule(id) {
-  const next = String(id || "");
-  if (next === nodeGraphGlGraphHoverModuleId) return;
-  nodeGraphGlGraphHoverModuleId = next;
-  if (typeof nodeGraphRoomAmbientDark === "function" && nodeGraphRoomAmbientDark() > 0) nodeGraphGlGraphPresentSoon();
-}
-
 function nodeGraphGlGraphBindRoomLight() {
   const host = document.getElementById("nodeGraphWorkspace");
   if (!host || host.dataset.roomLightBound === "1") return;
@@ -3290,13 +3263,10 @@ function nodeGraphGlGraphBindRoomLight() {
   host.addEventListener("pointermove", (event) => {
     nodeGraphRoomLight.mouse = { x: event.clientX, y: event.clientY };
     if (typeof nodeGraphRoomAmbientDark === "function" && nodeGraphRoomAmbientDark() > 0) nodeGraphGlGraphRoomLampSoon();
-    const point = nodeGraphGlHitPoint(event);
-    nodeGraphGlGraphSetHoverModule(point ? nodeGraphGlGraphHoverModuleAt(point.x, point.y) : "");
   }, { passive: true });
   host.addEventListener("pointerleave", () => {
     nodeGraphRoomLight.mouse = null;
     nodeGraphGlGraphRoomLampSoon();
-    nodeGraphGlGraphSetHoverModule("");
   }, { passive: true });
 }
 

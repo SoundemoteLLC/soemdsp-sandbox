@@ -506,11 +506,11 @@ function syncNodeUiDevModuleIdleStroke() {
   const selectedColorOut = document.getElementById("nodeUiDevModuleSelectedStrokeColorValue");
   const selectedAlphaInput = document.getElementById("nodeUiDevModuleSelectedStrokeAlpha");
   const selectedAlphaOut = document.getElementById("nodeUiDevModuleSelectedStrokeAlphaValue");
-  const color = normalizeNodeUiDevColor(colorInput?.value, "#442f7f");
+  const color = normalizeNodeUiDevColor(colorInput?.value, "#8000ff");
   const idleAlphaInput = document.getElementById("nodeUiDevModuleStrokeAlpha");
   const idleAlphaOut = document.getElementById("nodeUiDevModuleStrokeAlphaValue");
   const idleAlphaRaw = Number(idleAlphaInput?.value);
-  const idleAlphaPercent = Number.isFinite(idleAlphaRaw) ? Math.max(0, Math.min(100, idleAlphaRaw)) : 16;
+  const idleAlphaPercent = Number.isFinite(idleAlphaRaw) ? Math.max(0, Math.min(100, idleAlphaRaw)) : 17;
   if (idleAlphaOut) idleAlphaOut.textContent = `${idleAlphaPercent}%`;
   const selectedColor = normalizeNodeUiDevColor(selectedColorInput?.value, "#f9aeae");
   const selectedAlphaRaw = Number(selectedAlphaInput?.value);
@@ -1171,7 +1171,7 @@ function syncNodeUiDevSettingsHeaderControls() {
     ? Math.max(0, Math.min(20, nodeGraphFiniteNumber(moduleGridInsetInput.value)))
     : null;
   const gridColor = normalizeNodeUiDevColor(gridColorInput.value, "#ffffff");
-  const workspaceBackgroundColor = normalizeNodeUiDevColor(workspaceBackgroundColorInput.value, "#1a1a1a");
+  const workspaceBackgroundColor = normalizeNodeUiDevColor(workspaceBackgroundColorInput.value, "#19191a");
   const moduleFillColor = normalizeNodeUiDevColor(moduleFillColorInput.value, "#171a1f");
   const moduleTitleFillColor = normalizeNodeUiDevColor(moduleTitleFillColorInput?.value, "#030113");
   const moduleFillAlphaRaw = Number(moduleFillAlphaInput.value);

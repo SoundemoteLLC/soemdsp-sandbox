@@ -160,7 +160,7 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: "#e040fb", id: "nodeUiDevJackMagenta", key: "jackMagenta", type: "color" },
   { defaultValue: "#ffffff", id: "nodeUiDevGridColor", key: "gridColor", type: "color" },
   {
-    defaultValue: "#1a1a1a",
+    defaultValue: "#19191a",
     id: "nodeUiDevWorkspaceBackgroundColor",
     key: "workspaceBackgroundColor",
     type: "color",
@@ -168,8 +168,8 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: "#171a1f", id: "nodeUiDevModuleFillColor", key: "moduleFillColor", type: "color" },
   { defaultValue: 100, id: "nodeUiDevModuleFillAlpha", key: "moduleFillAlpha", max: 100, min: 0, type: "number" },
   { defaultValue: "#030113", id: "nodeUiDevModuleTitleFillColor", key: "moduleTitleFillColor", type: "color" },
-  { defaultValue: "#442f7f", id: "nodeUiDevModuleStrokeColor", key: "moduleStrokeColor", type: "color" },
-  { defaultValue: 16, id: "nodeUiDevModuleStrokeAlpha", key: "moduleStrokeAlpha", max: 100, min: 0, type: "number" },
+  { defaultValue: "#8000ff", id: "nodeUiDevModuleStrokeColor", key: "moduleStrokeColor", type: "color" },
+  { defaultValue: 17, id: "nodeUiDevModuleStrokeAlpha", key: "moduleStrokeAlpha", max: 100, min: 0, type: "number" },
   { defaultValue: "#f9aeae", id: "nodeUiDevModuleSelectedStrokeColor", key: "moduleSelectedStrokeColor", type: "color" },
   // Module corners, top and bottom apart. Shape: 0 Round, 1 Squircle, 2 Pill (full end, ignores Radius).
   { defaultValue: 1, id: "nodeUiDevModuleTopShape", key: "moduleTopShape", max: 2, min: 0, step: 1, type: "number" },
@@ -225,7 +225,7 @@ const nodeUiDevSettingControls = Object.freeze([
   // Jack ring light: connected and unconnected, 100% = the jack's own colour, lower shows less of it over the
   // workspace background (a minimum saturation keeps the colour readable).
   { defaultValue: 100, id: "nodeUiDevJackActiveLight", key: "jackActiveLight", max: 100, min: 0, step: 1, type: "number" },
-  { defaultValue: 25, id: "nodeUiDevJackInactiveLight", key: "jackInactiveLight", max: 100, min: 0, step: 1, type: "number" },
+  { defaultValue: 55, id: "nodeUiDevJackInactiveLight", key: "jackInactiveLight", max: 100, min: 0, step: 1, type: "number" },
   { defaultValue: 36, id: "nodeUiDevBypassIconSize", key: "bypassIconSize", max: 100, min: 0, type: "number" },
   { defaultValue: 40, id: "nodeUiDevBypassIconGlowSpread", key: "bypassIconGlowSpread", max: 200, min: 0, type: "number" },
   { defaultValue: "#f25d5d", id: "nodeUiDevBypassIconGlowColor", key: "bypassIconGlowColor", type: "color" },
