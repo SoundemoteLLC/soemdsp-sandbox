@@ -6,19 +6,19 @@ const STURMIAN_DEFAULT_MASK = 3170;
 
 registerNodeGraphChromelessModule("sturmianGrid", {
   label: "Sturmian Grid",
-  solidModule: true,
+  // No solidModule: LayoutA ports sit above the face, with visible labels.
   customDisplayArea: true,
   definition: {
     planRole: "source",
     planFreeRun: true,
     defaultWidthGu: 16,
     displayHeightGu: 8,
-    chrome: "LayoutB",
+    chrome: "LayoutA",
     customDisplayArea: true,
-    // LayoutB side-band labels (jack + short text; not labels-hidden).
-    layoutBPortLabels: true,
     digitalInputs: ["Restart", "Adv"],
-    inputLabels: { Restart: "↺", Adv: "▸", f: "ƒ" },
+    // Restart uses the app-wide Reset mark (↺). Adv matches blitTrigger ("Adv"),
+    // not a triangle glyph. ƒ matches Clock / other frequency inlets.
+    inputLabels: { Restart: "↺", Adv: "Adv", f: "ƒ" },
     inputAliases: { "ƒ": "f", Frequency: "f" },
     inputs: ["Restart", "Adv", "f"],
     // Wired ƒ replaces Rate (Rate row striped). Wired Adv owns Rate and ƒ.
@@ -26,11 +26,12 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     advJackParam: "rate",
     advJackOwnsInputs: ["f"],
     digitalOutputs: ["Kick", "Snare", "Hat", "Melody"],
+    // Named trigger outs keep the lane name plus the app-wide trigger mark (⎍).
     outputLabels: {
-      Kick: "K",
-      Snare: "S",
-      Hat: "H",
-      Melody: "M",
+      Kick: "Kick ⎍",
+      Snare: "Snare ⎍",
+      Hat: "Hat ⎍",
+      Melody: "Melody ⎍",
       Pitch: "♯/♭",
       f: "ƒ",
     },
