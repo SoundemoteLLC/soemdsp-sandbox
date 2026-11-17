@@ -3,8 +3,12 @@
 //   envelopeBipolar  — T60 fill mirrored about mid, log1p Hz → LUT
 //   spectrogram      — fake ridge, log2 Hz Y (Low…High), Sweep Time across X
 // Frequency layout is always the sweep; Decay is playhead speed on every view.
+// backgroundHue is shared gradient hue rotation (0 = authored stops).
+// The old round-shape plate hue 205.714 used to rotate Ice blue->yellow
+// and Light blue->green; normalize treats that leftover default as 0.
+const NODE_GRAPH_ROBIN_SINEPULSE_LEGACY_PLATE_HUE = 205.714;
 const nodeGraphRobinSinepulseFaceDisplaySettingsDefaults = Object.freeze({
-  backgroundHue: 205.714,
+  backgroundHue: 0,
   backgroundBrightness: 0.009,
   backgroundSaturation: 0.59,
   lineHue: 187.5,
@@ -32,7 +36,12 @@ function nodeGraphRobinSinepulseFaceView(look) {
 function normalizeNodeGraphRobinSinepulseFaceSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
   const d = nodeGraphRobinSinepulseFaceDisplaySettingsDefaults;
-  const out = normalizeNodeGraphRoundShapeFaceSettings({ ...d, ...source });
+  const merged = { ...d, ...source };
+  const incomingHue = Number(source.backgroundHue);
+  if (!Number.isFinite(incomingHue) || Math.abs(incomingHue - NODE_GRAPH_ROBIN_SINEPULSE_LEGACY_PLATE_HUE) < 1e-3) {
+    merged.backgroundHue = 0;
+  }
+  const out = normalizeNodeGraphRoundShapeFaceSettings(merged);
   const ridgeRaw = Number(source.dotThickness);
   out.dotThickness = Number.isFinite(ridgeRaw)
     ? Math.max(0, Math.min(32, ridgeRaw))
