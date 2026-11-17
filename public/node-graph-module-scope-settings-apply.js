@@ -471,6 +471,15 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "pitchQuantizerFace") {
+    node.traceDisplaySettings = typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
+      ? normalizeNodeGraphPitchQuantizerFaceSettings(settings)
+      : (settings && typeof settings === "object" ? { ...settings } : {});
+    if (typeof applyNodeGraphPitchQuantizerDisplaySettingsToFace === "function") {
+      applyNodeGraphPitchQuantizerDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (displayType === "torchFace") {
     node.traceDisplaySettings = normalizeNodeGraphTorchFaceSettings(settings);
     return node.traceDisplaySettings;

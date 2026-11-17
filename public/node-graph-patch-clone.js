@@ -634,6 +634,12 @@ function cloneNodeGraphTypedDisplaySettings(node) {
       return { traceDisplaySettings: normalizeNodeGraphWaterfallSettings(bag) };
     case "torchFace":
       return { traceDisplaySettings: normalizeNodeGraphTorchFaceSettings(bag) };
+    case "pitchQuantizerFace":
+      return {
+        traceDisplaySettings: typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
+          ? normalizeNodeGraphPitchQuantizerFaceSettings(bag)
+          : (bag || {}),
+      };
     case "keyboardFace":
     case "keyboardControllerFace": {
       if (!bag || typeof bag !== "object") {

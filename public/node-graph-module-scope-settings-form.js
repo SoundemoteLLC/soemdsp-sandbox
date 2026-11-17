@@ -818,6 +818,26 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
   };
   // Never a side "Color |" column — one contiguous widget row app-wide.
   let aria = base.aria || key;
+  if (formType === "pitchQuantizerFace") {
+    const labels = {
+      enabledColor: "Enabled",
+      playingColor: "Playing",
+      naturalColor: "Natural",
+      sharpColor: "Sharp",
+    };
+    const defaults = typeof NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS !== "undefined"
+      ? NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS
+      : {
+        enabledColor: "#3dffd0",
+        playingColor: "#1f8068",
+        naturalColor: "#121416",
+        sharpColor: "#666b70",
+      };
+    if (labels[key]) {
+      aria = `${labels[key]} color`;
+      base = { ...base, label: labels[key], defaultValue: defaults[key] };
+    }
+  } else
   if (formType === "roundingErrorFace" && (key === "backgroundColor" || key === "barColor" || key === "textColor")) {
     const labels = { backgroundColor: "Background", barColor: "Bars", textColor: "Text" };
     const defaults = { backgroundColor: "#06080c", barColor: "#e2b44a", textColor: "#7fc7d9" };
@@ -2255,6 +2275,9 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
   }
   if (type === "keyboardFace" && typeof buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml === "function") {
     return buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml();
+  }
+  if (type === "pitchQuantizerFace" && typeof buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml === "function") {
+    return buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml();
   }
   const activeFields = nodeGraphTraceDisplayActiveControlSet("fields", type);
   const activeColors = nodeGraphTraceDisplayActiveControlSet("colors", type);
