@@ -467,15 +467,23 @@ function syncNodeUiDevModuleCorners() {
   if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
 }
 
-// UI Dev "lighting: wires": the light the cables and their end dots keep in a fully dark room. The
-// range is the definition's (nodeUiDevSettingControls), applied to the inputs here.
-function syncNodeUiDevWireLight() {
-  const pairs = [["nodeUiDevWireDarkLight", "nodeGraphWireDarkLight"], ["nodeUiDevWireDotDarkLight", "nodeGraphWireDotDarkLight"]];
+// UI Dev "lighting: wires" (the light cables and their end dots keep in a fully dark room) and
+// "lighting: jacks" (connected / unconnected jack ring light). Percent controls; the range is the
+// definition's (nodeUiDevSettingControls), applied to the inputs here.
+function syncNodeUiDevLightingLevels() {
+  const pairs = [
+    ["nodeUiDevWireDarkLight", "nodeGraphWireDarkLight"],
+    ["nodeUiDevWireDotDarkLight", "nodeGraphWireDotDarkLight"],
+    ["nodeUiDevJackActiveLight", "nodeGraphJackActiveLight"],
+    ["nodeUiDevJackInactiveLight", "nodeGraphJackInactiveLight"],
+  ];
   for (const [id, target] of pairs) {
     const def = typeof nodeUiDevSettingControls !== "undefined" ? nodeUiDevSettingControls.find((d) => d.id === id) : null;
     if (!def) continue;
     const input = document.getElementById(id);
-    if (input) {
+    if (input && typeof nodeUiDevApplyDefinitionLimits === "function") {
+      nodeUiDevApplyDefinitionLimits(input, def);
+    } else if (input) {
       input.min = String(def.min);
       input.max = String(def.max);
       input.step = String(def.step ?? 1);
@@ -629,14 +637,14 @@ function bindNodeUiDevModuleIdleStroke() {
     input.addEventListener("change", syncNodeUiDevModuleCorners);
   }
   syncNodeUiDevModuleCorners();
-  for (const id of ["nodeUiDevWireDarkLight", "nodeUiDevWireDotDarkLight"]) {
+  for (const id of ["nodeUiDevWireDarkLight", "nodeUiDevWireDotDarkLight", "nodeUiDevJackActiveLight", "nodeUiDevJackInactiveLight"]) {
     const input = document.getElementById(id);
     if (!input || input.dataset.wireLightBound === "true") continue;
     input.dataset.wireLightBound = "true";
-    input.addEventListener("input", syncNodeUiDevWireLight);
-    input.addEventListener("change", syncNodeUiDevWireLight);
+    input.addEventListener("input", syncNodeUiDevLightingLevels);
+    input.addEventListener("change", syncNodeUiDevLightingLevels);
   }
-  syncNodeUiDevWireLight();
+  syncNodeUiDevLightingLevels();
   for (const id of [
     "nodeUiDevModuleStrokeColor",
     "nodeUiDevModuleStrokeAlpha",
@@ -1042,7 +1050,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   syncNodeUiDevDimmerCutoutControls();
   syncNodeUiDevMagnifierRimControls();
   syncNodeUiDevPortBrightness();
-  syncNodeUiDevWireLight();
+  syncNodeUiDevLightingLevels();
   syncNodeUiDevJackColors();
   if (typeof syncNodeUiDevFullyOpaqueWires === "function") {
     syncNodeUiDevFullyOpaqueWires();

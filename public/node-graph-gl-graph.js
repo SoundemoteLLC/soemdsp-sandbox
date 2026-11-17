@@ -794,11 +794,23 @@ function nodeGraphGlGraphDrawTextBox(batch, plate, toX, toY, zoom, cssW, cssH) {
   }
 }
 
-// A connected jack lights its stroke in its own colour (before the used / unused brightness) at
-// full alpha. An outlet and the inlet it feeds keep their own colours, so a colour change along a
-// cable shows at the jacks.
+// UI Dev "lighting: jacks": a connected jack's ring light (1 = its own colour at full alpha, above 1
+// lifts it toward white) and an unconnected jack's ring alpha. syncNodeUiDevLightingLevels sets them
+// from their definitions; these are only the values before it runs.
+var nodeGraphJackActiveLight = 1.4;
+var nodeGraphJackInactiveLight = 0.06;
+
+// A connected jack lights its stroke in its own colour. An outlet and the inlet it feeds keep their
+// own colours, so a colour change along a cable shows at the jacks.
 function nodeGraphGlGraphLitStroke(rgba) {
-  return [rgba[0], rgba[1], rgba[2], 1];
+  const b = Math.max(0, Number(nodeGraphJackActiveLight) || 0);
+  const lift = Math.max(0, b - 1);
+  return [rgba[0] + (1 - rgba[0]) * lift, rgba[1] + (1 - rgba[1]) * lift, rgba[2] + (1 - rgba[2]) * lift, Math.min(1, b)];
+}
+
+// An unconnected jack: its colour at the "inactive jack light" alpha.
+function nodeGraphGlGraphUnlitStroke(rgba) {
+  return [rgba[0], rgba[1], rgba[2], Math.max(0, Number(nodeGraphJackInactiveLight) || 0)];
 }
 
 // mode: "" = the module plate; "dim" = the ambient-light darkening of that plate's body (black fill
@@ -820,7 +832,7 @@ const NODE_STROKE_GLOW_ALPHA = 0.85;
 // Cables never go fully dark with the room: this much of them stays visible at full dark.
 const NODE_CABLE_FLOOR = 0.35;
 // UI Dev "lighting: wires": how much light the cables and, apart, their end dots keep in a fully dark
-// room (0 = black "shadow" wires, 1 = not dimmed). syncNodeUiDevWireLight sets them from their
+// room (0 = black "shadow" wires, 1 = not dimmed). syncNodeUiDevLightingLevels sets them from their
 // definitions; the room floor above stays the default.
 var nodeGraphWireDarkLight = NODE_CABLE_FLOOR;
 var nodeGraphWireDotDarkLight = NODE_CABLE_FLOOR;
@@ -892,11 +904,11 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
       x: toX(jack.x),
       y: toY(jack.y),
       r: jack.r * zoom,
-      // Stroke only: a connected jack draws its stroke as the bright version of its colour; an
-      // unconnected one keeps the plate stroke alpha.
+      // Stroke only: a connected jack draws its stroke at the active jack light, an unconnected one
+      // at the inactive jack light (UI Dev "lighting: jacks").
       rgba: mode === "dim" || mode === "shine"
         ? [0, 0, 0, 0]
-        : (jack.lit ? nodeGraphGlGraphLitStroke(jack.rgba) : [jack.rgba[0], jack.rgba[1], jack.rgba[2], color[3] ?? 1]),
+        : (jack.lit ? nodeGraphGlGraphLitStroke(jack.rgba) : nodeGraphGlGraphUnlitStroke(jack.rgba)),
       square: jack.square === true,
       inlet: jack.inlet === true,
     });

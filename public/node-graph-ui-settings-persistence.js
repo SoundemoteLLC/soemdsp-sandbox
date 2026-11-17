@@ -973,6 +973,18 @@ function normalizeNodeUiDevSettings(settings = {}) {
   };
 }
 
+// Range/number inputs without HTML limits take them from the definition before their value is read or set,
+// so the browser's default 0-100 range can't clamp a value the definition allows. The first time limits are
+// added, the markup value is re-applied, since the browser already clamped it to 0-100 while parsing.
+function nodeUiDevApplyDefinitionLimits(input, definition) {
+  if (definition.type !== "number" || (input.type !== "range" && input.type !== "number")) return;
+  let added = false;
+  if (!input.hasAttribute("min") && Number.isFinite(definition.min)) { input.min = String(definition.min); added = true; }
+  if (!input.hasAttribute("max") && Number.isFinite(definition.max)) { input.max = String(definition.max); added = true; }
+  if (!input.hasAttribute("step") && Number.isFinite(definition.step)) { input.step = String(definition.step); added = true; }
+  if (added && input.hasAttribute("value")) input.value = input.getAttribute("value");
+}
+
 function readNodeUiDevSettingsFromControls(options = {}) {
   void options;
   const controls = {};
@@ -985,6 +997,7 @@ function readNodeUiDevSettingsFromControls(options = {}) {
     } else if (definition.type === "boolean") {
       controls[definition.key] = input.checked;
     } else {
+      nodeUiDevApplyDefinitionLimits(input, definition);
       controls[definition.key] = input.value;
     }
   }
@@ -1734,6 +1747,7 @@ function applyNodeUiDevSettings(settings) {
     if (definition.type === "boolean") {
       input.checked = Boolean(value);
     } else {
+      nodeUiDevApplyDefinitionLimits(input, definition);
       input.value = String(value);
     }
     input.disabled = Boolean(definition.locked);

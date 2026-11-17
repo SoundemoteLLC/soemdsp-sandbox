@@ -310,7 +310,12 @@ function nodeGraphOneDimensionalBurnUndrawnWindow(canvas, buffer) {
   };
 }
 
-function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetBuffer = null) {
+/**
+ * hitBuffer (optional): a hit stream written beside the trace (a drum's own
+ * strikes, e.g. Modal Snare __Strike; > 0 on each struck sample). When given,
+ * the edges are those hits instead of Schmitt crossings of the trace.
+ */
+function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetBuffer = null, hitBuffer = null) {
   if (!buffer?.length || !canvas?.width || !canvas?.height) {
     return [];
   }
@@ -328,6 +333,10 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
   const phaseInc = 1 / passSamples;
   // Cycles needs edges for the period even with Sync off.
   const findEdges = nodeGraphScopeWindowCycles(settings) > 0;
+  // Hit stream: Cycles = N spans N hits; Sync starts a sweep on a hit and the
+  // next one ceil(N) hits later; no hits holds the last sweep (scope-sync.js).
+  const hits = Boolean(hitBuffer?.length);
+  const hitCycles = findEdges ? nodeGraphScopeWindowCycles(settings) : 1;
   const width = canvas.width;
   const height = canvas.height;
 
@@ -354,7 +363,7 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
   const resetThreshold = Number.isFinite(Number(nodeGraphLineBurnResetThreshold))
     ? Number(nodeGraphLineBurnResetThreshold)
     : 0.5;
-  const level = sync || findEdges
+  const level = !hits && (sync || findEdges)
     ? nodeGraphScopeSyncLevel(
       syncState,
       buffer,
@@ -372,13 +381,17 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
     const resetEdge = resetHigh && !resetWasHigh;
     resetWasHigh = resetHigh;
     const sample = Number(buffer[start + index]);
-    const edgeT = level ? nodeGraphScopeSyncStep(syncState, syncPrev, sample, level) : -1;
+    // Hit stream rides the same ring clock as the trace: align by distance from the end (as Reset).
+    const edgeT = hits
+      ? nodeGraphScopeSyncHitStep(syncState, nodeGraphOneDimensionalBurnResetSample(hitBuffer, index, count))
+      : (level ? nodeGraphScopeSyncStep(syncState, syncPrev, sample, level) : -1);
     syncPrev = sample;
     nodeGraphScopeSyncTrackPeriod(syncState, edgeT);
     if (resetEdge) {
       nodeGraphScopeSyncPenRestart(pen);
       return NODE_GRAPH_SCOPE_PEN_BREAK_DRAW;
     }
+    if (hits) return nodeGraphScopeSyncPenHitStep(pen, phaseInc, sync, edgeT >= 0, hitCycles);
     return nodeGraphScopeSyncPenStep(pen, phaseInc, sync, sync ? edgeT : -1);
   };
 

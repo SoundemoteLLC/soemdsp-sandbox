@@ -7713,7 +7713,7 @@ const nodeGraphModuleDefinitions = (
         key: "rate",
         kind: "frequency",
         label: "Rate",
-        max: "100",
+        max: "999",
         maxDigits: 5,
         mid: "2",
         min: "0",
@@ -12686,6 +12686,10 @@ const nodeGraphModuleDefinitions = (
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
+    // Display cycles are hits: the snare's own strikes (__Strike face tap), not
+    // edges of the noisy audio. Cycles = N spans N hits; Sync starts on a hit.
+    displayHitSignal: "__Strike",
+    defaultDisplaySettings: { sourceSync: true },
     displayModes: [
       { key: "lineBurn", renderer: "lineBurn", source: { value: "Snare L" } },
     ],

@@ -970,6 +970,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
   }
   // Electro Snare: Snare L on Left, Snare R on Right, Env on Mono.
+  if (t === "modalSnare" && p === "__strike") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "electroSnare" || t === "modalSnare") {
     if (p === "snare l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "snare r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
@@ -10904,6 +10905,8 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "fbmField") {
       return ["__DomainTime"];
     }
+    // Modal Snare face: strike velocity on each struck sample (the display's hit stream).
+    if (type === "modalSnare") return ["__Strike"];
     // Clock Divider face: edges counted toward the next fire.
     if (type === "clockDivider" || type === "triggerDivider") {
       return ["__Count"];
@@ -11269,7 +11272,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         || type === "acidSequencer" || type === "clock" || type === "pulseExplosion" || type === "pulseTrain"
         || type === "robinSinepulse" || type === "hyperbolicDecay" || type === "ellipsoidDecay"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc"
-        || type === "clockDivider" || type === "triggerDivider"
+        || type === "clockDivider" || type === "triggerDivider" || type === "modalSnare"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);
       } else if (type === "polyBlep" || type === "blit") {

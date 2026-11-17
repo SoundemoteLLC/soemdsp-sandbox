@@ -22,6 +22,15 @@
 //   the smoothed level stops the level (and so the edge) wandering per frame.
 //   Edges are interpolated to the sub-sample, so the picture does not jitter
 //   by up to one sample per frame.
+//   Hit stream (a drum's own strikes, definition displayHitSignal, e.g. Modal
+//   Snare __Strike): a struck sample (> 0, any velocity) is a hit; a run of
+//   struck samples (a trigger rising over a few samples strikes on each) is
+//   one hit, at its first sample. The
+//   period is the time between hits, so a pass is Cycles x that. Sync starts
+//   a sweep on a hit and the next one exactly ceil(Cycles) hits later, counted
+//   (not timed, so a rhythm that drifts or swings never skips a sweep); a pen
+//   that reaches the right edge first waits there. No auto run: with no hits
+//   the last sweep holds. Free: the pen wraps as usual.
 //
 // Period (plots): a wave can cross the level more than once per cycle (two
 // saws an octave apart cross twice). The period is the shortest run of 1, 2,
@@ -430,6 +439,47 @@
     return PEN_DRAW;
   }
 
+  /**
+   * Hit stream sample: a hit lands on this sample (t = 1), else -1. A hit is
+   * the first struck sample (> 0, any velocity) after an unstruck one.
+   */
+  function nodeGraphScopeSyncHitStep(state, value) {
+    const high = Number(value) > 0;
+    const hit = high && !state.hitHigh;
+    state.hitHigh = high;
+    return hit ? 1 : -1;
+  }
+
+  /**
+   * Sweeping pen driven by a hit stream, one sample (see the header). hit =
+   * a hit on this sample; cycles = the Window's Cycles (Time window: 1).
+   * Sync: the first hit starts a sweep; then the ceil(cycles)-th hit after
+   * the sweep's start starts the next one, wherever the pen is. Free: wraps.
+   */
+  function nodeGraphScopeSyncPenHitStep(pen, phaseInc, sync, hit, cycles) {
+    if (!sync) return nodeGraphScopeSyncPenStep(pen, phaseInc, false, -1);
+    if (hit) {
+      const need = Math.max(1, Math.ceil(Number(cycles) > 0 ? Number(cycles) - 1e-9 : 1));
+      pen.hits = (pen.hitStarted ? (pen.hits || 0) : 0) + 1;
+      if (!pen.hitStarted || pen.hits >= need) {
+        pen.hitStarted = true;
+        pen.hits = 0;
+        pen.waiting = false;
+        pen.waited = 0;
+        pen.phasor = 0;
+        return PEN_BREAK_DRAW;
+      }
+    }
+    if (pen.waiting) return PEN_WAIT;
+    if (pen.phasor >= 1) {
+      pen.waiting = true;
+      pen.waited = 0;
+      pen.phasor = 1;
+      return PEN_BREAK_WAIT;
+    }
+    return PEN_DRAW;
+  }
+
   /** Reset jack: pen to the left now (the caller breaks the stroke). */
   function nodeGraphScopeSyncPenRestart(pen) {
     pen.phasor = 0;
@@ -478,6 +528,8 @@
     nodeGraphScopeSyncTrackPeriod,
     nodeGraphScopeSyncWindow,
     nodeGraphScopeSyncPenStep,
+    nodeGraphScopeSyncHitStep,
+    nodeGraphScopeSyncPenHitStep,
     nodeGraphScopeSyncPenRestart,
     nodeGraphScopeSyncPenAdvance,
     nodeGraphScopeSyncPen,

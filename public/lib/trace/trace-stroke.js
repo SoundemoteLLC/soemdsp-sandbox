@@ -206,20 +206,43 @@
   }
 
   /**
-   * Meet color for combine mode: WHITE wherever the two channels overlap.
-   * The two inputs are accepted for the old signature but no longer matter;
-   * the classic complement (red + blue = green) is meetColorClassic.
+   * Meet color for combine mode (R+B=White): the two inks added, eased
+   * continuously toward white as the overlap gets stronger.
+   *
+   *   add = min(1, C_L + C_R)            (red + blue = magenta)
+   *   w   = min(peak(C_L), peak(C_R)) * share
+   *   C_M = add + (peak(add) - add) * w  (w = 1 → white at the pair's level)
+   *
+   * peak = brightest channel, so a dim ink only whitens a little. share
+   * (0…1, default 1) = how much of the pair overlaps; the 1D Waterfall passes
+   * overlap / union of the two bars, so a sliver of overlap stays close to
+   * Add and identical channels go white. The classic complement (red + blue
+   * = green) is meetColorClassic.
    */
-  function meetColorFromPair() {
-    return [1, 1, 1];
+  function meetColorFromPair(leftRgb01, rightRgb01, share = 1) {
+    const cL = parseRgb01(leftRgb01, [1, 0, 0]);
+    const cR = parseRgb01(rightRgb01, [0, 0, 1]);
+    const add = [
+      Math.min(1, cL[0] + cR[0]),
+      Math.min(1, cL[1] + cR[1]),
+      Math.min(1, cL[2] + cR[2]),
+    ];
+    const level = Math.max(add[0], add[1], add[2]);
+    const w = Math.min(Math.max(cL[0], cL[1], cL[2]), Math.max(cR[0], cR[1], cR[2]))
+      * clamp01(share, 1);
+    return [
+      add[0] + (level - add[0]) * w,
+      add[1] + (level - add[1]) * w,
+      add[2] + (level - add[2]) * w,
+    ];
   }
 
   // Overlap colour for a blend mode: R+B=G ("combine-green") keeps the classic
-  // complement, every other mode (R+B=White, "combine") paints white.
-  function meetColorForMode(mode, leftRgb01, rightRgb01) {
+  // complement, every other mode (R+B=White, "combine") eases toward white.
+  function meetColorForMode(mode, leftRgb01, rightRgb01, share = 1) {
     return String(mode || "") === "combine-green"
       ? meetColorClassic(leftRgb01, rightRgb01)
-      : meetColorFromPair(leftRgb01, rightRgb01);
+      : meetColorFromPair(leftRgb01, rightRgb01, share);
   }
 
   const STEREO_BLEND_MODES = Object.freeze([
