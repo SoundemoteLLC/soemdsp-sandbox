@@ -7081,7 +7081,8 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["density", "Taps"], ["densitySkew", "Skew"], ["minGap", "Min Gap"]], h: 40 },
       { kind: "cells", params: [["decay", "Length", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["darkness", "Darkness"], ["tailDarkness", "Tail Dark"], ["tailRandom", "Tail Rand"]], h: 52 },
+      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["darkness", "Darkness"]], h: 40 },
+      { kind: "cells", params: [["tailDarkness", "Tail Dark"], ["tailRandom", "Tail Rand"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
