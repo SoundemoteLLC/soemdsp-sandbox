@@ -6,8 +6,9 @@
 //    report the shared beat position after a block and its tempo.
 // 2. Shared settings (lib/visual/scope-sync.js): "beats" is a Window mode, the
 //    default stays Cycles, pass samples = Beats x samples per beat.
-// 3. Pen scopes (1D Phosphor paint helper): Sync starts every sweep on every
-//    ceil(Beats)-th transport beat (fractional Beats waits at the right edge);
+// 3. Pen scopes (1D Phosphor paint helper): Sync starts a sweep every Beats
+//    beats exactly (0.5 = two per beat, 2.5 = every two and a half), back to
+//    back, so every sample and every hit is drawn at any Beats;
 //    the frame never moves with the rhythm; Free wraps; no clock = patch tempo.
 // 4. Plots (nodeGraphScopeSyncWindow): the window starts on a sweep-start beat
 //    and stays on it frame to frame.
@@ -84,7 +85,7 @@ const sampleOfY = (y) => (H * 0.5 - y) / (H * 0.44);
  * so a point's sample value tells the beat it was drawn at. An irregular
  * "rhythm" is irrelevant to the window, so the trace is the clock itself.
  */
-function run({ face = "__frame", bpm = 120, beats, sync = true, total, clock = true, mark = Math.max(1, Math.ceil(beats - 1e-9)), startBeat = 0.37 }) {
+function run({ face = "__frame", bpm = 120, beats, sync = true, total, clock = true, mark = beats, startBeat = 0.37, hitEvery = 0 }) {
   const RING = 48000, CHUNK = 800;
   const per = bpm / (60 * SR);
   const trace = new Float64Array(RING);
@@ -98,7 +99,10 @@ function run({ face = "__frame", bpm = 120, beats, sync = true, total, clock = t
     trace.copyWithin(0, CHUNK);
     for (let k = 0; k < CHUNK; k += 1) {
       const b = beatOf(done + k) - per;
-      trace[RING - CHUNK + k] = -0.4 + 0.8 * (((b % mark) + mark) % mark) / mark;
+      // hitEvery: a one-sample 0.9 spike on every hitEvery beats (a rhythm), else 0.
+      trace[RING - CHUNK + k] = hitEvery > 0
+        ? (Math.floor((b + per) / hitEvery + 1e-12) > Math.floor(b / hitEvery + 1e-12) ? 0.9 : 0)
+        : -0.4 + 0.8 * (((b % mark) + mark) % mark) / mark;
     }
     done += CHUNK;
     trace.nodeGraphScopeAbsoluteFrame = done;
@@ -125,7 +129,7 @@ function run({ face = "__frame", bpm = 120, beats, sync = true, total, clock = t
   for (const [bpm, beats] of [[120, 4], [120, 1], [93, 3], [140, 2.5], [120, 0.5]]) {
     const total = 48000 * 20;
     const r = run({ bpm, beats, total });
-    const every = Math.max(1, Math.ceil(beats - 1e-9));
+    const every = beats;
     const totalBeats = total * r.per;
     const expect = Math.floor((0.37 + totalBeats) / every) - Math.floor(0.37 / every);
     const tol = 0.8 / (every / r.per) * 2; // two samples of the marker ramp
@@ -146,7 +150,21 @@ function run({ face = "__frame", bpm = 120, beats, sync = true, total, clock = t
     if (beats % 1) {
       let maxX = 0;
       for (const [, x] of r.xs) maxX = Math.max(maxX, x);
-      check(maxX <= 400 && r.xs.some(([v]) => ((v + 0.4) / 0.8) * every >= beats - 0.01), `Beats ${beats}: the pen reaches the right edge then waits for the next sweep start`);
+      const total2 = 48000 * 20;
+      check(maxX <= 400 && r.xs.length >= total2 - 800, `Beats ${beats}: never waits or leaves the face: ${r.xs.length} of ${total2} samples drawn, x <= ${maxX.toFixed(2)}`);
+    }
+  }
+}
+{
+  // Every hit draws at any Beats (Argi: hits missing below 1 beat): 16ths
+  // (every 0.25 beat) and a 3-against-4 rhythm (every 1/3 beat).
+  for (const [beats, hitEvery] of [[0.5, 0.25], [0.25, 0.25], [0.75, 1 / 3], [1.5, 0.25], [2.5, 1 / 3], [4, 0.25]]) {
+    for (const face of ["__frame", "__frame1d"]) {
+      const total = 48000 * 10;
+      const r = run({ face, bpm: 120, beats, hitEvery, total });
+      const hitsSent = Math.floor((0.37 + total * r.per) / hitEvery + 1e-12) - Math.floor(0.37 / hitEvery + 1e-12);
+      const hitsDrawn = r.xs.filter(([v, x]) => v > 0.8 && x >= 0 && x <= 400).length;
+      check(Math.abs(hitsDrawn - hitsSent) <= 1, `${face === "__frame" ? "1D Phosphor" : "1D Trace"}, Sync, Beats ${beats}, a hit every ${hitEvery.toFixed(3)} beat: ${hitsDrawn} of ${hitsSent} hits drawn on the face`);
     }
   }
 }
@@ -181,7 +199,8 @@ function run({ face = "__frame", bpm = 120, beats, sync = true, total, clock = t
   const length = 480000;
   const edge = new Float32Array(length);
   const state = {};
-  const bpm = 128, per = bpm / (60 * SR), beats = 2;
+  for (const beats of [2, 0.5, 2.5]) {
+  const bpm = 128, per = bpm / (60 * SR);
   let ok = true, steady = true, prevStartBeat = NaN, jumps = 0, frames = 0;
   for (let frame = 0; frame < 300; frame += 1) {
     const total = length + frame * 800;
@@ -191,21 +210,22 @@ function run({ face = "__frame", bpm = 120, beats, sync = true, total, clock = t
     ctx.__now += 1000 / 60;
     const win = ctx.nodeGraphScopeSyncWindow(state, edge, length, { settings: { windowMode: "beats", windowCycles: beats }, sampleRate: SR, sync: true, trigger: false });
     const startBeat = edge.nodeGraphScopeBeatEnd - (length - win.start) * per;
-    if (Math.abs(startBeat - Math.round(startBeat / 2) * 2) > 1e-6) ok = false;
+    if (Math.abs(startBeat - Math.round(startBeat / beats) * beats) > 1e-6) ok = false;
     if (Math.abs(win.n - beats / per) > 1) ok = false;
     if (win.start + win.n > length - 2 + 1e-9 || win.start < 0) ok = false;
     if (Number.isFinite(prevStartBeat) && Math.abs(startBeat - prevStartBeat) > 1e-6) {
       jumps += 1;
-      if (Math.abs(startBeat - prevStartBeat - 2) > 1e-6) steady = false;
+      if (Math.abs(startBeat - prevStartBeat - beats) > 1e-6) steady = false;
     }
     prevStartBeat = startBeat;
     frames += 1;
   }
-  const expectJumps = (299 * 800 * per) / 2;
-  check(ok, "plot Sync, Beats 2 at 128 BPM: every window starts exactly on an even beat, n = 2 beats, inside the ring");
-  check(steady && Math.abs(jumps - expectJumps) <= 1, `plot: the window holds its start beat and steps exactly 2 beats at a time (${jumps} steps in ${frames} frames, want ~${expectJumps.toFixed(1)})`);
+  const expectJumps = (299 * 800 * per) / beats;
+  check(ok, `plot Sync, Beats ${beats} at 128 BPM: every window starts exactly on a multiple of ${beats} beats, n = ${beats} beats, inside the ring`);
+  check(steady && Math.abs(jumps - expectJumps) <= 1, `plot Beats ${beats}: the window holds its start beat and steps exactly ${beats} beats at a time (${jumps} steps in ${frames} frames, want ~${expectJumps.toFixed(1)})`);
   const free = ctx.nodeGraphScopeSyncWindow({}, edge, length, { settings: { windowMode: "beats", windowCycles: beats }, sampleRate: SR, sync: false, trigger: false });
-  check(Math.abs(free.n - beats / per) <= 1, "plot Free, Beats 2: window = 2 beats long");
+  check(Math.abs(free.n - beats / per) <= 1, `plot Free, Beats ${beats}: window = ${beats} beats long`);
+  }
 }
 
 if (failed) { console.error(`${failed} failed`); process.exit(1); }

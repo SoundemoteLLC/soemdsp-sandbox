@@ -13,11 +13,11 @@
 // Beats: the transport is the engine's beat position (Circuit::projectBeats,
 // the one Host BPM and the sequencers read) and its tempo, sent with every
 // scope post (nodeGraphScopeBeatEnd = the beat one past the newest sample,
-// nodeGraphScopeBeatsPerSample). Sync: a sweep starts on every ceil(Beats)-th
-// beat of the transport counted from its start (Beats 4 = every bar's
-// downbeat in 4/4); the pen is placed from the beat itself, so it never
-// drifts, and a fractional Beats window waits at the right edge for the next
-// start. No edge, no level, no auto run: the transport always runs. Free:
+// nodeGraphScopeBeatsPerSample). Sync: sweeps run back to back, one every
+// Beats beats exactly, counted from the transport's start (Beats 4 = every
+// bar's downbeat in 4/4, 0.5 = two sweeps per beat, 2.5 = every two and a
+// half beats); the pen is placed from the beat itself, so it never drifts,
+// and every sample (every hit) is drawn at any Beats. No edge, no level, no auto run: the transport always runs. Free:
 // back-to-back passes of Beats, like any Free window. Without the engine's
 // beat position (a worklet from before it was sent) Beats is the patch tempo
 // and runs free.
@@ -174,9 +174,13 @@
     return nodeGraphScopeClampWindowCycles(beats) / (nodeGraphScopeBeatsPerSample(buffer, rate) * rate);
   }
 
-  /** Beats between sweep starts under Sync: whole beats, at least one. */
+  /**
+   * Beats between sweep starts under Sync: exactly Beats, so sweeps tile the
+   * transport with no gap (a whole-beat spacing left Beats < 1, and the rest
+   * of a fractional Beats, undrawn: the pen parked at the right edge).
+   */
   function beatSweepEvery(beats) {
-    return Math.max(1, Math.ceil(beats - 1e-9));
+    return nodeGraphScopeClampWindowCycles(beats);
   }
 
   /**
@@ -430,7 +434,7 @@
 
   /**
    * Beats window (plots): Beats x samples per beat. Sync: starts on the
-   * newest sweep start (every ceil(Beats)-th transport beat) that still fits
+   * newest sweep start (every Beats beats of the transport) that still fits
    * the whole window; the start is fractional, so it never jitters. Free (or
    * no transport clock): the Free window.
    */
@@ -540,15 +544,17 @@
 
   /**
    * Beats window pen under Sync, one sample on transport beat `beat` (see the
-   * header). The pen is placed from the beat: a sweep starts on every
-   * ceil(beats)-th beat and spans `beats`; past it the pen waits at the right
-   * edge for the next start. The caller's advance is overwritten next sample.
+   * header). The pen is placed from the beat: a sweep starts every `beats`
+   * beats of the transport and spans them, so the pen never waits (the wait
+   * branch only catches float rounding at a sweep's end). The caller's
+   * advance is overwritten next sample.
    */
   function nodeGraphScopeSyncPenBeatStep(pen, beat, beats) {
     const n = nodeGraphScopeClampWindowCycles(beats);
     const every = beatSweepEvery(n);
     const sweep = Math.floor(beat / every + 1e-9);
     const phasor = Math.max(0, (beat - sweep * every) / n);
+    // every === n: phasor < 1 but for rounding.
     const fresh = sweep !== pen.beatSweep;
     pen.beatSweep = sweep;
     pen.waited = 0;
