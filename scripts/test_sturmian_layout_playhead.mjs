@@ -91,6 +91,9 @@ assert(glsl.includes("trackStrokeAlpha") && glsl.includes("playheadStrokeAlpha")
 assert(glsl.includes("playing > 0.5"), "playhead gated on playing");
 const reg = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid-register.js"), "utf8");
 assert(reg.includes("planScopeCapture: true"), "register opts into scope capture");
+assert(reg.includes('["reset", "walk", "snap"]'), "Reset After stays in the param band");
+assert(ui.includes('kind === "reset"') && ui.includes("resetCellSize"), "Reset After drag cell on the strip");
+assert(glsl.includes("sturmianGlyphSpan(14, 15, 4, 15, 16, 5"), "reset label uses strip glyphs");
 const plan = fs.readFileSync(path.join(root, "public/node-graph-execution-plan.js"), "utf8");
 assert(plan.includes("planScopeCapture"), "execution plan honors planScopeCapture");
 

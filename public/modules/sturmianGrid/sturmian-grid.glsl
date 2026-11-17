@@ -8,7 +8,7 @@ vec3 laneColor(int lane) {
   return vec3(255.0, 154.0, 214.0) / 255.0;
 }
 
-// 5x7 glyphs: 0,1,2,K,S,H,M. Rows are 5 bits, MSB is the left pixel.
+// 5x7 glyphs: 0-2, K,S,H,M, 3-9, R,E,T, F. Rows are 5 bits, MSB is the left pixel.
 int sturmianGlyphRow(int code, int row) {
   if (row < 0 || row > 6) return 0;
   if (code == 0) {
@@ -52,8 +52,68 @@ int sturmianGlyphRow(int code, int row) {
     if (row == 2) return 21;
     return 17;
   }
+  if (code == 7) { // 3
+    if (row == 0 || row == 6) return 30;
+    if (row == 3) return 14;
+    return 1;
+  }
+  if (code == 8) { // 4
+    if (row == 3) return 31;
+    if (row <= 2) return 18;
+    return 2;
+  }
+  if (code == 9) { // 5
+    if (row == 0) return 31;
+    if (row == 1 || row == 2) return 16;
+    if (row == 3 || row == 6) return 30;
+    return 1;
+  }
+  if (code == 10) { // 6
+    if (row == 0 || row == 6) return 14;
+    if (row == 1 || row == 2) return 16;
+    if (row == 3) return 30;
+    return 17;
+  }
+  if (code == 11) { // 7
+    if (row == 0) return 31;
+    if (row == 1) return 1;
+    if (row == 2) return 2;
+    return 4;
+  }
+  if (code == 12) { // 8
+    if (row == 0 || row == 3 || row == 6) return 14;
+    return 17;
+  }
+  if (code == 13) { // 9
+    if (row == 0 || row == 6) return 14;
+    if (row == 1 || row == 2) return 17;
+    if (row == 3) return 15;
+    return 1;
+  }
+  if (code == 14) { // R
+    if (row == 0 || row == 3) return 30;
+    if (row == 1 || row == 2) return 17;
+    if (row == 4) return 20;
+    if (row == 5) return 18;
+    return 17;
+  }
+  if (code == 15) { // E
+    if (row == 0 || row == 6) return 31;
+    if (row == 3) return 30;
+    return 16;
+  }
+  if (code == 16) { // T
+    if (row == 0) return 31;
+    return 4;
+  }
+  if (code == 19) { // F
+    if (row == 0) return 31;
+    if (row == 3) return 30;
+    return 16;
+  }
   return 0;
 }
+
 
 bool sturmianGlyphAt(int code, vec2 p, float scale) {
   if (scale < 0.5) return false;
@@ -61,6 +121,27 @@ bool sturmianGlyphAt(int code, vec2 p, float scale) {
   int gy = int(floor(p.y / scale));
   if (gx < 0 || gx > 4 || gy < 0 || gy > 6) return false;
   return ((sturmianGlyphRow(code, gy) >> (4 - gx)) & 1) == 1;
+}
+
+int sturmianDigitGlyph(int d) {
+  if (d <= 2) return d;
+  if (d >= 3 && d <= 9) return 4 + d;
+  return 0;
+}
+
+bool sturmianGlyphSpan(int c0, int c1, int c2, int c3, int c4, int count, vec2 p, float scale) {
+  if (scale < 0.5 || count <= 0) return false;
+  float advance = 6.0 * scale;
+  float width = float(count) * 5.0 * scale + float(count > 1 ? count - 1 : 0) * scale;
+  if (p.x < 0.0 || p.y < 0.0 || p.x >= width || p.y >= 7.0 * scale) return false;
+  int i = int(floor(p.x / advance));
+  if (i < 0 || i >= count) return false;
+  int code = c0;
+  if (i == 1) code = c1;
+  else if (i == 2) code = c2;
+  else if (i == 3) code = c3;
+  else if (i == 4) code = c4;
+  return sturmianGlyphAt(code, vec2(p.x - float(i) * advance, p.y), scale);
 }
 
 // --- MAIN ---
@@ -155,7 +236,7 @@ if (inGrid) {
   }
 } else if (px.y >= gridLimit && px.y < faceH && px.x >= 0.0 && px.x < w) {
   base = BG;
-  float colW = max(1.0, floor((w - stripPadX * 2.0 - stripGapX) * 0.5));
+  float colW = max(1.0, floor((w - stripPadX * 2.0 - stripGapX - resetGap - resetCellSize) * 0.5));
   float rowH = max(1.0, floor((faceH - gridLimit - stripPadY * 2.0 - stripGapY) * 0.5));
   for (int lane = 0; lane < 4; lane++) {
     float lc = float(lane - (lane / 2) * 2);
@@ -187,6 +268,63 @@ if (inGrid) {
         }
       }
       bx += btnSize + innerGap;
+    }
+  }
+  float rx = resetCellX;
+  float ry = resetCellY;
+  float rs = resetCellSize;
+  if (rs > 0.5 && px.x >= rx && px.x < rx + rs && px.y >= ry && px.y < ry + rs) {
+    base = vec3(24.0, 29.0, 40.0) / 255.0;
+    bool edge = px.x < rx + 1.0 || px.y < ry + 1.0
+      || px.x >= rx + rs - 1.0 || px.y >= ry + rs - 1.0;
+    if (edge) base = vec3(151.0, 151.0, 255.0) / 255.0 * 0.35 + base * 0.65;
+    else {
+      float gs = max(1.0, floor(rs / 31.0));
+      if (14.0 * gs + max(1.0, gs) + 2.0 > rs - 2.0) gs = max(1.0, floor((rs - 4.0) / 15.0));
+      float lgw = 29.0 * gs;
+      float gh = 7.0 * gs;
+      float vgap = max(1.0, gs);
+      float blockH = gh + vgap + gh;
+      float textX = rx + floor((rs - lgw) * 0.5);
+      float textY = ry + floor((rs - blockH) * 0.5);
+      vec3 ink = vec3(199.0, 211.0, 229.0) / 255.0;
+      if (sturmianGlyphSpan(14, 15, 4, 15, 16, 5, vec2(px.x - textX, px.y - textY), gs)) base = ink;
+      int c0 = 0;
+      int c1 = 19;
+      int c2 = 19;
+      int c3 = 0;
+      int c4 = 0;
+      int n = 3;
+      if (reset >= 0.5) {
+        int v = int(floor(reset + 0.5));
+        if (v < 0) v = 0;
+        if (v > 99999) v = 99999;
+        int place = 1;
+        if (v >= 10) place = 10;
+        if (v >= 100) place = 100;
+        if (v >= 1000) place = 1000;
+        if (v >= 10000) place = 10000;
+        n = 0;
+        c0 = 0; c1 = 0; c2 = 0; c3 = 0; c4 = 0;
+        int left = v;
+        for (int i = 0; i < 5; i++) {
+          if (place < 1) break;
+          int d = left / place;
+          left = left - d * place;
+          place = place / 10;
+          int code = sturmianDigitGlyph(d);
+          if (n == 0) c0 = code;
+          else if (n == 1) c1 = code;
+          else if (n == 2) c2 = code;
+          else if (n == 3) c3 = code;
+          else c4 = code;
+          n += 1;
+        }
+      }
+      float nw = float(n) * 5.0 * gs + float(n > 1 ? n - 1 : 0) * gs;
+      float nx = rx + floor((rs - nw) * 0.5);
+      float ny = textY + gh + vgap;
+      if (sturmianGlyphSpan(c0, c1, c2, c3, c4, n, vec2(px.x - nx, px.y - ny), gs)) base = ink;
     }
   }
 }

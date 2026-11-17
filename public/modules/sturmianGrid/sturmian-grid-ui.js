@@ -8,9 +8,11 @@
 // outline, playhead and lane toggles are integer device pixels. The playhead
 // is a 16% white column plus a 1px white frame; a triggered step fills its
 // square with the track color (no inset). Track-span and playhead stroke
-// alphas live in Display Settings (default 1). The shared 2.5x threshold is
-// unchanged; this plate pins nearest and opts into compositor pixel-snap.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23";
+// alphas live in Display Settings (default 1). A Reset After drag-number
+// cell sits to the right of the K/S/H/M toggles and stays in sync with the
+// param-band slider. The shared 2.5x threshold is unchanged; this plate
+// pins nearest and opts into compositor pixel-snap.
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23-stg24";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_UI_DEFAULT_MASK = 3170;
 let sturmianShaderPromise = null;
@@ -166,6 +168,10 @@ function sturmianHitFace(face, plate, event, values, play, time) {
     plate._sturmianCssH || rect.height,
     texW, texH, sturmianViewZoom(), values.steps, values.spread, sturmianBaseCell(values),
   );
+  const reset = layout.lanes.reset;
+  if (reset && dx >= reset.x && dx < reset.x + reset.w && dy >= reset.y && dy < reset.y + reset.h) {
+    return { kind: "reset" };
+  }
   for (const button of layout.lanes.buttons) {
     if (dx >= button.x && dx < button.x + button.w && dy >= button.y && dy < button.y + button.h) {
       return { kind: "lane", bit: button.bit };
@@ -217,7 +223,9 @@ function sturmianEnsureGpu(shader) {
     + " uniform float labelW; uniform float innerGap;"
     + " uniform float layoutCell; uniform float layoutCols; uniform float layoutRows;"
     + " uniform float layoutOx; uniform float layoutOy; uniform float layoutPadLeft;"
-    + " uniform float trackStrokeAlpha; uniform float playheadStrokeAlpha;";
+    + " uniform float trackStrokeAlpha; uniform float playheadStrokeAlpha;"
+    + " uniform float resetCellX; uniform float resetCellY;"
+    + " uniform float resetCellSize; uniform float resetGap;";
   const vertex = compile(gl.VERTEX_SHADER, "#version 300 es\nin vec2 aPos; out vec2 vUv; void main(){vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);}");
   const fragment = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\nin vec2 vUv; out vec4 out_color; uniform vec2 resolution; uniform float time;\n${uniforms}\n${shader.functions}\nvoid main(){ vec2 uv=vUv; ${shader.body}\n}`);
   const program = gl.createProgram();
@@ -260,6 +268,10 @@ function sturmianEnsureGpu(shader) {
     layoutPadLeft: gl.getUniformLocation(program, "layoutPadLeft"),
     trackStrokeAlpha: gl.getUniformLocation(program, "trackStrokeAlpha"),
     playheadStrokeAlpha: gl.getUniformLocation(program, "playheadStrokeAlpha"),
+    resetCellX: gl.getUniformLocation(program, "resetCellX"),
+    resetCellY: gl.getUniformLocation(program, "resetCellY"),
+    resetCellSize: gl.getUniformLocation(program, "resetCellSize"),
+    resetGap: gl.getUniformLocation(program, "resetGap"),
     floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])),
   };
   return sturmianSharedGpu;
@@ -358,7 +370,21 @@ function sturmianLaneMetrics(texW, stripH, zoom) {
   let btn = Math.max(6, Math.round(22 * zoom));
   let labelW = Math.max(6, Math.round(11 * zoom));
   let innerGap = Math.max(1, Math.round(2 * zoom));
-  const colW = Math.max(1, Math.floor((texW - padX * 2 - gapX) / 2));
+  const resetGap = Math.max(1, Math.round(4 * zoom));
+  const minReset = Math.max(12, Math.round(22 * zoom));
+  let resetSize = Math.max(minReset, stripH - padY * 2);
+  const minColNeed = labelW + innerGap + 4 * btn + 3 * innerGap;
+  const chrome = padX * 2 + gapX + resetGap;
+  let colSpace = texW - chrome - resetSize;
+  if (colSpace < minColNeed * 2) {
+    resetSize = Math.max(minReset, texW - chrome - minColNeed * 2);
+    colSpace = texW - chrome - resetSize;
+  }
+  if (resetSize > texW - chrome - 8) {
+    resetSize = Math.max(6, Math.floor((texW - chrome) * 0.3));
+    colSpace = texW - chrome - resetSize;
+  }
+  const colW = Math.max(1, Math.floor(Math.max(1, colSpace) / 2));
   const need = labelW + innerGap + 4 * btn + 3 * innerGap;
   if (need > colW && colW > 16) {
     const scale = colW / need;
@@ -366,12 +392,12 @@ function sturmianLaneMetrics(texW, stripH, zoom) {
     labelW = Math.max(6, Math.floor(labelW * scale));
     innerGap = Math.max(1, Math.floor(innerGap * scale));
   }
-  return { padX, padY, gapX, gapY, btn, labelW, innerGap, stripH };
+  return { padX, padY, gapX, gapY, btn, labelW, innerGap, stripH, resetSize, resetGap };
 }
 
 function sturmianLaneButtons(texW, stripY, stripH, zoom) {
   const m = sturmianLaneMetrics(texW, stripH, zoom);
-  const colW = Math.max(1, Math.floor((texW - m.padX * 2 - m.gapX) / 2));
+  const colW = Math.max(1, Math.floor((texW - m.padX * 2 - m.gapX - m.resetGap - m.resetSize) / 2));
   const rowH = Math.max(1, Math.floor((stripH - m.padY * 2 - m.gapY) / 2));
   if (m.btn > rowH) m.btn = rowH;
   const buttons = [];
@@ -395,7 +421,15 @@ function sturmianLaneButtons(texW, stripY, stripH, zoom) {
       bx += m.btn + m.innerGap;
     }
   }
-  return { ...m, colW, rowH, buttons };
+  const innerH = Math.max(1, stripH - m.padY * 2);
+  const resetSize = Math.max(1, Math.min(m.resetSize, innerH));
+  const reset = {
+    x: texW - m.padX - resetSize,
+    y: stripY + m.padY + Math.floor((innerH - resetSize) / 2),
+    w: resetSize,
+    h: resetSize,
+  };
+  return { ...m, colW, rowH, resetSize, reset, buttons };
 }
 
 function sturmianFaceLayout(cssW, cssH, texW, texH, zoom, steps, spread, baseCell) {
@@ -521,6 +555,11 @@ function sturmianPaint(face) {
     : { trackStrokeAlpha: 1, playheadStrokeAlpha: 1 };
   gl.uniform1f(gpu.trackStrokeAlpha, look.trackStrokeAlpha);
   gl.uniform1f(gpu.playheadStrokeAlpha, look.playheadStrokeAlpha);
+  const resetCell = layout.lanes.reset;
+  gl.uniform1f(gpu.resetCellX, resetCell ? resetCell.x : 0);
+  gl.uniform1f(gpu.resetCellY, resetCell ? resetCell.y : 0);
+  gl.uniform1f(gpu.resetCellSize, resetCell ? resetCell.w : 0);
+  gl.uniform1f(gpu.resetGap, layout.lanes.resetGap || 0);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   if (typeof nodeGraphSharedGlEndPresent === "function") nodeGraphSharedGlEndPresent(gl);
   const ctx = typeof nodeGraphSharedGlPresentTarget === "function"
@@ -532,7 +571,73 @@ function sturmianPaint(face) {
   face.dataset.shaderError = "";
 }
 
-function sturmianCommit(nodeId, values, status = "Sturmian Grid") {
+
+const STURMIAN_RESET_THROW_PX = 180;
+
+function sturmianResetMetadata() {
+  const param = typeof nodeGraphParameterByKey === "function"
+    ? nodeGraphParameterByKey("sturmianGrid", "reset")
+    : null;
+  const meta = param && typeof nodeGraphParameterDefinitionMetadata === "function"
+    ? nodeGraphParameterDefinitionMetadata(param)
+    : null;
+  if (meta && Number.isFinite(Number(meta.min)) && Number.isFinite(Number(meta.max))) {
+    return meta;
+  }
+  return { min: 0, max: 128, mid: 8, step: 1, nonlinearSlider: true, sliderCurve: "skew" };
+}
+
+function sturmianResetControlPosition(value, meta) {
+  if (typeof nodeGraphParamControlPosition === "function") {
+    const unit = Number(nodeGraphParamControlPosition(value, meta));
+    if (Number.isFinite(unit)) return Math.max(0, Math.min(1, unit));
+  }
+  const min = Number(meta.min);
+  const max = Number(meta.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return 0;
+  return Math.max(0, Math.min(1, (Number(value) - min) / (max - min)));
+}
+
+function sturmianResetFromPointer(startUnit, startClientY, clientY) {
+  const meta = sturmianResetMetadata();
+  const unit = Math.max(0, Math.min(1, startUnit + (startClientY - clientY) / STURMIAN_RESET_THROW_PX));
+  let next;
+  if (typeof nodeGraphParamDomainFromControlPosition === "function") {
+    next = Number(nodeGraphParamDomainFromControlPosition(unit, meta));
+  } else {
+    const min = Number(meta.min);
+    const max = Number(meta.max);
+    next = min + (max - min) * unit;
+  }
+  const step = Number(meta.step);
+  if (Number.isFinite(step) && step > 0) next = Math.round(next / step) * step;
+  const min = Number(meta.min);
+  const max = Number(meta.max);
+  if (Number.isFinite(min)) next = Math.max(min, next);
+  if (Number.isFinite(max)) next = Math.min(max, next);
+  return next;
+}
+
+function sturmianWriteReset(nodeId, face, value, phase) {
+  const next = Number(value);
+  if (!Number.isFinite(next) || !face) return;
+  face._sturmianPreview = { ...(face._sturmianPreview || {}), reset: next };
+  const slider = typeof nodeGraphSliderForParameter === "function"
+    ? nodeGraphSliderForParameter(nodeId, "reset")
+    : null;
+  if (slider && typeof setNodeSliderValue === "function") {
+    setNodeSliderValue(slider, next, { interaction: phase === "up" ? "set" : "drag" });
+    if (phase === "up" && typeof commitNodeSliderDragValue === "function") {
+      commitNodeSliderDragValue(slider, "Reset After");
+    }
+  } else {
+    sturmianCommit(nodeId, { reset: next }, "Reset After", { record: phase === "up" });
+  }
+  face._sturmianForce = true;
+  sturmianPaint(face);
+}
+
+function sturmianCommit(nodeId, values, status = "Sturmian Grid", options = {}) {
   if (!nodeId || !nodeGraphMvp?.patch || typeof cloneNodeGraphPatch !== "function") return false;
   const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
   const patchNode = patch.nodes.find((item) => item.id === nodeId);
@@ -542,7 +647,7 @@ function sturmianCommit(nodeId, values, status = "Sturmian Grid") {
     next[key] = normalizeNodeGraphPatchParameter(patchNode.type, key, value, patchNode.paramMeta?.[key]);
   }
   patchNode.params = next;
-  commitNodeGraphPatch(patch, { status });
+  commitNodeGraphPatch(patch, { status, ...options });
   return true;
 }
 
@@ -643,6 +748,24 @@ function sturmianOnPointerDown(event) {
   const time = (performance.now() - face._sturmianStarted) / 1000;
   const hit = sturmianHitFace(face, plate, event, values, play, time);
   if (!hit) return;
+  if (hit.kind === "reset") {
+    const meta = sturmianResetMetadata();
+    const current = values.reset;
+    sturmianDrag = {
+      kind: "reset",
+      face,
+      nodeId,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startUnit: sturmianResetControlPosition(current, meta),
+      lastValue: current,
+    };
+    face._sturmianPreview = { ...(face._sturmianPreview || {}), reset: current };
+    try { face.setPointerCapture?.(event.pointerId); } catch (_error) { /* ignore */ }
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   const mask = Math.round(values.stepPattern);
   const turnOn = ((mask >> hit.bit) & 1) === 0;
   if (hit.kind === "lane") {
@@ -651,7 +774,7 @@ function sturmianOnPointerDown(event) {
     event.stopPropagation();
     return;
   }
-  sturmianDrag = { face, nodeId, turnOn, lastBit: hit.bit, pointerId: event.pointerId };
+  sturmianDrag = { kind: hit.kind, face, nodeId, turnOn, lastBit: hit.bit, pointerId: event.pointerId };
   face._sturmianPreview = { stepPattern: mask };
   sturmianApplyBit(nodeId, face, hit.bit, turnOn);
   try { face.setPointerCapture?.(event.pointerId); } catch (_error) { /* ignore */ }
@@ -662,6 +785,16 @@ function sturmianOnPointerDown(event) {
 function sturmianOnPointerMove(event) {
   if (!sturmianDrag || event.pointerId !== sturmianDrag.pointerId) return;
   const { face, nodeId, turnOn } = sturmianDrag;
+  if (sturmianDrag.kind === "reset") {
+    const next = sturmianResetFromPointer(sturmianDrag.startUnit, sturmianDrag.startY, event.clientY);
+    if (next !== sturmianDrag.lastValue) {
+      sturmianDrag.lastValue = next;
+      sturmianWriteReset(nodeId, face, next, "move");
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   const plate = face._sturmianPlate || face.querySelector(".node-sturmian-grid-canvas");
   const values = sturmianValues(nodeId, face._sturmianPreview);
   const play = sturmianPlayhead(nodeId, values.steps);
@@ -676,7 +809,11 @@ function sturmianOnPointerMove(event) {
 
 function sturmianOnPointerUp(event) {
   if (!sturmianDrag || event.pointerId !== sturmianDrag.pointerId) return;
-  const face = sturmianDrag.face;
+  const drag = sturmianDrag;
+  const face = drag.face;
+  if (drag.kind === "reset") {
+    sturmianWriteReset(drag.nodeId, face, drag.lastValue, "up");
+  }
   try { face?.releasePointerCapture?.(event.pointerId); } catch (_error) { /* ignore */ }
   if (face) delete face._sturmianPreview;
   sturmianDrag = null;
