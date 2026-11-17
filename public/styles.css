@@ -16902,8 +16902,8 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 
 /*
  * App-wide Hide In/Out: collapse the IO section for real (no proxy strip,
- * no LayoutB jack band). Connected wires keep endpoint dots only — see
- * nodeGraphPortCenter fallback + caps-only path in wire-rendering.
+ * no LayoutB jack band). Dots exist only with visible inlets/outlets — see
+ * nodeGraphPortCenter (no edge fallback). PushWire skips a cable when either end has no center.
  */
 .dsp-node.io-hidden .dsp-node-io-section,
 .dsp-node.io-hidden .node-io-proxy,

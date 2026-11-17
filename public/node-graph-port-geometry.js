@@ -72,48 +72,11 @@ function nodeGraphNodeSignalIoCollapsed(nodeId) {
 }
 
 /**
- * Synthetic jack center on the module perimeter when Hide In/Out collapses
- * the real port DOM. Inputs stack on the left edge; outputs on the right.
- * Used for wire *dots* only — cable paths are suppressed when either end
- * is collapsed (same idea as hidden connected sliders).
+ * Hidden In/Out has no visible jack, so there is no render position for a
+ * wire dot or cable end. Kept as a named no-op so older callers stay safe.
  */
-function nodeGraphIoHiddenPortFallbackCenter(nodeId, port, io) {
-  if (io !== "input" && io !== "output") {
-    return null;
-  }
-  const nodeEl = typeof nodeGraphNodeElement === "function"
-    ? nodeGraphNodeElement(nodeId)
-    : null;
-  if (!nodeEl) {
-    return null;
-  }
-  const rect = nodeEl.getBoundingClientRect();
-  if (!(rect.width > 0.5) || !(rect.height > 0.5)) {
-    return null;
-  }
-  const patchNode = typeof nodeGraphPatchNode === "function"
-    ? nodeGraphPatchNode(nodeId)
-    : null;
-  let ports = [];
-  if (io === "output" && typeof nodeGraphPatchNodeOutputPorts === "function") {
-    ports = nodeGraphPatchNodeOutputPorts(patchNode) || [];
-  } else if (io === "input" && typeof nodeGraphPatchNodeInputPorts === "function") {
-    ports = nodeGraphPatchNodeInputPorts(patchNode) || [];
-  }
-  const canonical = typeof nodeGraphCanonicalPortForNode === "function"
-    ? nodeGraphCanonicalPortForNode(nodeId, port, io)
-    : String(port || "").trim();
-  let index = ports.indexOf(canonical);
-  if (index < 0) {
-    index = 0;
-  }
-  const n = Math.max(1, ports.length || 1);
-  const yClient = rect.top + (rect.height * (index + 0.5)) / n;
-  const xClient = io === "output" ? rect.right : rect.left;
-  if (typeof nodeGraphClientToZoomSurfacePoint !== "function") {
-    return { x: xClient, y: yClient };
-  }
-  return nodeGraphClientToZoomSurfacePoint(xClient, yClient);
+function nodeGraphIoHiddenPortFallbackCenter(_nodeId, _port, _io) {
+  return null;
 }
 
 /** Layout jack is on-screen (not display:none / zero box). */
@@ -274,19 +237,29 @@ function nodeGraphPortCenter(node, port, io) {
   if (cache?.has(cacheKey)) {
     return cache.get(cacheKey);
   }
+  let nodeId = String(node || "");
+  let portName = String(port || "");
+  let ioName = String(io || "");
+  if (typeof nodeGraphMetamoduleWireVisualEndpoint === "function") {
+    const proxy = nodeGraphMetamoduleWireVisualEndpoint(nodeId, portName, ioName);
+    if (proxy?.nodeId) {
+      nodeId = proxy.nodeId;
+      portName = proxy.port;
+      ioName = proxy.io;
+    }
+  }
+  // Dots exist only where a visible inlet/outlet is laid out. Hidden In/Out
+  // must not reuse stale published geometry or an edge fallback over the body.
+  if (
+    (ioName === "input" || ioName === "output")
+    && typeof nodeGraphNodeSignalIoCollapsed === "function"
+    && nodeGraphNodeSignalIoCollapsed(nodeId)
+  ) {
+    cache?.set(cacheKey, null);
+    return null;
+  }
   // Prefer published module geometry SSOT (layout owners write; Play does not).
   if (typeof nodeGraphModuleGeometryAttach === "function") {
-    let nodeId = String(node || "");
-    let portName = String(port || "");
-    let ioName = String(io || "");
-    if (typeof nodeGraphMetamoduleWireVisualEndpoint === "function") {
-      const proxy = nodeGraphMetamoduleWireVisualEndpoint(nodeId, portName, ioName);
-      if (proxy?.nodeId) {
-        nodeId = proxy.nodeId;
-        portName = proxy.port;
-        ioName = proxy.io;
-      }
-    }
     const published = nodeGraphModuleGeometryAttach(nodeId, portName, ioName);
     if (published) {
       cache?.set(cacheKey, published);
@@ -299,15 +272,7 @@ function nodeGraphPortCenter(node, port, io) {
     cache?.set(cacheKey, laidOut);
     return laidOut;
   }
-  // Hide In/Out: section gone — edge anchor for wire dots only.
-  if (
-    (io === "input" || io === "output")
-    && nodeGraphNodeSignalIoCollapsed(node)
-  ) {
-    const fallback = nodeGraphIoHiddenPortFallbackCenter(node, port, io);
-    cache?.set(cacheKey, fallback);
-    return fallback;
-  }
+  // No laid-out jack, so no center.
   cache?.set(cacheKey, null);
   return null;
 }
