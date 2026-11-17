@@ -537,6 +537,8 @@ uniform vec4 uRound;
 uniform int uCount;
 uniform vec4 uJack[24];
 uniform vec4 uJackColor[24];
+// Workspace background for jacks flagged (uJack.w >= 2) to fill the hole they cut in the plate.
+uniform vec4 uJackBackdrop;
 // Border cuts: (y0, y1, side, 0) per rail IO box. No stroke on that wall over
 // [y0, y1); the box is drawn through the gap by the rail quads.
 uniform int uCutCount;
@@ -594,6 +596,8 @@ void main() {
   vec4 strokeCol = uPlateColor;
   // True where a round jack shapes the edge (its curve), not the wall.
   float jackEdge = 0.0;
+  // 1 where the jack shaping this pixel fills its hole with uJackBackdrop.
+  float jackHole = 0.0;
   for (int i = 0; i < 24; i++) {
     if (i >= uCount) break;
     vec2 jack = uJack[i].xy;
@@ -612,6 +616,7 @@ void main() {
       sd = -d;
       strokeCol = vec4(uJackColor[i].rgb, uJackColor[i].a); // the plate passes each jack stroke its own alpha (lit jacks: 1)
       jackEdge = 1.0 - square;
+      jackHole = uJack[i].w > 1.5 ? 1.0 : 0.0;
     }
   }
   // Stroke glow (uDimShape 4): one smooth exponential falloff outside the plate, radius uStroke, in
@@ -689,9 +694,16 @@ void main() {
     strokeA = 0.0;
     plateA = 0.0;
   }
-  float a = strokeA + plateA;
+  // A flagged jack's hole inside the plate rectangle: the workspace background under its ring, opaque,
+  // so the module's stroke light (it follows loudness) does not show through the jack.
+  float holeA = 0.0;
+  if (jackHole > 0.5 && uDimShape < 0.5) {
+    float inRect = clamp(-sdRect / aa + 0.5, 0.0, 1.0);
+    holeA = max(0.0, inRect - strokeA - plateA);
+  }
+  float a = strokeA + plateA + holeA;
   if (a < 0.004) discard;
-  vec3 rgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA) / a;
+  vec3 rgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA + uJackBackdrop.rgb * holeA) / a;
   gl_FragColor = vec4(rgb, a);
 }
 `;
@@ -759,6 +771,7 @@ void main() {
         outCut: gl.getUniformLocation(outProgram, "uCut[0]"),
         outJack: gl.getUniformLocation(outProgram, "uJack[0]"),
         outJackColor: gl.getUniformLocation(outProgram, "uJackColor[0]"),
+        outJackBackdrop: gl.getUniformLocation(outProgram, "uJackBackdrop"),
         outCamPixel: gl.getUniformLocation(outProgram, "uPixel"),
         outCamCam: gl.getUniformLocation(outProgram, "uCam"),
         outCamVp: gl.getUniformLocation(outProgram, "uVp"),
@@ -3554,9 +3567,11 @@ void main() {
       const jx = (Number(jack.x) || 0) * k;
       const jy = (Number(jack.y) || 0) * k;
       const color = jack.rgba || rgba;
-      list.push({ x: jx, y: jy, r: jack.square ? -r : r, rgba: color, inlet: jack.inlet === true });
+      list.push({ x: jx, y: jy, r: jack.square ? -r : r, rgba: color, inlet: jack.inlet === true, backdrop: Array.isArray(jack.backdrop) ? jack.backdrop : null });
     }
+    const backdropJack = list.find((j) => j.backdrop);
     batch.outlines.push({
+      jackBackdrop: backdropJack ? backdropJack.backdrop : null,
       nodeId, selected: selected === true, dimShape: dimShape === true ? 1 : ([2, 3, 4].includes(Number(dimShape)) ? Number(dimShape) : 0), glow: Number(glow) > 0 ? Number(glow) : 0, x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
       fill: fill || [0.09, 0.1, 0.12, 1],
       jacks: list,
@@ -3660,7 +3675,8 @@ void main() {
         jackData[i * 4] = jack.x;
         jackData[i * 4 + 1] = jack.y;
         jackData[i * 4 + 2] = jack.r;
-        jackData[i * 4 + 3] = jack.inlet ? 1 : 0;
+        // w: 1 = inlet, +2 = fill the hole it cuts with uJackBackdrop.
+        jackData[i * 4 + 3] = (jack.inlet ? 1 : 0) + (jack.backdrop && shape.jackBackdrop ? 2 : 0);
         const jc = jack.rgba || col;
         colorData[i * 4] = jc[0];
         colorData[i * 4 + 1] = jc[1];
@@ -3674,6 +3690,10 @@ void main() {
         const cutData = new Float32Array(CUT_MAX * 4);
         cuts.forEach((c, i) => cutData.set(c, i * 4));
         gl.uniform4fv(s.outCut, cutData);
+      }
+      if (s.outJackBackdrop) {
+        const jb = shape.jackBackdrop || [0, 0, 0];
+        gl.uniform4f(s.outJackBackdrop, jb[0], jb[1], jb[2], 1);
       }
       if (s.outJack) gl.uniform4fv(s.outJack, jackData);
       if (s.outJackColor) gl.uniform4fv(s.outJackColor, colorData);

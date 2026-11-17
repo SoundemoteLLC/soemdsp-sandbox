@@ -220,9 +220,12 @@ const nodeUiDevSettingControls = Object.freeze([
   // Light the cables, and apart their end dots, keep in a fully dark room, 0 (black shadow wires) to 100%.
   { defaultValue: 35, id: "nodeUiDevWireDarkLight", key: "wireDarkLight", max: 100, min: 0, step: 1, type: "number" },
   { defaultValue: 35, id: "nodeUiDevWireDotDarkLight", key: "wireDotDarkLight", max: 100, min: 0, step: 1, type: "number" },
-  // Jack ring light: connected (100% = its colour at full alpha, above lifts toward white) and unconnected (alpha).
-  { defaultValue: 140, id: "nodeUiDevJackActiveLight", key: "jackActiveLight", max: 200, min: 0, step: 1, type: "number" },
-  { defaultValue: 6, id: "nodeUiDevJackInactiveLight", key: "jackInactiveLight", max: 100, min: 0, step: 1, type: "number" },
+  // Wire end dot brightness when lit: 0 = black, 100% = its colour, above lifts toward white (alpha kept).
+  { defaultValue: 100, id: "nodeUiDevWireDotLitLight", key: "wireDotLitLight", max: 200, min: 0, step: 1, type: "number" },
+  // Jack ring light: connected and unconnected, 100% = the jack's own colour, lower shows less of it over the
+  // workspace background (a minimum saturation keeps the colour readable).
+  { defaultValue: 100, id: "nodeUiDevJackActiveLight", key: "jackActiveLight", max: 100, min: 0, step: 1, type: "number" },
+  { defaultValue: 25, id: "nodeUiDevJackInactiveLight", key: "jackInactiveLight", max: 100, min: 0, step: 1, type: "number" },
   { defaultValue: 36, id: "nodeUiDevBypassIconSize", key: "bypassIconSize", max: 100, min: 0, type: "number" },
   { defaultValue: 40, id: "nodeUiDevBypassIconGlowSpread", key: "bypassIconGlowSpread", max: 200, min: 0, type: "number" },
   { defaultValue: "#f25d5d", id: "nodeUiDevBypassIconGlowColor", key: "bypassIconGlowColor", type: "color" },
@@ -274,6 +277,12 @@ const nodeUiDevSettingSections = Object.freeze([
     title: "lighting: wires",
     ids: [
       "nodeUiDevWireDarkLight",
+    ],
+  },
+  {
+    title: "lighting: wire dots",
+    ids: [
+      "nodeUiDevWireDotLitLight",
       "nodeUiDevWireDotDarkLight",
     ],
   },

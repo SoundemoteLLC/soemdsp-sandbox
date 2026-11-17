@@ -474,6 +474,7 @@ function syncNodeUiDevLightingLevels() {
   const pairs = [
     ["nodeUiDevWireDarkLight", "nodeGraphWireDarkLight"],
     ["nodeUiDevWireDotDarkLight", "nodeGraphWireDotDarkLight"],
+    ["nodeUiDevWireDotLitLight", "nodeGraphWireDotLitLight"],
     ["nodeUiDevJackActiveLight", "nodeGraphJackActiveLight"],
     ["nodeUiDevJackInactiveLight", "nodeGraphJackInactiveLight"],
   ];
@@ -637,7 +638,7 @@ function bindNodeUiDevModuleIdleStroke() {
     input.addEventListener("change", syncNodeUiDevModuleCorners);
   }
   syncNodeUiDevModuleCorners();
-  for (const id of ["nodeUiDevWireDarkLight", "nodeUiDevWireDotDarkLight", "nodeUiDevJackActiveLight", "nodeUiDevJackInactiveLight"]) {
+  for (const id of ["nodeUiDevWireDarkLight", "nodeUiDevWireDotDarkLight", "nodeUiDevWireDotLitLight", "nodeUiDevJackActiveLight", "nodeUiDevJackInactiveLight"]) {
     const input = document.getElementById(id);
     if (!input || input.dataset.wireLightBound === "true") continue;
     input.dataset.wireLightBound = "true";
