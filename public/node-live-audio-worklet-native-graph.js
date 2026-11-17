@@ -7814,6 +7814,25 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("rotateZ", P.NATIVE_GRAPH_PARAM_LANE_BIAS3, cont("rotateZ", 0));
       continue;
     }
+    if (type === "sturmianGrid") {
+      // Face knobs must reach process_sturmian_grid. Without this push, the
+      // engine keeps Control defaults (alpha 0, view Binary), so Kick's tile-1
+      // bits never fire even when the face, driven by patch params, shows hits.
+      push("alpha", P.NATIVE_GRAPH_PARAM_WAVEFORM, cont("alpha", 0.2955977425));
+      push("beta", P.NATIVE_GRAPH_PARAM_SHAPE, cont("beta", 0.1607132448));
+      push("rho", P.NATIVE_GRAPH_PARAM_PHASE, cont("rho", 0));
+      push("drift", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("drift", 0));
+      push("rate", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("rate", 8));
+      push("steps", P.NATIVE_GRAPH_PARAM_STAGES, disc("steps", 16));
+      push("reset", P.NATIVE_GRAPH_PARAM_STURMIAN_RESET, disc("reset", 16));
+      push("spread", P.NATIVE_GRAPH_PARAM_CENTER, disc("spread", 1));
+      push("walk", P.NATIVE_GRAPH_PARAM_WIDTH, disc("walk", 1));
+      push("snap", P.NATIVE_GRAPH_PARAM_MIX, disc("snap", 0));
+      push("view", P.NATIVE_GRAPH_PARAM_MODE, disc("view", 0));
+      push("cell", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("cell", 14));
+      push("stepPattern", P.NATIVE_GRAPH_PARAM_STURMIAN_PATTERN, disc("stepPattern", 3170));
+      continue;
+    }
     if (type === "blitTrigger") {
       // Rounding Error Sequencer: spacing=frequency, gate=width, level=amplitude,
       // rate (Hz, steps per second)=center, length=stages, rotate=phaseParam.
