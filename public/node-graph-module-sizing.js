@@ -684,6 +684,19 @@ function normalizeNodeGraphTextBoxHeightUnits(heightGu, ui = {}) {
  * Pass ui to honor sliders-hidden / effective UI; omit ui for raw definition rows.
  */
 function nodeGraphModuleSliderBodyHeightGu(type, ui = null, node = null) {
+  // Pass ui to honor sliders-hidden; omit ui for raw definition rows.
+  // Hand-written faces (Dark Velvet Reverb, Cinematic Reverb, ...) also collapse.
+  if (ui != null) {
+    const effectiveUi = typeof nodeGraphEffectivePatchNodeUi === "function"
+      ? nodeGraphEffectivePatchNodeUi(ui, type)
+      : ui;
+    const slidersOff = typeof nodeGraphModuleTypeHasHideableSliders === "function"
+      ? !nodeGraphModuleTypeHasHideableSliders(type) || Boolean(effectiveUi?.slidersHidden)
+      : Boolean(effectiveUi?.slidersHidden);
+    if (slidersOff) {
+      return 0;
+    }
+  }
   // Hand-written face: its rows set the body height (node-graph-module-face.js).
   const facePx = typeof nodeGraphModuleFaceHeightPx === "function" ? nodeGraphModuleFaceHeightPx(type, node) : 0;
   if (facePx > 0) {
@@ -1600,7 +1613,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "scope", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
       { id: "interfaceControls", heightGu: nodeGraphModuleInterfaceControlsHeightGu(type, ui), visible: interfaceControlsVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       // Music Player's waveform row is `minmax(scope, 1fr)` (styles.css), so it
       // swallows every spare pixel and the slider stack always ended up flush
       // with the module's bottom edge no matter how tall the module was. The
@@ -1655,7 +1668,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "face", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       /* Vertical plate: top full + bottom half (CSS --node-module-grid-inset-y-total). */
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
@@ -1728,7 +1741,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "face", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       /* Vertical plate: top full + bottom half (CSS --node-module-grid-inset-y-total). */
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
@@ -1745,7 +1758,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "curve", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       /* Vertical plate: top full + bottom half (CSS --node-module-grid-inset-y-total). */
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
@@ -1756,7 +1769,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "curve", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       /* Vertical plate: top full + bottom half (CSS --node-module-grid-inset-y-total). */
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
@@ -1766,7 +1779,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "face", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       /* Vertical plate: top full + bottom half (CSS --node-module-grid-inset-y-total). */
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
@@ -1776,7 +1789,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "face", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       /* Vertical plate: top full + bottom half (CSS --node-module-grid-inset-y-total). */
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
@@ -1786,7 +1799,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "room", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       /* Vertical plate: top full + bottom half (CSS --node-module-grid-inset-y-total). */
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
@@ -1796,7 +1809,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
       { id: "curve", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
-      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, null, node), visible: slidersVisible },
+      { id: "params", heightGu: nodeGraphModuleSliderBodyHeightGu(type, ui, node), visible: slidersVisible },
       /* Vertical plate: top full + bottom half (CSS --node-module-grid-inset-y-total). */
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];

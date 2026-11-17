@@ -25803,6 +25803,14 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   display: block;
   padding: 0;
 }
+/* Hide Sliders / layout [hidden] must beat the face body's display:block.
+   Same specificity later in this file used to keep the knobs painted while
+   the params track collapsed and covered IO. */
+.node-graph-workspace.module-sliders-hidden .dsp-node.has-module-face:not(.sliders-forced-visible) > .dsp-node-body,
+.dsp-node.sliders-hidden.has-module-face > .dsp-node-body,
+.dsp-node.has-module-face > .dsp-node-body[hidden] {
+  display: none;
+}
 .dsp-node.has-module-face > .dsp-node-body > .node-parameter-row:not([hidden]) {
   display: contents;
 }

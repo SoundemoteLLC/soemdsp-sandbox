@@ -1159,6 +1159,10 @@ function nodeGraphModuleFaceDrawAllGl(batch, plates, toX, toY, zoom, cssW, cssH)
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plates[i].id) : null;
     const face = el?.classList.contains("has-module-face") ? el.querySelector(":scope > .dsp-node-body > .node-face") : null;
     if (!face) continue;
+    // Hide Sliders: do not paint face knobs over the remaining IO / display.
+    if (el.classList.contains("sliders-hidden")) continue;
+    if (el.closest(".node-graph-workspace.module-sliders-hidden") && !el.classList.contains("sliders-forced-visible")) continue;
+    if (face.parentElement?.hidden) continue;
     const laid = typeof nodeGraphModuleLayoutBox === "function" ? nodeGraphModuleLayoutBox(face, el) : null;
     if (!laid || !(laid.w > 1)) continue;
     const ox = toX(plates[i].x + laid.x);
