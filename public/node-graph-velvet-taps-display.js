@@ -2,8 +2,8 @@
 // Noise paper's sequence plots (Fagerstrom et al., DAFx2020 paper 31, Fig. 3a):
 // bipolar rectangular pulses (no zero line is drawn). Every tap is a sharp-cornered
 // rectangle at its delay (time axis 0 .. Length), as wide as its real pulse
-// (Darkness / Tail Darkness; exact fractional width, antialiased in device
-// pixels), up from the zero line for a + tap and down for a - tap (the signs
+// (Darkness / Tail Darkness; at least 1 device px, with exact fractional
+// edges only when wider than 1 px), up from the zero line for a + tap and down for a - tap (the signs
 // the audio uses). Height = amplitude only
 // (sign x the Amp Decay envelope; darkness never shrinks or grows it) in dB, mirrored: 0 dB at the top /
 // bottom edge, -60 dB on the zero line. Both channels: Left in the Left lamp
@@ -31,10 +31,11 @@
 // NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB). The trigger is latched until
 // one bright frame has been drawn, so a snapshot that arrives between paints
 // still gets a frame, and a stale bus value cannot retrigger the next paints.
-// Height and width stay the static layout (exact fractional pulse width; no
-// whole-pixel snap). Rects are drawn with coverage-weighted alpha in device
-// pixels (partial edge coverage; a width < 1 device px is a 1 px bar with
-// alpha = width). Taps go in a GL layer with quadBlend "add" (SRC_ALPHA, ONE)
+// Height stays the static amplitude layout. A tap narrower than 1 device px
+// is drawn as a 1 px bar at full coverage (brightness follows darkness and
+// the trigger flash only, never Length or zoom). Wider taps keep exact
+// fractional edges with coverage-weighted alpha. Taps go in a GL layer with
+// quadBlend "add" (SRC_ALPHA, ONE)
 // so overlaps accumulate: sparse taps stay distinct thin lines, dense clusters
 // stack into a bright burst (additive may clip toward white), and L red + R
 // blue add to the R+B=White look. Idle alpha is near 1 so an isolated tap
@@ -280,10 +281,17 @@ function nodeGraphVelvetTapsShade(ink, g, on) {
 
 // Coverage spans along one axis in device pixels: each { p, c, w } is a run
 // of `w` pixels starting at `p` with per-pixel coverage `c` in (0, 1].
-function nodeGraphVelvetTapsAxisSpans(a, b) {
+// minFull > 0: a span no wider than that is one bar of 1 px at coverage 1,
+// centred on the exact position (so Length cannot fade a thin tap).
+function nodeGraphVelvetTapsAxisSpans(a, b, minFull) {
   if (b < a) { const t = a; a = b; b = t; }
   const spans = [];
   if (!(b > a)) return spans;
+  const min = minFull > 0 ? minFull : 0;
+  if (min > 0 && !(b - a > min)) {
+    spans.push({ p: Math.floor((a + b) * 0.5), c: 1, w: 1 });
+    return spans;
+  }
   const first = Math.floor(a);
   const last = Math.ceil(b) - 1;
   if (last < first) return spans;
@@ -297,14 +305,15 @@ function nodeGraphVelvetTapsAxisSpans(a, b) {
   return spans;
 }
 
-// Sharp-cornered rectangle at exact CSS-pixel edges, antialiased by
-// coverage-weighted alpha in device pixels (accounts for batch.scale / dpr).
-// Widths or heights < 1 device px become a 1 px bar with alpha *= that size.
+// Sharp-cornered rectangle at exact CSS-pixel edges. Horizontal spans no
+// wider than 1 device px are a 1 px bar at full coverage; wider spans keep
+// fractional edge coverage. Height still uses coverage AA. Device pixels
+// follow batch.scale / dpr.
 function nodeGraphVelvetTapsCoverageRect(batch, xa, ya, wa, ha, rgba) {
   if (!batch || typeof nodeGraphGlLinesRect !== "function") return;
   if (!(wa > 0) || !(ha > 0)) return;
   const k = Number(batch.scale) > 0 ? Number(batch.scale) : 1;
-  const xs = nodeGraphVelvetTapsAxisSpans(xa * k, (xa + wa) * k);
+  const xs = nodeGraphVelvetTapsAxisSpans(xa * k, (xa + wa) * k, 1);
   const ys = nodeGraphVelvetTapsAxisSpans(ya * k, (ya + ha) * k);
   if (!xs.length || !ys.length) return;
   const saved = batch.scale;
@@ -392,7 +401,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     // samples), so the ink is scaled by 1 / w, floored at 0.2 so the
     // darkest pulses stay visible. A triggered tap is binary: full channel
     // ink for this one frame, otherwise that static shade. Width stays the
-    // real pulse (no whole-pixel snap); thin pulses AA via coverage alpha.
+    // real pulse; a sub-pixel pulse is a 1 device-px bar at full coverage.
     const sr = layout.sampleRate || 48000;
     const nodeId = String(node?.id || section?.dataset?.node || "");
     const rawL = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
