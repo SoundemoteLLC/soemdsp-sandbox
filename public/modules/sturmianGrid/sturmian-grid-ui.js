@@ -1,7 +1,7 @@
 // Packed sounding-bar grid on the shared face texture; standard parameter
 // rows live in the module body. Zoom samples nearest past the existing 2.5x
 // threshold like other shader faces. Cell size fits Steps and Track Spread.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_LANE_NAMES = ["Kick", "Snare", "Hat", "Melody"];
 const STURMIAN_LANE_SHORT = ["K", "S", "H", "M"];
@@ -60,24 +60,29 @@ function sturmianPlayhead(nodeId, steps) {
 
 // Integer-square packing, same as the shader: cell size fits Steps
 // columns and the Track Spread window (play row plus the other tracks
-// spaced `spread` apart). Leftover area keeps whole non-hittable
-// squares and equal margins. Uses module-space size so zoom is stable.
+// spaced `spread` apart). The same cell then tiles the whole face,
+// with extra columns/rows showing the continued Sturmian word (dim,
+// non-hittable). Sub-cell remainder is centered. Module-space so zoom
+// is stable.
 function sturmianRowsNeeded(spread) {
   const spreadN = Math.max(1, Math.floor(Number(spread) + 0.5) || 1);
   return 3 * spreadN + 1;
 }
 
 function sturmianGridLayout(width, height, steps, spread) {
-  const cols = Math.max(2, Math.floor(Number(steps) + 0.5) || 2);
+  const playCols = Math.max(2, Math.floor(Number(steps) + 0.5) || 2);
   const rowsNeeded = Math.max(1, sturmianRowsNeeded(spread));
   const cell = Math.max(2, Math.floor(Math.min(
-    Math.max(1, width) / cols,
+    Math.max(1, width) / playCols,
     Math.max(1, height) / rowsNeeded
   )));
+  const cols = Math.max(1, Math.floor(Math.max(1, width) / cell));
   const rows = Math.max(1, Math.floor(Math.max(1, height) / cell));
   return {
     cols,
     rows,
+    playCols,
+    padLeft: Math.max(0, Math.floor((cols - playCols) * 0.5)),
     cell,
     ox: Math.floor((width - cols * cell) * 0.5),
     oy: Math.floor((height - rows * cell) * 0.5),
@@ -128,8 +133,9 @@ function sturmianHitCell(face, plate, event, values, play, time) {
   const gx = x - layout.ox;
   const gy = y - layout.oy;
   if (gx < 0 || gy < 0 || gx >= layout.cols * layout.cell || gy >= layout.rows * layout.cell) return null;
-  const col = Math.floor(gx / layout.cell);
+  const col = Math.floor(gx / layout.cell) - layout.padLeft;
   const row = Math.floor(gy / layout.cell);
+  if (col < 0 || col >= layout.playCols) return null;
   const win = sturmianNTop(play.playBar, values.walk, values.spread, layout.rows);
   const track = sturmianTrackAtRow(row, win.firstN, win.spreadN, win.nTop);
   if (track < 0) return null;

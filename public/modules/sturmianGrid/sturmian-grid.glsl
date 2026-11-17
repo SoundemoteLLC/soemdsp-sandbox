@@ -11,15 +11,17 @@ vec3 laneColor(int lane) {
 vec2 px = vec2(uv.x * resolution.x, (1.0 - uv.y) * resolution.y);
 float w = resolution.x;
 float h = resolution.y;
-float cols = max(2.0, floor(steps + 0.5));
+float playCols = max(2.0, floor(steps + 0.5));
 float spreadN = max(1.0, floor(spread + 0.5));
 float walkN = max(0.0, floor(walk + 0.5));
-// Integer square cells: fit Steps columns and the Track Spread window
-// (play row plus the other tracks spaced `spread` apart). Leftover
-// width and height become equal margins so no half cells are drawn.
+// Cell size fits Steps and the Track Spread window. The same square
+// then tiles the whole face; extra columns/rows continue the word.
+// Sub-cell remainder becomes equal margins so no half cells are drawn.
 float rowsNeeded = max(1.0, 3.0 * spreadN + 1.0);
-float cell = max(2.0, floor(min(w / cols, h / rowsNeeded)));
+float cell = max(2.0, floor(min(w / playCols, h / rowsNeeded)));
+float cols = max(1.0, floor(w / cell));
 float rows = max(1.0, floor(h / cell));
+float padLeft = max(0.0, floor((cols - playCols) * 0.5));
 float ox = floor((w - cols * cell) * 0.5);
 float oy = floor((h - rows * cell) * 0.5);
 float firstN = playBar * walkN;
@@ -33,10 +35,11 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
 } else {
   float col = floor(gridX / cell);
   float row = floor(gridY / cell);
+  float m = col - padLeft;
   float n = nTop + row;
   float aa = alpha; float bb = beta;
   if (snap > 0.5) { aa = floor(aa * steps + 0.5) / steps; bb = floor(bb * steps + 0.5) / steps; }
-  float z = fract(col * aa + n * bb + rho + drift * time);
+  float z = fract(m * aa + n * bb + rho + drift * time);
   float tile = z >= 1.0-aa ? 1.0 : (z >= 1.0-aa-bb ? 2.0 : 0.0);
   vec3 base = vec3(16.0,19.0,28.0)/255.0;
   if(view < 0.5) base = tile < 0.5 ? BG : (tile < 1.5 ? vec3(150.0,151.0,255.0)/255.0 : vec3(255.0,42.0,101.0)/255.0);
@@ -49,7 +52,9 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
     float trackN = firstN + float(track) * spreadN;
     if (abs(n - trackN) < 0.5) { onTrack = true; trackHit = track; }
   }
-  if (!onTrack) base *= 0.55;
+  bool inBar = m >= 0.0 && m < playCols;
+  if (!onTrack || !inBar) base *= 0.55;
+
   float pr = max(1.0, pixelRatio);
   float devX = floor(gridX * pr + 1e-4);
   float devY = floor(gridY * pr + 1e-4);
@@ -60,21 +65,24 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
   float gridH = rows * cell;
   if (cell >= 8.0 && (mod(devX, cellDev) < pr || (gridY < gridH && mod(devY, cellDev) < pr)))
     base = mix(base, vec3(0.0), 0.45);
-  if (((devX >= 0.0 && devX < pr) || (devX >= cols * cellDev && devX < cols * cellDev + pr))
+  float barX0 = padLeft * cellDev;
+  float barX1 = (padLeft + playCols) * cellDev;
+  if (((devX >= barX0 && devX < barX0 + pr) || (devX >= barX1 && devX < barX1 + pr))
       && mod(devY, 8.0 * pr) < 4.0 * pr)
     base = mix(base, vec3(1.0), 0.35);
   for (int track = 0; track < 4; track++) {
     float trackN = firstN + float(track) * spreadN;
     if (abs(n - trackN) > 0.5) continue;
+    if (!inBar) continue;
     bool muted = mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5;
     vec3 tc = muted ? vec3(0.55) : laneColor(track);
-    bool edge = (devX >= 0.0 && devX < 2.0 * pr)
-      || (devX >= cols * cellDev - 2.0 * pr && devX < cols * cellDev)
+    bool edge = (devX >= barX0 && devX < barX0 + 2.0 * pr)
+      || (devX >= barX1 - 2.0 * pr && devX < barX1)
       || mod(devY, cellDev) < 2.0 * pr
       || mod(devY, cellDev) >= cellDev - 2.0 * pr;
     if (edge) base = mix(base, tc, 0.85);
   }
-  if (playing > 0.5 && abs(col - playStep) < 0.5) {
+  if (playing > 0.5 && abs(m - playStep) < 0.5) {
     base = mix(base, vec3(1.0), 0.16);
     if (mod(devX, cellDev) < pr || mod(devX, cellDev) >= cellDev - pr
         || devY < pr || devY >= floor(gridH * pr + 1e-4) - pr) base = vec3(1.0);
@@ -86,7 +94,7 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
     }
   }
   // Hit flash: lit when this column just fired, fading over one beat.
-  if (flashAmt > 0.0 && abs(col - flashStep) < 0.5 && trackHit >= 0
+  if (flashAmt > 0.0 && abs(m - flashStep) < 0.5 && trackHit >= 0
       && mod(floor(flashMask / exp2(float(trackHit))), 2.0) > 0.5
       && fx >= 1.0 && fx < cell - 1.0 && fy >= 1.0 && fy < cell - 1.0) {
     base = mix(base, vec3(1.0), 0.55 * flashAmt);
