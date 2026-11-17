@@ -151,7 +151,7 @@ struct VelvetReverbState {
   unsigned int* delayRc;
   int silentAgeL;    // consecutive zero-input samples on this channel
   int silentAgeR;
-  // Precision: false = double (default, bit-identical); true = float delay / running sum for a listening A/B.
+  // Precision: true = float delay / running sum (default); false = double.
   bool useFloat;
   float integralFL;
   float integralFR;
@@ -1396,7 +1396,7 @@ int soemdsp_velvet_reverb_create(double sampleRate) {
       s.tables[0].right.norm = 0.0;
       s.tables[0].left.maxEnd = 0;
       s.tables[0].right.maxEnd = 0;
-      s.useFloat = false;
+      s.useFloat = true;
       clear_scalars(s); // the pool hands out zeroed blocks: no second pass over the lines
       return i + 1;
     }
@@ -1432,7 +1432,7 @@ void soemdsp_velvet_reverb_set_seed(int handle, double seed) {
   s.seed = seed > 0.0 ? (unsigned int)seed : 0u;
 }
 
-// 0 = double (default), anything >= 0.5 = float delay / running sum.
+// 0 = double, anything >= 0.5 = float delay / running sum (default is float).
 // Converts the live delay in place so a listening A/B does not drop the tail.
 void soemdsp_velvet_reverb_set_precision(int handle, double mode) {
   if (handle <= 0 || handle > kMaxInstances) return;
@@ -1618,7 +1618,7 @@ double* soemdsp_velvet_reverb_levels_r() { return gLevelsR; }
 int soemdsp_velvet_reverb_levels_count_r() { return gLevelsCountR; }
 
 int soemdsp_velvet_reverb_version() {
-  return 13; // 13: optional float delay / running sum (soemdsp_velvet_reverb_set_precision; default remains double). 12: tap-major block path (bit-identical double math, same tap accumulation order), branchless wrap, hoisted rebuild checks, settled-silence skip. 11: each pulse starts on a whole sample in [cellStart, cellEnd - width] so it cannot overlap the next tap on the same channel (cell floor is max(Min Gap, width + 1); L/R are checked separately). 10: per-tap display peak-hold (width-filtered pulse x gain x norm, L/R, taken by the worklet at the face telemetry rate; off when the face is hidden). 9: Tail Curve (-1..+1, default 0): Step Graph rational bend (segment_rational01, same sign as Step Graph) on a log-width Darkness->Tail Darkness sweep, so cutoff falls exponentially over time at curve 0. 8: Tail Random (0 = smooth Darkness->Tail Darkness pulse widths, 1 = previous per-tap random widths; default 1) and Density Skew is -1..+1 (the rational warp is soft-capped just inside +-1 so the endpoints stay finite; Min Gap still drops bunched taps). 7: Min Gap parameter (default 1 ms) (ms; sample and layout take it last): the cell floor is max(Min Gap, widest pulse); Density Skew back to the one-sided rational warp. 6: cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
+  return 14; // 14: Precision defaults to Float (set_precision(0) is still Double). 13: optional float delay / running sum (soemdsp_velvet_reverb_set_precision; default was double). 12: tap-major block path (bit-identical double math, same tap accumulation order), branchless wrap, hoisted rebuild checks, settled-silence skip. 11: each pulse starts on a whole sample in [cellStart, cellEnd - width] so it cannot overlap the next tap on the same channel (cell floor is max(Min Gap, width + 1); L/R are checked separately). 10: per-tap display peak-hold (width-filtered pulse x gain x norm, L/R, taken by the worklet at the face telemetry rate; off when the face is hidden). 9: Tail Curve (-1..+1, default 0): Step Graph rational bend (segment_rational01, same sign as Step Graph) on a log-width Darkness->Tail Darkness sweep, so cutoff falls exponentially over time at curve 0. 8: Tail Random (0 = smooth Darkness->Tail Darkness pulse widths, 1 = previous per-tap random widths; default 1) and Density Skew is -1..+1 (the rational warp is soft-capped just inside +-1 so the endpoints stay finite; Min Gap still drops bunched taps). 7: Min Gap parameter (default 1 ms) (ms; sample and layout take it last): the cell floor is max(Min Gap, widest pulse); Density Skew back to the one-sided rational warp. 6: cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
 }
 
 } // extern "C"

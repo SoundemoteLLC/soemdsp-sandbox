@@ -15,6 +15,7 @@ const sha = (a) => crypto.createHash("sha256").update(Buffer.from(a.buffer, a.by
 function run({ taps = 64, dark = 1, spread = 1, mix = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 1, tailRand = 1, tailCurve = 0, n, input, midChange } = {}) {
   const h = x.soemdsp_velvet_reverb_create(FS);
   if (!h) throw new Error("create failed");
+  x.soemdsp_velvet_reverb_set_precision(h, 0); // v11 gold is the Double path
   x.soemdsp_velvet_reverb_set_seed(h, seed);
   const len = n ?? Math.ceil(decay * FS) + 2048;
   const L = new Float64Array(len);
