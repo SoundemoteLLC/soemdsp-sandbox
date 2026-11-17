@@ -535,7 +535,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.7-dark-velvet-taps-snhit-1-beats-1-vbip-1-vrbknobs1-v12s1-v6s1-stg1-skw1-stg6-gap1-stg7-trand1-stg11-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-vfit1-vblk1-vflt1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.7-dark-velvet-taps-snhit-1-beats-1-vbip-1-vrbknobs1-v12s1-v6s1-stg1-skw1-stg6-gap1-stg7-trand1-stg11-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-cnoclip1-lowcut1-nseed1-bump1-edge1-vfit1-mnoclip1-vblk1-vflt1-shapes3-mping1";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -3512,6 +3512,8 @@ async function stopNodeGraphLiveAudio() {
   nodeGraphMvp.live.outputMuted = false;
   nodeGraphMvp.live.inputVolumeGain = null;
   nodeGraphMvp.live.activeNodeIds = new Set();
+  // Stop is "no signal", not a pause: drop every module's level so no stroke stays lit.
+  nodeGraphClearNodeLevels();
   nodeGraphMvp.live.lastEvidence = null;
   nodeGraphMvp.live.lastParameterUpdateTime = 0;
   nodeGraphMvp.live.planEvidence = null;
@@ -3619,7 +3621,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1-limits-print-2-budget",
-  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.16.8-pcache-lvlports1-dvel-3-snhit-1-beats-1-vrbknobs1-stg1-mgap1-stg6-gap1-stg7-trand1-stg10-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-voff1-vflt1",
+  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.16.8-pcache-lvlports1-dvel-3-snhit-1-beats-1-vrbknobs1-stg1-mgap1-stg6-gap1-stg7-trand1-stg10-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-cpluck2-lowcut1-nseed1-edge1-voff1-vflt1-shapes3",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=step-register-1-limits-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
@@ -4322,6 +4324,8 @@ const nodeGraphNodeLevels = new Map();
 
 function nodeGraphIngestNodeLevels(peaks) {
   if (!peaks || typeof peaks !== "object") return;
+  // A post that lands after Stop tore the engine down must not light strokes again.
+  if (!nodeGraphMvp?.live?.node) return;
   const seen = new Set();
   for (const id of Object.keys(peaks)) {
     seen.add(id);
@@ -4336,7 +4340,19 @@ function nodeGraphIngestNodeLevels(peaks) {
 }
 
 function nodeGraphNodeLevel(id) {
+  // No engine (stopped / off): no signal. Pause keeps the engine, so levels hold.
+  if (!nodeGraphMvp?.live?.node) return 0;
   return nodeGraphNodeLevels.get(id) || 0;
+}
+
+// Every module silent (Stop / engine off), and repaint so the strokes drop now.
+function nodeGraphClearNodeLevels() {
+  nodeGraphNodeLevels.clear();
+  if (typeof nodeGraphGlGraphPresentDisplaysOnly === "function") {
+    try {
+      nodeGraphGlGraphPresentDisplaysOnly();
+    } catch (_) {}
+  }
 }
 
 // Tell the engine whether to collect per-module levels (off costs nothing).

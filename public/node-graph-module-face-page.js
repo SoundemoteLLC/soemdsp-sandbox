@@ -1,20 +1,18 @@
-// Module page (Command Center nav): a live copy of the selected module, minus
-// its title bar (the page heading names it) and its In/Out band (the Mini
-// Canvas bands).
-// - Sliders shown on the module: the copy is the module's own pixels, copied
-//   each frame out of the workspace GL canvas (#nodeGlGraphCanvas, a 2D
-//   present target). Wires or neighbours in that rectangle come along.
-// - Sliders hidden on the module (its own Hide sliders, or the workspace-wide
-//   one): the module is laid out as if its sliders were shown (per-module
-//   forced-visible, nodeGraphModuleFacePageWithSlidersShown) for one task, the
-//   GL graph's one-module pass (nodeGraphGlMiniPerformPresentModule, the Mini
-//   Canvas pass) draws it into the page's own canvases, and the classes go
-//   back before anything paints, so the workspace stays hidden.
-// Pointer presses on the copy are mapped back to the module's screen point and
-// replayed there (pointerdown/move/up), inside the same forced layout when the
-// sliders are hidden, so the circuit builder's own hit tests and drags run
-// every control. Follows the primary selection; keeps the last module when
-// nothing is selected. The module stays awake while shown
+// Module page (Command Center nav): the selected module's controls, minus its
+// title bar (the page heading names it), its In/Out band and its displays.
+// The GL graph's one-module pass (nodeGraphGlMiniPerformPresentModule, the
+// Mini Canvas / Performance pass) redraws the module into the page's own
+// canvases at the page's scale and device pixel ratio, so the copy is sharp
+// and independent of workspace zoom, pan and viewport. When its sliders are
+// hidden (its own Hide sliders, or the workspace-wide one) the module is laid
+// out as if they were shown (per-module forced-visible,
+// nodeGraphModuleFacePageWithSlidersShown) for that one task, and the classes
+// go back before anything paints, so the workspace stays hidden.
+// Pointer presses on the copy are mapped back to the module's layout point and
+// dispatched on the control laid out there (by geometry, so off-screen works),
+// then moves/ups are replayed on it, inside the same layout, so the circuit
+// builder's own drags run every control. Follows the primary selection; keeps
+// the last module when nothing is selected. The module stays awake while shown
 // (nodeGraphViewportCullMustStayAwake asks nodeGraphModuleFacePagePresentsNode).
 
 const NODE_GRAPH_MODULE_FACE_PAGE_POLL_MS = 100;
@@ -70,7 +68,31 @@ function nodeGraphModuleFacePageBands(el) {
     // A module that is only its title keeps it.
     if (cut.some((b) => b.y1 - b.y0 > 0.5)) shown = cut;
   }
-  return { w: box.w, bands: shown.filter((b) => b.y1 - b.y0 > 0.5) };
+  // Controls only: the module's displays (the GL graph's display rects) are
+  // cut out across the full width, so a display never takes the page's room.
+  for (const d of nodeGraphModuleFacePageDisplayRects(el)) {
+    const cut = nodeGraphModuleFacePageCutBand(shown, d.y, d.y + d.h);
+    if (cut.some((b) => b.y1 - b.y0 > 0.5)) shown = cut;
+  }
+  return { w: box.w, bands: shown.filter((b) => b.y1 - b.y0 > 4) };
+}
+
+/** The module's display rects in its layout px (DOM display faces and the GL graph's display rects). */
+function nodeGraphModuleFacePageDisplayRects(el) {
+  const out = [];
+  const mr = el.getBoundingClientRect();
+  const wz = el.offsetWidth > 0 ? mr.width / el.offsetWidth : 0;
+  if (!(wz > 0)) return out;
+  for (const face of el.querySelectorAll(".node-display-face")) {
+    const r = face.getBoundingClientRect();
+    if (!(r.width > 1) || !(r.height > 1)) continue;
+    out.push({ y: (r.top - mr.top) / wz, h: r.height / wz });
+  }
+  // Displays the GL graph draws itself (face displays such as Clock's).
+  if (typeof nodeGraphGlMiniPerformDisplays === "function") {
+    for (const d of nodeGraphGlMiniPerformDisplays(el)) out.push({ y: d.y, h: d.h });
+  }
+  return out;
 }
 
 /**
@@ -83,14 +105,39 @@ function nodeGraphModuleFacePageWithSlidersShown(el, fn) {
   const forced = Boolean(el?.classList?.contains("sliders-forced-visible"));
   const workspace = Boolean(el?.closest?.(".node-graph-workspace.module-sliders-hidden"));
   if (!el || (!perModule && (forced || !workspace))) return fn(false);
+  // The module's outer height is sized for hidden sliders: lay it out at the
+  // height the sizing SSOT gives the same module with its sliders shown.
+  const heightVar = "--node-grid-height-units";
+  const heightBefore = el.style.getPropertyValue(heightVar);
+  const shownGu = nodeGraphModuleFacePageShownHeightGu(el.dataset.node);
+  // Face modules (Clock, ...) also mark their body [hidden] while sliders are hidden.
+  const faceBody = el.classList.contains("has-module-face") ? el.querySelector(":scope > .dsp-node-body") : null;
+  const faceBodyHidden = Boolean(faceBody?.hidden);
   if (perModule) el.classList.remove("sliders-hidden");
   if (!forced) el.classList.add("sliders-forced-visible");
+  if (shownGu > 0) el.style.setProperty(heightVar, String(shownGu));
+  if (faceBodyHidden) faceBody.hidden = false;
   try {
     return fn(true);
   } finally {
+    if (faceBodyHidden) faceBody.hidden = true;
+    if (shownGu > 0) {
+      if (heightBefore) el.style.setProperty(heightVar, heightBefore);
+      else el.style.removeProperty(heightVar);
+    }
     if (!forced) el.classList.remove("sliders-forced-visible");
     if (perModule) el.classList.add("sliders-hidden");
   }
+}
+
+/** Outer height (grid units) of a module with its sliders shown (0 when unknown). */
+function nodeGraphModuleFacePageShownHeightGu(nodeId) {
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  if (!node || typeof nodeGraphModuleGridHeightUnitsForUi !== "function") return 0;
+  const shownUi = { ...(node.ui || {}), slidersHidden: false, slidersForceShow: true };
+  const ui = typeof nodeGraphEffectivePatchNodeUi === "function" ? nodeGraphEffectivePatchNodeUi(shownUi, node.type) : shownUi;
+  const gu = Number(nodeGraphModuleGridHeightUnitsForUi(node.type, ui, { ...node, ui: shownUi }));
+  return Number.isFinite(gu) && gu > 0 ? gu : 0;
 }
 
 /** The page's face surface (one host per shown band) for the hidden-sliders copy. */
@@ -105,7 +152,7 @@ function nodeGraphModuleFacePageFaceSurface(wrap) {
   return face;
 }
 
-/** Sliders hidden: draw the module (laid out with its sliders shown) through the one-module GL pass. */
+/** Draw the module (laid out with its sliders shown when they are hidden) through the one-module GL pass. */
 function presentNodeGraphModuleFacePageFace(wrap, el, nodeId) {
   if (typeof nodeGraphGlMiniPerformPresentModule !== "function") return false;
   const canvas = document.getElementById("nodeModuleFacePageDisplayCanvas");
@@ -145,86 +192,25 @@ function presentNodeGraphModuleFacePageFace(wrap, el, nodeId) {
   });
 }
 
-/** Copy the module's pixels from the workspace GL canvas into the page canvas. */
+/**
+ * Draw the module's controls into the page at the page's own scale and
+ * device pixel ratio (standard fidelity, like Performance view), through the
+ * one-module GL pass. Independent of workspace zoom, pan and viewport: the
+ * module is laid out in its own px, so nothing is cropped or culled when the
+ * workspace is zoomed in or the module is off screen.
+ */
 function presentNodeGraphModuleFacePageDisplay() {
   const wrap = document.getElementById("nodeModuleFacePageDisplay");
-  const canvas = document.getElementById("nodeModuleFacePageDisplayCanvas");
-  if (!wrap || !canvas) return false;
+  if (!wrap) return false;
   const nodeId = nodeGraphModuleFacePageNodeId;
   const el = nodeId && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeId) : null;
-  const src = document.getElementById("nodeGlGraphCanvas");
-  if (!el || !el.isConnected || !src || !(src.width > 0) || !(el.offsetWidth > 0)) {
+  if (!el || !el.isConnected || !(el.offsetWidth > 0)) {
     wrap.hidden = true;
     nodeGraphModuleFacePageCopyMap = null;
     return false;
   }
   wrap.hidden = false;
-  if (nodeGraphModuleFacePageNeedsReadouts(nodeId, el)) {
-    return presentNodeGraphModuleFacePageFace(wrap, el, nodeId);
-  }
-  canvas.hidden = false;
-  const faceSurface = document.getElementById("nodeModuleFacePageFace");
-  if (faceSurface && !faceSurface.hidden) {
-    faceSurface.hidden = true;
-    faceSurface.replaceChildren();
-  }
-  const mr = el.getBoundingClientRect();
-  const sr = src.getBoundingClientRect();
-  if (!(sr.width > 0) || !(sr.height > 0)) return false;
-  // Off screen: keep this module's last copied frame; never another module's.
-  if (mr.right <= sr.left || mr.left >= sr.right || mr.bottom <= sr.top || mr.top >= sr.bottom) {
-    if (nodeGraphModuleFacePageCopyMap?.nodeId === nodeId) return true;
-    wrap.hidden = true;
-    nodeGraphModuleFacePageCopyMap = null;
-    return false;
-  }
-  const { w: natW, bands } = nodeGraphModuleFacePageBands(el);
-  if (!bands.length) return false;
-  const shownH = bands.reduce((sum, b) => sum + (b.y1 - b.y0), 0);
-  const style = getComputedStyle(wrap);
-  const availW = Math.max(1, wrap.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0));
-  const scale = Math.min(availW / natW, NODE_GRAPH_MODULE_FACE_PAGE_DISPLAY_MAX_H / shownH);
-  const cssW = Math.max(1, Math.round(natW * scale));
-  const cssH = Math.max(1, Math.round(shownH * scale));
-  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  const pxW = Math.round(cssW * dpr);
-  const pxH = Math.round(cssH * dpr);
-  if (canvas.width !== pxW) canvas.width = pxW;
-  if (canvas.height !== pxH) canvas.height = pxH;
-  canvas.style.width = `${cssW}px`;
-  canvas.style.height = `${cssH}px`;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return false;
-  const wz = mr.width / el.offsetWidth;
-  const kx = src.width / sr.width;
-  const ky = src.height / sr.height;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = 1;
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, pxW, pxH);
-  const map = { nodeId, cssW, cssH, scale, bands: [] };
-  let y = 0;
-  for (const band of bands) {
-    const h = (band.y1 - band.y0) * scale;
-    ctx.drawImage(
-      src,
-      (mr.left - sr.left) * kx,
-      (mr.top + band.y0 * wz - sr.top) * ky,
-      natW * wz * kx,
-      (band.y1 - band.y0) * wz * ky,
-      0,
-      y * dpr,
-      cssW * dpr,
-      h * dpr,
-    );
-    map.bands.push({ y, h, y0: band.y0 });
-    y += h;
-  }
-  nodeGraphModuleFacePageCopyMap = map;
-  return true;
+  return presentNodeGraphModuleFacePageFace(wrap, el, nodeId);
 }
 
 /** The module's screen point under a page-copy pointer (clamped to the copy). */
@@ -274,8 +260,13 @@ function nodeGraphModuleFacePageReplay(type, source, point, target) {
   return replay;
 }
 
-/** The deepest element of the module under a screen point (off screen or covered: no elementFromPoint). */
-function nodeGraphModuleFacePageElementAt(el, x, y) {
+/**
+ * The deepest element of the module under a screen point, by layout (off
+ * screen or covered: no elementFromPoint). anyPointer: also elements the GL
+ * graph keeps pointer-events: none on (its readouts), whose own handlers run
+ * when the press is dispatched on them.
+ */
+function nodeGraphModuleFacePageElementAt(el, x, y, anyPointer = false) {
   let best = null;
   const within = (node) => {
     const r = node.getBoundingClientRect();
@@ -284,50 +275,92 @@ function nodeGraphModuleFacePageElementAt(el, x, y) {
   if (!within(el)) return null;
   best = el;
   for (const node of el.querySelectorAll("*")) {
-    if (best.contains(node) && within(node) && getComputedStyle(node).pointerEvents !== "none") best = node;
+    if (best.contains(node) && within(node) && (anyPointer || getComputedStyle(node).pointerEvents !== "none")) best = node;
   }
   return best;
 }
 
-/** Run fn inside the forced layout when the current copy is the hidden-sliders face pass. */
+/** Run fn inside the copy's layout (forced-visible when the module's sliders are hidden). */
 function nodeGraphModuleFacePageInCopyLayout(fn) {
   const map = nodeGraphModuleFacePageCopyMap;
   const el = map?.forced && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(map.nodeId) : null;
   return el ? nodeGraphModuleFacePageWithSlidersShown(el, fn) : fn(false);
 }
 
+/**
+ * Screen shift (px) that brings a mapped point inside the window, or null.
+ * Slider drags re-anchor at the window edge (infinite drag), so a control of a
+ * module zoomed or panned off screen would never move. The shift is applied
+ * to the module only for the synchronous replay (nodeGraphModuleFacePageWithShift).
+ */
+function nodeGraphModuleFacePageViewportShift(point) {
+  const margin = 80;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const dx = point.x < margin || point.x > w - margin ? Math.round(w / 2 - point.x) : 0;
+  const dy = point.y < margin || point.y > h - margin ? Math.round(h / 2 - point.y) : 0;
+  return dx || dy ? { dx, dy } : null;
+}
+
+/** Run fn with the module shifted on screen by shift (restored before anything paints). */
+function nodeGraphModuleFacePageWithShift(el, shift, fn) {
+  if (!el || !shift) return fn();
+  const mr = el.getBoundingClientRect();
+  const wz = el.offsetWidth > 0 ? mr.width / el.offsetWidth : 1;
+  const before = el.style.getPropertyValue("translate");
+  el.style.setProperty("translate", `${shift.dx / wz}px ${shift.dy / wz}px`);
+  try {
+    return fn();
+  } finally {
+    if (before) el.style.setProperty("translate", before);
+    else el.style.removeProperty("translate");
+  }
+}
+
+/** Drop a module drag armed by a replayed press (no move, no commit). */
+function nodeGraphModuleFacePageCancelNodeDrag() {
+  const drag = typeof nodeGraphMvp === "object" ? nodeGraphMvp?.nodeDragging : null;
+  if (!drag) return;
+  for (const dragged of drag.draggedNodes || []) dragged.element?.classList.remove("dragging");
+  drag.handle?.classList?.remove("dragging");
+  nodeGraphMvp.nodeDragging = null;
+}
+
 /** Press on the copy: replay it on the module itself, then keep replaying until release. */
 function beginNodeGraphModuleFacePageCopyPointer(event) {
   return nodeGraphModuleFacePageInCopyLayout(() => {
-    const point = nodeGraphModuleFacePageModulePoint(event);
-    if (!point) return false;
-    const panel = document.getElementById("nodeModuleFacePage");
-    // The element the press would hit on the module, as if this page were not over it.
-    const before = panel?.style.pointerEvents ?? "";
-    if (panel) panel.style.pointerEvents = "none";
-    let target = null;
-    try {
-      target = document.elementFromPoint(point.x, point.y);
-    } finally {
-      if (panel) panel.style.pointerEvents = before;
-    }
-    if (!target || panel?.contains(target) || (nodeGraphModuleFacePageCopyMap?.forced && !point.el.contains(target))) {
-      target = nodeGraphModuleFacePageElementAt(point.el, point.x, point.y);
-    }
-    if (!target || panel?.contains(target)) return false;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    nodeGraphModuleFacePageForward = { pointerId: event.pointerId, target };
-    nodeGraphModuleFacePageReplay("pointerdown", event, point, target);
-    // Real moves keep coming to the copy; they are replayed at the module.
-    const surface = document.getElementById(nodeGraphModuleFacePageCopyMap?.surface || "nodeModuleFacePageDisplayCanvas");
-    try {
-      surface?.setPointerCapture?.(event.pointerId);
-    } catch {
-      // Pointer already released.
-    }
-    return true;
+    const first = nodeGraphModuleFacePageModulePoint(event);
+    if (!first) return false;
+    const shift = nodeGraphModuleFacePageViewportShift(first);
+    return nodeGraphModuleFacePageWithShift(first.el, shift, () => beginNodeGraphModuleFacePageCopyPointerAt(event, shift));
   });
+}
+
+/** The press, with the module laid out (and shifted on screen) for the replay. */
+function beginNodeGraphModuleFacePageCopyPointerAt(event, shift) {
+  const point = nodeGraphModuleFacePageModulePoint(event);
+  if (!point) return false;
+  const panel = document.getElementById("nodeModuleFacePage");
+  // The control laid out under the press (slider readout, face, ...), by
+  // geometry: the module may be off screen or under this page, and the GL
+  // graph keeps pointer-events: none on readouts. Its own handlers start the drag.
+  const target = nodeGraphModuleFacePageElementAt(point.el, point.x, point.y, true);
+  if (!target || panel?.contains(target)) return false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  nodeGraphModuleFacePageForward = { pointerId: event.pointerId, target, shift };
+  nodeGraphModuleFacePageReplay("pointerdown", event, point, target);
+  // A press on a control must never move the module: drop a module drag the
+  // replay armed (its release would re-commit the whole patch).
+  nodeGraphModuleFacePageCancelNodeDrag();
+  // Real moves keep coming to the copy; they are replayed at the module.
+  const surface = document.getElementById(nodeGraphModuleFacePageCopyMap?.surface || "nodeModuleFacePageDisplayCanvas");
+  try {
+    surface?.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Pointer already released.
+  }
+  return true;
 }
 
 function nodeGraphModuleFacePageCopyPointerRelay(event) {
@@ -343,8 +376,11 @@ function nodeGraphModuleFacePageCopyPointerRelay(event) {
   if (!forward || event.pointerId !== forward.pointerId) return;
   event.stopImmediatePropagation();
   nodeGraphModuleFacePageInCopyLayout(() => {
-    const point = nodeGraphModuleFacePageModulePoint(event);
-    if (point) nodeGraphModuleFacePageReplay(event.type, event, point, forward.target.isConnected ? forward.target : document);
+    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeGraphModuleFacePageCopyMap?.nodeId) : null;
+    nodeGraphModuleFacePageWithShift(el, forward.shift, () => {
+      const point = nodeGraphModuleFacePageModulePoint(event);
+      if (point) nodeGraphModuleFacePageReplay(event.type, event, point, forward.target.isConnected ? forward.target : document);
+    });
   });
   if (event.type === "pointerup" || event.type === "pointercancel") {
     nodeGraphModuleFacePageForward = null;

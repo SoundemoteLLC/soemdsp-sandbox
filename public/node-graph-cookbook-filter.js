@@ -425,7 +425,7 @@ const nodeGraphFilterCurveFKey = Object.freeze({
   chebyshev: "frequency", elliptic: "frequency", papoulisFilter: "cutoff",
   bandpass: "frequency", allpass: "frequency", lowpass: "frequency",
   highpass: "frequency", eqFilter: "frequency", modeResonator: "frequency",
-  combResonator: "frequency", tiltFilter: "pivot",
+  combResonator: "frequency", combPluck: "frequency", tiltFilter: "pivot",
   // Source with a filter face: ƒ (absolute Hz) replaces Frequency.
   formantFilter: "frequency",
 });

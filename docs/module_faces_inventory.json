@@ -836,13 +836,24 @@
   "customFolder": "public/modules/codeBox"
  },
  {
+  "type": "combPluck",
+  "faceLayout": "spawn",
+  "chrome": "LayoutA",
+  "layout": "",
+  "display": true,
+  "visibleParams": 9,
+  "inputs": 2,
+  "outputs": 1,
+  "customFolder": "public/modules/combPluck"
+ },
+ {
   "type": "combResonator",
   "faceLayout": "spawn",
   "chrome": "LayoutA",
   "layout": "",
-  "display": false,
+  "display": true,
   "visibleParams": 8,
-  "inputs": 5,
+  "inputs": 4,
   "outputs": 3,
   "customFolder": ""
  },
@@ -2039,9 +2050,9 @@
   "faceLayout": "spawn",
   "chrome": "LayoutA",
   "layout": "",
-  "display": false,
-  "visibleParams": 4,
-  "inputs": 3,
+  "display": true,
+  "visibleParams": 8,
+  "inputs": 2,
   "outputs": 1,
   "customFolder": ""
  },

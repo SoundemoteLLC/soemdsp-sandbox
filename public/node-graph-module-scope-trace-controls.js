@@ -243,6 +243,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
   toggles: [
     "autoZoomLines",
     "waterfallSteps",
+    "liveTrace",
     "showLight",
     "showFlt",
     "showAmp",
@@ -1019,6 +1020,14 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  // Comb Pluck / Mode Resonator / Comb Resonator hit view: Stack fade (Fade time),
+  // Live playback toggle + Background / Curve / Live / Text colors.
+  pluckHitFace: Object.freeze({
+    fields: Object.freeze(["fadeTime"]),
+    colors: Object.freeze(["backgroundColor", "barColor", "lightColor", "textColor"]),
+    toggles: Object.freeze(["liveTrace"]),
+    choices: Object.freeze([]),
+  }),
   // Rounding Error Sequencer: ghost fade (Fade time, Ghost floor) + Background / Bars colors.
   roundingErrorFace: Object.freeze({
     fields: Object.freeze(["fadeTime", "ghost"]),
@@ -1252,6 +1261,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "skipDiscontinuities",
       "skipLight",
       "waterfallSteps",
+      "liveTrace",
       "showLight",
       "showFlt",
       "showAmp",
@@ -2100,6 +2110,11 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     id: "nodeTraceDisplaySkipDiscontinuities",
     title:
       "Break the stroke at wrap/jump samples instead of drawing a seam. 1D: no vertical wrap line. 2D: no chord across a sudden X/Y jump.",
+  }),
+  // Hit view (pluckHitFace): playhead + measured envelope on each hit. No title (no hover pop-up).
+  liveTrace: Object.freeze({
+    label: "Live",
+    id: "nodeTraceDisplayLiveTrace",
   }),
   waterfallSteps: Object.freeze({
     label: "Waterfall steps",
@@ -3011,6 +3026,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   plotFace: "Plot",
   vactrolScope: "Vactrol",
   roundingErrorFace: "Rounding Error",
+  pluckHitFace: "Hit View",
   robinSinepulseFace: "Robin Sinepulse",
   textBoxFace: "Text Box",
   keyboardFace: "Keyboard",

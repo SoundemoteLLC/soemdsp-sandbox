@@ -6852,12 +6852,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "combResonator") {
-      // decay=timeNumerator, hold=timingMode, damping=shape, topology=mode,
+      // decay=timeNumerator, hold=timingMode, damping=shape, lowCut=hpfFrequency, topology=mode,
       // invert=stages, depth=width.
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1));
       push("hold", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("hold", 0));
       push("damping", P.NATIVE_GRAPH_PARAM_SHAPE, cont("damping", 0));
+      push("lowCut", P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY, cont("lowCut", 1));
       push("topology", P.NATIVE_GRAPH_PARAM_MODE, disc("topology", 0));
       push("invert", P.NATIVE_GRAPH_PARAM_STAGES, disc("invert", 0));
       push("depth", P.NATIVE_GRAPH_PARAM_WIDTH, cont("depth", 1));
@@ -6866,7 +6867,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "modeResonator") {
       // Strict trigger (graph 359): shape=waveform, soft=center, width=width,
-      // retrigger=mode (0 Stack / 1 Choke).
+      // retrigger=mode (0 Stack / 1 Choke), seed=seed, noiseHit=lfoStyle (graph 361),
+      // curve=saturate (Edge, graph 362).
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1));
       push("hold", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("hold", 0));
@@ -6874,19 +6876,28 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("shape", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("shape", 0));
       push("soft", P.NATIVE_GRAPH_PARAM_CENTER, cont("soft", 0.5));
       push("width", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width", 0.5));
+      push("curve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("curve", 0));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
+      push("noiseHit", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("noiseHit", 0));
       push("retrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("retrigger", 0));
       continue;
     }
     if (type === "combPluck") {
       // Comb Pluck (graph 359): decay=timeNumerator, damping=shape, invert=stages,
-      // shape=waveform, soft=center, width=width, retrigger=mode, level=amplitude.
+      // shape=waveform, soft=center, width=width, retrigger=mode, level=amplitude,
+      // lowCut=hpfFrequency (graph 360), seed=seed, noiseHit=lfoStyle (graph 361),
+      // curve=saturate (Edge, graph 362).
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1));
       push("damping", P.NATIVE_GRAPH_PARAM_SHAPE, cont("damping", 0.2));
+      push("lowCut", P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY, cont("lowCut", 1));
       push("invert", P.NATIVE_GRAPH_PARAM_STAGES, disc("invert", 0));
-      push("shape", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("shape", 1));
+      push("shape", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("shape", 0));
       push("soft", P.NATIVE_GRAPH_PARAM_CENTER, cont("soft", 0.3));
       push("width", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width", 0.5));
+      push("curve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("curve", 0));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
+      push("noiseHit", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("noiseHit", 0));
       push("retrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("retrigger", 0));
       push("level", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("level", 1));
       continue;
@@ -8535,7 +8546,7 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
  * Relayed on the data bus as EffectiveHz. No audio math here.
  */
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_HZ_TYPES = new Set([
-  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "passiveFilter", "activeFilter", "flowerChildFilterRev3", "formantFilter",
+  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "combPluck", "passiveFilter", "activeFilter", "flowerChildFilterRev3", "formantFilter",
 ]);
 // Multi-cutoff types also publish HPF as EffectiveLoHz (EffectiveHz = LPF).
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_LO_HZ_TYPES = new Set(["passiveFilter", "activeFilter"]);

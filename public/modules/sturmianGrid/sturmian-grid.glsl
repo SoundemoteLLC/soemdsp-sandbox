@@ -115,6 +115,28 @@ int sturmianGlyphRow(int code, int row) {
 }
 
 
+// 1px grid line at the left of column c, or the packed grid's outer right
+// when c is at or past the last column. Same idea for rows (top / outer bottom).
+// Track-span and playhead strokes sit on these lines — the same pixels as the
+// gutters (>=16px) or the cells' outer edges (squares touching below 16px).
+float sturmianGridVLine(float c, float cols, float cellDev, float gridEndX) {
+  return c >= cols ? gridEndX - 1.0 : floor(c * cellDev);
+}
+
+float sturmianGridHLine(float r, float rows, float cellDev, float gridEndY) {
+  return r >= rows ? gridEndY - 1.0 : floor(r * cellDev);
+}
+
+bool sturmianOnRectLines(float x, float y, float x0, float x1, float y0, float y1) {
+  float xa = min(x0, x1);
+  float xb = max(x0, x1);
+  float ya = min(y0, y1);
+  float yb = max(y0, y1);
+  bool onV = (abs(x - x0) < 0.5 || abs(x - x1) < 0.5) && y >= ya && y <= yb;
+  bool onH = (abs(y - y0) < 0.5 || abs(y - y1) < 0.5) && x >= xa && x <= xb;
+  return onV || onH;
+}
+
 bool sturmianGlyphAt(int code, vec2 p, float scale) {
   if (scale < 0.5) return false;
   int gx = int(floor(p.x / scale));
@@ -158,8 +180,9 @@ float gridLimit = gridH > 0.5 ? gridH : faceH;
 float playCols = max(2.0, floor(steps + 0.5));
 float spreadN = max(1.0, floor(spread + 0.5));
 float walkN = max(0.0, floor(walk + 0.5));
-// Layout comes from JS (floor(baseCell * zoom), packed whole cells, integer
-// centered remainder). Do not re-fit cell to the plate — leftover is margin.
+// Layout comes from JS: largest whole-pixel square that fits the playable
+// Steps x Track Spread area, packed whole continuation cells, integer
+// centered remainder as a black margin.
 float cell = max(2.0, layoutCell);
 float cols = max(1.0, layoutCols);
 float rows = max(1.0, layoutRows);
@@ -174,6 +197,14 @@ float gridX = px.x - ox;
 float gridY = px.y - oy;
 // Leftover sub-cell space in the grid region is a black margin, not a stretch.
 vec3 base = vec3(0.0);
+float pr = max(1e-6, pixelRatio);
+float devX = floor(gridX * pr + 1e-4);
+float devY = floor(gridY * pr + 1e-4);
+float cellDev = cell * pr;
+float gridW = cols * cell;
+float gridSpanH = rows * cell;
+float gridEndX = floor(gridW * pr + 1e-4);
+float gridEndY = floor(gridSpanH * pr + 1e-4);
 bool inGrid = px.y < gridLimit && gridX >= 0.0 && gridY >= 0.0
   && gridX < cols * cell && gridY < rows * cell;
 float col = 0.0;
@@ -209,21 +240,13 @@ if (inGrid) {
   inBar = m >= 0.0 && m < playCols;
   if (!onTrack || !inBar) base *= 0.55;
 
-  float pr = max(1e-6, pixelRatio);
-  float devX = floor(gridX * pr + 1e-4);
-  float devY = floor(gridY * pr + 1e-4);
-  float cellDev = cell * pr;
   fx = mod(gridX, cell);
   fy = mod(gridY, cell);
-  float gridW = cols * cell;
-  float gridSpanH = rows * cell;
   // 1-texel gutters when the cell is at least 16 screen pixels. Below that
   // the 1px stroke is relatively thick, so squares touch. Track-span and
-  // playhead frames stay 1px with their Display Settings alphas.
+  // playhead frames sit on those same gutter/edge pixels (no extra inset).
   float colStartDev = floor(col * cell * pr + 1e-4);
   float rowStartDev = floor(row * cell * pr + 1e-4);
-  float gridEndX = floor(gridW * pr + 1e-4);
-  float gridEndY = floor(gridSpanH * pr + 1e-4);
   gutter = cell >= 16.0 && (devX < colStartDev + 1.0 || devY < rowStartDev + 1.0
     || devX >= gridEndX - 1.0 || devY >= gridEndY - 1.0);
   if (gutter) base = vec3(0.0);
@@ -233,14 +256,13 @@ if (inGrid) {
     if (!inBar) continue;
     bool muted = mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5;
     vec3 tc = muted ? vec3(0.55) : laneColor(track);
-    float spanLeft = floor(padLeft * cellDev);
-    float spanRight = floor((padLeft + playCols) * cellDev);
-    float spanTop = floor(row * cellDev);
-    float spanBot = floor((row + 1.0) * cellDev);
-    bool inside = devX >= spanLeft && devX < spanRight && devY >= spanTop && devY < spanBot;
-    bool frame = inside && (devX < spanLeft + 1.0 || devX >= spanRight - 1.0
-      || devY < spanTop + 1.0 || devY >= spanBot - 1.0);
-    if (frame) base = mix(base, tc, clamp(trackStrokeAlpha, 0.0, 1.0));
+    float lineL = sturmianGridVLine(padLeft, cols, cellDev, gridEndX);
+    float lineR = sturmianGridVLine(padLeft + playCols, cols, cellDev, gridEndX);
+    float lineT = sturmianGridHLine(row, rows, cellDev, gridEndY);
+    float lineB = sturmianGridHLine(row + 1.0, rows, cellDev, gridEndY);
+    if (sturmianOnRectLines(devX, devY, lineL, lineR, lineT, lineB)) {
+      base = mix(base, tc, clamp(trackStrokeAlpha, 0.0, 1.0));
+    }
   }
 } else if (px.y >= gridLimit && px.y < faceH && px.x >= 0.0 && px.x < w) {
   base = BG;
@@ -385,10 +407,11 @@ if (inGrid) {
   }
 }
 
-// Playhead wash stays (16% white column). Hit flash fills the triggered
-// square with its track color (no inset / inner stroke). Black gutters stay
-// when the cell is at least 16px; below that, squares touch.
-// 1px track-span and playhead strokes use Display Settings alphas (default 1).
+// Playhead wash stays (16% white column). Hits are binary (on/off) and any
+// step that fired since the last frame is on for this paint. Black gutters
+// stay when the cell is at least 16px; below that, squares touch.
+// Track-span and playhead 1px strokes sit on the grid's gutter/edge pixels
+// (Display Settings alphas, default 1) with no extra inset or layout room.
 if (playing > 0.5 && px.y >= 0.0 && px.y < gridLimit) {
   float stepCol = padLeft + floor(playStep + 0.5);
   float x0 = ox + stepCol * cell;
@@ -396,17 +419,23 @@ if (playing > 0.5 && px.y >= 0.0 && px.y < gridLimit) {
     base = mix(base, vec3(1.0), 0.16);
   }
 }
-if (inGrid && !gutter && flashAmt > 0.0 && abs(m - flashStep) < 0.5 && trackHit >= 0
-    && mod(floor(flashMask / exp2(float(trackHit))), 2.0) > 0.5) {
-  base = mix(base, laneColor(trackHit), flashAmt);
+if (inGrid && !gutter && trackHit >= 0 && m >= 0.0 && m < 32.0) {
+  uint bit = 1u << uint(floor(m + 0.5));
+  uint bits = 0u;
+  if (trackHit == 0) bits = hitBits[0];
+  else if (trackHit == 1) bits = hitBits[1];
+  else if (trackHit == 2) bits = hitBits[2];
+  else bits = hitBits[3];
+  if ((bits & bit) != 0u) base = laneColor(trackHit);
 }
-if (playing > 0.5 && px.y >= 0.0 && px.y < gridLimit) {
+if (playing > 0.5 && inGrid) {
   float stepCol = padLeft + floor(playStep + 0.5);
-  float x0 = ox + stepCol * cell;
-  if (px.x >= x0 && px.x < x0 + cell) {
-    bool frame = px.x < x0 + 1.0 || px.x >= x0 + cell - 1.0
-      || px.y < 1.0 || px.y >= gridLimit - 1.0;
-    if (frame) base = mix(base, vec3(1.0), clamp(playheadStrokeAlpha, 0.0, 1.0));
+  float lineL = sturmianGridVLine(stepCol, cols, cellDev, gridEndX);
+  float lineR = sturmianGridVLine(stepCol + 1.0, cols, cellDev, gridEndX);
+  float lineT = sturmianGridHLine(0.0, rows, cellDev, gridEndY);
+  float lineB = sturmianGridHLine(rows, rows, cellDev, gridEndY);
+  if (sturmianOnRectLines(devX, devY, lineL, lineR, lineT, lineB)) {
+    base = mix(base, vec3(1.0), clamp(playheadStrokeAlpha, 0.0, 1.0));
   }
 }
 out_color = vec4(base, 1.0);

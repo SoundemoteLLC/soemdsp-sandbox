@@ -373,6 +373,9 @@ function nodeGraphDisplaySettingsDefaultsForFormType(type = nodeGraphTraceDispla
   if (type === "roundingErrorFace" && typeof normalizeNodeGraphRoundingErrorFaceSettings === "function") {
     return normalizeNodeGraphRoundingErrorFaceSettings();
   }
+  if (type === "pluckHitFace" && typeof normalizeNodeGraphPluckHitFaceSettings === "function") {
+    return normalizeNodeGraphPluckHitFaceSettings();
+  }
   if (type === "vactrolScope") {
     return typeof normalizeNodeGraphVactrolScopeSettings === "function"
       ? normalizeNodeGraphVactrolScopeSettings(
@@ -806,6 +809,9 @@ if (type === "portalFace") {
   if (type === "roundingErrorFace" && typeof normalizeNodeGraphRoundingErrorFaceSettings === "function") {
     return normalizeNodeGraphRoundingErrorFaceSettings(settings);
   }
+  if (type === "pluckHitFace" && typeof normalizeNodeGraphPluckHitFaceSettings === "function") {
+    return normalizeNodeGraphPluckHitFaceSettings(settings);
+  }
   if (type === "vactrolScope" && typeof normalizeNodeGraphVactrolScopeSettings === "function") {
     return normalizeNodeGraphVactrolScopeSettings(settings);
   }
@@ -1058,6 +1064,9 @@ if (settingsSchema === "portalFace") {
   }
   if (settingsSchema === "roundingErrorFace" && typeof nodeGraphRoundingErrorFaceSettingsForNode === "function") {
     return nodeGraphRoundingErrorFaceSettingsForNode(node);
+  }
+  if (settingsSchema === "pluckHitFace" && typeof nodeGraphPluckHitFaceSettingsForNode === "function") {
+    return nodeGraphPluckHitFaceSettingsForNode(node);
   }
   if (settingsSchema === "vactrolScope" && typeof nodeGraphVactrolScopeSettingsForNode === "function") {
     return nodeGraphVactrolScopeSettingsForNode(node);
@@ -2597,6 +2606,12 @@ function nodeGraphTraceDisplayColorWidgetLabel(field) {
   if (buttonForm === "roundingErrorFace") {
     if (field === "backgroundColor") return "Background";
     if (field === "barColor") return "Bars";
+    if (field === "textColor") return "Text";
+  }
+  if (buttonForm === "pluckHitFace") {
+    if (field === "backgroundColor") return "Background";
+    if (field === "barColor") return "Curve";
+    if (field === "lightColor") return "Live";
     if (field === "textColor") return "Text";
   }
   if (buttonForm === "vactrolScope") {

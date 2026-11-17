@@ -7,6 +7,11 @@
 // (docs/COMB_PLUCK_PLAN.md): audio in only, no Trigger (Comb Pluck is the
 // triggered generator). The loop math is shared with Comb Pluck in
 // soemdsp/filter/comb_core.h.
+// No clip (Argi 2026-11-17: "don't let it inf but let it explode, the output
+// will mute if bad things happen"): the loop and the output are unbounded;
+// a NaN / Inf loop resets the comb to silence (comb_nonfinite_reset).
+// Low Cut = input highpass. + polarity Feedback runs the DC trap
+// (comb_dc_mean / comb_write_dc): DC cannot build up, harmonics untouched.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
@@ -47,6 +52,7 @@ static const char kMetadataJson[] =
         "\"step\":\"any\",\"unit\":\"s\"},"
       "{\"key\":\"hold\",\"label\":\"Hold\",\"defaultValue\":0,\"min\":0,\"mid\":0,\"max\":1,\"step\":1},"
       "{\"key\":\"damping\",\"label\":\"Damping\",\"defaultValue\":0,\"min\":0,\"mid\":0.35,\"max\":1,\"step\":\"any\"},"
+      "{\"key\":\"lowCut\",\"label\":\"Low Cut\",\"kind\":\"frequency\",\"defaultValue\":1,\"min\":1,\"mid\":100,\"max\":5000,\"step\":\"any\",\"unit\":\"Hz\"},"
       "{\"key\":\"topology\",\"label\":\"Topology\",\"defaultValue\":0,\"min\":0,\"mid\":0,\"max\":1,\"step\":1},"
       "{\"key\":\"invert\",\"label\":\"Polarity\",\"defaultValue\":0,\"min\":0,\"mid\":0,\"max\":1,\"step\":1},"
       "{\"key\":\"depth\",\"label\":\"Depth\",\"defaultValue\":1,\"min\":0,\"mid\":0.5,\"max\":1,\"step\":\"any\"},"
@@ -91,6 +97,7 @@ extern "C" double soemdsp_comb_resonator_sample(
   double decaySec,
   int hold,
   double damping,
+  double lowCut,
   int topology,
   int invert,
   double depth,
@@ -105,7 +112,9 @@ extern "C" double soemdsp_comb_resonator_sample(
   const double delaySamples = soemdsp::comb::comb_delay_samples(&s.comb, frequencyHz, rate, kMinHz);
 
   const double amp = safe(amplitude);
-  const double x = safe(input) * ((amp * 0.0 == 0.0) ? amp : 1.0);
+  // Low Cut: input highpass (outside the loop: shapes the excitation only).
+  const double x = soemdsp::comb::comb_highpass(&s.comb, safe(input), soemdsp::comb::comb_hp_coef(lowCut, rate))
+    * ((amp * 0.0 == 0.0) ? amp : 1.0);
   const double sign = invert ? -1.0 : 1.0;
   const int isFf = topology != 0;
 
@@ -119,18 +128,22 @@ extern "C" double soemdsp_comb_resonator_sample(
     const double fb = soemdsp::comb::comb_loop_filter(&s.comb, delayed, damping);
     const double g = soemdsp::comb::comb_feedback_gain(decaySec, delaySamples, rate, hold);
     y = x + sign * g * fb;
+    // DC trap (+ only: with − the loop already cancels DC every pass).
+    if (!invert) y -= soemdsp::comb::comb_dc_mean(&s.comb, delaySamples);
   }
 
-  y = clamp11(safe(y));
   if (y > -1e-30 && y < 1e-30) y = 0.0;
 
-  // Feedback writes the clipped output so the loop cannot explode.
-  // Feedforward writes the (unclipped) input history.
-  soemdsp::comb::comb_write(&s.comb, isFf ? (float)x : (float)y);
+  // Feedback writes the output (unclipped) back into the loop.
+  // Feedforward writes the input history.
+  const double w = isFf ? x : y;
+  if (soemdsp::comb::comb_nonfinite_reset(&s.comb, y, w)) return 0.0;
+  if (!isFf && !invert) soemdsp::comb::comb_write_dc(&s.comb, (float)w);
+  else soemdsp::comb::comb_write(&s.comb, (float)w);
 
   return y;
 }
 
-extern "C" int soemdsp_comb_resonator_version() { return 2; }
+extern "C" int soemdsp_comb_resonator_version() { return 3; }
 extern "C" const char* soemdsp_comb_resonator_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_comb_resonator_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

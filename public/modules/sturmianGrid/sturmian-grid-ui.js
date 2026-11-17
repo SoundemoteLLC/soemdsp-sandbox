@@ -1,21 +1,23 @@
 // Packed sounding-bar grid and K/S/H/M lane map on the shared face texture;
 // standard parameter rows live in the module body. Layout CSS is module-space
-// (stable at zoom, no reflow). Cells are floor(baseCell * zoom) whole device
-// pixels (baseCell is the hidden cell param, default 14) and are not stretched
-// to fill the plate; leftover space is a centered integer black margin. The
+// (stable at zoom, no reflow). Cell size is the largest whole-device-pixel
+// square that fits the playable area (Steps columns x Track Spread rows) so
+// a short pattern zooms in; leftover space is packed with dimmed continuation
+// squares, then a centered integer black margin. The
 // face texture is snapped to the integer framebuffer size of the on-screen
 // quad (CSS x workspace zoom; 4096 cap) so every texel is 1:1. Gutters (when
 // the cell is at least 16px), track outline, playhead and lane toggles are
 // integer device pixels. Strip and RESET bitmap text use the largest whole-
 // pixel scale that fits in the cell (compact "R"/value, then value only, then
-// hide) so glyphs never overflow. The playhead is a 16% white column plus a
-// 1px white frame; a triggered step fills its
-// square with the track color (no inset). Track-span and playhead stroke
-// alphas live in Display Settings (default 1). A Reset After drag-number
+// hide) so glyphs never overflow. The playhead is a 16% white column plus a 1px white frame on the
+// grid's gutter/edge pixels (no extra inset). A triggered step fills its
+// square with the track color (binary on/off; latched at least one frame,
+// no fade). Track-span and playhead stroke alphas live in Display Settings
+// (default 1). A Reset After drag-number
 // cell sits to the right of the K/S/H/M toggles and stays in sync with the
 // param-band slider. The shared 2.5x threshold is unchanged; this plate
 // pins nearest and opts into compositor pixel-snap.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23-stg24-stg25";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23-stg24-stg25-stg26-stg27";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_UI_DEFAULT_MASK = 3170;
 let sturmianShaderPromise = null;
@@ -78,12 +80,10 @@ function sturmianPlayhead(nodeId, steps) {
 }
 
 // Integer-square packing, same as the shader, in integer texel / screen
-// pixels of the grid region. Cell size is floor(baseCell * zoom) so it
-// grows only in whole device pixels and does not stretch to fill the
-// plate. As many whole cells as fit at that size are packed (sounding
-// bar plus continued word); leftover sub-cell space is a centered
-// integer black margin. Cell shrinks only when the sounding bar and
-// Track Spread window would not fit.
+// pixels of the grid region. Cell size is the largest whole-device-pixel
+// square that fits the sounding bar (Steps columns) and Track Spread
+// window (3*spread+1 rows). Extra whole cells pack as dimmed, non-clickable
+// continuation; leftover sub-cell space is a centered integer black margin.
 function sturmianRowsNeeded(spread) {
   const spreadN = Math.max(1, Math.floor(Number(spread) + 0.5) || 1);
   return 3 * spreadN + 1;
@@ -94,18 +94,17 @@ function sturmianBaseCell(values) {
   return Math.max(2, Number.isFinite(n) ? n : 14);
 }
 
-function sturmianGridLayout(width, height, steps, spread, zoom, baseCell) {
+function sturmianGridLayout(width, height, steps, spread, _zoom, _baseCell) {
   const playCols = Math.max(2, Math.floor(Number(steps) + 0.5) || 2);
   const rowsNeeded = Math.max(1, sturmianRowsNeeded(spread));
-  const z = Number.isFinite(Number(zoom)) && Number(zoom) > 0 ? Number(zoom) : 1;
-  const base = Math.max(2, Math.floor(Number(baseCell) + 0.5) || 14);
-  // Whole-pixel zoom steps. Do not stretch the cell to eat leftover space.
-  let cell = Math.max(2, Math.floor(base * z));
-  const maxFit = Math.max(2, Math.floor(Math.min(
+  // Largest whole-device-pixel square that fits the playable area (Steps
+  // columns x Track Spread rows). Workspace zoom already scales the backing
+  // size; do not start from baseCell and only shrink. Leftover sub-cell
+  // space stays a centered black margin; extra whole cells are continuation.
+  const cell = Math.max(2, Math.floor(Math.min(
     Math.max(1, width) / playCols,
     Math.max(1, height) / rowsNeeded
   )));
-  if (cell > maxFit) cell = maxFit;
   const cols = Math.max(1, Math.floor(Math.max(1, width) / cell));
   const rows = Math.max(1, Math.floor(Math.max(1, height) / cell));
   return {
@@ -220,7 +219,7 @@ function sturmianEnsureGpu(shader) {
   };
   const uniforms = STURMIAN_FLOATS.map((key) => `uniform float ${key};`).join("\n")
     + "\nuniform float playStep; uniform float playBar; uniform float playing; uniform float pixelRatio;"
-    + " uniform float flashStep; uniform float flashMask; uniform float flashAmt;"
+    + " uniform uint hitBits[4];"
     + " uniform float gridH; uniform float stripPadX; uniform float stripPadY;"
     + " uniform float stripGapX; uniform float stripGapY; uniform float btnSize;"
     + " uniform float labelW; uniform float innerGap;"
@@ -252,9 +251,7 @@ function sturmianEnsureGpu(shader) {
     playBar: gl.getUniformLocation(program, "playBar"),
     playing: gl.getUniformLocation(program, "playing"),
     pixelRatio: gl.getUniformLocation(program, "pixelRatio"),
-    flashStep: gl.getUniformLocation(program, "flashStep"),
-    flashMask: gl.getUniformLocation(program, "flashMask"),
-    flashAmt: gl.getUniformLocation(program, "flashAmt"),
+    hitBits: gl.getUniformLocation(program, "hitBits[0]"),
     gridH: gl.getUniformLocation(program, "gridH"),
     stripPadX: gl.getUniformLocation(program, "stripPadX"),
     stripPadY: gl.getUniformLocation(program, "stripPadY"),
@@ -280,50 +277,83 @@ function sturmianEnsureGpu(shader) {
   return sturmianSharedGpu;
 }
 
-function sturmianStepPeriodMs(values, measuredMs) {
-  if (Number.isFinite(measuredMs) && measuredMs > 0) return measuredMs;
-  const hz = Number(values?.rate);
-  if (Number.isFinite(hz) && hz > 0) return 1000 / hz;
-  return 125;
+function sturmianFiredMask(values, step, bar, time) {
+  const mask = Math.round(values.stepPattern);
+  const walk = Math.max(0, Math.floor(Number(values.walk) + 0.5) || 0);
+  const spread = Math.max(1, Math.floor(Number(values.spread) + 0.5) || 1);
+  let fired = 0;
+  for (let track = 0; track < 4; track += 1) {
+    if ((mask >> (12 + track)) & 1) continue;
+    const n = bar * walk + track * spread;
+    const tile = sturmianTileAt(values, step, n, time);
+    if ((mask >> (track * 3 + tile)) & 1) fired |= (1 << track);
+  }
+  return fired;
 }
 
-function sturmianUpdateFlash(face, values, play, time) {
-  if (face._sturmianFlash === undefined) {
-    face._sturmianFlash = {
-      playStep: play.playStep,
-      playBar: play.playBar,
-      step: play.playStep,
-      mask: 0,
-      at: 0,
-      periodMs: sturmianStepPeriodMs(values, 0),
-    };
-  } else if (play.playing > 0.5 && (face._sturmianFlash.playStep !== play.playStep || face._sturmianFlash.playBar !== play.playBar)) {
-    const mask = Math.round(values.stepPattern);
-    const walk = Math.max(0, Math.floor(values.walk + 0.5) || 0);
-    const spread = Math.max(1, Math.floor(values.spread + 0.5) || 1);
-    let fired = 0;
-    for (let track = 0; track < 4; track += 1) {
-      if ((mask >> (12 + track)) & 1) continue;
-      const n = play.playBar * walk + track * spread;
-      const tile = sturmianTileAt(values, play.playStep, n, time);
-      if ((mask >> (track * 3 + tile)) & 1) fired |= (1 << track);
-    }
-    const now = performance.now();
-    const measured = face._sturmianFlash.at > 0 ? now - face._sturmianFlash.at : 0;
-    face._sturmianFlash = {
-      playStep: play.playStep,
-      playBar: play.playBar,
-      step: play.playStep,
-      mask: fired,
-      at: now,
-      periodMs: sturmianStepPeriodMs(values, measured),
-    };
+function sturmianOrHit(latch, step, mask) {
+  const s = Math.max(0, Math.min(31, Math.floor(Number(step) + 0.5) || 0));
+  const bit = 1 << s;
+  for (let track = 0; track < 4; track += 1) {
+    if (mask & (1 << track)) latch[track] |= bit;
   }
-  const flash = face._sturmianFlash;
-  if (!flash || !flash.mask) return { step: 0, mask: 0, amt: 0 };
-  const periodMs = Math.max(1, Number(flash.periodMs) || sturmianStepPeriodMs(values, 0));
-  const amt = Math.max(0, Math.min(1, 1 - (performance.now() - flash.at) / periodMs));
-  return { step: flash.step, mask: flash.mask, amt };
+}
+
+function sturmianCurrentHitLatch(values, play, time) {
+  const latch = new Uint32Array(4);
+  if (play.playing > 0.5) {
+    sturmianOrHit(latch, play.playStep, sturmianFiredMask(values, play.playStep, play.playBar, time));
+  }
+  return latch;
+}
+
+// Hits are binary. Latch every step that fired since the last paint so a
+// high-rate trigger still shows as on for at least one frame, then drop
+// latched-only steps after that frame is drawn.
+function sturmianAccumulateHits(face, values, play, time) {
+  const stepCount = Math.max(1, Math.floor(Number(values.steps) + 0.5) || 1);
+  if (!face._sturmianHits) {
+    face._sturmianHits = {
+      playStep: play.playStep,
+      playBar: play.playBar,
+      playing: play.playing,
+      latch: sturmianCurrentHitLatch(values, play, time),
+    };
+    return face._sturmianHits.latch;
+  }
+  const prev = face._sturmianHits;
+  if (play.playing > 0.5) {
+    if (!(prev.playing > 0.5)) {
+      sturmianOrHit(prev.latch, play.playStep, sturmianFiredMask(values, play.playStep, play.playBar, time));
+    } else if (prev.playStep !== play.playStep || prev.playBar !== play.playBar) {
+      let delta = (play.playBar - prev.playBar) * stepCount + (play.playStep - prev.playStep);
+      if (!Number.isFinite(delta) || delta < 0) delta = 1;
+      const limit = Math.min(Math.max(delta, 0), stepCount);
+      let step = play.playStep;
+      let bar = play.playBar;
+      for (let i = 0; i < limit; i += 1) {
+        sturmianOrHit(prev.latch, step, sturmianFiredMask(values, step, bar, time));
+        if (i === limit - 1) break;
+        step -= 1;
+        if (step < 0) {
+          step = stepCount - 1;
+          bar -= 1;
+        }
+      }
+    }
+  }
+  prev.playStep = play.playStep;
+  prev.playBar = play.playBar;
+  prev.playing = play.playing;
+  return prev.latch;
+}
+
+function sturmianClearDrawnHits(face, values, play, time) {
+  if (!face._sturmianHits) return;
+  face._sturmianHits.latch = sturmianCurrentHitLatch(values, play, time);
+  face._sturmianHits.playStep = play.playStep;
+  face._sturmianHits.playBar = play.playBar;
+  face._sturmianHits.playing = play.playing;
 }
 
 const STURMIAN_BACKING_CAP = 4096;
@@ -535,10 +565,8 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.playBar, play.playBar);
   gl.uniform1f(gpu.playing, play.playing);
   gl.uniform1f(gpu.pixelRatio, 1);
-  const flash = sturmianUpdateFlash(face, values, play, time);
-  gl.uniform1f(gpu.flashStep, flash.step);
-  gl.uniform1f(gpu.flashMask, flash.mask);
-  gl.uniform1f(gpu.flashAmt, flash.amt);
+  const hitBits = sturmianAccumulateHits(face, values, play, time);
+  gl.uniform1uiv(gpu.hitBits, hitBits);
   gl.uniform1f(gpu.gridH, layout.gridH);
   gl.uniform1f(gpu.stripPadX, layout.lanes.padX);
   gl.uniform1f(gpu.stripPadY, layout.lanes.padY);
@@ -564,6 +592,7 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.resetCellSize, resetCell ? resetCell.w : 0);
   gl.uniform1f(gpu.resetGap, layout.lanes.resetGap || 0);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
+  sturmianClearDrawnHits(face, values, play, time);
   if (typeof nodeGraphSharedGlEndPresent === "function") nodeGraphSharedGlEndPresent(gl);
   const ctx = typeof nodeGraphSharedGlPresentTarget === "function"
     ? nodeGraphSharedGlPresentTarget(plate)

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Sturmian Grid: whole-pixel cell zoom, integer black margins, playhead step map.
+// Sturmian Grid: auto-fit whole-pixel cells, integer black margins, playhead step map.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,17 +15,13 @@ function rowsNeeded(spread) {
   return 3 * spreadN + 1;
 }
 
-function gridLayout(width, height, steps, spread, zoom, baseCell) {
+function gridLayout(width, height, steps, spread, _zoom, _baseCell) {
   const playCols = Math.max(2, Math.floor(Number(steps) + 0.5) || 2);
   const need = Math.max(1, rowsNeeded(spread));
-  const z = Number.isFinite(Number(zoom)) && Number(zoom) > 0 ? Number(zoom) : 1;
-  const base = Math.max(2, Math.floor(Number(baseCell) + 0.5) || 14);
-  let cell = Math.max(2, Math.floor(base * z));
-  const maxFit = Math.max(2, Math.floor(Math.min(
+  const cell = Math.max(2, Math.floor(Math.min(
     Math.max(1, width) / playCols,
     Math.max(1, height) / need
   )));
-  if (cell > maxFit) cell = maxFit;
   const cols = Math.max(1, Math.floor(Math.max(1, width) / cell));
   const rows = Math.max(1, Math.floor(Math.max(1, height) / cell));
   return {
@@ -47,26 +43,34 @@ function playStepFromPhase(phase, steps) {
 }
 
 const a = gridLayout(400, 300, 16, 1, 1, 14);
-assert(a.cell === 14, `zoom1 cell is 14, got ${a.cell}`);
+assert(a.cell === 25, `auto-fit 16x4 into 400x300 is 25, got ${a.cell}`);
 assert(a.playCols === 16, "16 sounding columns");
-assert(a.ox === Math.floor((400 - a.cols * 14) / 2), "integer centered ox");
+assert(a.cols >= 16, "continuation columns may pack leftover");
+assert(a.ox === Math.floor((400 - a.cols * a.cell) / 2), "integer centered ox");
 assert((400 - a.cols * a.cell) - a.ox * 2 <= 1, "remainder is a whole-pixel margin");
 
-const b = gridLayout(800, 600, 16, 1, 1.9, 14);
-assert(b.cell === 26, `cell is floor(14*1.9)=26, got ${b.cell}`);
+const short = gridLayout(400, 300, 2, 1, 1, 14);
+assert(short.cell === 75, `2 steps x spread 1 zooms in to 75, got ${short.cell}`);
+assert(short.playCols === 2, "2 sounding columns");
+assert(short.cols > 2, "leftover width is dimmed continuation squares");
+assert(short.rows === 4, "Track Spread window is 4 rows");
+
+const twelve = gridLayout(400, 300, 12, 1, 1, 14);
+assert(twelve.cell === Math.floor(Math.min(400 / 12, 300 / 4)), "12 steps auto-fit larger than base 14");
+assert(twelve.cell > 14, `12-step cell grows, got ${twelve.cell}`);
 
 const c = gridLayout(800, 600, 16, 1, 2, 14);
-assert(c.cell === 28, "zoom 2 doubles 14 to 28");
+assert(c.cell === 50, `800x600 / 16x4 auto-fit is 50, got ${c.cell}`);
 const leftover = 800 - c.cols * c.cell;
 assert(leftover < c.cell, "leftover is a sub-cell margin");
 assert(c.ox === Math.floor(leftover / 2), "centered remainder");
 
 const d1 = gridLayout(800, 600, 16, 1, 2.0, 14);
 const d2 = gridLayout(800, 600, 16, 1, 2.07, 14);
-assert(d1.cell === 28 && d2.cell === 28, "cell stays 28 until floor(14*zoom) ticks");
+assert(d1.cell === d2.cell, "cell is fit to the face, not baseCell * zoom");
 
 const e = gridLayout(100, 80, 16, 1, 4, 14);
-assert(e.cell === Math.floor(100 / 16), `shrunk to fit 16 cols, got ${e.cell}`);
+assert(e.cell === Math.floor(100 / 16), `fits 16 cols, got ${e.cell}`);
 assert(e.cols >= 16, "sounding bar still fits");
 
 for (let steps = 2; steps <= 32; steps += 1) {
@@ -80,14 +84,18 @@ for (let steps = 2; steps <= 32; steps += 1) {
 assert(playStepFromPhase(Number.NaN, 16).playing === 0, "missing phase is not playing");
 
 const ui = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid-ui.js"), "utf8");
-assert(ui.includes("floor(base * z)"), "UI uses floor(baseCell * zoom)");
+assert(ui.includes("largest whole-device-pixel"), "UI auto-fits the playable area");
+assert(!ui.includes("floor(base * z)"), "UI no longer starts from baseCell * zoom");
 assert(ui.includes("layoutCell"), "shader gets JS layout uniforms");
 assert(ui.includes("planScopeCapture"), "comments mention planScopeCapture");
 const glsl = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid.glsl"), "utf8");
 assert(glsl.includes("mix(base, vec3(1.0), 0.16)"), "0.16 white play column");
-assert(glsl.includes("mix(base, laneColor(trackHit), flashAmt)"), "hit flash fills the square with track color");
+assert(glsl.includes("hitBits") && glsl.includes("(bits & bit) != 0u"), "binary hit bits, no fade");
+assert(!glsl.includes("flashAmt"), "no smooth hit fade");
 assert(!glsl.includes("mix(base, laneColor(trackHit), 0.85)"), "no inset 0.85 hit fill");
 assert(glsl.includes("trackStrokeAlpha") && glsl.includes("playheadStrokeAlpha"), "separate stroke alphas");
+assert(glsl.includes("sturmianGridVLine") && glsl.includes("sturmianOnRectLines"), "strokes sit on grid gutter/edge lines");
+assert(ui.includes("sturmianAccumulateHits") && ui.includes("sturmianClearDrawnHits"), "hits latch until after the frame is drawn");
 assert(glsl.includes("playing > 0.5"), "playhead gated on playing");
 const reg = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid-register.js"), "utf8");
 assert(reg.includes("planScopeCapture: true"), "register opts into scope capture");

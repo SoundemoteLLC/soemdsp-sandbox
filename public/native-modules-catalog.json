@@ -1947,7 +1947,7 @@
     },
     {
       "name": "mode_resonator",
-      "label": "Mode Resonator",
+      "label": "Mode Ping",
       "targetType": "modeResonator",
       "kind": "generator",
       "source": "native_modules/mode_resonator/mode_resonator.cpp",

@@ -1,7 +1,12 @@
 # Comb Resonator / Comb Pluck split — plan
 
-Status: **plan only, nothing built.** Argi approved the split and the name
-"Comb Pluck" on 2026-11-17. Implement after the open questions below are settled.
+Status: **built 2026-11-17** (commits 84272ea8 modules + wiring, 07cc2ed8
+displays; see "6. As built" at the end). Argi approved the split and the name
+"Comb Pluck" on 2026-11-17.
+Mode Resonator was renamed **Mode Ping** (t367u, display label only: the
+internal key `modeResonator`, the native type and `mode_resonator.cpp` keep
+their names so patches still load). The family is Comb Resonator, Comb Pluck
+and Mode Ping.
 Old patches: **not a concern** (no migration, no legacy jack). Argi briefly
 flagged Pixel Grid + Comb Resonator patches, but none exist on disk, and he said
 to drop it (2026-11-17).
@@ -62,18 +67,16 @@ can't flange. Answers from Argi (2026-11-17) folded in.
 
 **Shape** (switch), one single-cycle burst per trigger:
 - **Bump**: raised-cosine (Hann) pulse. The purest "tap", with no sharp corners.
-- **Triangle**: one bipolar zero-mean triangle cycle (Argi's polyBLEP-triangle
-  test already sounded like a nice tap).
-- **Saw**: one cycle of the DSF saw (same closed-form kernel as the DSF
-  oscillator's Saw + Bright). Soft goes from sine to a sharp saw.
+- ~~Triangle~~ / ~~Saw~~: dropped (t365s993). Only Bump, Noise and the
+  later Edge really worked as taps. Shape is now Bump 0 / Noise 1 / Edge 2.
 - **Noise**: windowed noise burst (Hann window, Fluvv or white source).
   Breathy "pff" taps and snare-ish combs.
 
 **Soft** (0 … 1): one softness control that every shape respects:
 - Bump: window power, so it goes from a gentle cos² to a narrower, punchier cosⁿ.
-- Triangle: rounds the corners (band-limit tilt) toward a sine.
-- Saw: DSF geometric rolloff, exactly like DSF Bright (soft = sine, hard = sharp
-  saw). Nonlinear taper like Bright, with sensitivity near the soft end.
+  As built (t360u): q = 4 · (qMax/4)^(1 − √Soft), qMax = (n_pts/(0.6π))², so
+  Soft 0 is a spike about one sample wide (0.6 table points), a near-click,
+  and Soft 1 the old gentle hump; the zero-mean step keeps it DC-free.
 - Noise: tilts the burst from white (hard) toward dark / brown (soft).
 
 **Width** (Argi picked width): exciter length as a fraction of the loop period
@@ -106,26 +109,26 @@ shared `comb_core` (header or shared functions) used by both
 | decay | Decay | seconds to 1/e, same law as Comb Resonator |
 | damping | Damping | loop lowpass, 0 bright … 1 dark |
 | invert | Polarity | + (all harmonics) / − (odd, hollow, octave down) |
-| shape | Shape | Bump / Triangle / Saw / Noise |
+| shape | Shape | Bump / Noise / Edge |
 | soft | Soft | per-shape softness (see Exciter) |
 | width | Width | exciter length as a fraction of the period |
 | retrigger | Retrigger | Stack / Choke |
-| level | Level | output level; ring peak kept roughly constant across Frequency × Decay (impulse-normalized like Mode Resonator); trigger height scales it |
+| level | Level | output level; ring peak kept roughly constant across Frequency × Decay (impulse-normalized like Mode Ping); trigger height scales it |
 
 No Hold, Topology, or Depth: Hold is infinite sustain (not a pluck),
 Feedforward has no ring, and Depth is feedforward-only. Those stay on the effect.
 
 All limits live in the definition. Fill every per-control `tooltip` field. There are no hover pop-ups.
 
-## 2b. Mode Resonator becomes strictly triggered
+## 2b. Mode Ping becomes strictly triggered
 
-Argi (2026-11-17): Mode Resonator should be triggered strictly and keep its own
+Argi (2026-11-17): Mode Ping should be triggered strictly and keep its own
 (pole-based, modal) sound, so its audio-input effect role goes away.
 
 - Inputs: `Trigger` (rising edge, same latch, velocity-scaled) and `f` (ƒ).
   **Remove the audio inputs** (Mono, Left, Right).
-- Gets the same built-in exciter as Comb Pluck (Shape: Bump / Triangle / Saw /
-  Noise, Soft, Width relative to the period) and the same Retrigger
+- Gets the same built-in exciter as Comb Pluck (Shape: Bump / Noise / Edge,
+  Soft, Width relative to the period) and the same Retrigger
   switch (Stack / Choke). The exciter code is shared, not copied.
 - Keeps its own resonator (poles, its own Decay / Hold / Amplitude law). That's
   what makes it sound different from Comb Pluck.
@@ -201,14 +204,117 @@ Coordinate with MasterBot / Misty before touching shared files
 ## 5. Decisions and open questions
 
 Decided 2026-11-17:
-1. Exciter shapes: Bump, Triangle, Saw (DSF soft-to-sharp), Noise, each with a Soft morph.
+1. Exciter shapes: Bump, Noise, Edge, each with a Soft morph (Triangle and Saw
+   were built, then dropped in t365s993).
 2. Width: relative to the period.
 3. Retrigger: a switch with Stack and Choke.
 4. Trigger height scales the hit.
 5. Mono out.
 7. Displays: the hit view is fine, plus a live playback animation over time.
 
-6. Mode Resonator: drop its effect role. It becomes a **strict triggered
+6. Mode Ping: drop its effect role. It becomes a **strict triggered
    generator** with its own sound (see section 2b). No separate Mode Pluck.
 
 No open questions left; ready to build on Argi's go.
+
+## 6. As built (2026-11-17)
+
+- Shared code: `library/include/soemdsp/filter/comb_core.h` (Comb Resonator
+  and Comb Pluck; Comb Resonator output is bit-identical to before over 200k
+  samples) and `library/include/soemdsp/trigger/pluck_exciter.h` (trigger
+  latch, exciter, Stack / Choke, face taps; Comb Pluck and Mode Ping).
+- Comb Pluck = graph type 266 (`native_modules/comb_pluck/comb_pluck.cpp`),
+  graph version 359. Slots: decay=timeNumerator, damping=shape,
+  invert=stages, shape=waveform, soft=center, width=width, retrigger=mode,
+  level=amplitude. Mode Ping adds shape / soft / width / retrigger on the
+  same slots.
+- Trigger: fires above 0.5, re-arms below 0.4; velocity = peak of the first
+  16 samples after the edge. A velocity gate that never rises above 0.5
+  never fires (the fire threshold is fixed).
+- Exciter: n = round(Width x fs / f) samples (at least 3), sampled at the
+  sample midpoints; zero mean by a Hann-weighted correction, peak 1. Noise is
+  counter-hash noise, simulated once at the edge so the mean, peak and |E(f)|
+  are exact for the samples played.
+- Choke: the old ring fades over 2 ms, is cleared, then the new burst starts
+  (the hit lands 2 ms after the edge). Stack adds into the ring.
+- Comb Pluck Level: the first loop pass is the burst itself, so a hit peaks at
+  about Level x velocity. Mode Ping: 1/|E(f)| normalization latched per
+  hit (at most 64x). No clip (t365, as the combs): the old clamp11 in the
+  pole loop is gone; a NaN / Inf ring resets y1 / y2 to 0 and outputs 0.
+- No clip in either comb (2026-11-17, Argi: "don't let it inf but let it
+  explode, the output will mute if bad things happen"). Comb Resonator's
+  +/-1 clamp (which flattened tall bursts every pass in Feedback, so the
+  ring seemed to damp itself) and Comb Pluck's +/-8 safety clamp are gone.
+  Only guard: comb_nonfinite_reset (comb_core.h) zeroes the delay line,
+  damping and Thiran state if the loop sum is NaN / Inf or too big for the
+  float delay line, and that sample outputs 0.
+- DC trap (2026-11-17, t360u): with + polarity in Feedback the loop writes
+  y - m, m = the mean of the last D written samples (one loop period: running
+  sum plus a trapezoid integral over the fractional D, linear between
+  samples). A partial with period D/k has zero mean over D, so every harmonic
+  passes with no pitch, gain or phase change (the trapezoid error is second
+  order in k/D; a plain N-sample sum with a frac-weighted tail was first
+  order: the engine tuning check read 3.2 cents worst case at 1234.5 Hz with
+  it, 2.0 with the trapezoid); only the
+  0 Hz loop mode is removed (DC loop gain g/2 instead of g). Chosen over a
+  5-20 Hz one-pole in the loop because that shifts each partial by a
+  different phase: compensated at the fundamental, the upper partials would
+  still go about 275 x fc / f cents flat (12 cents at 5 Hz on 110 Hz). With
+  − polarity DC already cancels every pass, so the trap is off there.
+- Low Cut (t361u, Comb Pluck and Comb Resonator, slot hpfFrequency, 1 Hz to
+  5 kHz in the definition): Comb Pluck = a zero-phase one-pole highpass on
+  the exciter burst (forward then backward with the forward ringing past the
+  end continued in closed form; the shift it makes at the two end samples is
+  taken back out with edge shapes decaying at the filter's own rate, so no
+  long ramp puts lows back in; then zero-mean again; identity at 1 Hz), the
+  bottom edge of the burst spectrum next to Soft as the top edge.
+  Comb Resonator = a one-pole highpass on the input. Both sit outside the
+  loop: a variable highpass inside it would detune the partials against each
+  other and shorten their decays, so Decay and tuning stay exact. Mode
+  Resonator has no Low Cut (its 1/|E(f)| normalization would cancel it at f).
+- Exciter table: each burst is rendered at the edge into a 2048-point table
+  (one point per sample up to 2048 samples, else resampled and read back
+  with linear interpolation), so zero-mean, Low Cut, peak and |E(f)| are
+  exact on the samples played.
+- Seed + Noise Hit (t360u, Comb Pluck and Mode Ping, slots seed and
+  lfoStyle; Seed 0..16777215 in the definition): the Noise shape hashes
+  index i with kSeedBase ^ Seed * kSeedMul. Noise Hit New (default) also
+  xors a per-instance salt and continues the instance's counter, so every
+  hit and every module differs (New with Seed 0 is the old stream exactly).
+  Same drops the salt and starts at index 0, so every hit replays one burst
+  and the same Seed sounds the same in any module; the hit view draws that
+  burst exactly (for New it is a representative).
+- Edge (t360u, Shape 4, Comb Pluck and Mode Ping): one ramp-and-drop
+  cycle. The ramp rises 0 -> 1 over the first 1 - d of the burst along the
+  Step Graph Rational curve (segment_curves.h segment_rational01 / JS twin
+  nodeGraphSegmentRational01, one source of truth), bent by the new Curve
+  knob (-1..+1, saturate slot, default 0 = straight saw); the drop falls
+  1 -> 0 over the last d with a raised-cosine. Soft sets d geometrically from
+  half a table point (Soft 0: the last sample is still the top, so the burst
+  ends on a one-sample cliff) to half the burst (Soft 1). Then the usual
+  table pipeline (zero-mean via m * hann, Low Cut, peak 1), so it is DC-free
+  and over inside Width; the zero-mean step pulls the middle of the ramp
+  below 0, like a saw. Soft is reused for the drop (it is the shape's
+  sharpness, as for the others) and Curve is the one new control.
+- Triangle / Saw dropped (t365s993): Shape is Bump 0 / Noise 1 / Edge 2 in
+  both modules (definition max 2, pluck_exciter.h kShapeMax 2, Comb Pluck
+  default Bump). The harmonic-series code (raw_tonal, a / K, kMaxHarmonics)
+  is gone. Saved patches: validateNodeGraphPatch maps the old index when the
+  saved Shape range max is >= 3 or the value is above 2 (0 Bump, 1 Triangle
+  -> Bump, 2 Saw -> Edge, 3 Noise -> 1, 4 Edge -> 2) and resets the saved max
+  to 2 so it migrates once; the DSP and the hit view clamp to 0..2 anyway.
+- Width's cap below one period is the definition's max (0.9); the DSP does
+  not clamp it again.
+- Display `pluckHitFace` (`public/modules/combPluck/pluck-hit-display.js`),
+  shared by all three modules. The exciter inset is a strip at the left edge
+  (one period, burst at its start, shape name under it), separate from the
+  time plot so it never covers the curve. The top-partial curve is the 8th
+  partial (or the highest under Nyquist). Taps: __Elapsed (Phase01),
+  __Peak (Saw, 20 ms release follower), __Vel (Ramp), __Hits (Square).
+  Display Settings: Background / Curve / Live / Text colours, Stack fade (s),
+  Live (on). Comb Resonator in Feedforward shows its magnitude response.
+- Tests: `scripts/test_graph_engine.mjs` section 5a (one hit per held gate,
+  velocity, hysteresis, Level, Stack / Choke, every Shape, 1/e at Decay, Mode
+  strictly triggered, Comb Resonator Trigger gone; no clip: a height-10 burst
+  rings at the same Decay as a quiet one, tuning within 3 cents, a runaway
+  loop resets instead of going Inf).

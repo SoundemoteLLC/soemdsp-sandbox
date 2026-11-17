@@ -175,6 +175,11 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Gain";
     title = "Plot scale: 1 = -1..+1 fills the height (2D Plot: the square, both axes).";
   }
+  if (formType === "pluckHitFace" && key === "fadeTime") {
+    // No hover pop-up (empty title): the label says it.
+    label = "Stack fade (s)";
+    title = "";
+  }
   if (formType === "pulseTrainFace" && key === "fadeTime") {
     label = "Fade time (s)";
     title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
@@ -833,6 +838,12 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
       aria = `${labels[key]} color`;
       base = { ...base, label: labels[key], defaultValue: defaults[key] };
     }
+  } else
+  if (formType === "pluckHitFace" && (key === "backgroundColor" || key === "barColor" || key === "lightColor" || key === "textColor")) {
+    const labels = { backgroundColor: "Background", barColor: "Curve", lightColor: "Live", textColor: "Text" };
+    const defaults = { backgroundColor: "#05080b", barColor: "#7fc7d9", lightColor: "#ffd27a", textColor: "#8b9daa" };
+    base = { ...base, label: labels[key], defaultValue: defaults[key] };
+    aria = `${labels[key]} color`;
   } else
   if (formType === "roundingErrorFace" && (key === "backgroundColor" || key === "barColor" || key === "textColor")) {
     const labels = { backgroundColor: "Background", barColor: "Bars", textColor: "Text" };
@@ -2423,6 +2434,10 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         ...(type === "pulseTrainFace" && node?.type !== "velvetReverb" ? ["fadeTime"] : []),
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
+    }
+    // Hit view: only the Stack fade time (old traces fading under a new hit).
+    if (type === "pluckHitFace" && section === "waterfall") {
+      fieldKeys = ["fadeTime"].filter((key) => activeFields.has(key) && allowKey("fields", key));
     }
     if (type === "formantFilterFace" && section === "waterfall") {
       fieldKeys = ["dotSize", "formantCurveThickness", "bodyThickness"]

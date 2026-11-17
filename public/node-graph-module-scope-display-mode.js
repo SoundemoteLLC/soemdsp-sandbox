@@ -293,6 +293,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "plot",
     "vactrolScope",
     "roundingErrorFace",
+    "pluckHitFace",
     "robinSinepulseFace",
     "sinCos4Face",
     // Lone t Torch: hue shift of the torch pixels.

@@ -25988,9 +25988,17 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
   color: var(--node-slider-unit-color, #7fc7d9);
 }
 
+/* Controls only (displays cropped out): the copy takes the page's room and
+   scrolls when the window is shorter, so nothing ever sits over it. */
 .node-module-face-page-display {
-  flex: 0 0 auto;
-  padding: 8px 10px 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 10px;
+}
+
+.node-module-face-page-body:empty {
+  display: none;
 }
 
 .node-module-face-page-display[hidden] {

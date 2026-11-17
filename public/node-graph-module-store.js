@@ -1250,7 +1250,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   range: {
     category: "math",
-    description: "Linear map from [In Low, In High] to [Out Low, Out High]. Default −1…+1 → −10…+10.",
+    description: "Linear map from [In Min, In Max] to [Out Min, Out Max]. Default −1…+1 → −10…+10.",
     label: "Range",
     notes: ["range", "map", "scale", "remap", "utility", "dynamics", "native"],
   },
@@ -1994,10 +1994,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   modeResonator: {
     category: "scientificFilter",
     description: "Trigger a clean decaying mode with a built-in exciter—metallic rings and predictable resonance tails.",
-    label: "Mode Resonator",
+    label: "Mode Ping",
     notes: [
       "mode",
       "ping",
+      "mode resonator",
+      "resonator",
       "trigger",
       "exciter",
       "pluck",

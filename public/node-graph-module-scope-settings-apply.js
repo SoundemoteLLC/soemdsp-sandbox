@@ -121,6 +121,15 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     if (typeof applyNodeGraphRoundingErrorDisplaySettingsToFace === "function") applyNodeGraphRoundingErrorDisplaySettingsToFace(node);
     return node.traceDisplaySettings;
   }
+  if (displayType === "pluckHitFace" && typeof normalizeNodeGraphPluckHitFaceSettings === "function") {
+    const prev = node.traceDisplaySettings && typeof node.traceDisplaySettings === "object" ? node.traceDisplaySettings : {};
+    const incoming = settings && typeof settings === "object" ? settings : {};
+    const merged = { ...prev };
+    Object.keys(incoming).forEach((key) => { if (incoming[key] !== undefined) merged[key] = incoming[key]; });
+    node.traceDisplaySettings = normalizeNodeGraphPluckHitFaceSettings(merged);
+    if (typeof applyNodeGraphPluckHitDisplaySettingsToFace === "function") applyNodeGraphPluckHitDisplaySettingsToFace(node);
+    return node.traceDisplaySettings;
+  }
   if (displayType === "vactrolScope" && typeof normalizeNodeGraphVactrolScopeSettings === "function") {
     const prev = node.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
       ? node.traceDisplaySettings

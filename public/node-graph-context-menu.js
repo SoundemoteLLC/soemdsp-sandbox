@@ -2513,6 +2513,44 @@ function configureNodeSceneContextMenu(mode) {
  * (knobs / buttons / faces use click-drag; right-click is the menu).
  * @returns {boolean} true if handled
  */
+/**
+ * Right-click on a module outside its parameter controls and displays: select
+ * it and stay on the current Command Center page. Only a parameter
+ * (Parameter Settings) or a display (Display Settings) switches the page on a
+ * right-click; pages that follow the selection (Module Settings, Module page)
+ * just retarget. Returns true when the event was a module's.
+ */
+function nodeGraphSelectModuleFromContextEvent(event, nodeElement = null) {
+  if (event?.type === "dblclick") {
+    return false;
+  }
+  const node = nodeElement
+    || event?.currentTarget?.closest?.(".dsp-node")
+    || event?.target?.closest?.(".dsp-node");
+  const nodeId = String(node?.dataset?.node || "").trim();
+  if (!node || !nodeId || !nodeGraphPatchNode(nodeId)) {
+    return false;
+  }
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  event?.stopImmediatePropagation?.();
+  if (typeof nodeGraphFinishContextSelection === "function") {
+    nodeGraphFinishContextSelection(nodeId, event);
+  } else if (typeof ensureNodeGraphModuleSelectedForContext === "function") {
+    ensureNodeGraphModuleSelectedForContext(nodeId, event);
+  }
+  nodeGraphMvp.sceneContextPoint = null;
+  if (typeof closeNodeScopeContextMenu === "function") {
+    closeNodeScopeContextMenu();
+  }
+  // Already on Module Settings: show this module's actions there.
+  const active = typeof nodeGraphUnifiedWindowActivePage === "function" ? nodeGraphUnifiedWindowActivePage() : "";
+  if (active === "moduleActions") {
+    configureNodeSceneContextMenu("module");
+  }
+  return true;
+}
+
 function openNodeGraphModuleSettingsFromContextEvent(event, nodeElement = null) {
   if (event?.type === "dblclick") {
     return false;
@@ -2615,7 +2653,8 @@ function openNodeModuleActionMenu(event) {
     && openNodeGraphParameterSettingsFromContextEvent(event)) {
     return;
   }
-  openNodeGraphModuleSettingsFromContextEvent(event);
+  // Anything else on the module: select it, no page change.
+  nodeGraphSelectModuleFromContextEvent(event);
 }
 
 /**
@@ -2658,7 +2697,7 @@ function openNodeXyPadContextMenu(event) {
       return true;
     }
   }
-  return openNodeGraphModuleSettingsFromContextEvent(event, nodeEl);
+  return nodeGraphSelectModuleFromContextEvent(event, nodeEl);
 }
 
 function openNodeRoundShapeContextMenu(event) {
@@ -2983,9 +3022,9 @@ function openNodeSceneContextMenu(event) {
     return;
   }
 
-  // Anywhere on a module (ports, inputs, body, header) → Module Settings.
-  // Never Module Browser. Shared with the gear action button.
-  if (openNodeGraphModuleSettingsFromContextEvent(event, onModule)) {
+  // Anywhere else on a module (ports, inputs, body, header): select it and
+  // stay on the current page (parameters and displays claimed it above).
+  if (nodeGraphSelectModuleFromContextEvent(event, onModule)) {
     return;
   }
 

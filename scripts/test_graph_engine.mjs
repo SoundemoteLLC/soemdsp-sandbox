@@ -363,8 +363,8 @@ const shuffled = (n) => {
   }
 }
 
-// ---------------------------------------------------------------- 5a. Comb Pluck / Mode Resonator / Comb Resonator
-// docs/COMB_PLUCK_PLAN.md: Comb Pluck and Mode Resonator fire the shared exciter on a Trigger
+// ---------------------------------------------------------------- 5a. Comb Pluck / Mode Ping / Comb Resonator
+// docs/COMB_PLUCK_PLAN.md: Comb Pluck and Mode Ping fire the shared exciter on a Trigger
 // rising edge (> 0.5, re-arm < 0.4, height = velocity); Comb Resonator is a strict effect.
 {
   const COMB = 66, MODE = 67, CPLUCK = 266, ATT_OFFSET = 71;
@@ -406,47 +406,303 @@ const shuffled = (n) => {
   check(hyst.hits === 2, `comb pluck: re-arms only below 0.4 (dip to 0.45 then 0.3 gave ${hyst.hits} hits, expected 2)`);
   const lvl = run(CPLUCK, held, { params: [[P_AMP, 0.5]] });
   check(Math.abs(lvl.peak - 0.5) < 0.06, `comb pluck: Level 0.5 peaks at ${lvl.peak.toFixed(3)} (expected about 0.5)`);
-  const choke = run(CPLUCK, [[5, 1], [10, 0], [12, 1]], { params: [[P_RETRIG, 1], [P_DECAY, 4]] });
-  const stack = run(CPLUCK, [[5, 1], [10, 0], [12, 1]], { params: [[P_RETRIG, 0], [P_DECAY, 4]] });
+  // Soft 1 (wide Bump) so the second hit overlaps the first ring's bump wherever it lands.
+  const choke = run(CPLUCK, [[5, 1], [10, 0], [12, 1]], { params: [[P_RETRIG, 1], [P_DECAY, 4], [30, 1]] });
+  const stack = run(CPLUCK, [[5, 1], [10, 0], [12, 1]], { params: [[P_RETRIG, 0], [P_DECAY, 4], [30, 1]] });
   check(choke.hits === 2 && stack.hits === 2 && stack.peak > choke.peak, `comb pluck: Stack adds into the ring (peak ${stack.peak.toFixed(3)}), Choke restarts it (peak ${choke.peak.toFixed(3)})`);
   let shapesOk = true;
-  for (let s = 0; s < 4; s++) {
+  for (let s = 0; s < 3; s++) {
     const r = run(CPLUCK, held, { params: [[P_SHAPE_SEL, s], [P_DAMP, 0.4], [P_FREQ, 220]] });
     if (!(r.hits === 1 && r.peak > 0.5 && r.peak < 1.3)) shapesOk = false;
   }
-  check(shapesOk, "comb pluck: every Shape (Bump / Triangle / Saw / Noise) rings once near full level");
+  check(shapesOk, "comb pluck: every Shape (Bump / Noise / Edge) rings once near full level");
+  // Old 5-shape indices (3, 4) never read out of range: the DSP clamps to Edge (2).
+  const edgeRef = run(CPLUCK, held, { params: [[P_SHAPE_SEL, 2], [P_DAMP, 0.4], [P_FREQ, 220]] });
+  const edgeHi = run(CPLUCK, held, { params: [[P_SHAPE_SEL, 4], [P_DAMP, 0.4], [P_FREQ, 220]] });
+  check(edgeHi.hits === 1 && Math.abs(edgeHi.peak - edgeRef.peak) < 1e-9, `comb pluck: Shape 4 clamps to Edge (peak ${edgeHi.peak.toFixed(4)} vs ${edgeRef.peak.toFixed(4)})`);
   // The ring decays at Decay (1/e per Decay seconds): about 0.37 of the hit 1 s after it.
-  const ringAt = (type) => {
+  // hits: [[block, height], ...] (each hit is followed by a low block so it re-arms).
+  const ringAt = (type, { hits = [[2, 1]], params = [] } = {}) => {
     const h = fresh();
     x.soemdsp_graph_add_node(h, 1, BIAS);
     x.soemdsp_graph_add_node(h, 2, type);
     x.soemdsp_graph_set_smooth_type(h, 1, ATT_OFFSET, 3); x.soemdsp_graph_set_smooth_time(h, 1, ATT_OFFSET, 0);
+    for (const [k, v] of params) x.soemdsp_graph_set_param(h, 2, k, v);
     x.soemdsp_graph_connect(h, 1, 0, 2, PORT_TRIG);
     x.soemdsp_graph_compile(h);
     const blocksPerSec = Math.round(SR / BLK);
+    const last = hits[hits.length - 1][0];
     let first = 0, later = 0;
-    for (let b = 0; b < blocksPerSec + 8; b++) {
-      if (b === 2) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, 1);
+    for (let b = 0; b < blocksPerSec + last + 8; b++) {
+      for (const [hb, hv] of hits) {
+        if (b === hb) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, hv);
+        if (b === hb + 1) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, 0);
+      }
       x.soemdsp_graph_process_block(h, BLK);
       let pk = 0;
       for (const v of port(h, 2, 0)) pk = Math.max(pk, Math.abs(v));
-      if (b >= 2 && b < 6) first = Math.max(first, pk);
-      if (b >= blocksPerSec + 2 - 4 && b < blocksPerSec + 2 + 4) later = Math.max(later, pk);
+      if (b >= last && b < last + 4) first = Math.max(first, pk);
+      if (b >= blocksPerSec + last - 4 && b < blocksPerSec + last + 4) later = Math.max(later, pk);
     }
     x.soemdsp_graph_destroy(h);
-    return later / first;
+    return { ratio: later / first, first };
   };
-  const cpRing = ringAt(CPLUCK);
-  const mdRing = ringAt(MODE);
-  check(cpRing > 0.25 && cpRing < 0.45 && mdRing > 0.3 && mdRing < 0.45, `comb pluck / mode resonator: 1 s after a hit with Decay 1 s the ring is at ${cpRing.toFixed(3)} / ${mdRing.toFixed(3)} of its start (expected about 0.37)`);
+  const cpRing = ringAt(CPLUCK).ratio;
+  const mdRing = ringAt(MODE).ratio;
+  check(cpRing > 0.25 && cpRing < 0.45 && mdRing > 0.3 && mdRing < 0.45, `comb pluck / mode ping: 1 s after a hit with Decay 1 s the ring is at ${cpRing.toFixed(3)} / ${mdRing.toFixed(3)} of its start (expected about 0.37)`);
   const md = run(MODE, held);
-  check(md.hits === 1 && md.peak > 0.85 && md.peak <= 1.0, `mode resonator: a held gate fires one hit (hits ${md.hits}, peak ${md.peak.toFixed(3)})`);
+  check(md.hits === 1 && md.peak > 0.85 && md.peak < 1.15, `mode ping: a held gate fires one hit (hits ${md.hits}, peak ${md.peak.toFixed(3)})`);
+  // No clip in Mode Ping: a height-10 hit and four stacked hits ring above 1 and still
+  // fall to about 1/e 1 s later (Decay 1 s), instead of being flattened at 1 and choking.
+  // Stacked at 375 Hz (period 128 samples = one block) so the hits add in phase.
+  const mdTall = ringAt(MODE, { hits: [[2, 10]] });
+  const mdStack = ringAt(MODE, { hits: [[2, 1], [4, 1], [6, 1], [8, 1]], params: [[P_FREQ, 375]] });
+  check(mdTall.first > 8 && mdTall.ratio > 0.3 && mdTall.ratio < 0.45 && mdStack.first > 2.5 && mdStack.ratio > 0.3 && mdStack.ratio < 0.45,
+    `mode ping: no clip, a height-10 hit peaks ${mdTall.first.toFixed(2)} and is at ${mdTall.ratio.toFixed(3)} 1 s later; 4 stacked hits peak ${mdStack.first.toFixed(2)} and are at ${mdStack.ratio.toFixed(3)} (expected about 0.37)`);
   const mdAudio = run(MODE, [[5, 1]], { inPort: 0 });
-  check(mdAudio.peak === 0, `mode resonator: strictly triggered, audio on the old In port does nothing (peak ${mdAudio.peak})`);
+  check(mdAudio.peak === 0, `mode ping: strictly triggered, audio on the old In port does nothing (peak ${mdAudio.peak})`);
   const combTrig = run(COMB, held);
   check(combTrig.peak === 0, `comb resonator: strict effect, Trigger no longer feeds the comb (peak ${combTrig.peak})`);
   const combIn = run(COMB, [[5, 1], [6, 0]], { inPort: 0 });
   check(combIn.peak > 0.5, `comb resonator: audio In still rings the comb (peak ${combIn.peak.toFixed(3)})`);
+
+  // No clip anywhere in the comb (Argi 2026-11-17: "don't let it inf but let it explode, the
+  // output will mute if bad things happen"). Only a NaN / Inf loop resets the comb to silence.
+  const P_HOLD = 54;
+  // Feed a 1-block burst of height A into Comb Resonator (Feedback); return the output.
+  const combRing = (A, { freq = 110, decay = 1, hold = 0, blocks = Math.round(SR / BLK), steady = false } = {}) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_add_node(h, 2, COMB);
+    x.soemdsp_graph_set_smooth_type(h, 1, ATT_OFFSET, 3); x.soemdsp_graph_set_smooth_time(h, 1, ATT_OFFSET, 0);
+    x.soemdsp_graph_set_param(h, 2, P_FREQ, freq);
+    x.soemdsp_graph_set_param(h, 2, P_DECAY, decay);
+    x.soemdsp_graph_set_param(h, 2, P_HOLD, hold);
+    x.soemdsp_graph_connect(h, 1, 0, 2, 0);
+    x.soemdsp_graph_compile(h);
+    for (let b = 0; b < 40; b++) x.soemdsp_graph_process_block(h, BLK); // let the knob glides settle
+    const out = new Float64Array(blocks * BLK);
+    for (let b = 0; b < blocks; b++) {
+      if (b === 0) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, A);
+      if (b === 1 && !steady) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, 0);
+      x.soemdsp_graph_process_block(h, BLK);
+      out.set(port(h, 2, 0), b * BLK);
+    }
+    x.soemdsp_graph_destroy(h);
+    return out;
+  };
+  const winPeak = (a, t, w = 0.02) => {
+    let p = 0;
+    for (let i = Math.max(0, Math.round((t - w) * SR)); i < Math.min(a.length, Math.round((t + w) * SR)); i++) p = Math.max(p, Math.abs(a[i]));
+    return p;
+  };
+  const decayRatio = (a) => winPeak(a, 0.75) / winPeak(a, 0.25); // Decay 1 s: exp(-0.5) = 0.607
+  const want = Math.exp(-0.5);
+  const quiet = combRing(0.1), tall = combRing(10);
+  const rq = decayRatio(quiet), rt = decayRatio(tall);
+  let tallPeak = 0;
+  for (const v of tall) tallPeak = Math.max(tallPeak, Math.abs(v));
+  check(tallPeak > 9.5, `comb resonator: no clip, a height-10 burst comes out at ${tallPeak.toFixed(2)} (was clamped to 1)`);
+  check(Math.abs(rq - want) < 0.03 && Math.abs(rt - want) < 0.03, `comb resonator: Feedback ring decays at Decay for quiet and tall bursts (0.25 s -> 0.75 s: ${rq.toFixed(3)} at 0.1, ${rt.toFixed(3)} at 10, expected ${want.toFixed(3)})`);
+  // Tuning: the ring's period (autocorrelation, parabolic peak) vs fs / Frequency, in cents.
+  const periodOf = (a, start, len, lo, hi) => {
+    const ac = (lag) => { let s = 0; for (let i = start; i < start + len; i++) s += a[i] * a[i + lag]; return s; };
+    let best = lo, bv = -Infinity;
+    for (let l = lo; l <= hi; l++) { const v = ac(l); if (v > bv) { bv = v; best = l; } }
+    const y0 = ac(best - 1), y1 = bv, y2 = ac(best + 1);
+    return best + 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2);
+  };
+  let worstCents = 0;
+  for (const [f, A] of [[220, 0.1], [220, 10], [331.7, 10], [1234.5, 10]]) {
+    const a = combRing(A, { freq: f, blocks: 200 });
+    const D = SR / f;
+    const per = periodOf(a, Math.round(0.1 * SR), 4096, Math.floor(D * 0.9), Math.ceil(D * 1.1));
+    worstCents = Math.max(worstCents, Math.abs(1200 * Math.log2(D / per)));
+  }
+  check(worstCents < 3, `comb resonator: tuning holds at any level (worst ${worstCents.toFixed(2)} cents over 220 / 331.7 / 1234.5 Hz, quiet and tall)`);
+  // Comb Pluck: the loop is unclipped too (the old +-8 runaway clamp is gone).
+  const hot = run(CPLUCK, [[5, 20], [40, 0]]);
+  check(hot.peak > 18, `comb pluck: velocity 20 rings at ${hot.peak.toFixed(2)} (no clip)`);
+
+  // DC trap (+ polarity Feedback writes y - mean of the last loop period) and Low Cut
+  // (Comb Resonator: input highpass; Comb Pluck: zero-phase highpass on the exciter).
+  const P_LOWCUT = 60, SAW_PORT = 3;
+  // Run Comb Resonator (+, Feedback, Decay 5 s) on a source built by setup(h) into port 0.
+  const combOn = (setup, { seconds = 3, lowCut = 1, decay = 5 } = {}) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 2, COMB);
+    x.soemdsp_graph_set_param(h, 2, P_FREQ, 110);
+    x.soemdsp_graph_set_param(h, 2, P_DECAY, decay);
+    x.soemdsp_graph_set_param(h, 2, P_LOWCUT, lowCut);
+    setup(h);
+    x.soemdsp_graph_compile(h);
+    const blocks = Math.round((seconds * SR) / BLK);
+    const out = new Float64Array(blocks * BLK);
+    for (let b = 0; b < blocks; b++) { x.soemdsp_graph_process_block(h, BLK); out.set(port(h, 2, 0), b * BLK); }
+    x.soemdsp_graph_destroy(h);
+    return out;
+  };
+  const tailStats = (a, seconds) => {
+    let pk = 0, sum = 0;
+    const from = a.length - Math.round(seconds * SR);
+    for (let i = from; i < a.length; i++) { pk = Math.max(pk, Math.abs(a[i])); sum += a[i]; }
+    return { pk, mean: sum / (a.length - from) };
+  };
+  const bias = (h, v) => {
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_set_smooth_type(h, 1, ATT_OFFSET, 3); x.soemdsp_graph_set_smooth_time(h, 1, ATT_OFFSET, 0);
+    x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, v);
+    x.soemdsp_graph_connect(h, 1, 0, 2, 0);
+  };
+  // Hold + a huge input on the loop pitch (Amp 1e37 x 110 Hz sine) grows without limit until
+  // the float delay line would overflow; then the comb resets to silence instead of Inf / NaN.
+  // (A steady DC input no longer runs away: the DC trap holds it at about x / (2 - g).)
+  const boom = combOn((h) => {
+    x.soemdsp_graph_set_param(h, 2, 54, 1);
+    x.soemdsp_graph_set_param(h, 2, 12, 1e37);
+    x.soemdsp_graph_add_node(h, 3, OSC); x.soemdsp_graph_set_param(h, 3, P_FREQ, 110);
+    x.soemdsp_graph_connect(h, 3, SINE, 2, 0);
+  }, { seconds: 2 });
+  let finite = true, big = 0, resets = 0;
+  for (let i = 1; i < boom.length; i++) {
+    if (!Number.isFinite(boom[i])) finite = false;
+    big = Math.max(big, Math.abs(boom[i]));
+    if (boom[i] === 0 && boom[i - 1] !== 0) resets += 1;
+  }
+  check(finite && big > 1e38 && resets > 0, `comb resonator: a runaway loop resets instead of going Inf (all finite ${finite}, max ${big.toExponential(2)}, ${resets} reset(s))`);
+  // DC step held (Decay 5 s: a plain comb would pile it up 1 / (1 - g) = ~550x). The step's
+  // edge still rings the harmonics (that is the comb working), so this checks the tail's DC.
+  const step = tailStats(combOn((h) => bias(h, 1)), 0.5);
+  check(Math.abs(step.mean) < 0.01, `comb resonator: a held DC step does not build up (last 0.5 s mean ${step.mean.toFixed(4)}, ring peak ${step.pk.toFixed(3)})`);
+  // A 3 Hz sine passes Low Cut at its 1 Hz floor: the DC trap alone keeps the 0 Hz loop mode
+  // from resonating it (gain at 3 Hz from a 1 s DFT of the tail; a plain comb gives about 5.8).
+  const dft = (a, hz, from, len) => {
+    let re = 0, im = 0;
+    for (let i = from; i < from + len; i++) { const ph = 2 * Math.PI * hz * i / SR; re += a[i] * Math.cos(ph); im -= a[i] * Math.sin(ph); }
+    return Math.hypot(re, im) / len;
+  };
+  const wobA = combOn((h) => {
+    x.soemdsp_graph_add_node(h, 3, OSC); x.soemdsp_graph_set_param(h, 3, P_FREQ, 3);
+    x.soemdsp_graph_connect(h, 3, SINE, 2, 0);
+  });
+  const wobGain = 2 * dft(wobA, 3, wobA.length - SR, SR);
+  check(wobGain < 2, `comb resonator: a 3 Hz sine is not resonated by the 0 Hz loop mode (gain ${wobGain.toFixed(3)})`);
+  // Repeating ramp 0..1 (saw + 0.5 offset, 37 Hz): no DC in the output, nothing runs away.
+  const ramp = tailStats(combOn((h) => {
+    bias(h, 0.5);
+    x.soemdsp_graph_add_node(h, 3, OSC); x.soemdsp_graph_set_param(h, 3, P_FREQ, 37);
+    x.soemdsp_graph_connect(h, 3, SAW_PORT, 2, 0);
+  }), 1);
+  check(Math.abs(ramp.mean) < 0.02 && ramp.pk < 20, `comb resonator: a repeating 0..1 ramp leaves no DC (mean ${ramp.mean.toFixed(4)}, peak ${ramp.pk.toFixed(2)})`);
+  // DC trap keeps the tuning: the tall-burst tuning check above already runs through it; Low Cut
+  // never touches the loop. Comb Pluck Low Cut: thins the fundamental, keeps the top, same pitch.
+  const pluckRing = (lowCut) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_add_node(h, 2, CPLUCK);
+    x.soemdsp_graph_set_smooth_type(h, 1, ATT_OFFSET, 3); x.soemdsp_graph_set_smooth_time(h, 1, ATT_OFFSET, 0);
+    for (const [k, v] of [[P_FREQ, 220], [P_SHAPE_SEL, 2], [52, 1], [P_DAMP, 0], [P_LOWCUT, lowCut], [30, 0]]) x.soemdsp_graph_set_param(h, 2, k, v);
+    x.soemdsp_graph_connect(h, 1, 0, 2, PORT_TRIG);
+    x.soemdsp_graph_compile(h);
+    for (let b = 0; b < 40; b++) x.soemdsp_graph_process_block(h, BLK);
+    const blocks = Math.round((0.5 * SR) / BLK);
+    const out = new Float64Array(blocks * BLK);
+    for (let b = 0; b < blocks; b++) {
+      if (b === 0) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, 1);
+      x.soemdsp_graph_process_block(h, BLK);
+      out.set(port(h, 2, 0), b * BLK);
+    }
+    x.soemdsp_graph_destroy(h);
+    return out;
+  };
+  const lo = pluckRing(1), hi = pluckRing(2000);
+  const win = Math.round(0.1 * SR);
+  const fundRatio = dft(hi, 220, 2000, win) / dft(lo, 220, 2000, win);
+  const topRatio = dft(hi, 220 * 12, 2000, win) / dft(lo, 220 * 12, 2000, win);
+  check(fundRatio < 0.5 && topRatio > 0.7, `comb pluck: Low Cut 2 kHz thins the fundamental (x${fundRatio.toFixed(3)}) and keeps the 12th partial (x${topRatio.toFixed(3)})`);
+  const D = SR / 220;
+  const perHi = periodOf(hi, 2000, 8192, Math.floor(D * 0.9), Math.ceil(D * 1.1));
+  const centsHi = Math.abs(1200 * Math.log2(D / perHi));
+  check(centsHi < 3, `comb pluck: Low Cut 2 kHz leaves the tuning alone (${centsHi.toFixed(2)} cents)`);
+
+  // Seed / Noise Hit (Noise shape; seed slot 48, lfoStyle slot 56 = 0 New / 1 Same). Decay 1 ms
+  // so the output is just the burst; hits every 30 blocks, each compared over its first 6 blocks.
+  const P_SEED = 48, P_NOISE_HIT = 56;
+  const noiseHits = (type, { seed = 0, same = 0, hits = 2, extraFirst = false } = {}) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    if (extraFirst) x.soemdsp_graph_add_node(h, 3, type);  // takes the first native instance
+    x.soemdsp_graph_add_node(h, 2, type);
+    x.soemdsp_graph_set_smooth_type(h, 1, ATT_OFFSET, 3); x.soemdsp_graph_set_smooth_time(h, 1, ATT_OFFSET, 0);
+    for (const [k, v] of [[P_FREQ, 220], [P_SHAPE_SEL, 1], [P_DECAY, 0.001], [P_SEED, seed], [P_NOISE_HIT, same]]) x.soemdsp_graph_set_param(h, 2, k, v);
+    x.soemdsp_graph_connect(h, 1, 0, 2, PORT_TRIG);
+    x.soemdsp_graph_compile(h);
+    for (let b = 0; b < 40; b++) x.soemdsp_graph_process_block(h, BLK);  // let Frequency / Decay settle
+    const segs = [];
+    for (let k = 0; k < hits; k++) {
+      x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, 1);
+      const seg = [];
+      for (let b = 0; b < 30; b++) {
+        if (b === 10) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, 0);
+        x.soemdsp_graph_process_block(h, BLK);
+        if (b < 6) seg.push(...port(h, 2, 0));
+      }
+      segs.push(seg);
+    }
+    x.soemdsp_graph_destroy(h);
+    return segs;
+  };
+  // Bump Soft range: Soft 0 is a near-click (a spike about one sample wide), Soft 1 the gentle
+  // hump (about half the burst); both DC-free. Decay 1 ms and Polarity - (no DC trap moving
+  // the sum around): the output is the burst itself.
+  const bumpBurst = (soft, shape = 0, curve = 0) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_add_node(h, 2, CPLUCK);
+    x.soemdsp_graph_set_smooth_type(h, 1, ATT_OFFSET, 3); x.soemdsp_graph_set_smooth_time(h, 1, ATT_OFFSET, 0);
+    for (const [k, v] of [[P_FREQ, 220], [P_SHAPE_SEL, shape], [P_DECAY, 0.001], [30, soft], [P_DAMP, 0], [22, 1], [58, curve]]) x.soemdsp_graph_set_param(h, 2, k, v);
+    x.soemdsp_graph_connect(h, 1, 0, 2, PORT_TRIG);
+    x.soemdsp_graph_compile(h);
+    for (let b = 0; b < 40; b++) x.soemdsp_graph_process_block(h, BLK);
+    x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, 1);
+    const out = [];
+    for (let b = 0; b < 4; b++) { x.soemdsp_graph_process_block(h, BLK); out.push(...port(h, 2, 0)); }
+    x.soemdsp_graph_destroy(h);
+    const pk = Math.max(...out.map(Math.abs));
+    const above = out.filter((v) => Math.abs(v) > 0.5 * pk).length;
+    const sum = out.reduce((a, v) => a + v, 0);
+    let cliff = 0;
+    for (let i = 1; i < out.length; i++) cliff = Math.max(cliff, out[i - 1] - out[i]);
+    let early = 0;
+    for (let i = 0; i < 44; i++) early += out[i];
+    return { pk, above, sum, cliff: cliff / pk, early: early / 44 / pk, out };
+  };
+  const click = bumpBurst(0), hump = bumpBurst(1);
+  check(click.above <= 2 && hump.above > 20 && Math.abs(click.sum) < 0.05 && Math.abs(hump.sum) < 0.05,
+    `comb pluck: Bump Soft 0 is a near-click (${click.above} sample(s) over half peak), Soft 1 a hump (${hump.above}), both DC-free (sums ${click.sum.toFixed(4)}, ${hump.sum.toFixed(4)})`);
+  // Edge (Shape 4): ramp along the Rational curve, then a drop whose speed is Soft; DC-free,
+  // over inside Width (109 samples at 220 Hz, Width 0.5).
+  const edgeSharp = bumpBurst(0, 2), edgeSoft = bumpBurst(1, 2);
+  const edgeUp = bumpBurst(0.3, 2, 0.8), edgeDown = bumpBurst(0.3, 2, -0.8);
+  const tail = Math.max(...edgeSharp.out.slice(112).map(Math.abs));
+  check(edgeSharp.cliff > 0.9 && edgeSoft.cliff < 0.15 && Math.abs(edgeSharp.sum) < 0.05 && Math.abs(edgeSoft.sum) < 0.05 && tail < 0.02,
+    `comb pluck: Edge Soft 0 drops in one sample (${edgeSharp.cliff.toFixed(2)} of peak), Soft 1 drops gently (${edgeSoft.cliff.toFixed(2)}), DC-free (sums ${edgeSharp.sum.toFixed(4)}, ${edgeSoft.sum.toFixed(4)}), over inside Width (after: ${tail.toFixed(4)})`);
+  check(edgeUp.early > edgeDown.early + 0.05,  // the zero-mean step (m * hann) pulls both below 0
+   
+    `comb pluck: Edge Curve +0.8 rises early (first 40% mean ${edgeUp.early.toFixed(3)}), -0.8 late (${edgeDown.early.toFixed(3)})`);
+  const maxDiff = (a, b) => { let d = 0; for (let i = 0; i < a.length; i++) d = Math.max(d, Math.abs(a[i] - b[i])); return d; };
+  for (const [type, name] of [[CPLUCK, "comb pluck"], [MODE, "mode resonator"]]) {
+    const same = noiseHits(type, { seed: 7, same: 1 });
+    const newer = noiseHits(type, { seed: 7, same: 0 });
+    const sameOther = noiseHits(type, { seed: 7, same: 1, extraFirst: true });
+    const seed8 = noiseHits(type, { seed: 8, same: 1 });
+    const newOther = noiseHits(type, { seed: 7, same: 0, extraFirst: true });
+    const pk = Math.max(...same[0].map(Math.abs));
+    check(pk > 0.1 && maxDiff(same[0], same[1]) < 1e-6 && maxDiff(same[0], sameOther[0]) === 0,
+      `${name}: Noise Hit Same replays one burst every hit and in another instance (peak ${pk.toFixed(3)}, hit 2 diff ${maxDiff(same[0], same[1]).toExponential(1)} (the last ring tail), other instance diff ${maxDiff(same[0], sameOther[0])})`);
+    check(maxDiff(newer[0], newer[1]) > 0.05 && maxDiff(newer[0], newOther[0]) > 0.05 && maxDiff(same[0], seed8[0]) > 0.05,
+      `${name}: Noise Hit New gives fresh noise each hit and per instance, and Seed changes the Same burst (diffs ${maxDiff(newer[0], newer[1]).toFixed(3)}, ${maxDiff(newer[0], newOther[0]).toFixed(3)}, ${maxDiff(same[0], seed8[0]).toFixed(3)})`);
+  }
 }
 
 // ---------------------------------------------------------------- 5b. RMS Meter (stereo in, one set of outs)

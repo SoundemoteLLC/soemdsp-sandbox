@@ -160,8 +160,9 @@ Only these live-audio types exist in the efficient build:
 | `superloveFilter` | SuperLove character filter |
 | `humanFilter` | Human character filter |
 | `resonatorFilter` | Character resonator (sin/tri/saw) |
-| `combResonator` | Delay-loop comb resonator |
-| `modeResonator` | Complex 2-pole mode resonator |
+| `combResonator` | Delay-loop comb resonator (audio-in effect) |
+| `combPluck` | Triggered comb (Karplus-Strong pluck) with built-in exciter |
+| `modeResonator` | Complex 2-pole mode resonator (triggered, built-in exciter) |
 | `chaoticPhaseLockingFilter` | Chaotic phase-locking filter |
 | `inertialFilter` | Attack/release inertial smoother |
 | `expAdsr` | Curve ADSR envelope |
@@ -234,7 +235,7 @@ polyBlep → ladderFilter → softClipper → reverbEffect → pingPongDelay →
    chebyshev / elliptic /
    eqFilter / activeFilter / passiveFilter / tb303Filter /
    flowerChildFilter / flowerChildFilterRev3 / yellowjacketFilter / superloveFilter / humanFilter /
-   resonatorFilter / combResonator / modeResonator /
+   resonatorFilter / combResonator / combPluck / modeResonator /
    chaoticPhaseLockingFilter / inertialFilter /
    expAdsr / linearEnvelope / pluckEnvelope /
    flowerChildEnvelopeFollower /

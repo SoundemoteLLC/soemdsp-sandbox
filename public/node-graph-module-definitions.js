@@ -199,7 +199,7 @@ const nodeGraphNodeLabels = Object.freeze({
   vcvrackSuperloveFilter: "VCVRack Superlove Filter",
   chaoticPhaseLockingFilter: "Chaotic Phaselocking Filter",
   resonatorFilter: "Shaped Resonator Filter",
-  modeResonator: "Mode Resonator",
+  modeResonator: "Mode Ping",
   combResonator: "Comb Resonator",
   combPluck: "Comb Pluck",
   waveguide: "Waveguide",
@@ -9682,11 +9682,8 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   range: {
-    // Hand-written face (node-graph-module-face.js): In and Out bands (ends may cross to invert).
-    face: [
-      { kind: "band", lo: "inLow", hi: "inHigh", label: "In", h: 34 },
-      { kind: "band", lo: "outLow", hi: "outHigh", label: "Out", h: 34 },
-    ],
+    // Four separate standard sliders (In Min, In Max, Out Min, Out Max; ends may
+    // cross to invert). Keys stay inLow/inHigh/outLow/outHigh so patches load unchanged.
     planRole: "processor",
     label: "Range",
     // Face shows the sent/effective Out value (not Trace). Ranges own the
@@ -9708,47 +9705,47 @@ const nodeGraphModuleDefinitions = (
         // Browser spawn (bipolar): In −1…+1. Slider domain ±10. Wire unipolar spawn uses 0…1.
         defaultValue: "-1",
         key: "inLow",
-        label: "In Low",
+        label: "In Min",
         max: "10",
         mid: "0",
         min: "-10",
         nonlinearSlider: true,
         showSign: true,
         step: "any",
-        tooltip: "Input value that maps to Out Low. Default −1 (bipolar). Slider domain −10…+10." },
+        tooltip: "Input value that maps to Out Min. Default −1 (bipolar). Slider domain −10…+10." },
       {
         defaultValue: "1",
         key: "inHigh",
-        label: "In High",
+        label: "In Max",
         max: "10",
         mid: "1",
         min: "-10",
         nonlinearSlider: true,
         showSign: true,
         step: "any",
-        tooltip: "Input value that maps to Out High. Default +1 (bipolar). Slider domain −10…+10." },
+        tooltip: "Input value that maps to Out Max. Default +1 (bipolar). Slider domain −10…+10." },
       {
         defaultValue: "0",
         key: "outLow",
-        label: "Out Low",
+        label: "Out Min",
         max: "10",
         mid: "0",
         min: "-10",
         nonlinearSlider: true,
         showSign: true,
         step: "any",
-        tooltip: "Output at In Low. Default 0. Slider domain −10…+10." },
+        tooltip: "Output at In Min. Default 0. Slider domain −10…+10." },
       {
         defaultValue: "1",
         key: "outHigh",
-        label: "Out High",
+        label: "Out Max",
         max: "10",
         mid: "0",
         min: "-10",
         nonlinearSlider: true,
         showSign: true,
         step: "any",
-        tooltip: "Output at In High. Default +1. Slider domain −10…+10." },
+        tooltip: "Output at In Max. Default +1. Slider domain −10…+10." },
     ]
   },
   tubeSaturation: {
@@ -14769,12 +14766,13 @@ const nodeGraphModuleDefinitions = (
   // exciter (soemdsp/trigger/pluck_exciter.h) into the poles; no audio input.
   modeResonator: {
     // Hand-written face (node-graph-module-face.js): Freq | Decay, Shape, Soft | Width,
-    // Stack / Choke, Amp, Hold Off / Hold On. Hit view above it
+    // Noise New / Same, Stack / Choke, Amp, Hold Off / Hold On (Seed: parameters only). Hit view above it
     // (modules/combPluck/pluck-hit-display.js): predicted ring + live playhead.
     face: [
       { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"]], h: 40 },
-      { kind: "choices", param: "shape", labels: ["Bump", "Triangle", "Saw", "Noise"], h: 26 },
+      { kind: "choices", param: "shape", labels: ["Bump", "Noise", "Edge"], h: 26 },
       { kind: "cells", params: [["soft", "Soft"], ["width", "Width"]], h: 40 },
+      { kind: "choices", param: "noiseHit", labels: ["Noise New", "Noise Same"], h: 26 },
       { kind: "choices", param: "retrigger", labels: ["Stack", "Choke"], h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "choices", param: "hold", labels: ["Hold Off", "Hold On"], h: 26 },
@@ -14798,7 +14796,7 @@ const nodeGraphModuleDefinitions = (
     inputLabels: { f: "ƒ" },
     outputs: ["Out"],
     outputTooltips: {
-      Out: "The ring: Amplitude x velocity, clamped to ±1." },
+      Out: "The ring: peaks near Amplitude x velocity per hit. Not clipped: tall or stacked hits go above 1 (only a NaN / Inf ring resets to silence)." },
     parameters: [
       {
         defaultValue: "440",
@@ -14844,20 +14842,20 @@ const nodeGraphModuleDefinitions = (
         tooltip: "On = undamped ring (r = 1): after excitation the mode holds a pure sinusoid forever."
       },
       {
-        choices: ["Bump", "Triangle", "Saw", "Noise"],
+        choices: ["Bump", "Noise", "Edge"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "shape",
         label: "Shape",
         linearSmoothing: false,
-        max: "3",
+        max: "2",
         mid: "0",
         min: "0",
         nonlinearSlider: false,
         step: "1",
         tooltip:
-          "Exciter fired on each Trigger edge, one burst shorter than the period. Bump = one smooth hump (Soft widens it). Triangle = one band-limited triangle cycle. Saw = one band-limited saw cycle (DSF rolloff). Noise = a filtered noise burst. Every shape has its DC removed, so the ring never drifts."
+          "Exciter fired on each Trigger edge, one burst shorter than the period. Bump = one smooth hump (Soft widens it). Noise = a filtered noise burst. Edge = one ramp-and-drop cycle: the ramp follows Curve (the Step Graph curve), Soft sets how fast it drops. Every shape has its DC removed, so the ring never drifts."
       },
       {
         defaultValue: "0.5",
@@ -14870,7 +14868,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         tooltip:
-          "Softness of the exciter, latched at each hit. Bump: 1 = gentle hump, 0 = narrow punchy spike. Triangle / Saw: 1 = sine, 0 = sharp corners (geometric harmonic rolloff, like DSF Bright). Noise: 1 = dark, 0 = white."
+          "Softness of the exciter, latched at each hit. Bump: 1 = gentle hump about half the burst wide, 0 = a near-click spike about one sample wide (the width shrinks geometrically, most of the change near 0), still with no DC. Noise: 1 = dark, 0 = white. Edge: 0 = drops in one sample (a cliff), 1 = the drop takes half the burst."
       },
       {
         defaultValue: "0.5",
@@ -14883,6 +14881,50 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         tooltip:
           "Exciter length as a fraction of one period (1/Frequency), latched at each hit. Narrow = bright tick or pong, wide = round pow or thump. Tied to the period, so the timbre follows pitch. Kept under one period so the burst never overlaps its own echo."
+      },
+      {
+        defaultValue: "0",
+        key: "curve",
+        label: "Curve",
+        max: "1",
+        mid: "0",
+        min: "-1",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip:
+          "Edge shape only: bend of its ramp, latched at each hit, the same Rational curve as Step Graph segments (−1…+1). 0 = straight saw ramp; + = rises fast then levels off before the drop (rounder, softer edge); − = starts slow and rushes into the drop (sharper, brighter edge). Other shapes ignore it."
+      },
+      {
+        defaultValue: "0",
+        key: "seed",
+        kind: "seed",
+        label: "Seed",
+        linearSmoothing: false,
+        max: "16777215",
+        maxDigits: 0,
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        smoothingType: "none",
+        step: "1",
+        tooltip:
+          "Which noise the Noise shape uses, latched at each hit. With Noise Hit Same, the same Seed gives the identical burst every hit, in any Mode Ping (the hit view draws exactly that burst). With New, Seed (mixed with a per-module salt) picks this module's own noise stream and each hit continues it. Other shapes ignore it."
+      },
+      {
+        choices: ["New", "Same"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "noiseHit",
+        label: "Noise Hit",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip:
+          "Noise shape only. New = every hit takes fresh noise (the next stretch of this module's stream, so repeated notes vary like a real pluck). Same = every hit replays one burst picked by Seed (machine-gun identical, like a sample)."
       },
       {
         choices: ["Stack", "Choke"],
@@ -14909,19 +14951,19 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Impulse-normalized level: each hit's ring peaks near Amplitude x velocity at any Frequency, Decay, Shape or Width (the exciter's strength at Frequency is divided out, at most 64x). The output is clamped to ±1."
+        tooltip: "Impulse-normalized level: each hit's ring peaks near Amplitude x velocity at any Frequency, Decay, Shape or Width (the exciter's strength at Frequency is divided out, at most 64x). Not clipped: tall or stacked hits ring above 1 and still decay at Decay; only a NaN / Inf ring resets to silence."
       },
     ]
   },
-  // Delay+feedback comb: pitch from delay D=fs/f0. Sibling of Mode Resonator (poles vs delay loop).
+  // Delay+feedback comb: pitch from delay D=fs/f0. Sibling of Mode Ping (poles vs delay loop).
   combResonator: {
-    // Hand-written face (node-graph-module-face.js): Freq | Decay, Damping | Depth, Amp,
+    // Hand-written face (node-graph-module-face.js): Freq | Decay, Damping | Depth, Amp | Low Cut,
     // Hold, Topology, Polarity. Decay view above it (modules/combPluck/pluck-hit-display.js):
     // the loop envelope from Decay / Damping / Hold, or the Feedforward response.
     face: [
       { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"]], h: 40 },
       { kind: "cells", params: [["damping", "Damping"], ["depth", "Depth"]], h: 40 },
-      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"], ["lowCut", "Low Cut"]], h: 40 },
       { kind: "choices", param: "hold", labels: ["Hold Off", "Hold On"], h: 26 },
       { kind: "choices", param: "topology", labels: ["Feedback", "Feedforward"], h: 26 },
       { kind: "choices", param: "invert", labels: ["+", "−"], h: 26 },
@@ -14995,7 +15037,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Feedback only: g ≈ 1 (sustained loop). No loop DC block (keeps Decay accurate). Positive polarity + DC input can accumulate — HP after if needed."
+        tooltip: "Feedback only: g ≈ 1 (sustained loop), partials above Low Cut ring forever. DC cannot pile up: with + polarity the loop subtracts the mean of its last period (exact for every harmonic, so pitch and Decay are untouched)."
       },
       {
         defaultValue: "0",
@@ -15008,6 +15050,20 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         tooltip:
           "Feedback only: one-pole lowpass in the loop (Karplus–Strong style). 0 = bright pure comb, 1 = dark / faster high-partial loss."
+      },
+      {
+        defaultValue: "1",
+        key: "lowCut",
+        kind: "frequency",
+        label: "Low Cut",
+        max: "5000",
+        maxDigits: 5,
+        mid: "100",
+        min: "1",
+        step: "any",
+        unit: "Hz",
+        tooltip:
+          "Highpass on the input (one-pole), before the comb: the bottom edge of what excites it (Damping trims the top). Low partials get less to ring with, so the comb sounds thinner. It is outside the loop, so it never changes pitch or Decay. At the bottom of its range it only keeps DC out."
       },
       {
         choices: ["Feedback", "Feedforward"],
@@ -15068,16 +15124,19 @@ const nodeGraphModuleDefinitions = (
   // Resonator loop (soemdsp/filter/comb_core.h) struck on each Trigger edge by the
   // shared pluck exciter (soemdsp/trigger/pluck_exciter.h). Mono out.
   combPluck: {
-    // Hand-written face (node-graph-module-face.js): Freq | Decay, Damping | Level,
-    // Shape, Soft | Width, Stack / Choke, Polarity. Hit view above it
+    // Hand-written face (node-graph-module-face.js): Freq | Decay, Damping | Low Cut,
+    // Shape, Soft | Width, Noise New / Same, Stack / Choke, Polarity, Level (Seed:
+    // parameters only). Hit view above it
     // (modules/combPluck/pluck-hit-display.js): predicted ring + live playhead.
     face: [
       { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"]], h: 40 },
-      { kind: "cells", params: [["damping", "Damping"], ["level", "Level"]], h: 40 },
-      { kind: "choices", param: "shape", labels: ["Bump", "Triangle", "Saw", "Noise"], h: 26 },
+      { kind: "cells", params: [["damping", "Damping"], ["lowCut", "Low Cut"]], h: 40 },
+      { kind: "choices", param: "shape", labels: ["Bump", "Noise", "Edge"], h: 26 },
       { kind: "cells", params: [["soft", "Soft"], ["width", "Width"]], h: 40 },
+      { kind: "choices", param: "noiseHit", labels: ["Noise New", "Noise Same"], h: 26 },
       { kind: "choices", param: "retrigger", labels: ["Stack", "Choke"], h: 26 },
       { kind: "choices", param: "invert", labels: ["+", "−"], h: 26 },
+      { kind: "cells", params: [["level", "Level"]], h: 40 },
     ],
     planRole: "source",
     planFreeRun: true,
@@ -15142,6 +15201,20 @@ const nodeGraphModuleDefinitions = (
           "One-pole lowpass in the loop (Karplus-Strong). 0 = bright, every partial rings for Decay. Higher = the top partials die faster than the body (pow instead of pong)."
       },
       {
+        defaultValue: "1",
+        key: "lowCut",
+        kind: "frequency",
+        label: "Low Cut",
+        max: "5000",
+        maxDigits: 5,
+        mid: "100",
+        min: "1",
+        step: "any",
+        unit: "Hz",
+        tooltip:
+          "Low end of the exciter, latched at each hit: a zero-phase highpass on the burst, the bottom edge of its spectrum (Soft is the top edge), like highpassing a saw before the comb. Partials below Low Cut get less energy, so the pluck sounds thinner and clickier. The burst still ends on time and has no DC. It never touches the loop, so pitch and Decay stay exact. At the bottom of its range it does nothing audible."
+      },
+      {
         choices: ["+", "−"],
         defaultValue: "0",
         displayChoices: true,
@@ -15157,20 +15230,20 @@ const nodeGraphModuleDefinitions = (
         tooltip: "+ = all harmonics of Frequency. − = inverted loop: odd harmonics of Frequency/2, hollow and an octave down."
       },
       {
-        choices: ["Bump", "Triangle", "Saw", "Noise"],
-        defaultValue: "1",
+        choices: ["Bump", "Noise", "Edge"],
+        defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "shape",
         label: "Shape",
         linearSmoothing: false,
-        max: "3",
+        max: "2",
         mid: "0",
         min: "0",
         nonlinearSlider: false,
         step: "1",
         tooltip:
-          "Exciter fired on each Trigger edge, one burst shorter than the period. Bump = one smooth hump (Soft widens it). Triangle = one band-limited triangle cycle. Saw = one band-limited saw cycle (DSF rolloff). Noise = a filtered noise burst. Every shape has its DC removed, so the loop never drifts."
+          "Exciter fired on each Trigger edge, one burst shorter than the period. Bump = one smooth hump (Soft widens it). Noise = a filtered noise burst. Edge = one ramp-and-drop cycle: the ramp follows Curve (the Step Graph curve), Soft sets how fast it drops. Every shape has its DC removed, so the loop never drifts."
       },
       {
         defaultValue: "0.3",
@@ -15183,7 +15256,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         tooltip:
-          "Softness of the exciter, latched at each hit. Bump: 1 = gentle hump, 0 = narrow punchy spike. Triangle / Saw: 1 = sine, 0 = sharp corners (geometric harmonic rolloff, like DSF Bright). Noise: 1 = dark, 0 = white."
+          "Softness of the exciter, latched at each hit. Bump: 1 = gentle hump about half the burst wide, 0 = a near-click spike about one sample wide (the width shrinks geometrically, most of the change near 0), still with no DC. Noise: 1 = dark, 0 = white. Edge: 0 = drops in one sample (a cliff), 1 = the drop takes half the burst."
       },
       {
         defaultValue: "0.5",
@@ -15196,6 +15269,50 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         tooltip:
           "Exciter length as a fraction of one period (1/Frequency), latched at each hit. Narrow = bright tick or pong, wide = round pow or thump. Tied to the period, so the timbre follows pitch. Kept under one period so the burst never overlaps its own echo."
+      },
+      {
+        defaultValue: "0",
+        key: "curve",
+        label: "Curve",
+        max: "1",
+        mid: "0",
+        min: "-1",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip:
+          "Edge shape only: bend of its ramp, latched at each hit, the same Rational curve as Step Graph segments (−1…+1). 0 = straight saw ramp; + = rises fast then levels off before the drop (rounder, softer edge); − = starts slow and rushes into the drop (sharper, brighter edge). Other shapes ignore it."
+      },
+      {
+        defaultValue: "0",
+        key: "seed",
+        kind: "seed",
+        label: "Seed",
+        linearSmoothing: false,
+        max: "16777215",
+        maxDigits: 0,
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        smoothingType: "none",
+        step: "1",
+        tooltip:
+          "Which noise the Noise shape uses, latched at each hit. With Noise Hit Same, the same Seed gives the identical burst every hit, in any Comb Pluck (the hit view draws exactly that burst). With New, Seed (mixed with a per-module salt) picks this module's own noise stream and each hit continues it. Other shapes ignore it."
+      },
+      {
+        choices: ["New", "Same"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "noiseHit",
+        label: "Noise Hit",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip:
+          "Noise shape only. New = every hit takes fresh noise (the next stretch of this module's stream, so repeated notes vary like a real pluck). Same = every hit replays one burst picked by Seed (machine-gun identical, like a sample)."
       },
       {
         choices: ["Stack", "Choke"],

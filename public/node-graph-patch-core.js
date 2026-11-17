@@ -581,6 +581,21 @@ function validateNodeGraphPatch(patch) {
           value = Number.isFinite(n) && n >= 0 && n < six.length ? six[n] : 1;
         }
       }
+      // Comb Pluck / Mode Resonator Shape: old 5-choice list (Bump / Triangle /
+      // Saw / Noise / Edge, max 4) -> Bump / Noise / Edge (Triangle -> Bump,
+      // Saw -> Edge). Legacy = saved max >= 3 or a value above the new max 2.
+      if ((type === "combPluck" || type === "modeResonator") && parameter.key === "shape") {
+        const sourceMax = Number(node.paramMeta?.[parameter.key]?.max);
+        const n = Math.round(Number(value));
+        if (Number.isFinite(n) && ((Number.isFinite(sourceMax) && sourceMax >= 3) || n > 2)) {
+          const five = [0, 0, 2, 1, 2];
+          value = five[Math.max(0, Math.min(4, n))];
+        }
+        // A saved range would keep the old max 4 (and re-migrate next load).
+        if (paramMeta[parameter.key] && Number(paramMeta[parameter.key].max) > 2) {
+          paramMeta[parameter.key].max = 2;
+        }
+      }
       // Sturmian Grid Rate: stored BPM -> Hz (old engine rate was BPM/15).
       if (type === "sturmianGrid" && parameter.key === "rate") {
         if (
