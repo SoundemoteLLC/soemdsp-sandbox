@@ -7243,12 +7243,12 @@ const nodeGraphModuleDefinitions = (
       // -1..+1. At exactly +-1 the DSP soft-caps the contour just inside the
       // curve's step so packing stays extreme but finite (Min Gap still drops
       // bunched taps; no NaN, no infinite cells). The knob is scaled by the
-      // bipolar rational slider curve (amount -0.99, like Pulse Sawmorph width)
+      // bipolar rational slider curve (amount -0.9, like Pulse Sawmorph width)
       // for fine control near 0 — knob scaling only, not the DSP warp. Taps
       // that would bunch closer than the cell floor are not used (the face
       // reads "48 / 64 taps").
       {
-        curveAmount: "-0.99",
+        curveAmount: "-0.9",
         defaultValue: "0",
         key: "densitySkew",
         label: "Density Skew",
