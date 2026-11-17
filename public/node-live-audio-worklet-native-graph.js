@@ -6063,7 +6063,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("tailDarkness", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("tailDarkness", 0));
       push("ampDecay", P.NATIVE_GRAPH_PARAM_LEVEL, cont("ampDecay", -60));
       push("densitySkew", P.NATIVE_GRAPH_PARAM_SHAPE, cont("densitySkew", 0));
-      push("minGap", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("minGap", 0.083)); // Min Gap ms
+      push("minGap", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("minGap", 1)); // Min Gap ms
       continue;
     }
     if (type === "softpopOscillator") {

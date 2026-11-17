@@ -52,7 +52,8 @@ const r1 = await loadAndRead(demo, "demo");
 const node = demo.nodes.find((n) => n.type === "velvetReverb");
 const want1 = Math.min(4096, Math.ceil(Number(node.params.density) - 1e-9));
 check(r1.mounted, "demo patch (old saved velvet settings) loads and mounts the tap face");
-check(r1.count === want1, `demo face shows ${r1.count} taps (Taps = ${want1})`);
+// Min Gap (default 1 ms) may hold back taps that would bunch up: then the face shows fewer and flags it.
+check(r1.count === want1 || (r1.count > 0 && r1.count < want1 && (r1.flags & 4)), `demo face shows ${r1.count} taps (Taps = ${want1}, flags ${r1.flags})`);
 if (SHOT_DIR && r1.mounted) await page.locator(".node-velvet-taps-display").first().screenshot({ timeout: 120000, path: path.join(SHOT_DIR, "velvet_taps_demo.png") });
 
 const bare = { ...demo, nodes: [{ id: "velvetReverb-9", type: "velvetReverb", gx: 2, gy: 2, params: { density: 40, decay: 0.8, darkness: 1, tailDarkness: 300, seed: 5 } }], connections: [] };
@@ -64,11 +65,11 @@ if (SHOT_DIR && r2.mounted) await page.locator(".node-velvet-taps-display").firs
 check(r2.left === "rgb(255 113 113)" && r2.right === "rgb(84 84 249)", `default inks: Left ${r2.left} (#FF7171), Right ${r2.right} (#5454F9)`);
 check(r2.knobs?.length === 3, `definitions carry Amp Decay, Density Skew and Min Gap: ${(r2.knobs || []).join("; ")}`);
 // Tail Darkness off: wider late pulses get their lost energy back, which would tilt the levels.
-const knobbed = { ...bare, nodes: [{ ...bare.nodes[0], params: { ...bare.nodes[0].params, density: 200, tailDarkness: 0, ampDecay: 0, densitySkew: 0.6 } }] };
+const knobbed = { ...bare, nodes: [{ ...bare.nodes[0], params: { ...bare.nodes[0].params, density: 200, tailDarkness: 0, ampDecay: 0, densitySkew: 0.6, minGap: 0.083 } }] };
 const rk = await loadAndRead(knobbed, "knobs");
 check(rk.count === 200 && Math.abs(rk.endDb) < 0.5 && rk.mean < 0.4, `Amp Decay 0 dB + Skew 0.6 on the face: ${rk.count} taps, end ${rk.endDb.toFixed(2)} dB (flat), mean position ${rk.mean.toFixed(3)} of Length (packed early)`);
 if (SHOT_DIR && rk.mounted) await page.locator(".node-velvet-taps-display").first().screenshot({ timeout: 120000, path: path.join(SHOT_DIR, "velvet_taps_knobs.png") });
-const big = { ...bare, nodes: [{ ...bare.nodes[0], params: { density: 20000, decay: 1, darkness: 2, tailDarkness: 0, seed: 5 } }] };
+const big = { ...bare, nodes: [{ ...bare.nodes[0], params: { density: 20000, decay: 1, darkness: 2, tailDarkness: 0, seed: 5, minGap: 0 } }] };
 const r3 = await loadAndRead(big, "big");
 // Taps: spawn slider max 300, hardMax = the engine's table (4096); a typed value past the slider max
 // still works and stops at hardMax, so no limit flag is needed.

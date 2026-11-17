@@ -7239,9 +7239,9 @@ const nodeGraphModuleDefinitions = (
       // Min Gap: the least spacing between consecutive taps in ms (never less
       // than the pulse width there). Taps that would sit closer are not used, so
       // dense or skewed settings keep velvet dispersion instead of flanging.
-      // Default ~4 samples at 48 kHz.
+      // Default 1 ms (48 samples at 48 kHz).
       {
-        defaultValue: "0.083",
+        defaultValue: "1",
         key: "minGap",
         kind: "time",
         label: "Min Gap",

@@ -4552,7 +4552,7 @@ static void init_node_defaults(Node& n, int typeId) {
   ); // pingPong timing; lookaheadLimiter / activeFilter = gainCompensation
   init_control(
     n.offsetMs,
-    (typeId == kTypeVelvetReverb) ? 0.083 : // Min Gap ms (Dark Velvet Reverb)
+    (typeId == kTypeVelvetReverb) ? 1.0 : // Min Gap ms (Dark Velvet Reverb)
     (typeId == kTypePulseTrain) ? 0.0 : // Stretch -1..+1 (0 = span multiplier 1)
     (typeId == kTypeModalSnare) ? 2.0 : // clickDecay ms (Modal Snare)
     (typeId == kTypePulseExplosion) ? 0.002 : // hold seconds

@@ -23,7 +23,7 @@ check(x.soemdsp_velvet_reverb_version() >= 7, `velvet_reverb version ${x.soemdsp
 
 // Wet impulse response (Mix 1): impulse on both channels at sample 0.
 const tapsOf = ({ taps, density, decay = 0.025 }) => taps ?? (density ?? 2500) * decay;
-function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, n } = {}) {
+function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, n } = {}) { // gap: a dense test Min Gap (~4 samples); the default is 1 ms
   const T = tapsOf({ taps, density, decay });
   const h = x.soemdsp_velvet_reverb_create(FS);
   if (!h) throw new Error("create failed");
@@ -346,7 +346,10 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   check(dist(a, b) > 0 && dist(a, b) < 3 * dist(b, c) + 1e-9 && dist(b, c) < 3 * dist(a, b) + 1e-9, `audio: Min Gap moves smoothly (0.50 -> 0.51 ${dist(a, b).toFixed(4)}, 0.51 -> 0.52 ${dist(b, c).toFixed(4)})`);
   const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
   const mg = defs.slice(defs.indexOf('key: "minGap",') - 60, defs.indexOf('key: "minGap",') + 320);
-  check(/defaultValue: "0.083"/.test(mg) && /max: "10"/.test(mg) && /min: "0"/.test(mg) && /unit: "ms"/.test(mg), "Min Gap definition: 0..10 ms, default 0.083 ms");
+  check(/defaultValue: "1"/.test(mg) && /max: "10"/.test(mg) && /min: "0"/.test(mg) && /unit: "ms"/.test(mg), "Min Gap definition: 0..10 ms, default 1 ms");
+  // Defaults everywhere (Taps 64, Length 25 ms, Min Gap 1 ms via NaN -> the native default): 1200 / 48 samples = 25 taps play.
+  const dc = x.soemdsp_velvet_reverb_layout(64, 1, 1, FS, 0.025, 0, 1, -60, 0, NaN);
+  check(dc === 25 && (x.soemdsp_velvet_reverb_layout_flags() & 4), `default Taps 64 / Length 25 ms / Min Gap 1 ms: ${dc} / 64 taps play`);
 }
 
 // ---- 6 s Length (the definition max): the delay line is sized from the sample rate, so it always fits
