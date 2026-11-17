@@ -1528,6 +1528,9 @@ function syncNodeGraphModuleChromeElement(element, patchNode) {
     "unused-hidden",
     Boolean(normalizeNodeGraphPatchNodeUi(patchNode.ui, patchNode.type).hideUnused),
   );
+  if (typeof nodeGraphApplyHideUnusedKeptClasses === "function") {
+    nodeGraphApplyHideUnusedKeptClasses(element, patchNode);
+  }
   element.classList.toggle("interface-controls-hidden", patchNodeUi.interfaceControlsHidden);
   element.classList.toggle("interface-controls-forced-visible", Boolean(patchNodeUi.interfaceControlsForceShow));
   element.classList.toggle("movement-locked", patchNodeUi.movementLocked);
@@ -2077,6 +2080,10 @@ function commitNodeGraphPatchBody(patch, options = {}) {
       nodeGraphPatchThrowLoadFailure(pretty, error);
     }
     nodeGraphMvp.patch = validated;
+  }
+  // Hide unused snapshot: newly wired jacks join it; unwired ones stay.
+  if (typeof nodeGraphHideUnusedGrowPatch === "function") {
+    nodeGraphHideUnusedGrowPatch(nodeGraphMvp.patch);
   }
   // A newly loaded patch starts its own drawing undo/redo.
   if (options.resetEditorView && typeof clearNodeGraphDrawingHistory === "function") {

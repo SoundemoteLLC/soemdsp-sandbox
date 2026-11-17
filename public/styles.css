@@ -13743,12 +13743,12 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 }
 
 /* Hide unused: per-module .unused-hidden only (unconnected signal jacks). Parameter I/O stays visible. */
-.dsp-node.unused-hidden .node-io-row:not(:has(.connected-port)):not(:has(.node-param-port)),
-.dsp-node.unused-hidden .node-io-row:not(:has(.node-port.connected-port)):not(:has(.node-param-port)) {
+.dsp-node.unused-hidden .node-io-row:not(:has(.connected-port)):not(:has(.unused-kept)):not(:has(.node-param-port)),
+.dsp-node.unused-hidden .node-io-row:not(:has(.node-port.connected-port)):not(:has(.node-port.unused-kept)):not(:has(.node-param-port)) {
   display: none !important;
 }
 
-.dsp-node.unused-hidden .node-port:not(.node-param-port):not(.connected-port) {
+.dsp-node.unused-hidden .node-port:not(.node-param-port):not(.connected-port):not(.unused-kept) {
   display: none !important;
 }
 

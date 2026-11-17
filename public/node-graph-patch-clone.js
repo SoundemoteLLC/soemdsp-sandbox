@@ -94,6 +94,12 @@ function normalizeNodeGraphPatchNodeUi(ui = {}, type = "") {
     // visually; uncollapse restores those flags unchanged.
     collapsed: Boolean(source.collapsed),
   };
+  // Hide unused is a snapshot: the jacks shown when it was engaged, plus any
+  // wired since (nodeGraphHideUnusedGrowPatch). Unwiring one keeps it shown.
+  if (normalized.hideUnused) {
+    const keep = nodeGraphHideUnusedKeepLists(source.hideUnusedKeep);
+    if (keep) normalized.hideUnusedKeep = keep;
+  }
   // Layout canvas pin and whole-module tile (node-graph-screen-solo.js) survive load/save.
   if (source.showInCanvas) normalized.showInCanvas = true;
   if (source.canvasWholeModule) normalized.canvasWholeModule = true;
@@ -106,6 +112,88 @@ function normalizeNodeGraphPatchNodeUi(ui = {}, type = "") {
       : Math.max(0, Math.round(absoluteFace));
   }
   return normalized;
+}
+
+/** Stored Hide unused snapshot ({ inputs, outputs } port names) or null. */
+function nodeGraphHideUnusedKeepLists(keep) {
+  if (!keep || typeof keep !== "object") return null;
+  const list = (value) => (Array.isArray(value) ? [...new Set(value.map(String).filter(Boolean))].sort() : []);
+  return { inputs: list(keep.inputs), outputs: list(keep.outputs) };
+}
+
+/** Jacks Hide unused keeps on a node: its snapshot, or null when it has none yet. */
+function nodeGraphHideUnusedKeepSets(patchNode) {
+  const keep = nodeGraphHideUnusedKeepLists(patchNode?.ui?.hideUnusedKeep);
+  return keep ? { inputs: new Set(keep.inputs), outputs: new Set(keep.outputs) } : null;
+}
+
+function nodeGraphHideUnusedConnectedSets(patchNode) {
+  return typeof nodeGraphModuleConnectedSignalPortSets === "function"
+    ? nodeGraphModuleConnectedSignalPortSets(patchNode)
+    : { inputs: new Set(), outputs: new Set() };
+}
+
+/** Engage / re-apply Hide unused: snapshot the jacks wired right now onto ui. */
+function nodeGraphHideUnusedSnapshotUi(ui, patchNode) {
+  const now = nodeGraphHideUnusedConnectedSets(patchNode);
+  ui.hideUnusedKeep = { inputs: [...now.inputs].sort(), outputs: [...now.outputs].sort() };
+  return ui;
+}
+
+/**
+ * After any commit: each Hide unused module adds its newly wired jacks to its
+ * snapshot (and a module with no snapshot yet, e.g. an older patch, takes
+ * the jacks wired now). Unwired jacks stay in it until Hide unused is
+ * engaged again. Returns the ids whose snapshot grew.
+ */
+function nodeGraphHideUnusedGrowPatch(patch) {
+  const grown = [];
+  for (const node of Array.isArray(patch?.nodes) ? patch.nodes : []) {
+    const ui = node?.ui;
+    if (!ui || typeof ui !== "object" || !(ui.hideUnused || ui.unusedHidden)) continue;
+    const keep = nodeGraphHideUnusedKeepSets(node) || { inputs: new Set(), outputs: new Set() };
+    const had = Boolean(ui.hideUnusedKeep);
+    const before = keep.inputs.size + keep.outputs.size;
+    const now = nodeGraphHideUnusedConnectedSets(node);
+    for (const port of now.inputs) keep.inputs.add(port);
+    for (const port of now.outputs) keep.outputs.add(port);
+    if (had && keep.inputs.size + keep.outputs.size === before) continue;
+    ui.hideUnusedKeep = { inputs: [...keep.inputs].sort(), outputs: [...keep.outputs].sort() };
+    grown.push(node.id);
+  }
+  return grown;
+}
+
+/** Mark the snapshot jacks .unused-kept so CSS keeps them while unwired. */
+function nodeGraphApplyHideUnusedKeptClasses(element, patchNode) {
+  if (!element?.querySelectorAll) return;
+  const on = Boolean(normalizeNodeGraphPatchNodeUi(patchNode?.ui, patchNode?.type).hideUnused);
+  const keep = on ? nodeGraphHideUnusedKeepSets(patchNode) : null;
+  for (const port of element.querySelectorAll(".node-port")) {
+    const name = String(port.dataset?.port || "");
+    const io = port.dataset?.io || (port.classList.contains("output") ? "output" : "input");
+    const kept = Boolean(keep && name && (io === "output" ? keep.outputs : keep.inputs).has(name));
+    port.classList.toggle("unused-kept", kept);
+  }
+}
+
+// IO strip height under Hide unused counts the snapshot jacks too (same rows
+// CSS keeps). Wraps the sizing count; without a snapshot it is unchanged.
+if (typeof nodeGraphModuleIoRowCount === "function" && !nodeGraphModuleIoRowCount.hideUnusedKeep) {
+  const nodeGraphModuleIoRowCountConnectedOnly = nodeGraphModuleIoRowCount;
+  nodeGraphModuleIoRowCount = function nodeGraphModuleIoRowCountWithKeep(type, node = null) {
+    const base = nodeGraphModuleIoRowCountConnectedOnly(type, node);
+    const patchNode = node && typeof node === "object" ? node : null;
+    if (!patchNode?.id || !normalizeNodeGraphPatchNodeUi(patchNode.ui, type).hideUnused) return base;
+    const keep = nodeGraphHideUnusedKeepSets(patchNode);
+    if (!keep || typeof nodeGraphModuleIoPortLists !== "function") return base;
+    const { inputs, outputs } = nodeGraphModuleIoPortLists(type, patchNode);
+    const now = nodeGraphHideUnusedConnectedSets(patchNode);
+    const shownIn = inputs.filter((port) => now.inputs.has(port) || keep.inputs.has(port)).length;
+    const shownOut = outputs.filter((port) => now.outputs.has(port) || keep.outputs.has(port)).length;
+    return Math.max(base, shownIn, shownOut, 0);
+  };
+  nodeGraphModuleIoRowCount.hideUnusedKeep = true;
 }
 
 /** @deprecated Multi-mode faces removed — always empty (one face per module). */

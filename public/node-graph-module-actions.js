@@ -353,10 +353,13 @@ function hideNodeGraphUnusedPortsOnAllModules() {
   for (const targetNode of Array.isArray(patch.nodes) ? patch.nodes : []) {
     nodeIds.push(targetNode.id);
     const ui = normalizeNodeGraphPatchNodeUi(targetNode.ui, targetNode.type);
-    if (ui.hideUnused) {
+    // Engaged again: re-take the snapshot, so jacks unwired since then hide now.
+    const before = JSON.stringify(ui.hideUnused ? ui.hideUnusedKeep || null : null);
+    ui.hideUnused = true;
+    nodeGraphHideUnusedSnapshotUi(ui, targetNode);
+    if (before === JSON.stringify(ui.hideUnusedKeep)) {
       continue;
     }
-    ui.hideUnused = true;
     applyNodeGraphPatchNodeUi(targetNode, ui);
     changed = true;
   }
@@ -3548,6 +3551,12 @@ function toggleNodeGraphModuleHideUnusedFromContext() {
       continue;
     }
     ui.hideUnused = wantHidden;
+    // Engage takes the snapshot of the jacks wired now; off drops it.
+    if (wantHidden) {
+      nodeGraphHideUnusedSnapshotUi(ui, targetNode);
+    } else {
+      delete ui.hideUnusedKeep;
+    }
     applyNodeGraphPatchNodeUi(targetNode, ui);
     changedCount += 1;
   }
