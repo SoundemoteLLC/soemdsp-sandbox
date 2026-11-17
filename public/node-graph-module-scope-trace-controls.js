@@ -2668,11 +2668,12 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
   }),
   windowMode: Object.freeze({
     label: "Window",
-    aria: "Window: a fixed number of cycles or a fixed time",
+    aria: "Window: a fixed number of cycles, of beats at the tempo, or a fixed time",
     id: "nodeTraceDisplayWindowMode",
-    title: "Cycles: a fixed number of periods (period measured from the edges). Time: a fixed length in ms; more cycles show as the pitch rises. Both values are kept (lib/visual/scope-sync.js).",
+    title: "Cycles: a fixed number of periods (period measured from the edges). Beats: a number of beats at the transport tempo; Sync starts each sweep on a beat. Time: a fixed length in ms; more cycles show as the pitch rises. Both values are kept (lib/visual/scope-sync.js).",
     options: Object.freeze([
       Object.freeze({ value: "cycles", label: "Cycles" }),
+      Object.freeze({ value: "beats", label: "Beats" }),
       Object.freeze({ value: "time", label: "Time" }),
     ]),
   }),

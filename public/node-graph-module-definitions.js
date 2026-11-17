@@ -12686,9 +12686,6 @@ const nodeGraphModuleDefinitions = (
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
-    // Display cycles are hits: the snare's own strikes (__Strike face tap), not
-    // edges of the noisy audio. Cycles = N spans N hits; Sync starts on a hit.
-    displayHitSignal: "__Strike",
     defaultDisplaySettings: { sourceSync: true },
     displayModes: [
       { key: "lineBurn", renderer: "lineBurn", source: { value: "Snare L" } },

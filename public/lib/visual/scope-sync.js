@@ -5,8 +5,22 @@
 //   Cycles (default, 3): a fixed number of periods. The period is measured
 //          from the time between edges (median of the last few, smoothed);
 //          until one is measured, Time is used.
+//   Beats: a number of beats at the transport tempo (the same Cycles value,
+//          shown as Beats), so a rhythm sits in a frame that never resizes.
 //   Time:  a fixed length in ms; more cycles show as the pitch rises.
 // Both values are stored (windowCycles, timeMs), so switching keeps them.
+//
+// Beats: the transport is the engine's beat position (Circuit::projectBeats,
+// the one Host BPM and the sequencers read) and its tempo, sent with every
+// scope post (nodeGraphScopeBeatEnd = the beat one past the newest sample,
+// nodeGraphScopeBeatsPerSample). Sync: a sweep starts on every ceil(Beats)-th
+// beat of the transport counted from its start (Beats 4 = every bar's
+// downbeat in 4/4); the pen is placed from the beat itself, so it never
+// drifts, and a fractional Beats window waits at the right edge for the next
+// start. No edge, no level, no auto run: the transport always runs. Free:
+// back-to-back passes of Beats, like any Free window. Without the engine's
+// beat position (a worklet from before it was sent) Beats is the patch tempo
+// and runs free.
 //
 //   Free: passes run back to back (a pen wraps; a window is the newest one).
 //   Sync: a pass starts on a rising edge. A pen that reaches the right edge
@@ -22,15 +36,6 @@
 //   the smoothed level stops the level (and so the edge) wandering per frame.
 //   Edges are interpolated to the sub-sample, so the picture does not jitter
 //   by up to one sample per frame.
-//   Hit stream (a drum's own strikes, definition displayHitSignal, e.g. Modal
-//   Snare __Strike): a struck sample (> 0, any velocity) is a hit; a run of
-//   struck samples (a trigger rising over a few samples strikes on each) is
-//   one hit, at its first sample. The
-//   period is the time between hits, so a pass is Cycles x that. Sync starts
-//   a sweep on a hit and the next one exactly ceil(Cycles) hits later, counted
-//   (not timed, so a rhythm that drifts or swings never skips a sweep); a pen
-//   that reaches the right edge first waits there. No auto run: with no hits
-//   the last sweep holds. Free: the pen wraps as usual.
 //
 // Period (plots): a wave can cross the level more than once per cycle (two
 // saws an octave apart cross twice). The period is the shortest run of 1, 2,
@@ -51,7 +56,9 @@
   const CYCLES_MIN = 0.05;
   const CYCLES_MAX = 100;
   const CYCLES_DEFAULT = 3;
-  const WINDOW_MODES = Object.freeze(["cycles", "time"]);
+  const WINDOW_MODES = Object.freeze(["cycles", "beats", "time"]);
+  // Beats window without the engine's tempo: the patch tempo, else this.
+  const TEMPO_BPM_DEFAULT = 120;
   const WINDOW_MODE_DEFAULT = "cycles";
   // Fraction of the recent peak-to-peak range.
   const HYSTERESIS = 0.04;
@@ -118,8 +125,60 @@
       : 0;
   }
 
-  /** Samples in one pass / window: cycles x measured period, else Time. */
-  function nodeGraphScopePassSamples(state, settings, sampleRate) {
+  /** Beats to show, or 0 unless the Window is Beats. */
+  function nodeGraphScopeWindowBeats(settings) {
+    return nodeGraphScopeWindowMode(settings?.windowMode) === "beats"
+      ? nodeGraphScopeClampWindowCycles(settings?.windowCycles)
+      : 0;
+  }
+
+  /** Patch tempo (BPM) on the page, for a ring without the engine's. */
+  function patchTempoBpm() {
+    let bpm = NaN;
+    try {
+      if (typeof global.nodeGraphPatchTimingValue === "function") bpm = Number(global.nodeGraphPatchTimingValue("tempoBpm"));
+      if (!(bpm > 0)) bpm = Number(global.nodeGraphMvp?.patch?.timing?.tempoBpm);
+    } catch (_e) {
+      bpm = NaN;
+    }
+    return bpm > 0 ? bpm : TEMPO_BPM_DEFAULT;
+  }
+
+  /**
+   * Transport clock of a scope ring: { end, per } = the beat one past the
+   * newest sample and beats per sample, so sample i of the ring sits on beat
+   * end - (ring.length - i) * per. null without the engine's beat position.
+   */
+  function nodeGraphScopeBeatClock(buffer) {
+    const end = Number(buffer?.nodeGraphScopeBeatEnd);
+    const per = Number(buffer?.nodeGraphScopeBeatsPerSample);
+    return Number.isFinite(end) && per > 0 ? { end, per } : null;
+  }
+
+  /** Beats per sample: the ring's transport tempo, else the patch tempo. */
+  function nodeGraphScopeBeatsPerSample(buffer, sampleRate) {
+    const clock = nodeGraphScopeBeatClock(buffer);
+    if (clock) return clock.per;
+    const rate = Number(sampleRate) > 0 ? Number(sampleRate) : 48000;
+    return patchTempoBpm() / (60 * rate);
+  }
+
+  /** Beats between sweep starts under Sync: whole beats, at least one. */
+  function beatSweepEvery(beats) {
+    return Math.max(1, Math.ceil(beats - 1e-9));
+  }
+
+  /**
+   * Samples in one pass / window: cycles x measured period, Beats x the
+   * transport's samples per beat (beatsPerSample: the ring's, see
+   * nodeGraphScopeBeatsPerSample), else Time.
+   */
+  function nodeGraphScopePassSamples(state, settings, sampleRate, beatsPerSample) {
+    const beats = nodeGraphScopeWindowBeats(settings);
+    if (beats > 0) {
+      const per = Number(beatsPerSample) > 0 ? Number(beatsPerSample) : nodeGraphScopeBeatsPerSample(null, sampleRate);
+      return Math.max(2, beats / per);
+    }
     const cycles = nodeGraphScopeWindowCycles(settings);
     if (cycles > 0 && state?.period > 0) return Math.max(2, cycles * state.period);
     return nodeGraphScopeTimeSamples(settings?.timeMs, sampleRate);
@@ -284,6 +343,8 @@
    * by start - floor(start). Free (or no edge): the newest window.
    */
   function nodeGraphScopeSyncWindow(state, edge, length, opts) {
+    const beats = nodeGraphScopeWindowBeats(opts.settings);
+    if (beats > 0) return beatWindow(state, edge, length, opts, beats);
     const cycles = nodeGraphScopeWindowCycles(opts.settings);
     const timeSamples = nodeGraphScopeTimeSamples(opts.settings?.timeMs, opts.sampleRate);
     const fit = (n) => Math.max(2, Math.min(length - 3, Math.round(n)));
@@ -354,6 +415,33 @@
     if (chosen < 0) return freeOf(n);
     state.lockAbs = Number.isFinite(base) ? base + chosen : NaN;
     return { start: chosen, n };
+  }
+
+  /**
+   * Beats window (plots): Beats x samples per beat. Sync: starts on the
+   * newest sweep start (every ceil(Beats)-th transport beat) that still fits
+   * the whole window; the start is fractional, so it never jitters. Free (or
+   * no transport clock): the Free window.
+   */
+  function beatWindow(state, edge, length, opts, beats) {
+    const fit = (n) => Math.max(2, Math.min(length - 3, Math.round(n)));
+    const per = nodeGraphScopeBeatsPerSample(edge, opts.sampleRate);
+    const n = fit(beats / per);
+    if (!(length > 4) || !edge?.length) return { start: Math.max(0, length - 2 - n), n };
+    const total = Number(edge.nodeGraphScopeTotalSampleCount);
+    const base = Number.isFinite(total) && total > 0 ? total - length : NaN;
+    const clock = nodeGraphScopeBeatClock(edge);
+    if (!opts.sync || !clock) return freeWindow(state, n, length, base, opts.sampleRate);
+    state.freeEnd = NaN;
+    state.lockAbs = NaN;
+    const every = beatSweepEvery(beats);
+    // Window index i (end-aligned with the ring) is on beat clock.end - (length - i) * per.
+    const last = length - 2 - n;
+    const lastBeat = clock.end - (length - last) * clock.per;
+    const startBeat = Math.floor(lastBeat / every + 1e-9) * every;
+    const start = length - (clock.end - startBeat) / clock.per;
+    if (!(start >= 0)) return { start: Math.max(0, last), n };
+    return { start: Math.min(start, last), n };
   }
 
   /**
@@ -440,44 +528,28 @@
   }
 
   /**
-   * Hit stream sample: a hit lands on this sample (t = 1), else -1. A hit is
-   * the first struck sample (> 0, any velocity) after an unstruck one.
+   * Beats window pen under Sync, one sample on transport beat `beat` (see the
+   * header). The pen is placed from the beat: a sweep starts on every
+   * ceil(beats)-th beat and spans `beats`; past it the pen waits at the right
+   * edge for the next start. The caller's advance is overwritten next sample.
    */
-  function nodeGraphScopeSyncHitStep(state, value) {
-    const high = Number(value) > 0;
-    const hit = high && !state.hitHigh;
-    state.hitHigh = high;
-    return hit ? 1 : -1;
-  }
-
-  /**
-   * Sweeping pen driven by a hit stream, one sample (see the header). hit =
-   * a hit on this sample; cycles = the Window's Cycles (Time window: 1).
-   * Sync: the first hit starts a sweep; then the ceil(cycles)-th hit after
-   * the sweep's start starts the next one, wherever the pen is. Free: wraps.
-   */
-  function nodeGraphScopeSyncPenHitStep(pen, phaseInc, sync, hit, cycles) {
-    if (!sync) return nodeGraphScopeSyncPenStep(pen, phaseInc, false, -1);
-    if (hit) {
-      const need = Math.max(1, Math.ceil(Number(cycles) > 0 ? Number(cycles) - 1e-9 : 1));
-      pen.hits = (pen.hitStarted ? (pen.hits || 0) : 0) + 1;
-      if (!pen.hitStarted || pen.hits >= need) {
-        pen.hitStarted = true;
-        pen.hits = 0;
-        pen.waiting = false;
-        pen.waited = 0;
-        pen.phasor = 0;
-        return PEN_BREAK_DRAW;
-      }
-    }
-    if (pen.waiting) return PEN_WAIT;
-    if (pen.phasor >= 1) {
-      pen.waiting = true;
-      pen.waited = 0;
+  function nodeGraphScopeSyncPenBeatStep(pen, beat, beats) {
+    const n = nodeGraphScopeClampWindowCycles(beats);
+    const every = beatSweepEvery(n);
+    const sweep = Math.floor(beat / every + 1e-9);
+    const phasor = Math.max(0, (beat - sweep * every) / n);
+    const fresh = sweep !== pen.beatSweep;
+    pen.beatSweep = sweep;
+    pen.waited = 0;
+    if (phasor >= 1) {
       pen.phasor = 1;
+      if (pen.waiting && !fresh) return PEN_WAIT;
+      pen.waiting = true;
       return PEN_BREAK_WAIT;
     }
-    return PEN_DRAW;
+    pen.waiting = false;
+    pen.phasor = phasor;
+    return fresh ? PEN_BREAK_DRAW : PEN_DRAW;
   }
 
   /** Reset jack: pen to the left now (the caller breaks the stroke). */
@@ -520,6 +592,9 @@
     nodeGraphScopeWindowSettings,
     nodeGraphScopeTimeSamples,
     nodeGraphScopeWindowCycles,
+    nodeGraphScopeWindowBeats,
+    nodeGraphScopeBeatClock,
+    nodeGraphScopeBeatsPerSample,
     nodeGraphScopePassSamples,
     nodeGraphScopeSyncState,
     nodeGraphScopeSyncLevel,
@@ -528,8 +603,7 @@
     nodeGraphScopeSyncTrackPeriod,
     nodeGraphScopeSyncWindow,
     nodeGraphScopeSyncPenStep,
-    nodeGraphScopeSyncHitStep,
-    nodeGraphScopeSyncPenHitStep,
+    nodeGraphScopeSyncPenBeatStep,
     nodeGraphScopeSyncPenRestart,
     nodeGraphScopeSyncPenAdvance,
     nodeGraphScopeSyncPen,

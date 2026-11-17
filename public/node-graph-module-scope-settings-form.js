@@ -14,6 +14,11 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Span °";
     title = "Centered arc sweep across Bias 0…1 (degrees). Opens left and right together; gap stays opposite center.";
   }
+  // Window row in Beats: the Cycles value counts beats (lib/visual/scope-sync.js).
+  if (key === "windowCycles" && nodeGraphDisplaySettingsWindowRowIsBeats(formType)) {
+    label = "Beats";
+    title = "";
+  }
   if ((key === "historySeconds" || key === "zoomSeconds" || key === "historyHz") && (
     formType === "waterfall"
     || formType === "waterfallRgb"
@@ -1415,17 +1420,26 @@ function paintNodeGraphStampPreview(root, settings = {}) {
 }
 
 /** Hide Shape param for Circle; retitle Stretch/Corners/Sides/… from live Shape. */
-/** Window row key: windowCycles in Cycles mode, else timeMs (lib/visual/scope-sync.js). */
+/** Window row key: windowCycles in Cycles / Beats mode, else timeMs (lib/visual/scope-sync.js). */
 function nodeGraphDisplaySettingsWindowRowKey(formType) {
   const settings = typeof nodeGraphTraceDisplayCurrentSettingsForFormType === "function"
     ? nodeGraphTraceDisplayCurrentSettingsForFormType(formType)
     : null;
-  return nodeGraphScopeWindowMode(settings?.windowMode) === "cycles" ? "windowCycles" : "timeMs";
+  return nodeGraphScopeWindowMode(settings?.windowMode) === "time" ? "timeMs" : "windowCycles";
+}
+
+/** Whether the form's Window is Beats (the Cycles stepper then reads Beats). */
+function nodeGraphDisplaySettingsWindowRowIsBeats(formType) {
+  if (!formType || typeof nodeGraphTraceDisplayCurrentSettingsForFormType !== "function") {
+    return false;
+  }
+  const settings = nodeGraphTraceDisplayCurrentSettingsForFormType(formType);
+  return nodeGraphScopeWindowMode(settings?.windowMode) === "beats";
 }
 
 /**
- * Window: Cycles <-> Time. Retargets the one stepper to windowCycles or
- * timeMs so both values stay stored (switching keeps each).
+ * Window: Cycles / Beats <-> Time. Retargets the one stepper to windowCycles
+ * (labelled Beats in Beats) or timeMs so both values stay stored.
  */
 function syncNodeGraphScopeWindowRow(root, settings = {}) {
   const host = root?.querySelector?.("[data-trace-display-window-label]")
@@ -1435,8 +1449,11 @@ function syncNodeGraphScopeWindowRow(root, settings = {}) {
   if (!field) {
     return;
   }
-  const key = nodeGraphScopeWindowMode(settings?.windowMode) === "cycles" ? "windowCycles" : "timeMs";
-  const meta = nodeGraphDisplaySettingsFieldMeta[key] || { label: key };
+  const mode = nodeGraphScopeWindowMode(settings?.windowMode);
+  const key = mode === "time" ? "timeMs" : "windowCycles";
+  const fieldMeta = nodeGraphDisplaySettingsFieldMeta[key] || { label: key };
+  // Beats: the same Cycles value, counted in beats.
+  const meta = mode === "beats" ? { label: "Beats", title: "" } : fieldMeta;
   const titleSpan = host.querySelector("[data-trace-display-window-label]");
   if (titleSpan) {
     titleSpan.textContent = meta.label;

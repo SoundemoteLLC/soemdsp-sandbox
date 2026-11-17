@@ -66,6 +66,8 @@ $modules = @(
     "soemdsp_graph_set_speed_limit",
     "soemdsp_graph_set_host_transport",
     "soemdsp_graph_set_host_beats",
+    "soemdsp_graph_project_beats",
+    "soemdsp_graph_tempo_bpm",
     "soemdsp_graph_set_host_playing",
     "soemdsp_graph_set_node_scope_taps",
     "soemdsp_graph_add_node", "soemdsp_graph_connect",

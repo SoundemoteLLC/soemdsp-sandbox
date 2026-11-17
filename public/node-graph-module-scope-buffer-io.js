@@ -104,6 +104,9 @@ function resizeNodeGraphLiveModuleScopeBuffer(buffer, frameCapacity) {
   if (Number.isFinite(Number(buffer.nodeGraphScopeSampleStride)) && Number(buffer.nodeGraphScopeSampleStride) > 0) {
     next.nodeGraphScopeSampleStride = Number(buffer.nodeGraphScopeSampleStride);
   }
+  // Transport clock (end-aligned, so the copy keeps it).
+  next.nodeGraphScopeBeatEnd = buffer.nodeGraphScopeBeatEnd;
+  next.nodeGraphScopeBeatsPerSample = buffer.nodeGraphScopeBeatsPerSample;
   return next;
 }
 
@@ -112,6 +115,8 @@ function resizeNodeGraphLiveModuleScopeBuffer(buffer, frameCapacity) {
 const nodeGraphScopeRingCarriedProps = [
   "nodeGraphScopeAbsoluteFrame",
   "nodeGraphScopeAnalyzer",
+  "nodeGraphScopeBeatEnd",
+  "nodeGraphScopeBeatsPerSample",
   "nodeGraphScopeBurnArmed",
   "nodeGraphScopeBurnCrossings",
   "nodeGraphScopeBurnLastSample",
@@ -274,6 +279,14 @@ function pushNodeGraphLiveModuleScopeSamples(nodeId, values, metadata = null) {
     }
     if (Number.isFinite(sampleStride) && sampleStride > 0) {
       buffer.nodeGraphScopeSampleStride = sampleStride;
+    }
+    // Transport clock (Beats window, lib/visual/scope-sync.js): the engine's
+    // beat one past the newest sample, and beats per ring sample.
+    const beatEnd = Number(metadata.beatEnd);
+    const beatsPerSample = Number(metadata.beatsPerSample);
+    if (Number.isFinite(beatEnd) && Number.isFinite(beatsPerSample) && beatsPerSample > 0) {
+      buffer.nodeGraphScopeBeatEnd = beatEnd;
+      buffer.nodeGraphScopeBeatsPerSample = beatsPerSample;
     }
   }
   // Scope-ring posts (Output Instant Waterfall) often omit absoluteFrame. Drive a
