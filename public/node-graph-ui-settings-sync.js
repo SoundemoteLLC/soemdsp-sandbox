@@ -467,6 +467,29 @@ function syncNodeUiDevModuleCorners() {
   if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
 }
 
+// UI Dev "lighting: wires": the light the cables and their end dots keep in a fully dark room. The
+// range is the definition's (nodeUiDevSettingControls), applied to the inputs here.
+function syncNodeUiDevWireLight() {
+  const pairs = [["nodeUiDevWireDarkLight", "nodeGraphWireDarkLight"], ["nodeUiDevWireDotDarkLight", "nodeGraphWireDotDarkLight"]];
+  for (const [id, target] of pairs) {
+    const def = typeof nodeUiDevSettingControls !== "undefined" ? nodeUiDevSettingControls.find((d) => d.id === id) : null;
+    if (!def) continue;
+    const input = document.getElementById(id);
+    if (input) {
+      input.min = String(def.min);
+      input.max = String(def.max);
+      input.step = String(def.step ?? 1);
+    }
+    const raw = Number(input?.value);
+    const pct = Number.isFinite(raw) ? Math.max(def.min, Math.min(def.max, raw)) : def.defaultValue;
+    globalThis[target] = pct / 100;
+    const out = document.getElementById(`${id}Value`);
+    if (out) out.textContent = `${pct}%`;
+  }
+  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
+  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+}
+
 function syncNodeUiDevModuleIdleStroke() {
   const colorInput = document.getElementById("nodeUiDevModuleStrokeColor");
   const colorOut = document.getElementById("nodeUiDevModuleStrokeColorValue");
@@ -606,6 +629,14 @@ function bindNodeUiDevModuleIdleStroke() {
     input.addEventListener("change", syncNodeUiDevModuleCorners);
   }
   syncNodeUiDevModuleCorners();
+  for (const id of ["nodeUiDevWireDarkLight", "nodeUiDevWireDotDarkLight"]) {
+    const input = document.getElementById(id);
+    if (!input || input.dataset.wireLightBound === "true") continue;
+    input.dataset.wireLightBound = "true";
+    input.addEventListener("input", syncNodeUiDevWireLight);
+    input.addEventListener("change", syncNodeUiDevWireLight);
+  }
+  syncNodeUiDevWireLight();
   for (const id of [
     "nodeUiDevModuleStrokeColor",
     "nodeUiDevModuleStrokeAlpha",
@@ -1011,6 +1042,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   syncNodeUiDevDimmerCutoutControls();
   syncNodeUiDevMagnifierRimControls();
   syncNodeUiDevPortBrightness();
+  syncNodeUiDevWireLight();
   syncNodeUiDevJackColors();
   if (typeof syncNodeUiDevFullyOpaqueWires === "function") {
     syncNodeUiDevFullyOpaqueWires();

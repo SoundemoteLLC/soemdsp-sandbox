@@ -819,6 +819,26 @@ const NODE_STROKE_GLOW_REACH_PX = 16;
 const NODE_STROKE_GLOW_ALPHA = 0.85;
 // Cables never go fully dark with the room: this much of them stays visible at full dark.
 const NODE_CABLE_FLOOR = 0.35;
+// UI Dev "lighting: wires": how much light the cables and, apart, their end dots keep in a fully dark
+// room (0 = black "shadow" wires, 1 = not dimmed). syncNodeUiDevWireLight sets them from their
+// definitions; the room floor above stays the default.
+var nodeGraphWireDarkLight = NODE_CABLE_FLOOR;
+var nodeGraphWireDotDarkLight = NODE_CABLE_FLOOR;
+
+// Brightness (0..1) a cable (dot = true: a wire end dot) keeps in the room right now. The colour goes
+// toward black; the alpha is kept, so a dark cable is a shadow, not a fade-out.
+function nodeGraphGlGraphWireLight(dot) {
+  if (nodeGraphGlGraphState.view || typeof nodeGraphRoomAmbientDark !== "function") return 1;
+  const dark = Math.max(0, Math.min(1, nodeGraphRoomAmbientDark()));
+  const keep = Math.max(0, Math.min(1, Number(dot ? nodeGraphWireDotDarkLight : nodeGraphWireDarkLight)));
+  return Math.max(Number.isFinite(keep) ? keep : NODE_CABLE_FLOOR, 1 - dark);
+}
+
+function nodeGraphGlGraphShadeRgba(rgba, light) {
+  if (!rgba || !(light < 1)) return rgba;
+  const k = Math.max(0, light);
+  return [rgba[0] * k, rgba[1] * k, rgba[2] * k, rgba.length > 3 ? rgba[3] : 1];
+}
 
 function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, borderOn, borderIdle) {
   if (!layer || typeof nodeGraphGlLinesModuleOutline !== "function") return;
@@ -1478,13 +1498,9 @@ function nodeGraphGlGraphDragFrom(point, endpoint) {
 
 /** One wire end dot (square jack or round) into `batch`. */
 function nodeGraphGlGraphDrawWireEnd(batch, end, feather) {
-  // In a dark room the cables are darkened (with a floor); the dots at their ends get exactly the same
-  // darkening, so a dot is never brighter than the wire it ends.
-  const dark = !nodeGraphGlGraphState.view && typeof nodeGraphRoomAmbientDark === "function"
-    ? Math.min(nodeGraphRoomAmbientDark(), 1 - NODE_CABLE_FLOOR) : 0;
-  const rgba = dark > 0
-    ? [end.rgba[0] * (1 - dark), end.rgba[1] * (1 - dark), end.rgba[2] * (1 - dark), end.rgba.length > 3 ? end.rgba[3] : 1]
-    : end.rgba;
+  // In a dark room the end dots darken toward black with their own light setting (UI Dev
+  // "lighting: wires"), alpha kept.
+  const rgba = nodeGraphGlGraphShadeRgba(end.rgba, nodeGraphGlGraphWireLight(true));
   if (end.square) {
     nodeGraphGlLinesRect(batch, end.x - end.reach, end.y - end.reach, end.reach * 2, end.reach * 2, rgba);
   } else {
@@ -1815,7 +1831,7 @@ function nodeGraphGlGraphWireBakeUpdate(p) {
   const mix = nodeGraphGlGraphWireBakeMix;
   let h = 2166136261;
   for (const v of [rx0, ry0, pw, ph, scale, p.halfWorld, p.traceHalf, p.paramHalf, p.feather,
-    st.wireDip ?? 0.35, st.wireDipWidth ?? 0.5, list.length, p.railEnds.length]) h = mix(h, v);
+    st.wireDip ?? 0.35, st.wireDipWidth ?? 0.5, list.length, p.railEnds.length, nodeGraphGlGraphWireLight(false)]) h = mix(h, v);
   for (let i = 0; i < p.railEnds.length; i += 1) {
     h = mix(h, p.railEnds[i].x);
     h = mix(h, p.railEnds[i].y);
@@ -1854,12 +1870,13 @@ function nodeGraphGlGraphWireBakeUpdate(p) {
 /** Same strokes as the vector path, in zoom-1 world px (camera uniform). list: [{ wire, picked }]. */
 function nodeGraphGlGraphWireBakeStroke(batch, list, p) {
   const st = nodeGraphGlGraphState;
+  const light = nodeGraphGlGraphWireLight(false);
   for (let i = 0; i < list.length; i += 1) {
     const { wire, picked } = list[i];
     const style = wire.style === "trace" ? "trace" : "ribbon";
     const stroke = style === "trace" ? p.traceHalf : (wire.param ? p.paramHalf : p.halfWorld);
     const feather = style === "trace" ? 0 : p.feather;
-    const rgba = picked ? [0.95, 0.86, 0.45, 1] : wire.rgba;
+    const rgba = nodeGraphGlGraphShadeRgba(picked ? [0.95, 0.86, 0.45, 1] : wire.rgba, light);
     let pts = wire.xy;
     if (wire.param && p.railEnds.length) {
       pts = Float32Array.from(pts);
@@ -2031,7 +2048,7 @@ function nodeGraphGlGraphDotBakeUpdate(p) {
     const pw = Math.max(1, Math.min(max, Math.ceil(x1) + edge - rx0));
     const ph = Math.max(1, Math.min(max, Math.ceil(y1) + edge - ry0));
     let h = 2166136261;
-    for (const v of [rx0, ry0, pw, ph, p.feather, ends.length]) h = mix(h, v);
+    for (const v of [rx0, ry0, pw, ph, p.feather, ends.length, nodeGraphGlGraphWireLight(true)]) h = mix(h, v);
     for (const e of ends) {
       h = mix(h, e.x);
       h = mix(h, e.y);
@@ -2547,6 +2564,19 @@ function nodeGraphGlGraphPresent(options = {}) {
     })
     : null;
   if (!dotBake && !view && nodeGraphGlGraphState.dotBake) nodeGraphGlGraphDotBakeDrop();
+  // Room light on the cable canvas: a black quad UNDER the cables darkens the workspace seen through
+  // it (same amount as before). The cables darken by their own colour (UI Dev "lighting: wires"), so
+  // at 0 they turn into black shadow wires instead of fading out.
+  const wireLight = view ? 1 : nodeGraphGlGraphWireLight(false);
+  const roomDarkUnderWires = !view && typeof nodeGraphRoomAmbientDark === "function"
+    ? Math.max(0, Math.min(1, nodeGraphRoomAmbientDark())) : 0;
+  if (roomDarkUnderWires > 0 && typeof nodeGraphGlLinesRect === "function") {
+    const kx = frameCamera ? 1 : zoom;
+    nodeGraphGlLinesRect(
+      wireBatch, toX(cam.x - 16), toY(cam.y - 16), (cssW / zoom + 32) * kx, (cssH / zoom + 32) * kx,
+      [0, 0, 0, Math.min(roomDarkUnderWires, 1 - NODE_CABLE_FLOOR)],
+    );
+  }
   for (let i = 0; i < nodeGraphGlGraphState.wires.length; i += 1) {
     const wire = nodeGraphGlGraphState.wires[i];
     const src = wire.xy;
@@ -2595,6 +2625,7 @@ function nodeGraphGlGraphPresent(options = {}) {
         rgba = [0.95, 0.86, 0.45, 1];
       }
     }
+    rgba = nodeGraphGlGraphShadeRgba(rgba, wireLight);
     // Baked cables are already in the zoom-1 picture, and so is a live one
     // whenever its own picture was made; otherwise it strokes here.
     const isLive = nodeGraphGlGraphWireIsLive(wire);
@@ -2857,15 +2888,6 @@ function nodeGraphGlGraphPresent(options = {}) {
   }
   nodeGraphGlGraphDrawConstraintBadges(veilBatch, toX, toY, layoutZoom, cssW, cssH);
   if (trailBatch) nodeGraphGlGraphDrawTrail(trailBatch, zoom);
-  // Cables sit on their own canvas under the module stacks: darken them the same amount, with a
-  // black quad over the view (a CSS filter would lift the canvas above the modules).
-  if (ambientDark > 0) {
-    const kx = frameCamera ? 1 : zoom;
-    nodeGraphGlLinesModuleOutline(
-      wireBatch, toX(cam.x - 16), toY(cam.y - 16), (cssW / zoom + 32) * kx, (cssH / zoom + 32) * kx,
-      0, [0, 0, 0, 0], [], [0, 0, 0, Math.min(ambientDark, 1 - NODE_CABLE_FLOOR)], null, null, "", false, true,
-    );
-  }
   batch._blend = "alpha";
   wireBatch._blend = "alpha";
   contactBatch._blend = "max";
