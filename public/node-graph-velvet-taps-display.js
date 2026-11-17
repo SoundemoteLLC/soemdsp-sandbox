@@ -34,7 +34,7 @@ function nodeGraphVelvetTapsLoad() {
   if (nodeGraphVelvetTapsWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphVelvetTapsWasm.promise;
   }
-  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1")
+  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1-v6s1")
     .then((response) => {
       if (!response.ok) throw new Error(`velvet_reverb wasm HTTP ${response.status}`);
       return response.arrayBuffer();

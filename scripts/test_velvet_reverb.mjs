@@ -115,7 +115,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const lay = layout({ taps: 20000, decay: 1 });
   check(lay.count === x.soemdsp_velvet_reverb_max_taps() && (lay.flags & 1), `past the engine's ${x.soemdsp_velvet_reverb_max_taps()} taps the layout says so (count ${lay.count}, flags ${lay.flags})`);
   const lay2 = layout({ taps: 100, decay: 30 });
-  check((lay2.flags & 2) && lay2.length < 13.5 && lay2.length > 12, `only a Length that truly cannot fit (30 s, past the definition max) is held and flagged (${lay2.length.toFixed(3)} s, flags ${lay2.flags})`);
+  check((lay2.flags & 2) && lay2.length < 7.5 && lay2.length > 6, `only a Length that truly cannot fit (30 s, past the definition max) is held and flagged (${lay2.length.toFixed(3)} s, flags ${lay2.flags})`);
   const lay3 = layout({ taps: 120, decay: 0.4, dark: 5 });
   check(lay3.count === 120 && lay3.flags === 0 && lay3.pos.every((p, i) => i === 0 || p >= lay3.pos[i - 1] - 0.4 / 120) && lay3.pos[lay3.count - 1] < 0.4 && lay3.width.every((wd) => wd * FS >= 1 && wd * FS <= 5), "layout: 120 taps inside 0.4 s, widths 1..5 samples");
   const r3 = ir({ taps: 120, decay: 0.4, dark: 5 }).L;
@@ -333,36 +333,36 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   check(dark.count < 256 && dark.count >= 70 && dark.count <= 80, `Darkness 32: 256 taps in 50 ms keep ${dark.count} (2400 samples / 32-sample cells = 75)`);
 }
 
-// ---- 12 s Length: the delay line is sized from the sample rate, so it always fits
+// ---- 6 s Length (the definition max): the delay line is sized from the sample rate, so it always fits
 {
   const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
   const vr = defs.slice(defs.indexOf("\n  velvetReverb: {"));
   const dec = vr.slice(vr.indexOf('key: "decay",') - 200, vr.indexOf('key: "decay",') + 400);
   const defMax = Number(/max: "([^"]+)"/.exec(dec.slice(dec.indexOf('key: "decay",')))?.[1]);
-  check(defMax === 12 && x.soemdsp_velvet_reverb_max_length() === defMax, `Length definition max ${defMax} s = the delay line's design length ${x.soemdsp_velvet_reverb_max_length()} s`);
+  check(defMax === 6 && x.soemdsp_velvet_reverb_max_length() === defMax, `Length definition max ${defMax} s = the delay line's design length ${x.soemdsp_velvet_reverb_max_length()} s`);
   const fits = [44100, 48000, 96000, 192000].map((sr) => {
-    const count = x.soemdsp_velvet_reverb_layout(64, 1024, 1, sr, 12, 1024, 1, -60, 0);
+    const count = x.soemdsp_velvet_reverb_layout(64, 1024, 1, sr, 6, 1024, 1, -60, 0);
     return [sr, count, x.soemdsp_velvet_reverb_layout_length(), x.soemdsp_velvet_reverb_layout_flags()];
   });
-  check(fits.every(([, c, len, fl]) => c === 64 && Math.abs(len - 12) < 1e-9 && fl === 0), `12 s with the widest pulses (Darkness / Tail Darkness 1024) fits unflagged at ${fits.map(([sr, c, len, fl]) => `${sr / 1000} kHz (${c} taps, ${len} s, flags ${fl})`).join(", ")}`);
+  check(fits.every(([, c, len, fl]) => c === 64 && Math.abs(len - 6) < 1e-9 && fl === 0), `6 s with the widest pulses (Darkness / Tail Darkness 1024) fits unflagged at ${fits.map(([sr, c, len, fl]) => `${sr / 1000} kHz (${c} taps, ${len} s, flags ${fl})`).join(", ")}`);
   const mb = (sr) => x.soemdsp_velvet_reverb_block_bytes(sr) / 1e6;
   console.log(`     memory per instance: ${mb(44100).toFixed(1)} MB at 44.1 kHz, ${mb(48000).toFixed(1)} MB at 48 kHz, ${mb(96000).toFixed(1)} MB at 96 kHz, ${mb(192000).toFixed(1)} MB at 192 kHz`);
-  check(mb(96000) < 2.1 * mb(48000) && mb(48000) < 25, `memory follows the sample rate (${mb(48000).toFixed(1)} / ${mb(96000).toFixed(1)} MB at 48 / 96 kHz)`);
-  // The audio holds a tap near 12 s: impulse response energy right before the end.
-  const { L } = ir({ taps: 64, decay: 12, amp: 0, n: 12 * FS + 2048 });
+  check(mb(96000) < 2.1 * mb(48000) && mb(48000) < 13, `memory follows the sample rate (${mb(48000).toFixed(1)} / ${mb(96000).toFixed(1)} MB at 48 / 96 kHz)`);
+  // The audio holds a tap near 6 s: impulse response energy right before the end.
+  const { L } = ir({ taps: 64, decay: 6, amp: 0, n: 6 * FS + 2048 });
   let last = 0;
   for (let i = 0; i < L.length; i += 1) if (L[i] !== 0) last = i;
-  check(last / FS > 11.5 && last / FS <= 12 + 0.01, `audio: the last tap of a 12 s tail plays at ${(last / FS).toFixed(3)} s`);
-  // A 96 kHz instance holds 12 s too (the line grows with the rate it is created at).
+  check(last / FS > 5.75 && last / FS <= 6 + 0.01, `audio: the last tap of a 6 s tail plays at ${(last / FS).toFixed(3)} s`);
+  // A 96 kHz instance holds 6 s too (the line grows with the rate it is created at).
   const h = x.soemdsp_velvet_reverb_create(96000);
   let lastHi = 0;
-  for (let i = 0; i < 12 * 96000 + 4096; i += 1) {
+  for (let i = 0; i < 6 * 96000 + 4096; i += 1) {
     const v = i === 0 ? 1 : 0;
-    const o = x.soemdsp_velvet_reverb_sample(h, v, v, 32, 1, 1, 1, 96000, 12, 0, 0, 0);
+    const o = x.soemdsp_velvet_reverb_sample(h, v, v, 32, 1, 1, 1, 96000, 6, 0, 0, 0);
     if (o !== 0) lastHi = i;
   }
   x.soemdsp_velvet_reverb_destroy(h);
-  check(lastHi / 96000 > 11 && lastHi / 96000 <= 12.01, `96 kHz: the last tap of a 12 s tail plays at ${(lastHi / 96000).toFixed(3)} s`);
+  check(lastHi / 96000 > 5.5 && lastHi / 96000 <= 6.01, `96 kHz: the last tap of a 6 s tail plays at ${(lastHi / 96000).toFixed(3)} s`);
 }
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }

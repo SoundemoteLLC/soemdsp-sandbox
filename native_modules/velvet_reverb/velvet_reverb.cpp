@@ -49,8 +49,8 @@ namespace {
 // the shared memory pool when an instance is created (engine build, never in the
 // sample path) and go back when it is destroyed. The delay lines are sized from
 // the sample rate the instance is created at: kMaxLengthSeconds plus the widest
-// pulse, so any Length the definition allows fits (about 21 MB per instance at
-// 48 kHz, 40 MB at 96 kHz, 77 MB at 192 kHz; soemdsp_velvet_reverb_block_bytes).
+// pulse, so any Length the definition allows fits (about 12 MB per instance at
+// 48 kHz, 21 MB at 96 kHz, 40 MB at 192 kHz; soemdsp_velvet_reverb_block_bytes).
 static const int kMaxInstances = 128;
 // Physical limits only. Taps, Length and Darkness ranges belong to the parameters;
 // the DSP follows whatever they allow up to what fits in memory / the delay line.
@@ -59,7 +59,7 @@ static const int kMaxPulseWidth = 65536; // a pulse must fit well inside the del
 // Longest Length the delay line is sized for. Mirrors the Length (decay)
 // definition max, which is the source of truth: test_velvet_reverb.mjs checks
 // that they match (soemdsp_velvet_reverb_max_length).
-static const double kMaxLengthSeconds = 12.0;
+static const double kMaxLengthSeconds = 6.0;
 // Delay line length in samples at a sample rate: the longest Length plus the
 // widest pulse plus read margin. Not a power of two (that would waste up to
 // half the memory); reads wrap with one compare. Taps that would still land
@@ -728,7 +728,7 @@ double soemdsp_velvet_reverb_right(int handle) {
 }
 
 int soemdsp_velvet_reverb_version() {
-  return 6; // 6: Density Skew is the bipolar rational curve (+ packs toward the middle, - toward both ends); cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 12 s (kMaxLengthSeconds) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
+  return 6; // 6: Density Skew is the bipolar rational curve (+ packs toward the middle, - toward both ends); cell floor (taps that would bunch under max(4 samples, widest pulse) are not used; layout flag 4) and the delay lines are sized from the creation sample rate for 6 s (kMaxLengthSeconds; was 12 s) plus the widest pulse, so any allowed Length fits; create(sampleRate). 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
 }
 
 } // extern "C"

@@ -7198,7 +7198,7 @@ const nodeGraphModuleDefinitions = (
         key: "decay",
         kind: "time",
         label: "Length",
-        max: "12",
+        max: "6",
         maxDigits: 5,
         mid: "0.5",
         min: "0.001",
