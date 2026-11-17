@@ -250,8 +250,12 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
       this.NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = NODE_GRAPH_VELVET_TAP_IDLE_ALPHA;
       this.NODE_GRAPH_VELVET_TAP_ON_ALPHA = NODE_GRAPH_VELVET_TAP_ON_ALPHA;
       this.NODE_GRAPH_VELVET_TAP_ON_LIFT = NODE_GRAPH_VELVET_TAP_ON_LIFT;
+      this.NODE_GRAPH_VELVET_TAP_FLASH_DB = NODE_GRAPH_VELVET_TAP_FLASH_DB;
+      this.NODE_GRAPH_VELVET_TAP_DARKNESS_WREF = NODE_GRAPH_VELVET_TAP_DARKNESS_WREF;
+      this.NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR = NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR;
       this.nodeGraphVelvetTapsAxisSpans = nodeGraphVelvetTapsAxisSpans;
       this.nodeGraphVelvetTapsDarknessShade = nodeGraphVelvetTapsDarknessShade;
+      this.nodeGraphVelvetTapsFlashAmount = nodeGraphVelvetTapsFlashAmount;
       this.nodeGraphVelvetTapsShade = nodeGraphVelvetTapsShade;
     `,
     cov,
@@ -263,24 +267,58 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
   check(idleA * 2 >= 1, `two idle overlaps reach a burst (2 x ${idleA} = ${idleA * 2})`);
 
   const dim = cov.nodeGraphVelvetTapsDarknessShade;
+  const floor = cov.NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR;
+  const wref = cov.NODE_GRAPH_VELVET_TAP_DARKNESS_WREF;
+  check(wref === 64 && floor === 0.2, `Wref is the spawn Darkness max (${wref}) and the floor is ${floor}`);
   const d1 = dim(1 / 48000, 48000);
   const d2 = dim(2 / 48000, 48000);
-  const d3 = dim(3 / 48000, 48000);
   const d4 = dim(4 / 48000, 48000);
   const d8 = dim(8 / 48000, 48000);
+  const d16 = dim(16 / 48000, 48000);
+  const d32 = dim(32 / 48000, 48000);
+  const d64 = dim(64 / 48000, 48000);
+  const d128 = dim(128 / 48000, 48000);
   check(d1 === 1, `width 1 sample is full brightness (${d1})`);
-  check(d2 > d3 && d3 > d4 && d4 > d8 && d8 === 0.2, `darkness dim is monotonic and floors at 0.2 (${d2} > ${d3} > ${d4} > ${d8})`);
+  check(Math.abs(d64 - floor) < 1e-12, `width 64 (Wref) is at the ${floor} floor (${d64})`);
+  check(d128 === floor, `widths past Wref stay at the floor (${d128})`);
+  check(d1 > d2 && d2 > d4 && d4 > d8 && d8 > d16 && d16 > d32 && d32 > d64, `darkness dim is monotonic down to the floor (${d1} > ${d2} > ${d4} > ${d8} > ${d16} > ${d32} > ${d64})`);
+  const geo = [d1, d2, d4, d8, d16, d32, d64];
+  const steps = [];
+  for (let i = 1; i < geo.length; i += 1) steps.push(geo[i - 1] - geo[i]);
+  const mean = steps.reduce((a, b) => a + b, 0) / steps.length;
+  check(
+    steps.every((s) => Math.abs(s - mean) < 1e-12),
+    `log brightness is evenly spaced across a geometric width sweep (step ${mean.toFixed(4)})`,
+  );
 
   const ink = [0.8, 0.15, 0.15, 1];
   const idle1 = cov.nodeGraphVelvetTapsShade(ink, 1, false);
   const idle2 = cov.nodeGraphVelvetTapsShade(ink, d2, false);
-  const idle4 = cov.nodeGraphVelvetTapsShade(ink, d4, false);
-  const on1 = cov.nodeGraphVelvetTapsShade(ink, 1, true);
-  const onDark = cov.nodeGraphVelvetTapsShade(ink, d8, true);
+  const idle8 = cov.nodeGraphVelvetTapsShade(ink, d8, false);
+  const idle64 = cov.nodeGraphVelvetTapsShade(ink, d64, false);
+  const on1 = cov.nodeGraphVelvetTapsShade(ink, 1, true, 1);
+  const onDark = cov.nodeGraphVelvetTapsShade(ink, d8, true, 1);
   check(idle1[0] === ink[0] && idle1[3] === idleA, "idle width-1 uses full channel ink at idle alpha");
-  check(idle2[0] < idle1[0] && idle4[0] < idle2[0], "idle rgb follows the monotonic darkness shade");
-  check(on1[0] > idle1[0] && on1[3] === 1, "triggered width-1 is brighter (lifted toward white) than idle");
-  check(onDark[0] === on1[0] && onDark[0] > idle4[0], "triggered wide taps also lift to the same near-white channel colour");
+  check(idle2[0] < idle1[0] && idle8[0] < idle2[0] && idle64[0] < idle8[0], "idle rgb follows the monotonic darkness shade");
+  check(on1[0] > idle1[0] && on1[3] === 1, "triggered width-1 at 0 dB is brighter (lifted toward white) than idle");
+  check(onDark[0] === on1[0] && onDark[0] > idle8[0], "a 0 dB hit reaches the same full lift for any width");
+  const midWide = cov.nodeGraphVelvetTapsShade(ink, d8, true, Math.pow(10, -20 / 20));
+  const midThin = cov.nodeGraphVelvetTapsShade(ink, 1, true, Math.pow(10, -20 / 20));
+  check(midWide[0] > idle8[0] && midWide[0] < midThin[0], "at a mid level, a wider tap stays dimmer than a width-1 flash");
+
+  // Relative flash: absolute 60 dB window, monotonic in level, no fake full-bright.
+  const amt = cov.nodeGraphVelvetTapsFlashAmount;
+  const db = (v) => Math.pow(10, v / 20);
+  check(amt(1) === 1, "0 dB (peak 1) is full lift");
+  check(Math.abs(amt(db(-60))) < 1e-12, "-60 dB is no lift over idle");
+  check(amt(db(-90)) === 0 && amt(TRIGGER) === 0, "a just-triggered -90 dB hit stays at zero lift");
+  check(amt(2) === 1, "peaks above 1 (clipped) stay at the full lift, no extra headroom");
+  check(amt(db(-40)) > amt(db(-50)) && amt(db(-20)) > amt(db(-40)) && amt(0.5) > amt(db(-20)) && amt(1) > amt(0.5), "flash amount is monotonic in level");
+  const quiet = cov.nodeGraphVelvetTapsShade(ink, 1, true, TRIGGER);
+  const mid = cov.nodeGraphVelvetTapsShade(ink, 1, true, db(-20));
+  const full = cov.nodeGraphVelvetTapsShade(ink, 1, true, 1);
+  check(quiet[3] === 1 && quiet[0] === idle1[0], "a barely-audible hit is visibly lit (alpha 1) with no lift over idle");
+  check(mid[0] > quiet[0] && mid[0] < full[0] && full[0] === on1[0], "flash colour rises with level up to the current full lift");
 
   const spans = cov.nodeGraphVelvetTapsAxisSpans;
   const compact = (s) => s.map((x) => `${x.p}:${x.c.toFixed(4)}x${x.w}`).join(",");

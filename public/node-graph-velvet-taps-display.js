@@ -10,7 +10,9 @@
 // colour (red), Right in the Right lamp colour (blue), drawn additively so a
 // Left+Right overlap sums toward R+B=White and a dense cluster bursts.
 // Spread 0 = the channels are identical, so every pulse adds toward white.
-// Darker (wider) pulses draw dimmer: ink x 1/w (the audio's pulse gain), floored at 0.2.
+// Darker (wider) pulses draw dimmer on a log-width scale (Wref = 64 samples, the spawn
+// Darkness max) so a geometric Darkness-to-Tail-Dark sweep falls evenly across the tail,
+// floored at 0.2.
 // Text: the tap count ("64 taps"; "48 / 64 taps" when taps that would bunch up
 // under the cell floor are not used; "4096 taps max" past the engine's table) and
 // the tail length ("25.0 ms"; "... s max" only when the delay line truly cannot
@@ -24,8 +26,9 @@
 // "Text" on this face: tap count / length readouts and the held-length bar,
 // Left, Right, Line thickness, Dot size) over the module definition's
 // defaultDisplaySettings (Dot size 0) for any key the node has not stored.
-// Live animation is binary (no fade, no level-to-brightness map): a tap is
-// idle (the static darkness shade) or fully bright (full channel ink). The
+// Live animation is a level-relative flash (no fade, no easing): a tap is
+// idle (the static darkness shade) or lit, with lift scaled from the snapshot
+// peak. The
 // worklet posts per-tap peak-hold levels (TapLevelsL / TapLevelsR) at the
 // display-telemetry rate. A tap is triggered when that peak is above
 // NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB). A hit pops bright on the next
@@ -41,7 +44,9 @@
 // stack into a bright burst (additive may clip toward white), and L red + R
 // blue add to the R+B=White look. Idle alpha is near 1 so an isolated tap
 // matches the pre-animation static look (ink x 1/width, floor 0.2). A
-// triggered tap is full channel ink lifted toward white.
+// triggered tap lifts from its idle shade toward white by a 60 dB map of
+// that snapshot's peak (0 dB = the full lift, -60 dB = no lift over idle,
+// alpha 1 so a barely-audible hit still pops).
 // GPU only (gl-line-renderer); the face does not edit that shared renderer.
 
 const nodeGraphVelvetTapsWasm = { promise: null, exports: null, failed: false };
@@ -167,6 +172,8 @@ function nodeGraphVelvetTapsTriggerState(nodeId) {
       shownR: new Uint8Array(0),
       energyL: new Uint8Array(0),
       energyR: new Uint8Array(0),
+      heldL: new Float32Array(0),
+      heldR: new Float32Array(0),
       snapL: undefined,
       snapR: undefined,
     };
@@ -185,12 +192,23 @@ function nodeGraphVelvetTapsEnsureTriggers(state, key, n) {
   return state[key];
 }
 
+function nodeGraphVelvetTapsEnsureHeld(state, key, n) {
+  const count = Math.max(0, n | 0);
+  if (!state[key] || state[key].length !== count) {
+    const next = new Float32Array(count);
+    if (state[key]) next.set(state[key].subarray(0, Math.min(state[key].length, count)));
+    state[key] = next;
+  }
+  return state[key];
+}
+
 function nodeGraphVelvetTapsEnsureSide(state, side, n) {
   const s = side === "R" ? "R" : "L";
   return {
     trig: nodeGraphVelvetTapsEnsureTriggers(state, "triggered" + s, n),
     shown: nodeGraphVelvetTapsEnsureTriggers(state, "shown" + s, n),
     energy: nodeGraphVelvetTapsEnsureTriggers(state, "energy" + s, n),
+    held: nodeGraphVelvetTapsEnsureHeld(state, "held" + s, n),
   };
 }
 
@@ -200,15 +218,19 @@ function nodeGraphVelvetTapsEnsureSide(state, side, n) {
 // Ingest and the draw-time fallback both use this so they cannot fight.
 function nodeGraphVelvetTapsApplySnapshot(state, side, levels, threshold) {
   const n = levels && typeof levels.length === "number" ? levels.length : 0;
-  const { trig, shown, energy } = nodeGraphVelvetTapsEnsureSide(state, side, n);
+  const { trig, shown, energy, held } = nodeGraphVelvetTapsEnsureSide(state, side, n);
   const th = threshold == null ? NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL : threshold;
   for (let i = 0; i < n; i += 1) {
-    const hit = levels && i < levels.length && Number(levels[i]) > th;
+    const mag = levels && i < levels.length ? Number(levels[i]) : 0;
+    const hit = mag > th;
     energy[i] = hit ? 1 : 0;
-    if (hit) trig[i] = 1;
-    else if (shown[i]) {
+    if (hit) {
+      trig[i] = 1;
+      held[i] = mag;
+    } else if (shown[i]) {
       trig[i] = 0;
       shown[i] = 0;
+      held[i] = 0;
     }
   }
   return trig;
@@ -254,52 +276,84 @@ function nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, countL, countR, armFromB
     }
   }
   const side = (s, n) => {
-    const { trig, shown, energy } = nodeGraphVelvetTapsEnsureSide(state, s, n);
+    const { trig, shown, energy, held } = nodeGraphVelvetTapsEnsureSide(state, s, n);
     const on = new Uint8Array(trig);
+    const level = new Float32Array(n);
     for (let i = 0; i < n; i += 1) {
       if (trig[i]) {
         shown[i] = 1;
+        level[i] = held[i];
         if (!energy[i]) {
           trig[i] = 0;
           shown[i] = 0;
+          held[i] = 0;
         }
       }
     }
-    return on;
+    return { on, level };
   };
-  return { onL: side("L", nL), onR: side("R", nR) };
+  const left = side("L", nL);
+  const right = side("R", nR);
+  return { onL: left.on, onR: right.on, levelL: left.level, levelR: right.level };
 }
 
 nodeGraphVelvetTapsInstallIngestArm();
 
 
-// Idle fill is near the pre-animation static look (ink x 1/width at almost
-// solid alpha). Triggered is opaque and lifted toward white so the flash
-// pops clearly. Overlaps still add and may clip to white (a burst).
+// Idle fill is near the pre-animation static look (log-width darkness shade
+// at almost solid alpha). A lit tap is opaque; its lift toward white follows
+// the snapshot peak on a 60 dB map. Overlaps still add and may clip to white
+// (a burst) if the signal itself piles up or clips.
 const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = 0.92;
 const NODE_GRAPH_VELVET_TAP_ON_ALPHA = 1;
 const NODE_GRAPH_VELVET_TAP_ON_LIFT = 0.4;
+// 0 dB (peak 1) = full lift; -60 dB = no lift over idle. Peaks above 1
+// (a clipped signal) stay at the full lift; we do not invent extra headroom.
+const NODE_GRAPH_VELVET_TAP_FLASH_DB = 60;
+// Spawn Darkness slider max (samples). Width 1 is full shade, width 64 is
+// the 0.2 floor, so typical Darkness 1-64 uses the whole range. A fixed
+// Wref keeps a uniform-width patch from collapsing to the floor (which
+// "current max width" would do). Widths past 64 stay at the floor.
+const NODE_GRAPH_VELVET_TAP_DARKNESS_WREF = 64;
+const NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR = 0.2;
 
-// Darkness dim: 1 / pulse width in samples, floored at 0.2. Wider is always
-// dimmer until the floor. Used only for idle taps.
+// Darkness dim: log-width, floored at 0.2. Wider is always dimmer until
+// the floor. Matches the geometric (log-width) Darkness-to-Tail-Dark sweep,
+// so Tail Curve 0 falls roughly linearly across the tail on screen.
 function nodeGraphVelvetTapsDarknessShade(widthSeconds, sampleRate) {
-  return Math.max(0.2, Math.min(1, 1 / Math.max(1, widthSeconds * sampleRate)));
+  const w = Math.max(1, widthSeconds * sampleRate);
+  const t = Math.log(w) / Math.log(NODE_GRAPH_VELVET_TAP_DARKNESS_WREF);
+  const span = 1 - NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR;
+  return Math.max(NODE_GRAPH_VELVET_TAP_DARKNESS_FLOOR, 1 - span * t);
 }
 
-// ink is the lamp colour. Idle keeps its darkness shade; triggered uses full
-// ink lifted toward white.
-function nodeGraphVelvetTapsShade(ink, g, on) {
-  if (on) {
-    const lift = NODE_GRAPH_VELVET_TAP_ON_LIFT;
-    return [
-      ink[0] + (1 - ink[0]) * lift,
-      ink[1] + (1 - ink[1]) * lift,
-      ink[2] + (1 - ink[2]) * lift,
-      NODE_GRAPH_VELVET_TAP_ON_ALPHA,
-    ];
-  }
+// 0 dB -> 1, -60 dB -> 0. Below the window (including a just-triggered
+// -90 dB hit) stays at 0; the paint still pops via alpha 1.
+function nodeGraphVelvetTapsFlashAmount(level) {
+  const mag = Number(level);
+  if (!(mag > 0)) return 0;
+  const db = 20 * Math.log10(mag);
+  return Math.max(0, Math.min(1, (db + NODE_GRAPH_VELVET_TAP_FLASH_DB) / NODE_GRAPH_VELVET_TAP_FLASH_DB));
+}
+
+// ink is the lamp colour. Idle keeps its darkness shade. A lit tap keeps
+// that shade at -60 dB (alpha 1, so it still pops) and, as the peak rises
+// to 0 dB, moves to full ink lifted toward white.
+function nodeGraphVelvetTapsShade(ink, g, on, level) {
   const s = Math.max(0, Math.min(1, g));
-  return [ink[0] * s, ink[1] * s, ink[2] * s, NODE_GRAPH_VELVET_TAP_IDLE_ALPHA];
+  const idle = [ink[0] * s, ink[1] * s, ink[2] * s, NODE_GRAPH_VELVET_TAP_IDLE_ALPHA];
+  if (!on) return idle;
+  const amt = nodeGraphVelvetTapsFlashAmount(level);
+  const lift = NODE_GRAPH_VELVET_TAP_ON_LIFT * amt;
+  const r = idle[0] + (ink[0] - idle[0]) * amt;
+  const gc = idle[1] + (ink[1] - idle[1]) * amt;
+  const b = idle[2] + (ink[2] - idle[2]) * amt;
+  return [
+    r + (1 - r) * lift,
+    gc + (1 - gc) * lift,
+    b + (1 - b) * lift,
+    NODE_GRAPH_VELVET_TAP_ON_ALPHA,
+  ];
 }
 
 // Coverage spans along one axis in device pixels: each { p, c, w } is a run
@@ -444,7 +498,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
       : null;
     const ingest = nodeGraphVelvetTapsInstallIngestArm();
     const lit = nodeGraphVelvetTapsTakeLit(stateId, rawL, rawR, layout.count, layout.countR, !ingest);
-    const shade = (ink, r) => nodeGraphVelvetTapsShade(ink, r.g, r.on);
+    const shade = (ink, r) => nodeGraphVelvetTapsShade(ink, r.g, r.on, r.level);
     // One sharp rectangle per tap: x range = the real pulse, y = zero line to
     // the mirrored dB height (lvl <= 1 of the peak, so it stays in the face).
     const rect = (p, wd, signed, on) => {
@@ -454,12 +508,20 @@ function drawNodeGraphVelvetTapsDisplay(section) {
       const xa = at(p);
       const xb = at(p + wd);
       const g = nodeGraphVelvetTapsDarknessShade(wd, sr);
-      return { xa, xb, s: Math.sign(signed), hh: hNorm * reach, hNorm, g: on ? 1 : g, on: !!on };
+      return { xa, xb, s: Math.sign(signed), hh: hNorm * reach, hNorm, g, on: !!on, level: 0 };
     };
     const rl = [];
     const rr = [];
-    for (let i = 0; i < layout.count; i += 1) rl.push(rect(layout.pos[i], layout.width[i], layout.level[i], lit.onL[i]));
-    for (let i = 0; i < layout.countR; i += 1) rr.push(rect(layout.posR[i], layout.widthR[i], layout.levelR[i], lit.onR[i]));
+    for (let i = 0; i < layout.count; i += 1) {
+      const r = rect(layout.pos[i], layout.width[i], layout.level[i], lit.onL[i]);
+      r.level = lit.levelL ? lit.levelL[i] : 0;
+      rl.push(r);
+    }
+    for (let i = 0; i < layout.countR; i += 1) {
+      const r = rect(layout.posR[i], layout.widthR[i], layout.levelR[i], lit.onR[i]);
+      r.level = lit.levelR ? lit.levelR[i] : 0;
+      rr.push(r);
+    }
     // Taps are their own additive layer so text and the length bar stay
     // normal-over, while overlapping pulses (same or opposite channel) sum
     // light. L red + R blue therefore still reads as R+B=White, and a dense
