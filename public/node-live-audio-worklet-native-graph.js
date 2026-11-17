@@ -290,6 +290,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   crossover6: 107,
   velvetNoise: 263,
   velvetReverb: 265,
+  noiseConvReverb: 267,
 });
 
 // Param IDs — keep in sync with graph_engine.cpp kParam*.
@@ -608,6 +609,16 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "tailRandom") return P.NATIVE_GRAPH_PARAM_CENTER;
     if (k === "tailCurve") return P.NATIVE_GRAPH_PARAM_SATURATE;
     if (k === "precision") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
+  }
+  if (t === "noiseConvReverb") {
+    if (k === "decay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "ampShape") return P.NATIVE_GRAPH_PARAM_SHAPE;
+    if (k === "spectralShape") return P.NATIVE_GRAPH_PARAM_SATURATE;
+    if (k === "darkness") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "brightness") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "decorrelate") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if (t === "robinLeakyEnvelope") {
     if (k === "startDecay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
@@ -6086,6 +6097,17 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("tailRandom", P.NATIVE_GRAPH_PARAM_CENTER, cont("tailRandom", 1));
       push("tailCurve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("tailCurve", 0));
       push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 0));
+      continue;
+    }
+    if (type === "noiseConvReverb") {
+      push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1.5));
+      push("ampShape", P.NATIVE_GRAPH_PARAM_SHAPE, cont("ampShape", 0));
+      push("spectralShape", P.NATIVE_GRAPH_PARAM_SATURATE, cont("spectralShape", 0));
+      push("darkness", P.NATIVE_GRAPH_PARAM_WIDTH, cont("darkness", 0.25));
+      push("brightness", P.NATIVE_GRAPH_PARAM_CENTER, cont("brightness", 0.7));
+      push("decorrelate", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("decorrelate", 1));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 0.5));
       continue;
     }
     if (type === "softpopOscillator") {
