@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // Pitch Quantizer display is a WebGL face that shares Keyboard key geometry
-// and gradient drawing (inverted palette, dark naturals / light sharps).
-// Pointer hit-test shares layout with the draw path; toggle still edits the
-// scale mask. Seams must not show through sharp keys.
+// and gradient drawing. Base keys swap the Keyboard unlit palette (dark
+// naturals / cream sharps). Bright colors are reserved for enabled (teal)
+// and playing (gold) states. Pointer hit-test shares layout with the draw
+// path; toggle still edits the scale mask and must not select the module.
+// Seams must not show through sharp keys. Key tops are flush with the
+// display edge; labels nearly fill each key's width.
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -65,6 +68,17 @@ assert(
   /event\.stopPropagation\(\)/.test(ui) && /onPointerDown/.test(ui),
   "pointer path must stopPropagation so module drag does not swallow key hits",
 );
+assert(
+  /stopImmediatePropagation/.test(ui)
+    && /addEventListener\(\s*"pointerdown"\s*,\s*onPointerDown\s*,\s*true\s*\)/.test(ui),
+  "key pointerdown must capture-phase swallow like the Vactrol legend hit layer",
+);
+assert(
+  /function nodeGraphPitchQuantizerArmNativeHits/.test(ui)
+    && /nodeGraphGlHitKeepsNativeTarget/.test(ui)
+    && /closest\(\s*["']\.node-pitch-quantizer-face["']\s*\)/.test(ui),
+  "must wrap the GL keep-native hook so plate clicks on this face are not module drags",
+);
 
 const ops = [];
 const ctx = {
@@ -122,6 +136,30 @@ const cSharp = layout.keys.find((k) => k.pc === 1);
 const c = layout.keys.find((k) => k.pc === 0);
 assert(c && cSharp && cSharp.h < c.h, "sharps are shorter than naturals");
 assert(cSharp.y === c.y, "sharps start at the top of the bed");
+assert(layout.inset === 0, "flushEdge layout has no bed inset");
+assert(
+  layout.keys.every((k) => k.y === 0),
+  "natural and sharp tops are flush with the display top edge",
+);
+const defaultGeom = ctx.nodeGraphPianoKeysComputeRects({
+  width: 280,
+  height: 100,
+  inModuleFace: true,
+  whiteW: 16,
+  blackW: 10,
+  blackH: 0,
+  blackKeyHeight: 62,
+  totalUnits: 7,
+  leadPad: 0,
+  whites: [0, 2, 4, 5, 7, 9, 11],
+  blacks: [0, 1, 3, 4, 5].map((leftWhiteIndex) => ({ leftWhiteIndex })),
+});
+assert(
+  defaultGeom.inset === 280 * ctx.NODE_GRAPH_PIANO_KEYS_INSET_FRAC
+    && defaultGeom.whites[0].y === defaultGeom.inset
+    && defaultGeom.blacks[0].y === defaultGeom.inset,
+  "Keyboard default ComputeRects (no flushEdge) keeps the golden inset",
+);
 // Keyboard centers a sharp on the C/D joint.
 const joint = c.x + c.w;
 assert(
@@ -253,18 +291,26 @@ const idleC = paint(c, 0, null);
 const liveC = paint(c, 0, 0);
 const enC = paint(c, C_MAJOR, null);
 const enLiveC = paint(c, C_MAJOR, 0);
-assert(lum(liveC.top) < lum(idleC.top) && lum(liveC.bottom) < lum(idleC.bottom), "live natural is darker than idle (inverted Keyboard highlight)");
-assert(liveC.stroke > 0, "live natural gets a dark ring");
-assert(idleC.stroke === 0, "idle natural has no ring");
-assert(lum(enLiveC.top) < lum(enC.top) && lum(enLiveC.bottom) < lum(enC.bottom), "live enabled natural is darker than enabled-only teal");
-assert(enC.stroke > 0 && enLiveC.stroke > 0, "enabled teal and live-on both keep a ring");
 assert(
-  JSON.stringify(enC.strokeRgba) !== JSON.stringify(enLiveC.strokeRgba),
-  "live ring is visually distinct from the enabled teal stroke",
+  lum(liveC.top) > lum(idleC.top),
+  "playing natural is a bright highlight, brighter than the unlit dark natural",
+);
+assert(liveC.stroke > 0, "playing natural keeps a bright inset ring");
+assert(
+  lum(enLiveC.top) !== lum(enC.top)
+    && Math.hypot(enLiveC.top[0] - liveC.top[0], enLiveC.top[1] - liveC.top[1], enLiveC.top[2] - liveC.top[2]) < 0.08,
+  "enabled+playing fill is the playing accent, not the enabled teal plate",
+);
+assert(enC.stroke > 0 && enLiveC.stroke > 0, "enabled teal and playing both keep a ring");
+assert(
+  JSON.stringify(enLiveC.strokeRgba) !== JSON.stringify(liveC.strokeRgba),
+  "enabled+playing stroke stays teal, distinct from disabled+playing",
 );
 const tealBias = (p) => p.top[1] - p.top[0];
 assert(tealBias(enC) > tealBias(idleC), "enabled-only natural still reads teal against idle");
-assert(tealBias(enLiveC) > tealBias(liveC), "live+enabled still reads teal against a live-but-out-of-scale natural");
+const playVsEnabled = Math.hypot(liveC.top[0] - enC.top[0], liveC.top[1] - enC.top[1], liveC.top[2] - enC.top[2]);
+assert(playVsEnabled >= 0.4, "playing gold is color-distinct from enabled teal");
+assert(tealBias(enC) > tealBias(enLiveC), "playing fill on an enabled key is not the teal plate");
 assert(
   JSON.stringify(paint(c, C_MAJOR, 4)) === JSON.stringify(enC),
   "a live class on another key does not restyle this enabled natural",
@@ -272,12 +318,16 @@ assert(
 
 const idleCs = paint(cSharp, 0, null);
 const liveCs = paint(cSharp, 0, 1);
-assert(lum(liveCs.top) < lum(idleCs.top) && lum(liveCs.bottom) < lum(idleCs.bottom), "live sharp is darker than its dim idle pad");
-assert(liveCs.stroke > 0, "live sharp keeps a dark ring");
+assert(liveCs.stroke > 0, "playing sharp keeps a highlight ring");
+assert(
+  Math.hypot(liveCs.top[0] - liveC.top[0], liveCs.top[1] - liveC.top[1], liveCs.top[2] - liveC.top[2]) < 0.08,
+  "playing sharp uses the same bright playing fill as a playing natural",
+);
 assert(
   JSON.stringify(paint(cSharp, 0, 0)) === JSON.stringify(idleCs),
-  "a live natural does not darken a neighboring sharp",
+  "a live natural does not restyle a neighboring sharp",
 );
+assert(idleCs.stroke === 0, "unlit cream sharp has no leftover mid-tone border");
 
 const colorDelta = (a, b) => ({
   dl: Math.abs(lum(a) - lum(b)),
@@ -297,7 +347,8 @@ assert(
   "enabled vs disabled sharp is strongly distinct (luminance or color)",
 );
 assert(tealBias(enCs) >= 0.4, "enabled sharp fill is solid bright teal");
-assert(tealBias(idleCs) < 0.08 && lum(idleCs.top) < 0.55, "disabled sharp is dim desaturated grey");
+assert(tealBias(idleCs) < 0.08 && lum(idleCs.top) >= 0.9, "disabled sharp is the unlit Keyboard cream white-key top");
+assert(tealBias(idleC) < 0.08 && lum(idleC.top) <= 0.18, "disabled natural is the unlit Keyboard black-key top, not teal");
 assert(enCs.stroke > 0, "enabled sharp keeps the electric teal stroke");
 
 assert(typeof ctx.nodeGraphPitchQuantizerFacePaintSig === "function", "paint signature helper is exported");
@@ -322,17 +373,12 @@ const toHex = (rgba) => ctx.nodeGraphPitchQuantizerHexFromRgba
     const h = (c) => Math.max(0, Math.min(255, Math.round(c * 255))).toString(16).padStart(2, "0");
     return `#${h(rgba[0])}${h(rgba[1])}${h(rgba[2])}`;
   })();
-// Defaults must match the pq-gl-5 look (bright teal / darkened live / near-black / dim grey).
+// Defaults: enabled teal, bright playing gold, swapped Keyboard unlit bases.
 const lookHex = (rgba) => `#${[0, 1, 2].map((i) => Math.max(0, Math.min(255, Math.round(rgba[i] * 255))).toString(16).padStart(2, "0")).join("")}`;
-assert(defaults.enabledColor === lookHex(look.electric), "enabled color default is the pq-gl-5 electric teal");
-assert(defaults.naturalColor === lookHex(look.naturalTop), "natural color default is the pq-gl-5 near-black pad");
-assert(defaults.sharpColor === lookHex(look.sharpTop), "sharp color default is the pq-gl-5 dim grey pad");
-const darkenedElectric = [
-  look.electric[0] * 0.5,
-  look.electric[1] * 0.5,
-  look.electric[2] * 0.5,
-];
-assert(defaults.playingColor === lookHex(darkenedElectric), "playing color default is the pq-gl-5 darkened teal");
+assert(defaults.enabledColor === "#3dffd0" && defaults.enabledColor === lookHex(look.electric), "enabled color default is electric teal");
+assert(defaults.playingColor === "#ffcf6b" && defaults.playingColor === lookHex(look.playingTop), "playing color default is the bright Keyboard gold");
+assert(defaults.naturalColor === "#20252a" && defaults.naturalColor === lookHex(look.naturalTop), "natural color default is the Keyboard black-key top");
+assert(defaults.sharpColor === "#f7f2e8" && defaults.sharpColor === lookHex(look.sharpTop), "sharp color default is the Keyboard white-key top");
 
 const fromEmpty = ctx.normalizeNodeGraphPitchQuantizerFaceSettings(undefined);
 const fromPartial = ctx.normalizeNodeGraphPitchQuantizerFaceSettings({ enabledColor: "#ff0000" });
@@ -341,7 +387,7 @@ assert(
     && fromEmpty.playingColor === defaults.playingColor
     && fromEmpty.naturalColor === defaults.naturalColor
     && fromEmpty.sharpColor === defaults.sharpColor,
-  "old patches with no color settings must get pq-gl-5 defaults",
+  "old patches with no color settings must get the current defaults",
 );
 assert(fromPartial.enabledColor === "#ff0000", "a saved enabled color is kept");
 assert(fromPartial.sharpColor === defaults.sharpColor, "missing color keys fall back to defaults");
@@ -353,7 +399,7 @@ assert(
 
 assert(
   JSON.stringify(paint(c, C_MAJOR, null)) === JSON.stringify(paint(c, C_MAJOR, null, defaults)),
-  "default color settings keep the pq-gl-5 enabled/disabled paint",
+  "default color settings keep the default enabled/disabled paint",
 );
 const redEnabled = { ...defaults, enabledColor: "#ff3355" };
 const redC = paint(c, C_MAJOR, null, redEnabled);
@@ -377,4 +423,102 @@ assert(/data-trace-display-color="sharpColor"/.test(html), "settings include sha
 assert(!/\btitle\s*=/.test(html) && !/data-tooltip/.test(html), "display color controls must not set hover title text");
 assert(/Colors/.test(html), "color controls are grouped in the display settings form");
 
-console.log("ok  pitch quantizer WebGL face: shared keyboard keys, high-contrast enabled, live key-on, display colors, no rogue DOM");
+// Unjacked draw must not paint a plate ring that covers the flush key tops.
+ops.length = 0;
+ctx.nodeGraphPitchQuantizerGlDrawKeys({}, layout, C_MAJOR, false, 1);
+const unjackedRing = ops.find((o) => o.op === "roundRect" && o.spec && o.spec.fill && o.spec.fill[3] === 0 && (o.spec.stroke || 0) > 0);
+assert(!unjackedRing, "unjacked flush face must not draw a plate ring over the key tops");
+const keyTops = ops.filter((o) => o.op === "roundRect" && o.spec && o.spec.fillBottom);
+assert(keyTops.length >= 12 && keyTops.every((o) => Math.abs(o.y) < 0.001), "drawn key rects start at the display top");
+
+// Labels nearly fill each key's width (naturals in the lip, sharps in the sharp).
+const texts = [];
+ctx.nodeGraphGlLinesText = (batch, label, x, y, spec = {}) => {
+  texts.push({ label, x, y, px: spec.px, rgba: spec.rgba, maxWidth: spec.maxWidth });
+};
+ops.length = 0;
+texts.length = 0;
+ctx.nodeGraphPitchQuantizerGlDrawKeys({}, layout, 0, false, 1);
+assert(texts.length === 12, "every key is labelled");
+const aspect = ctx.NODE_GRAPH_PIANO_KEYS_LABEL_CHAR_ASPECT || 0.62;
+const cqiWhite = (ctx.NODE_GRAPH_PIANO_KEYS_WHITE_LABEL_CQI * layout.width / 7);
+const cqiBlack = (ctx.NODE_GRAPH_PIANO_KEYS_BLACK_LABEL_CQI * layout.width / 7);
+for (const key of layout.keys) {
+  const label = texts.find((t) => t.label === key.label
+    && Math.abs(t.x - (key.x + key.w * 0.5)) < 0.01);
+  assert(label, "label is centered on " + key.label);
+  const expected = ctx.nodeGraphPianoKeysLabelPx(key, key, {
+    labelFit: "width",
+    labelMargin: 1,
+    sharpHeightFrac: 0.62,
+    labelSizeK: 1,
+    totalUnits: 7,
+  }, { w: layout.width, h: layout.height }, 1, 1);
+  assert(Math.abs(label.px - expected) < 0.01, "PQ label px is the width-fit size for " + key.label);
+  const margin = 1;
+  const maxW = Math.max(1, key.w - margin * 2);
+  const chars = Math.max(1, String(key.label).length);
+  const glyphW = label.px * aspect * chars;
+  assert(glyphW <= maxW + 0.05, "label stays inside " + key.label + " with a small margin");
+  // Width-fit should be close to the available width, or capped by the lip/height.
+  const lipH = key.black ? (key.h - margin * 2) : (key.h * 0.38 - margin * 2);
+  const widthLimited = expected + 0.01 >= (maxW / (chars * aspect)) - 0.05;
+  const heightLimited = expected + 0.01 >= lipH - 0.05;
+  assert(widthLimited || heightLimited, key.label + " label nearly fills its width or lip height");
+  assert(label.px > cqiWhite * 1.5, "PQ labels are much larger than the Keyboard CQI size");
+  // Contrast: text luminance is clearly apart from the key fill.
+  const painted = paint(key, 0, null);
+  const textLum = lum(label.rgba || painted.text);
+  const fillLum = lum(painted.top);
+  assert(Math.abs(textLum - fillLum) >= 0.35, "base " + key.label + " label stays legible against the unlit fill");
+}
+const enTexts = [];
+ctx.nodeGraphGlLinesText = (batch, label, x, y, spec = {}) => {
+  enTexts.push({ label, px: spec.px, rgba: spec.rgba });
+};
+ctx.nodeGraphPitchQuantizerGlDrawKeys({}, layout, C_MAJOR, false, 1, 0);
+const enLabelC = enTexts.find((t) => t.label === "C");
+const playTexts = [];
+ctx.nodeGraphGlLinesText = (batch, label, x, y, spec = {}) => {
+  playTexts.push({ label, rgba: spec.rgba });
+};
+ctx.nodeGraphPitchQuantizerGlDrawKeys({}, layout, 0, false, 1, 0);
+const playLabelC = playTexts.find((t) => t.label === "C");
+assert(enLabelC && Math.abs(lum(enLabelC.rgba) - lum(enC.top)) >= 0.35, "label stays legible on an enabled teal fill");
+assert(playLabelC && Math.abs(lum(playLabelC.rgba) - lum(liveC.top)) >= 0.35, "label stays legible on a playing gold fill");
+
+// Keyboard CQI path is unchanged when labelFit is omitted.
+const kWhite = ctx.nodeGraphPianoKeysLabelPx({ black: false, label: "C" }, { w: 40, h: 100 }, {
+  labelSizeK: 1,
+  totalUnits: 7,
+}, { w: 280, h: 100 }, 1, 1);
+const kBlack = ctx.nodeGraphPianoKeysLabelPx({ black: true, label: "C#" }, { w: 25, h: 62 }, {
+  labelSizeK: 1,
+  totalUnits: 7,
+}, { w: 280, h: 100 }, 1, 1);
+assert(Math.abs(kWhite - cqiWhite) < 1e-9, "Keyboard natural label size stays on the CQI path");
+assert(Math.abs(kBlack - cqiBlack) < 1e-9, "Keyboard sharp label size stays on the CQI path");
+
+// Runtime wrap: PQ face targets stay native so the overlay does not begin a drag.
+const prevKeep = (target) => target && target.id === "keep-me";
+ctx.nodeGraphGlHitKeepsNativeTarget = prevKeep;
+ctx.nodeGraphPitchQuantizerArmNativeHits();
+const pqTarget = { id: "pq", closest: (sel) => (sel === ".node-pitch-quantizer-face" ? pqTarget : null) };
+const other = { id: "other", closest: () => null };
+const keep = { id: "keep-me", closest: () => null };
+assert(ctx.nodeGraphGlHitKeepsNativeTarget(pqTarget) === true, "PQ face target is treated as a native interactive hit");
+assert(ctx.nodeGraphGlHitKeepsNativeTarget(other) === false, "unrelated targets still go through the previous hook");
+assert(ctx.nodeGraphGlHitKeepsNativeTarget(keep) === true, "existing keep-native targets still match");
+ctx.nodeGraphPitchQuantizerArmNativeHits();
+assert(ctx.nodeGraphGlHitKeepsNativeTarget._pqFaceNative, "the keep-native wrap is idempotent");
+assert(/toggleNodeGraphPitchQuantizerKey/.test(ui), "a key click still toggles the scale mask");
+
+const form = read("public/node-graph-module-scope-settings-form.js");
+assert(
+  /playingColor:\s*"#ffcf6b"/.test(form)
+    && /naturalColor:\s*"#20252a"/.test(form)
+    && /sharpColor:\s*"#f7f2e8"/.test(form),
+  "settings form fallbacks match the new display color defaults",
+);
+
+console.log("ok  pitch quantizer WebGL face: swapped unlit keys, bright playing, flush tops, wide labels, no-select clicks");

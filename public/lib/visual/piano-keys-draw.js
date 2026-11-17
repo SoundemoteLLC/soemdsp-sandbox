@@ -14,6 +14,7 @@ const NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W = 10;
 const NODE_GRAPH_PIANO_KEYS_LABEL_FONT = "\"Cascadia Mono\", Consolas, monospace";
 const NODE_GRAPH_PIANO_KEYS_WHITE_LABEL_CQI = 0.17560976;
 const NODE_GRAPH_PIANO_KEYS_BLACK_LABEL_CQI = 0.14146342;
+const NODE_GRAPH_PIANO_KEYS_LABEL_CHAR_ASPECT = 0.62;
 
 function nodeGraphPianoKeysHex(hex, alpha = 1) {
   const h = String(hex).replace("#", "");
@@ -47,14 +48,16 @@ function nodeGraphPianoKeysMix(a, b, t) {
 /**
  * Key rectangles in layout px. Same numbers the Keyboard face has always used.
  * opts: { width, height, inModuleFace, whiteW, blackW, blackH, blackKeyHeight,
- *         totalUnits, leadPad, whites, blacks: [{ leftWhiteIndex }] }
+ *         totalUnits, leadPad, whites, blacks: [{ leftWhiteIndex }], flushEdge }
  * Returns { w, h, inset, inModuleFace, whites: [{x,y,w,h,last}], blacks: [rect|null] }.
+ * flushEdge: Pitch Quantizer only. Keys start at y=0 / x=0 with no bed inset.
+ * Keyboard omits it so the golden draw stays identical.
  */
 function nodeGraphPianoKeysComputeRects(opts) {
   const layout = opts || {};
   const W = Math.max(0, Number(layout.width) || 0);
   const H = Math.max(0, Number(layout.height) || 0);
-  const inset = W * NODE_GRAPH_PIANO_KEYS_INSET_FRAC;
+  const inset = layout.flushEdge === true ? 0 : W * NODE_GRAPH_PIANO_KEYS_INSET_FRAC;
   const iw = Math.max(0, W - inset * 2);
   const ih = Math.max(0, H - inset * 2);
   const whitesIn = Array.isArray(layout.whites) ? layout.whites : [];
@@ -161,6 +164,44 @@ function nodeGraphPianoKeysVisibleSeamRects(computed) {
  *         keys, labels, totalUnits, labelSizeK, labelFont, paintKey, textOpts }
  * geom: { w, h, inset, inModuleFace, rects: Map(key -> {x,y,w,h,last}) }
  */
+/**
+ * Label size in destination px. Default is the Keyboard CQI path (one size
+ * for all naturals, one for all sharps). labelFit: "width" sizes each label
+ * to nearly fill that key's width, with a small margin, capped by the natural
+ * lower-lip height or the sharp's height so it stays in its area.
+ */
+function nodeGraphPianoKeysLabelPx(key, r, o, geom, sx, sy) {
+  const opts = o || {};
+  const sizeK = Math.max(0.5, Math.min(4, Number(opts.labelSizeK) || 1));
+  const units = Math.max(1, Number(opts.totalUnits) || 1);
+  const scaleX = Number(sx) || 1;
+  const scaleY = Number(sy) || scaleX;
+  if (opts.labelFit === "width" && r) {
+    const margin = Number.isFinite(Number(opts.labelMargin)) ? Math.max(0, Number(opts.labelMargin)) : 1;
+    const maxW = Math.max(1, (r.w - margin * 2) * scaleX);
+    const chars = Math.max(1, String(key && key.label != null ? key.label : "").length);
+    const aspect = Number.isFinite(Number(opts.labelCharAspect))
+      ? Math.max(0.3, Number(opts.labelCharAspect))
+      : NODE_GRAPH_PIANO_KEYS_LABEL_CHAR_ASPECT;
+    const pxByW = maxW / (chars * aspect);
+    const sharpFrac = Number.isFinite(Number(opts.sharpHeightFrac))
+      ? Number(opts.sharpHeightFrac)
+      : (typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT === "number"
+        ? NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT / 100
+        : 0.62);
+    const lipFrac = Math.max(0.08, 1 - sharpFrac);
+    const maxH = key && key.black
+      ? Math.max(1, (r.h - margin * 2) * scaleY)
+      : Math.max(1, (r.h * lipFrac - margin * 2) * scaleY);
+    return Math.max(1, Math.min(pxByW, maxH) * sizeK);
+  }
+  const cqi = (key && key.black)
+    ? NODE_GRAPH_PIANO_KEYS_BLACK_LABEL_CQI
+    : NODE_GRAPH_PIANO_KEYS_WHITE_LABEL_CQI;
+  const gw = geom && geom.w ? geom.w : 0;
+  return (cqi * gw / units) * scaleX * sizeK;
+}
+
 function nodeGraphPianoKeysDraw(batch, geom, opts) {
   const o = opts || {};
   const x = Number(o.x) || 0;
@@ -221,25 +262,33 @@ function nodeGraphPianoKeysDraw(batch, geom, opts) {
     });
   }
   if (L.ring) {
-    rr(0, 0, geom.w, geom.h, {
-      radius: outerRadius,
-      stroke: Math.max(0.75, geom.inset * Math.min(sx, sy)),
-      fill: [0, 0, 0, 0],
-      strokeRgba: L.ring,
-      feather: 1,
-    });
+    const ringStroke = Number.isFinite(Number(o.ringStroke))
+      ? Math.max(0, Number(o.ringStroke))
+      : Math.max(0.75, geom.inset * Math.min(sx, sy));
+    if (ringStroke > 0) {
+      rr(0, 0, geom.w, geom.h, {
+        radius: outerRadius,
+        stroke: ringStroke,
+        fill: [0, 0, 0, 0],
+        strokeRgba: L.ring,
+        feather: 1,
+      });
+    }
   }
   if (o.labels && o.labels !== "off" && Array.isArray(o.keys) && typeof nodeGraphGlLinesText === "function") {
     const units = Math.max(1, o.totalUnits || 1);
     const sizeK = Math.max(0.5, Math.min(4, Number(o.labelSizeK) || 1));
     const whitePx = (NODE_GRAPH_PIANO_KEYS_WHITE_LABEL_CQI * geom.w / units) * sx * sizeK;
     const blackPx = (NODE_GRAPH_PIANO_KEYS_BLACK_LABEL_CQI * geom.w / units) * sx * sizeK;
+    const fitWidth = o.labelFit === "width";
     const textOpts = typeof o.textOpts === "function" ? o.textOpts : (spec) => spec;
     const family = o.labelFont || NODE_GRAPH_PIANO_KEYS_LABEL_FONT;
     for (const key of o.keys) {
       const r = rectOf(key);
       if (!r || !key.label) continue;
-      const px = key.black ? blackPx : whitePx;
+      const px = fitWidth
+        ? nodeGraphPianoKeysLabelPx(key, r, o, geom, sx, sy)
+        : (key.black ? blackPx : whitePx);
       if (px < 1) continue;
       const paint = paintKey(key);
       nodeGraphGlLinesText(batch, key.label, x + (r.x + r.w * 0.5) * sx, y + (r.y + r.h - (key.black ? 2 : 1)) * sy, textOpts({
@@ -273,7 +322,8 @@ function nodeGraphPianoKeysFlagState(flags) {
  * Shared key-state paint. Maps a look table plus state flags to a vertical
  * gradient, optional ring stroke, and label colour. Keyboard and Pitch
  * Quantizer both call this; they only differ in the look they pass.
- * Keyboard brightens an active key; Pitch Quantizer darkens it.
+ * Keyboard brightens an active (pressed/held) key. Pitch Quantizer uses the
+ * same path with a swapped unlit palette and a bright playing highlight.
  */
 function nodeGraphPianoKeysPaint(look, state, opts) {
   const L = look || {};
@@ -362,11 +412,12 @@ function nodeGraphPianoKeysPaint(look, state, opts) {
   bottom = bottom || (style && style.bottom);
   border = border || (style && style.border);
   const mid = nodeGraphPianoKeysMix(top, bottom, 0.5);
+  const hasBorder = Boolean(border);
   return {
     top,
     bottom,
-    stroke: ringPx,
-    strokeRgba: nodeGraphPianoKeysOver(border, mid),
+    stroke: hasBorder ? ringPx : 0,
+    strokeRgba: hasBorder ? nodeGraphPianoKeysOver(border, mid) : mid,
     // Black labels only take the state colour on wide keyboards (old @container 520px).
     text: wideLabels ? (style && style.text) : (B.base && B.base.text),
   };
@@ -378,7 +429,11 @@ if (typeof globalThis !== "undefined") {
   globalThis.NODE_GRAPH_PIANO_KEYS_DEFAULT_WHITE_W = NODE_GRAPH_PIANO_KEYS_DEFAULT_WHITE_W;
   globalThis.NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W = NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W;
   globalThis.NODE_GRAPH_PIANO_KEYS_LABEL_FONT = NODE_GRAPH_PIANO_KEYS_LABEL_FONT;
+  globalThis.NODE_GRAPH_PIANO_KEYS_WHITE_LABEL_CQI = NODE_GRAPH_PIANO_KEYS_WHITE_LABEL_CQI;
+  globalThis.NODE_GRAPH_PIANO_KEYS_BLACK_LABEL_CQI = NODE_GRAPH_PIANO_KEYS_BLACK_LABEL_CQI;
+  globalThis.NODE_GRAPH_PIANO_KEYS_LABEL_CHAR_ASPECT = NODE_GRAPH_PIANO_KEYS_LABEL_CHAR_ASPECT;
   globalThis.nodeGraphPianoKeysHex = nodeGraphPianoKeysHex;
+  globalThis.nodeGraphPianoKeysLabelPx = nodeGraphPianoKeysLabelPx;
   globalThis.nodeGraphPianoKeysRgba = nodeGraphPianoKeysRgba;
   globalThis.nodeGraphPianoKeysOver = nodeGraphPianoKeysOver;
   globalThis.nodeGraphPianoKeysMix = nodeGraphPianoKeysMix;

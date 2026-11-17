@@ -16,23 +16,30 @@ const NODE_GRAPH_PITCH_QUANTIZER_GL_FONT = typeof NODE_GRAPH_PIANO_KEYS_LABEL_FO
   : "\"Cascadia Mono\", Consolas, monospace";
 
 const NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK = Object.freeze({
-  bg: [0.027, 0.035, 0.043, 1],
-  bedGlow: [0.239, 1, 0.816, 0.06],
-  plateStroke: [0.498, 0.780, 0.851, 0.28],
+  // Face bed matches the unlit Keyboard plate (no teal wash).
+  bg: [5 / 255, 6 / 255, 7 / 255, 1],
+  bedGlow: [0, 0, 0, 0],
+  plateStroke: [243 / 255, 241 / 255, 236 / 255, 0.16],
   plateStrokeJacked: [0.89, 0.36, 0.36, 0.8],
-  seam: [0.01960784, 0.02352941, 0.02745098, 0.72],
-  // Disabled naturals: near-black pads, Keyboard-style top-to-bottom gradient.
-  naturalFill: [0.035, 0.040, 0.046, 1],
-  naturalTop: [0.070, 0.078, 0.086, 1],
-  naturalBottom: [0.035, 0.040, 0.046, 1],
-  naturalStroke: [0.12, 0.14, 0.15, 1],
-  naturalLabel: [0.42, 0.46, 0.48, 1],
-  // Disabled sharps: dim desaturated grey, still lighter than naturals.
-  sharpFill: [0.28, 0.30, 0.32, 1],
-  sharpTop: [0.40, 0.42, 0.44, 1],
-  sharpBottom: [0.28, 0.30, 0.32, 1],
-  sharpStroke: [0.18, 0.20, 0.21, 1],
-  sharpLabel: [0.10, 0.11, 0.12, 1],
+  seam: [5 / 255, 6 / 255, 7 / 255, 0.72],
+  // Disabled naturals: Keyboard black-key gradient (NODE_GRAPH_MIDI_KEY_LOOK.black.base).
+  naturalFill: [9 / 255, 11 / 255, 14 / 255, 1],
+  naturalTop: [32 / 255, 37 / 255, 42 / 255, 1],
+  naturalBottom: [9 / 255, 11 / 255, 14 / 255, 1],
+  naturalStroke: [127 / 255, 199 / 255, 217 / 255, 0.25],
+  naturalLabel: [243 / 255, 241 / 255, 236 / 255, 0.82],
+  // Disabled sharps: Keyboard white-key gradient (NODE_GRAPH_MIDI_KEY_LOOK.white.base).
+  sharpFill: [167 / 255, 159 / 255, 147 / 255, 1],
+  sharpTop: [247 / 255, 242 / 255, 232 / 255, 1],
+  sharpBottom: [167 / 255, 159 / 255, 147 / 255, 1],
+  sharpStroke: [5 / 255, 6 / 255, 7 / 255, 0.16],
+  sharpLabel: [5 / 255, 6 / 255, 7 / 255, 0.92],
+  // Playing: Keyboard-style pressed highlight (bright gold, not darkened).
+  playing: [1, 207 / 255, 107 / 255, 1],
+  playingTop: [1, 207 / 255, 107 / 255, 1],
+  playingBottom: [122 / 255, 63 / 255, 6 / 255, 1],
+  playingLabel: [26 / 255, 18 / 255, 0, 1],
+  playingInset: [1, 226 / 255, 173 / 255, 0.82],
   // Enabled notes: solid bright teal fill plus electric stroke, flat glow.
   electric: [0.239, 1, 0.816, 1],
   electricFillNatural: [0.12, 0.78, 0.62, 1],
@@ -101,6 +108,7 @@ function nodeGraphPitchQuantizerKeyLayout(width, height) {
       leadPad: 0,
       whites: whitesSrc,
       blacks,
+      flushEdge: true,
     })
     : { w: W, h: H, inset: 0, inModuleFace: true, whites: [], blacks: [] };
   const keys = [];
@@ -244,16 +252,16 @@ const NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS = Object.freeze({
     "#3dffd0",
   ),
   playingColor: nodeGraphPitchQuantizerHexFromRgba(
-    nodeGraphPitchQuantizerDarkenRgba(NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.electric, 0.5),
-    "#1f8068",
+    NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.playingTop,
+    "#ffcf6b",
   ),
   naturalColor: nodeGraphPitchQuantizerHexFromRgba(
     NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.naturalTop,
-    "#121416",
+    "#20252a",
   ),
   sharpColor: nodeGraphPitchQuantizerHexFromRgba(
     NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.sharpTop,
-    "#666b70",
+    "#f7f2e8",
   ),
 });
 
@@ -279,35 +287,30 @@ function nodeGraphPitchQuantizerSettingsAreDefault(settings) {
 }
 
 /**
- * Keyboard-shaped look tables for the shared state-paint path. Idle
- * (disabled: near-black naturals, dim grey sharps) and enabled (solid
- * bright teal fill plus stroke) each have a base plus an inverted "blue"
- * (active) slot: where Keyboard brightens a sounding key, these darken it
- * and add a dark ring so the live class stays distinct from the teal.
+ * Keyboard-shaped look tables for the shared state-paint path. Base /
+ * disabled keys use unlit Keyboard gradients with the colors swapped
+ * (naturals = Keyboard black keys, sharps = Keyboard white keys). Bright
+ * colors are reserved for enabled (teal fill + stroke) and playing
+ * (Keyboard-style pressed highlight in the playing color, not darkened).
  */
 function nodeGraphPitchQuantizerDefaultPaintLooks() {
   const L = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
-  const darkRing = [0.02, 0.05, 0.05, 0.85];
-  const darkTealRing = [0.02, 0.12, 0.10, 0.88];
+  const playing = {
+    top: L.playingTop,
+    bottom: L.playingBottom,
+    text: L.playingLabel,
+    inset: L.playingInset,
+    border: L.playingInset,
+  };
   return {
     idle: {
       white: {
-        base: { top: L.naturalTop, bottom: L.naturalBottom, text: L.naturalLabel },
-        blue: {
-          top: nodeGraphPitchQuantizerDarkenRgba(L.naturalTop, 0.55),
-          bottom: nodeGraphPitchQuantizerDarkenRgba(L.naturalBottom, 0.7),
-          text: L.naturalLabel,
-          inset: darkRing,
-        },
+        base: { top: L.naturalTop, bottom: L.naturalBottom, text: L.naturalLabel, inset: L.naturalStroke },
+        blue: playing,
       },
       black: {
-        base: { top: L.sharpTop, bottom: L.sharpBottom, text: L.sharpLabel, border: L.sharpStroke },
-        blue: {
-          top: nodeGraphPitchQuantizerDarkenRgba(L.sharpTop, 0.55),
-          bottom: nodeGraphPitchQuantizerDarkenRgba(L.sharpBottom, 0.65),
-          text: [0.90, 0.93, 0.94, 1],
-          border: darkRing,
-        },
+        base: { top: L.sharpTop, bottom: L.sharpBottom, text: L.sharpLabel },
+        blue: playing,
       },
     },
     enabled: {
@@ -318,12 +321,7 @@ function nodeGraphPitchQuantizerDefaultPaintLooks() {
           text: L.electricLabelNatural,
           inset: L.electric,
         },
-        blue: {
-          top: nodeGraphPitchQuantizerDarkenRgba(L.electricTopNatural, 0.5),
-          bottom: nodeGraphPitchQuantizerDarkenRgba(L.electricBottomNatural, 0.65),
-          text: L.electricLabelNatural,
-          inset: darkTealRing,
-        },
+        blue: { ...playing, inset: L.electric },
       },
       black: {
         base: {
@@ -332,12 +330,7 @@ function nodeGraphPitchQuantizerDefaultPaintLooks() {
           text: L.electricLabelSharp,
           border: L.electric,
         },
-        blue: {
-          top: nodeGraphPitchQuantizerDarkenRgba(L.electricTopSharp, 0.5),
-          bottom: nodeGraphPitchQuantizerDarkenRgba(L.electricBottomSharp, 0.6),
-          text: [0.85, 1, 0.96, 1],
-          border: darkTealRing,
-        },
+        blue: { ...playing, border: L.electric },
       },
     },
   };
@@ -346,69 +339,65 @@ function nodeGraphPitchQuantizerDefaultPaintLooks() {
 function nodeGraphPitchQuantizerPaintLooksFromColors(settings) {
   const L = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
   const s = normalizeNodeGraphPitchQuantizerFaceSettings(settings);
-  const darkRing = [0.02, 0.05, 0.05, 0.85];
-  const playing = nodeGraphPitchQuantizerRgbaFromHex(s.playingColor, nodeGraphPitchQuantizerDarkenRgba(L.electric, 0.5));
+  const playing = nodeGraphPitchQuantizerRgbaFromHex(s.playingColor, L.playingTop);
   const enabled = nodeGraphPitchQuantizerRgbaFromHex(s.enabledColor, L.electric);
   const natural = nodeGraphPitchQuantizerRgbaFromHex(s.naturalColor, L.naturalTop);
   const sharp = nodeGraphPitchQuantizerRgbaFromHex(s.sharpColor, L.sharpTop);
-  const naturalBottom = nodeGraphPitchQuantizerDarkenRgba(natural, 0.5);
-  const sharpBottom = nodeGraphPitchQuantizerDarkenRgba(sharp, 0.3);
-  const enabledTop = enabled;
+  // Keyboard black keys drop the bottom stop to ~30% of the top; white keys to ~66%.
+  const naturalBottom = nodeGraphPitchQuantizerDarkenRgba(natural, 0.7);
+  const sharpBottom = nodeGraphPitchQuantizerDarkenRgba(sharp, 0.34);
   const enabledBottom = nodeGraphPitchQuantizerDarkenRgba(enabled, 0.22);
-  const playingBottom = nodeGraphPitchQuantizerDarkenRgba(playing, 0.3);
-  const lightLabel = [0.91, 1, 0.985, 1];
-  const darkLabel = [0.02, 0.10, 0.08, 1];
-  const sharpLiveLabel = [0.90, 0.93, 0.94, 1];
-  const darkTealRing = [playing[0] * 0.15, playing[1] * 0.15, playing[2] * 0.15, 0.88];
+  // Keyboard pressed/held highlights keep a bright top and a deep bottom of the same hue.
+  const playingBottom = nodeGraphPitchQuantizerDarkenRgba(playing, 0.55);
+  const playingInset = [playing[0], playing[1], playing[2], 0.82];
+  const lightLabel = [234 / 255, 248 / 255, 1, 1];
+  const darkLabel = [26 / 255, 18 / 255, 0, 1];
+  const playingText = nodeGraphPitchQuantizerLabelRgba(playing, lightLabel, darkLabel);
+  const playingLook = {
+    top: playing,
+    bottom: playingBottom,
+    text: playingText,
+    inset: playingInset,
+    border: playingInset,
+  };
   return {
     idle: {
       white: {
-        base: { top: natural, bottom: naturalBottom, text: nodeGraphPitchQuantizerLabelRgba(natural, lightLabel, darkLabel) },
-        blue: {
-          top: nodeGraphPitchQuantizerDarkenRgba(natural, 0.55),
-          bottom: nodeGraphPitchQuantizerDarkenRgba(naturalBottom, 0.7),
+        base: {
+          top: natural,
+          bottom: naturalBottom,
           text: nodeGraphPitchQuantizerLabelRgba(natural, lightLabel, darkLabel),
-          inset: darkRing,
+          inset: [natural[0], natural[1], natural[2], 0.25],
         },
+        blue: playingLook,
       },
       black: {
-        base: { top: sharp, bottom: sharpBottom, text: nodeGraphPitchQuantizerLabelRgba(sharp, lightLabel, darkLabel), border: nodeGraphPitchQuantizerDarkenRgba(sharp, 0.4) },
-        blue: {
-          top: nodeGraphPitchQuantizerDarkenRgba(sharp, 0.55),
-          bottom: nodeGraphPitchQuantizerDarkenRgba(sharpBottom, 0.65),
-          text: sharpLiveLabel,
-          border: darkRing,
+        base: {
+          top: sharp,
+          bottom: sharpBottom,
+          text: nodeGraphPitchQuantizerLabelRgba(sharp, lightLabel, darkLabel),
         },
+        blue: playingLook,
       },
     },
     enabled: {
       white: {
         base: {
-          top: enabledTop,
+          top: enabled,
           bottom: enabledBottom,
-          text: nodeGraphPitchQuantizerLabelRgba(enabledTop, lightLabel, darkLabel),
+          text: nodeGraphPitchQuantizerLabelRgba(enabled, lightLabel, darkLabel),
           inset: enabled,
         },
-        blue: {
-          top: playing,
-          bottom: playingBottom,
-          text: nodeGraphPitchQuantizerLabelRgba(playing, lightLabel, darkLabel),
-          inset: darkTealRing,
-        },
+        blue: { ...playingLook, inset: enabled },
       },
       black: {
         base: {
-          top: enabledTop,
+          top: enabled,
           bottom: enabledBottom,
-          text: nodeGraphPitchQuantizerLabelRgba(enabledTop, lightLabel, darkLabel),
+          text: nodeGraphPitchQuantizerLabelRgba(enabled, lightLabel, darkLabel),
           border: enabled,
         },
-        blue: {
-          top: playing,
-          bottom: playingBottom,
-          text: nodeGraphPitchQuantizerLabelRgba(playing, [0.85, 1, 0.96, 1], darkLabel),
-          border: darkTealRing,
-        },
+        blue: { ...playingLook, border: enabled },
       },
     },
   };
@@ -513,7 +502,9 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
     look: {
       bed: L.bg,
       bedGlow: L.bedGlow,
-      ring: jacked ? L.plateStrokeJacked : L.plateStroke,
+      // No plate ring when unjacked: the 0.75px min stroke would cover the
+      // flush key tops and make the row look 1px too low.
+      ring: jacked ? L.plateStrokeJacked : null,
       whiteSeam: L.seam,
     },
     whites,
@@ -522,10 +513,50 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
     labels: "name",
     totalUnits: Math.max(1, whites.length),
     labelSizeK: 1,
+    labelFit: "width",
+    labelMargin: 1,
+    sharpHeightFrac: typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT === "number"
+      ? NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT / 100
+      : 0.62,
     labelFont: NODE_GRAPH_PITCH_QUANTIZER_GL_FONT,
     paintKey: (key) => nodeGraphPitchQuantizerKeyPaint(key, mask, livePc, settings),
   });
 }
+
+/**
+ * The workspace GL overlay pointer router starts a module drag on any plate
+ * hit unless nodeGraphGlHitKeepsNativeTarget(event.target) is true. That
+ * list lives in node-graph-gl-graph.js (a lighting file we do not edit).
+ * Arp / Keyboard / Step Graph / Vactrol stay native because their face
+ * classes or data attributes are in the list; .node-pitch-quantizer-face
+ * is not. Wrap the hook at runtime so key clicks reach this face instead
+ * of selecting / dragging the module. Also listen in the capture phase
+ * and stopImmediatePropagation, same as the Vactrol legend hit layer.
+ */
+function nodeGraphPitchQuantizerArmNativeHits() {
+  const g = typeof globalThis !== "undefined" ? globalThis : undefined;
+  const fn = g && typeof g.nodeGraphGlHitKeepsNativeTarget === "function"
+    ? g.nodeGraphGlHitKeepsNativeTarget
+    : (typeof nodeGraphGlHitKeepsNativeTarget === "function"
+      ? nodeGraphGlHitKeepsNativeTarget
+      : null);
+  if (!fn || fn._pqFaceNative) return fn;
+  const wrapped = function nodeGraphGlHitKeepsNativeTarget(target) {
+    if (target && typeof target.closest === "function"
+      && target.closest(".node-pitch-quantizer-face")) {
+      return true;
+    }
+    return fn(target);
+  };
+  wrapped._pqFaceNative = true;
+  if (g) g.nodeGraphGlHitKeepsNativeTarget = wrapped;
+  return wrapped;
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.nodeGraphPitchQuantizerArmNativeHits = nodeGraphPitchQuantizerArmNativeHits;
+}
+nodeGraphPitchQuantizerArmNativeHits();
 
 function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
   const nodeId = nodeIdOrEl && typeof nodeIdOrEl === "object"
@@ -582,6 +613,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     if (!key) return;
     event.preventDefault();
     event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
     const { jacked, shift } = faceState();
     if (jacked) return;
     const sourceClass = (((key.pc - shift) % 12) + 12) % 12;
@@ -590,7 +622,8 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     }
   }
 
-  section.addEventListener("pointerdown", onPointerDown);
+  nodeGraphPitchQuantizerArmNativeHits();
+  section.addEventListener("pointerdown", onPointerDown, true);
 
   function paint() {
     const { mask, jacked, livePc, display } = faceState();

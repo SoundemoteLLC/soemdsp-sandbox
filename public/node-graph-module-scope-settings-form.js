@@ -825,9 +825,9 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
       ? NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS
       : {
         enabledColor: "#3dffd0",
-        playingColor: "#1f8068",
-        naturalColor: "#121416",
-        sharpColor: "#666b70",
+        playingColor: "#ffcf6b",
+        naturalColor: "#20252a",
+        sharpColor: "#f7f2e8",
       };
     if (labels[key]) {
       aria = `${labels[key]} color`;
