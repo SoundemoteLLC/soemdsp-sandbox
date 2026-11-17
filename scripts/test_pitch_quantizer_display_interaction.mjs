@@ -248,7 +248,7 @@ const cPaint = ctx.nodeGraphPitchQuantizerKeyPaint(c, 0, 0);
 assert(paintCalls > 0, "PQ KeyPaint must call the shared nodeGraphPianoKeysPaint");
 ctx.nodeGraphPianoKeysPaint = origPaint;
 
-const paint = (key, mask, livePc) => ctx.nodeGraphPitchQuantizerKeyPaint(key, mask, livePc);
+const paint = (key, mask, livePc, settings) => ctx.nodeGraphPitchQuantizerKeyPaint(key, mask, livePc, settings);
 const idleC = paint(c, 0, null);
 const liveC = paint(c, 0, 0);
 const enC = paint(c, C_MAJOR, null);
@@ -306,4 +306,75 @@ assert(sigOf(C_MAJOR) !== sigOf(C_MAJOR ^ (1 << 0)), "toggling a natural must ch
 assert(sigOf(C_MAJOR) !== sigOf(C_MAJOR ^ (1 << 1)), "toggling a sharp must change the paint signature");
 assert(sigOf(C_MAJOR) === sigOf(C_MAJOR), "unchanged mask keeps the same paint signature");
 
-console.log("ok  pitch quantizer WebGL face: shared keyboard keys, high-contrast enabled, live key-on, no rogue DOM");
+assert(
+  /settingsSchema:\s*"pitchQuantizerFace"/.test(defs),
+  "pitchQuantizer face must declare a pitchQuantizerFace settings schema",
+);
+assert(
+  typeof ctx.normalizeNodeGraphPitchQuantizerFaceSettings === "function"
+    && ctx.NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS,
+  "display color settings defaults and normalizer must be exported",
+);
+const defaults = ctx.NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS;
+const toHex = (rgba) => ctx.nodeGraphPitchQuantizerHexFromRgba
+  ? ctx.nodeGraphPitchQuantizerHexFromRgba(rgba)
+  : (() => {
+    const h = (c) => Math.max(0, Math.min(255, Math.round(c * 255))).toString(16).padStart(2, "0");
+    return `#${h(rgba[0])}${h(rgba[1])}${h(rgba[2])}`;
+  })();
+// Defaults must match the pq-gl-5 look (bright teal / darkened live / near-black / dim grey).
+const lookHex = (rgba) => `#${[0, 1, 2].map((i) => Math.max(0, Math.min(255, Math.round(rgba[i] * 255))).toString(16).padStart(2, "0")).join("")}`;
+assert(defaults.enabledColor === lookHex(look.electric), "enabled color default is the pq-gl-5 electric teal");
+assert(defaults.naturalColor === lookHex(look.naturalTop), "natural color default is the pq-gl-5 near-black pad");
+assert(defaults.sharpColor === lookHex(look.sharpTop), "sharp color default is the pq-gl-5 dim grey pad");
+const darkenedElectric = [
+  look.electric[0] * 0.5,
+  look.electric[1] * 0.5,
+  look.electric[2] * 0.5,
+];
+assert(defaults.playingColor === lookHex(darkenedElectric), "playing color default is the pq-gl-5 darkened teal");
+
+const fromEmpty = ctx.normalizeNodeGraphPitchQuantizerFaceSettings(undefined);
+const fromPartial = ctx.normalizeNodeGraphPitchQuantizerFaceSettings({ enabledColor: "#ff0000" });
+assert(
+  fromEmpty.enabledColor === defaults.enabledColor
+    && fromEmpty.playingColor === defaults.playingColor
+    && fromEmpty.naturalColor === defaults.naturalColor
+    && fromEmpty.sharpColor === defaults.sharpColor,
+  "old patches with no color settings must get pq-gl-5 defaults",
+);
+assert(fromPartial.enabledColor === "#ff0000", "a saved enabled color is kept");
+assert(fromPartial.sharpColor === defaults.sharpColor, "missing color keys fall back to defaults");
+assert(
+  JSON.stringify(ctx.nodeGraphPitchQuantizerDisplaySettingsForNode({})) === JSON.stringify(defaults)
+    && JSON.stringify(ctx.nodeGraphPitchQuantizerDisplaySettingsForNode({ traceDisplaySettings: {} })) === JSON.stringify(defaults),
+  "a node without traceDisplaySettings colors gets defaults",
+);
+
+assert(
+  JSON.stringify(paint(c, C_MAJOR, null)) === JSON.stringify(paint(c, C_MAJOR, null, defaults)),
+  "default color settings keep the pq-gl-5 enabled/disabled paint",
+);
+const redEnabled = { ...defaults, enabledColor: "#ff3355" };
+const redC = paint(c, C_MAJOR, null, redEnabled);
+assert(
+  Math.hypot(redC.top[0] - enC.top[0], redC.top[1] - enC.top[1], redC.top[2] - enC.top[2]) >= 0.3,
+  "a custom enabled color must change the enabled key fill",
+);
+assert(
+  ctx.nodeGraphPitchQuantizerFacePaintSig(280, 100, 1, C_MAJOR, false, null)
+    !== ctx.nodeGraphPitchQuantizerFacePaintSig(280, 100, 1, C_MAJOR, false, null, redEnabled),
+  "changing a display color must change the paint signature",
+);
+
+ctx.nodeGraphDisplaySettingsBuildColorRowHtml = (key, type) => `<input data-trace-display-color="${key}" data-form="${type}" value="">`;
+ctx.nodeGraphDisplaySettingsColorRows = (rows) => rows.join("");
+const html = ctx.buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml();
+assert(/data-trace-display-color="enabledColor"/.test(html), "settings include enabled highlight color");
+assert(/data-trace-display-color="playingColor"/.test(html), "settings include playing highlight color");
+assert(/data-trace-display-color="naturalColor"/.test(html), "settings include natural key color");
+assert(/data-trace-display-color="sharpColor"/.test(html), "settings include sharp key color");
+assert(!/\btitle\s*=/.test(html) && !/data-tooltip/.test(html), "display color controls must not set hover title text");
+assert(/Colors/.test(html), "color controls are grouped in the display settings form");
+
+console.log("ok  pitch quantizer WebGL face: shared keyboard keys, high-contrast enabled, live key-on, display colors, no rogue DOM");

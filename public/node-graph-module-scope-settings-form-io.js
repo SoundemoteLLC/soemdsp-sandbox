@@ -167,6 +167,19 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
       bindNodeGraphKeyboardFaceDisplaySettingsBody(host);
     }
   }
+  if (type === "pitchQuantizerFace") {
+    if (typeof bindNodeGraphPitchQuantizerDisplaySettingsBody === "function") {
+      bindNodeGraphPitchQuantizerDisplaySettingsBody(host);
+    }
+    if (typeof syncNodeGraphPitchQuantizerDisplaySettingsControls === "function") {
+      syncNodeGraphPitchQuantizerDisplaySettingsControls(
+        host,
+        typeof nodeGraphPitchQuantizerDisplaySettingsForNode === "function"
+          ? nodeGraphPitchQuantizerDisplaySettingsForNode(node)
+          : (node?.traceDisplaySettings || {}),
+      );
+    }
+  }
   // RGB Picture: load / clear image.
   if (type === "rgbPictureFace") {
     if (typeof bindNodeGraphRgbPictureDisplaySettingsEvents === "function") {
@@ -643,6 +656,11 @@ if (type === "portalFace") {
       ? normalizeNodeGraphKeyboardFaceSettings(nodeGraphKeyboardLayoutDefaults || {})
       : { blackKeyWidth: 10, blackKeyHeight: 62, hideKeyboardInfo: true, keyLabels: "name" };
   }
+  if (type === "pitchQuantizerFace") {
+    return typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
+      ? normalizeNodeGraphPitchQuantizerFaceSettings()
+      : { ...(typeof NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS !== "undefined" ? NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS : {}) };
+  }
   if (type === "torchFace") {
     return normalizeNodeGraphTorchFaceSettings();
   }
@@ -908,6 +926,11 @@ if (type === "portalFace") {
       ? normalizeNodeGraphKeyboardFaceSettings(settings)
       : (settings && typeof settings === "object" ? settings : {});
   }
+  if (type === "pitchQuantizerFace") {
+    return typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
+      ? normalizeNodeGraphPitchQuantizerFaceSettings(settings)
+      : (settings && typeof settings === "object" ? settings : {});
+  }
   if (type === "torchFace") {
     return normalizeNodeGraphTorchFaceSettings(settings);
   }
@@ -1061,6 +1084,13 @@ if (settingsSchema === "portalFace") {
         ...(node?.traceDisplaySettings || {}),
       })
       : (node?.traceDisplaySettings || {});
+  }
+  if (settingsSchema === "pitchQuantizerFace") {
+    return typeof nodeGraphPitchQuantizerDisplaySettingsForNode === "function"
+      ? nodeGraphPitchQuantizerDisplaySettingsForNode(node)
+      : (typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
+        ? normalizeNodeGraphPitchQuantizerFaceSettings(node?.traceDisplaySettings)
+        : (node?.traceDisplaySettings || {}));
   }
   if (settingsSchema === "transportBpm") {
     return typeof nodeGraphTransportSettingsForNode === "function"
@@ -1329,6 +1359,16 @@ function readNodeGraphTraceDisplaySettingsForm() {
     }
     return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
   }
+  if (formType === "pitchQuantizerFace") {
+    const panel = root?.querySelector?.("[data-pitch-quantizer-display-settings-panel]") || root;
+    if (typeof syncNodeGraphPitchQuantizerDisplaySettingsControls === "function") {
+      syncNodeGraphPitchQuantizerDisplaySettingsControls(panel, normalized);
+    }
+    syncNodeGraphTraceDisplayColorWidgets(
+      document.getElementById("nodeTraceDisplaySettingsPopover"),
+    );
+    return;
+  }
   if (formType === "keypadFace") {
     const panel = root?.querySelector?.("[data-keypad-display-settings-panel]") || root;
     const next = { ...current };
@@ -1413,6 +1453,12 @@ function readNodeGraphTraceDisplaySettingsForm() {
   ) {
     if (typeof readNodeGraphMatrixFaceDisplaySettingsForm === "function") {
       return readNodeGraphMatrixFaceDisplaySettingsForm(root, current);
+    }
+    return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
+  }
+  if (formType === "pitchQuantizerFace") {
+    if (typeof readNodeGraphPitchQuantizerDisplaySettingsForm === "function") {
+      return readNodeGraphPitchQuantizerDisplaySettingsForm(root, current);
     }
     return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
   }
@@ -2499,6 +2545,12 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
 function nodeGraphTraceDisplayColorWidgetLabel(field) {
   // Title lives inside the widget (swatch). Never a side "Color" heading.
   const buttonForm = nodeGraphTraceDisplaySettingsFormType();
+  if (buttonForm === "pitchQuantizerFace") {
+    if (field === "enabledColor") return "Enabled";
+    if (field === "playingColor") return "Playing";
+    if (field === "naturalColor") return "Natural";
+    if (field === "sharpColor") return "Sharp";
+  }
   if (buttonForm === "roundingErrorFace") {
     if (field === "backgroundColor") return "Background";
     if (field === "barColor") return "Bars";

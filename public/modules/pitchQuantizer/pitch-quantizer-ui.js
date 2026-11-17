@@ -188,6 +188,96 @@ function nodeGraphPitchQuantizerDarkenRgba(rgba, amount) {
   return [rgba[0] * (1 - t), rgba[1] * (1 - t), rgba[2] * (1 - t), rgba[3]];
 }
 
+function nodeGraphPitchQuantizerHexFromRgba(rgba, fallback) {
+  if (!Array.isArray(rgba) || rgba.length < 3) return fallback;
+  const h = (c) => {
+    const n = Math.max(0, Math.min(255, Math.round(Number(c) * 255)));
+    return n.toString(16).padStart(2, "0");
+  };
+  return `#${h(rgba[0])}${h(rgba[1])}${h(rgba[2])}`;
+}
+
+function nodeGraphPitchQuantizerRgbaFromHex(value, fallbackRgba) {
+  const fallback = Array.isArray(fallbackRgba) && fallbackRgba.length >= 3
+    ? fallbackRgba
+    : [1, 1, 1, 1];
+  const raw = String(value || "").trim();
+  let hex = raw;
+  if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+    hex = `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+  }
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    return [fallback[0], fallback[1], fallback[2], fallback[3] ?? 1];
+  }
+  return [
+    parseInt(hex.slice(1, 3), 16) / 255,
+    parseInt(hex.slice(3, 5), 16) / 255,
+    parseInt(hex.slice(5, 7), 16) / 255,
+    1,
+  ];
+}
+
+function nodeGraphPitchQuantizerNormalizeHex(value, fallbackHex) {
+  const raw = String(value || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`.toLowerCase();
+  }
+  return String(fallbackHex || "#ffffff").toLowerCase();
+}
+
+function nodeGraphPitchQuantizerLabelRgba(fill, light, dark) {
+  const lum = 0.2126 * fill[0] + 0.7152 * fill[1] + 0.0722 * fill[2];
+  return lum > 0.45 ? dark : light;
+}
+
+const NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS = Object.freeze([
+  "enabledColor",
+  "playingColor",
+  "naturalColor",
+  "sharpColor",
+]);
+
+const NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS = Object.freeze({
+  enabledColor: nodeGraphPitchQuantizerHexFromRgba(
+    NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.electric,
+    "#3dffd0",
+  ),
+  playingColor: nodeGraphPitchQuantizerHexFromRgba(
+    nodeGraphPitchQuantizerDarkenRgba(NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.electric, 0.5),
+    "#1f8068",
+  ),
+  naturalColor: nodeGraphPitchQuantizerHexFromRgba(
+    NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.naturalTop,
+    "#121416",
+  ),
+  sharpColor: nodeGraphPitchQuantizerHexFromRgba(
+    NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.sharpTop,
+    "#666b70",
+  ),
+});
+
+function normalizeNodeGraphPitchQuantizerFaceSettings(settings) {
+  const d = NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS;
+  const src = settings && typeof settings === "object" ? settings : {};
+  return {
+    enabledColor: nodeGraphPitchQuantizerNormalizeHex(src.enabledColor, d.enabledColor),
+    playingColor: nodeGraphPitchQuantizerNormalizeHex(src.playingColor, d.playingColor),
+    naturalColor: nodeGraphPitchQuantizerNormalizeHex(src.naturalColor, d.naturalColor),
+    sharpColor: nodeGraphPitchQuantizerNormalizeHex(src.sharpColor, d.sharpColor),
+  };
+}
+
+function nodeGraphPitchQuantizerDisplaySettingsForNode(node) {
+  return normalizeNodeGraphPitchQuantizerFaceSettings(node?.traceDisplaySettings);
+}
+
+function nodeGraphPitchQuantizerSettingsAreDefault(settings) {
+  const s = normalizeNodeGraphPitchQuantizerFaceSettings(settings);
+  const d = NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS;
+  return NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS.every((key) => s[key] === d[key]);
+}
+
 /**
  * Keyboard-shaped look tables for the shared state-paint path. Idle
  * (disabled: near-black naturals, dim grey sharps) and enabled (solid
@@ -195,7 +285,7 @@ function nodeGraphPitchQuantizerDarkenRgba(rgba, amount) {
  * (active) slot: where Keyboard brightens a sounding key, these darken it
  * and add a dark ring so the live class stays distinct from the teal.
  */
-function nodeGraphPitchQuantizerPaintLooks() {
+function nodeGraphPitchQuantizerDefaultPaintLooks() {
   const L = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
   const darkRing = [0.02, 0.05, 0.05, 0.85];
   const darkTealRing = [0.02, 0.12, 0.10, 0.88];
@@ -253,6 +343,83 @@ function nodeGraphPitchQuantizerPaintLooks() {
   };
 }
 
+function nodeGraphPitchQuantizerPaintLooksFromColors(settings) {
+  const L = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
+  const s = normalizeNodeGraphPitchQuantizerFaceSettings(settings);
+  const darkRing = [0.02, 0.05, 0.05, 0.85];
+  const playing = nodeGraphPitchQuantizerRgbaFromHex(s.playingColor, nodeGraphPitchQuantizerDarkenRgba(L.electric, 0.5));
+  const enabled = nodeGraphPitchQuantizerRgbaFromHex(s.enabledColor, L.electric);
+  const natural = nodeGraphPitchQuantizerRgbaFromHex(s.naturalColor, L.naturalTop);
+  const sharp = nodeGraphPitchQuantizerRgbaFromHex(s.sharpColor, L.sharpTop);
+  const naturalBottom = nodeGraphPitchQuantizerDarkenRgba(natural, 0.5);
+  const sharpBottom = nodeGraphPitchQuantizerDarkenRgba(sharp, 0.3);
+  const enabledTop = enabled;
+  const enabledBottom = nodeGraphPitchQuantizerDarkenRgba(enabled, 0.22);
+  const playingBottom = nodeGraphPitchQuantizerDarkenRgba(playing, 0.3);
+  const lightLabel = [0.91, 1, 0.985, 1];
+  const darkLabel = [0.02, 0.10, 0.08, 1];
+  const sharpLiveLabel = [0.90, 0.93, 0.94, 1];
+  const darkTealRing = [playing[0] * 0.15, playing[1] * 0.15, playing[2] * 0.15, 0.88];
+  return {
+    idle: {
+      white: {
+        base: { top: natural, bottom: naturalBottom, text: nodeGraphPitchQuantizerLabelRgba(natural, lightLabel, darkLabel) },
+        blue: {
+          top: nodeGraphPitchQuantizerDarkenRgba(natural, 0.55),
+          bottom: nodeGraphPitchQuantizerDarkenRgba(naturalBottom, 0.7),
+          text: nodeGraphPitchQuantizerLabelRgba(natural, lightLabel, darkLabel),
+          inset: darkRing,
+        },
+      },
+      black: {
+        base: { top: sharp, bottom: sharpBottom, text: nodeGraphPitchQuantizerLabelRgba(sharp, lightLabel, darkLabel), border: nodeGraphPitchQuantizerDarkenRgba(sharp, 0.4) },
+        blue: {
+          top: nodeGraphPitchQuantizerDarkenRgba(sharp, 0.55),
+          bottom: nodeGraphPitchQuantizerDarkenRgba(sharpBottom, 0.65),
+          text: sharpLiveLabel,
+          border: darkRing,
+        },
+      },
+    },
+    enabled: {
+      white: {
+        base: {
+          top: enabledTop,
+          bottom: enabledBottom,
+          text: nodeGraphPitchQuantizerLabelRgba(enabledTop, lightLabel, darkLabel),
+          inset: enabled,
+        },
+        blue: {
+          top: playing,
+          bottom: playingBottom,
+          text: nodeGraphPitchQuantizerLabelRgba(playing, lightLabel, darkLabel),
+          inset: darkTealRing,
+        },
+      },
+      black: {
+        base: {
+          top: enabledTop,
+          bottom: enabledBottom,
+          text: nodeGraphPitchQuantizerLabelRgba(enabledTop, lightLabel, darkLabel),
+          border: enabled,
+        },
+        blue: {
+          top: playing,
+          bottom: playingBottom,
+          text: nodeGraphPitchQuantizerLabelRgba(playing, [0.85, 1, 0.96, 1], darkLabel),
+          border: darkTealRing,
+        },
+      },
+    },
+  };
+}
+
+function nodeGraphPitchQuantizerPaintLooks(settings) {
+  return nodeGraphPitchQuantizerSettingsAreDefault(settings)
+    ? nodeGraphPitchQuantizerDefaultPaintLooks()
+    : nodeGraphPitchQuantizerPaintLooksFromColors(settings);
+}
+
 /**
  * Live quantized pitch class from the module's `pitch` scope buffer, only
  * while the engine is playing. Cleared when stopped so the face does not
@@ -268,13 +435,15 @@ function nodeGraphPitchQuantizerLivePitchClass(nodeId) {
   return (((Math.round(pitch) % 12) + 12) % 12);
 }
 
-function nodeGraphPitchQuantizerFacePaintSig(bw, bh, strokeDev, mask, jacked, livePc) {
+function nodeGraphPitchQuantizerFacePaintSig(bw, bh, strokeDev, mask, jacked, livePc, settings) {
   const liveSig = livePc == null ? "-" : String(livePc);
-  return `${Math.max(1, bw | 0)}x${Math.max(1, bh | 0)}:s${Math.max(1, strokeDev | 0)}:m${mask}:j${jacked ? 1 : 0}:p${liveSig}`;
+  const s = normalizeNodeGraphPitchQuantizerFaceSettings(settings);
+  const colorSig = `${s.enabledColor}:${s.playingColor}:${s.naturalColor}:${s.sharpColor}`;
+  return `${Math.max(1, bw | 0)}x${Math.max(1, bh | 0)}:s${Math.max(1, strokeDev | 0)}:m${mask}:j${jacked ? 1 : 0}:p${liveSig}:c${colorSig}`;
 }
 
-function nodeGraphPitchQuantizerKeyPaint(key, mask, livePc) {
-  const looks = nodeGraphPitchQuantizerPaintLooks();
+function nodeGraphPitchQuantizerKeyPaint(key, mask, livePc, settings) {
+  const looks = nodeGraphPitchQuantizerPaintLooks(settings);
   const on = typeof nodeGraphPitchQuantizerMaskHasClass === "function"
     ? nodeGraphPitchQuantizerMaskHasClass(mask, key.pc)
     : false;
@@ -286,8 +455,15 @@ function nodeGraphPitchQuantizerKeyPaint(key, mask, livePc) {
   return nodeGraphPianoKeysPaint(look, state, { black: key.black, wideLabels: true });
 }
 
-function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev, livePc) {
-  const L = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
+function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev, livePc, settings) {
+  const base = NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK;
+  const s = normalizeNodeGraphPitchQuantizerFaceSettings(settings);
+  const enabled = nodeGraphPitchQuantizerRgbaFromHex(s.enabledColor, base.electric);
+  const L = {
+    ...base,
+    glow: [enabled[0], enabled[1], enabled[2], base.glow[3]],
+    glowOuter: [enabled[0], enabled[1], enabled[2], base.glowOuter[3]],
+  };
   const stroke = Math.max(1, strokeDev | 0);
   const glowPad = Math.max(2, stroke * 2);
   const glowPadOuter = Math.max(4, stroke * 4);
@@ -347,7 +523,7 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
     totalUnits: Math.max(1, whites.length),
     labelSizeK: 1,
     labelFont: NODE_GRAPH_PITCH_QUANTIZER_GL_FONT,
-    paintKey: (key) => nodeGraphPitchQuantizerKeyPaint(key, mask, livePc),
+    paintKey: (key) => nodeGraphPitchQuantizerKeyPaint(key, mask, livePc, settings),
   });
 }
 
@@ -385,7 +561,8 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
       ? nodeGraphPitchQuantizerSemitoneShift(patchNode)
       : 0;
     const livePc = nodeGraphPitchQuantizerLivePitchClass(nodeId);
-    return { mask, jacked, shift, livePc };
+    const display = nodeGraphPitchQuantizerDisplaySettingsForNode(patchNode);
+    return { mask, jacked, shift, livePc, display };
   }
 
   function keyAtClientXY(clientX, clientY) {
@@ -416,7 +593,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
   section.addEventListener("pointerdown", onPointerDown);
 
   function paint() {
-    const { mask, jacked, livePc } = faceState();
+    const { mask, jacked, livePc, display } = faceState();
     const m = typeof nodeGraphDisplayCanvasSize === "function"
       ? nodeGraphDisplayCanvasSize(section, canvas)
       : null;
@@ -425,7 +602,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     const bw = Math.max(1, m.width);
     const bh = Math.max(1, m.height);
     const strokeDev = Math.max(1, Math.round(dpr));
-    const sig = nodeGraphPitchQuantizerFacePaintSig(bw, bh, strokeDev, mask, jacked, livePc);
+    const sig = nodeGraphPitchQuantizerFacePaintSig(bw, bh, strokeDev, mask, jacked, livePc, display);
     if (sig === lastSig) return;
     lastSig = sig;
     const batch = typeof nodeGraphGlLinesBegin === "function"
@@ -438,7 +615,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     }
     const layout = nodeGraphPitchQuantizerKeyLayout(bw, bh);
     hitLayout = layout;
-    nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev, livePc);
+    nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev, livePc, display);
     if (typeof nodeGraphGlLinesEnd === "function" && !nodeGraphGlLinesEnd(batch)) {
       lastSig = "";
       if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
@@ -576,6 +753,80 @@ function syncNodeGraphPitchQuantizerFace(nodeId) {
   )) {
     if (typeof root._pqRepaint === "function") root._pqRepaint();
   }
+}
+
+function buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml() {
+  const type = "pitchQuantizerFace";
+  const colorRow = (key) => (typeof nodeGraphDisplaySettingsBuildColorRowHtml === "function"
+    ? nodeGraphDisplaySettingsBuildColorRowHtml(key, type)
+    : "");
+  const keys = NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS;
+  const rows = keys.map(colorRow);
+  return `
+    <div data-pitch-quantizer-display-settings-panel>
+      <div class="metadata-section-title">Colors</div>
+      <div class="metadata-field-section">${typeof nodeGraphDisplaySettingsColorRows === "function"
+        ? nodeGraphDisplaySettingsColorRows(rows, [2, 2])
+        : rows.join("")}</div>
+    </div>`;
+}
+
+function syncNodeGraphPitchQuantizerDisplaySettingsControls(root, settings) {
+  if (!root || !settings) return;
+  const s = normalizeNodeGraphPitchQuantizerFaceSettings(settings);
+  const panel = root.querySelector?.("[data-pitch-quantizer-display-settings-panel]") || root;
+  for (const key of NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS) {
+    const input = panel?.querySelector?.(`[data-trace-display-color="${key}"]`);
+    if (input) input.value = s[key];
+  }
+}
+
+function bindNodeGraphPitchQuantizerDisplaySettingsBody(host) {
+  if (!host || host.dataset.pqSettingsBound === "true") return;
+  host.dataset.pqSettingsBound = "true";
+  const apply = (persist, record) => {
+    if (typeof markNodeGraphTraceDisplaySettingsDirty === "function") {
+      markNodeGraphTraceDisplaySettingsDirty("*");
+    }
+    if (typeof applyNodeGraphTraceDisplaySettingsForm === "function") {
+      applyNodeGraphTraceDisplaySettingsForm({ persist, record, commit: record });
+    }
+  };
+  host.addEventListener("input", (event) => {
+    if (event.target?.closest?.("[data-trace-display-color]")) apply("none", false);
+  });
+  host.addEventListener("change", (event) => {
+    if (event.target?.closest?.("[data-trace-display-color]")) apply("immediate", true);
+  });
+}
+
+function readNodeGraphPitchQuantizerDisplaySettingsForm(root, current) {
+  const panel = root?.querySelector?.("[data-pitch-quantizer-display-settings-panel]") || root;
+  const next = { ...(current && typeof current === "object" ? current : {}) };
+  for (const key of NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS) {
+    const input = panel?.querySelector?.(`[data-trace-display-color="${key}"]`);
+    if (input && input.value) next[key] = input.value;
+  }
+  return normalizeNodeGraphPitchQuantizerFaceSettings(next);
+}
+
+function applyNodeGraphPitchQuantizerDisplaySettingsToFace(node) {
+  const id = String(node?.id || "").trim();
+  if (id && typeof syncNodeGraphPitchQuantizerFace === "function") {
+    syncNodeGraphPitchQuantizerFace(id);
+  }
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS = NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS;
+  globalThis.NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS = NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS;
+  globalThis.normalizeNodeGraphPitchQuantizerFaceSettings = normalizeNodeGraphPitchQuantizerFaceSettings;
+  globalThis.nodeGraphPitchQuantizerDisplaySettingsForNode = nodeGraphPitchQuantizerDisplaySettingsForNode;
+  globalThis.buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml = buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml;
+  globalThis.syncNodeGraphPitchQuantizerDisplaySettingsControls = syncNodeGraphPitchQuantizerDisplaySettingsControls;
+  globalThis.bindNodeGraphPitchQuantizerDisplaySettingsBody = bindNodeGraphPitchQuantizerDisplaySettingsBody;
+  globalThis.readNodeGraphPitchQuantizerDisplaySettingsForm = readNodeGraphPitchQuantizerDisplaySettingsForm;
+  globalThis.applyNodeGraphPitchQuantizerDisplaySettingsToFace = applyNodeGraphPitchQuantizerDisplaySettingsToFace;
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {

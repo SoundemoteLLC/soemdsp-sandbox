@@ -4357,6 +4357,7 @@ const nodeGraphModuleDefinitions = (
         key: "face",
         label: "Scale",
         renderer: "pitchQuantizerFace",
+        settingsSchema: "pitchQuantizerFace",
         source: { value: "pitch" },
       },
     ],
