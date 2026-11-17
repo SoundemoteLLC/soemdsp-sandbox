@@ -46,17 +46,16 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     // knobs and made Sturmian's controls disappear. Plane is a View choice;
     // there is no separate View Plane control.
     parameterRows: [
-      ["rate", "semitoneOffset"],
-      ["pitchSource", "pitchRange"],
+      ["rate", "drift"],
+      ["semitoneOffset", "pitchSource", "pitchRange"],
       ["alpha", "beta", "rho"],
-      ["drift"],
-      ["steps", "reset"],
-      ["spread", "walk"],
-      ["snap"],
+      ["steps", "spread"],
+      ["reset", "walk", "snap"],
       ["view"],
     ],
     parameters: [
       { key: "rate", label: "Rate", defaultValue: "8", min: "0", max: "20000", mid: "8", step: "any", nonlinearSlider: true, linearSmoothing: false, kind: "frequency", unit: "Hz" },
+      { key: "drift", label: "Drift", defaultValue: "0", min: "-0.2", max: "0.2", mid: "0", step: "0.0005", nonlinearSlider: false, linearSmoothing: false },
       // Same convention as Pitch Quantizer / Acid Sequencer: integer st, -48..+48.
       { key: "semitoneOffset", label: "Semitone Offset", defaultValue: "0", min: "-48", mid: "0", max: "48", step: "1", nonlinearSlider: false, linearSmoothing: false, showSign: true, unit: "st" },
       // Classic (default) is the original floor(x*10) pentatonic map, span 21 st.
@@ -66,12 +65,11 @@ registerNodeGraphChromelessModule("sturmianGrid", {
       { key: "alpha", label: "α", defaultValue: "0.2955977425", min: "0.001", max: "0.999", mid: "0.3", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
       { key: "beta", label: "β", defaultValue: "0.1607132448", min: "0.001", max: "0.999", mid: "0.2", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
       { key: "rho", label: "ρ", defaultValue: "0", min: "0", max: "1", mid: "0.5", step: "0.0001", nonlinearSlider: false, linearSmoothing: false, wraparound: true },
-      { key: "drift", label: "Drift", defaultValue: "0", min: "-0.2", max: "0.2", mid: "0", step: "0.0005", nonlinearSlider: false, linearSmoothing: false },
       { key: "steps", label: "Steps", defaultValue: "16", min: "2", max: "32", mid: "16", step: "1", nonlinearSlider: false, linearSmoothing: false },
+      { key: "spread", label: "Track spread", defaultValue: "1", min: "1", max: "16", mid: "1", step: "1", nonlinearSlider: false, linearSmoothing: false },
       // Spawn 0–128, mid-skew 8 at slider center, default 8. 0 = never reset.
       // hardMax keeps the previous 65536 typed/load ceiling so old patches hold.
       { key: "reset", label: "Reset after", defaultValue: "8", min: "0", max: "128", mid: "8", step: "1", hardMax: "65536", nonlinearSlider: true, sliderCurve: "skew", linearSmoothing: false },
-      { key: "spread", label: "Track spread", defaultValue: "1", min: "1", max: "16", mid: "1", step: "1", nonlinearSlider: false, linearSmoothing: false },
       { key: "walk", label: "Bar walk", defaultValue: "1", min: "0", max: "8", mid: "1", step: "1", nonlinearSlider: false, linearSmoothing: false },
       { key: "snap", label: "Rational snap", defaultValue: "0", min: "0", max: "1", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false, choices: ["Off", "On"], displayChoices: true },
       { key: "view", label: "View", defaultValue: "0", min: "0", max: "2", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false, choices: ["Plane", "Binary", "Level"], displayChoices: true },

@@ -34,19 +34,17 @@ assert(def, "sturmian registered");
 assert.equal = (a, b, msg) => assert(a === b, `${msg}: ${a} !== ${b}`);
 
 const expectedRows = [
-  ["rate", "semitoneOffset"],
-  ["pitchSource", "pitchRange"],
+  ["rate", "drift"],
+  ["semitoneOffset", "pitchSource", "pitchRange"],
   ["alpha", "beta", "rho"],
-  ["drift"],
-  ["steps", "reset"],
-  ["spread", "walk"],
-  ["snap"],
+  ["steps", "spread"],
+  ["reset", "walk", "snap"],
   ["view"],
 ];
 assert(JSON.stringify(def.parameterRows) === JSON.stringify(expectedRows), "parameterRows order");
 const visibleKeys = def.parameters.filter((p) => p.hidden !== true).map((p) => p.key);
 assert(JSON.stringify(visibleKeys) === JSON.stringify([
-  "rate", "semitoneOffset", "pitchSource", "pitchRange", "alpha", "beta", "rho", "drift", "steps", "reset", "spread", "walk", "snap", "view",
+  "rate", "drift", "semitoneOffset", "pitchSource", "pitchRange", "alpha", "beta", "rho", "steps", "spread", "reset", "walk", "snap", "view",
 ]), "visible parameter order");
 assert(def.parameters.find((p) => p.key === "pitchSource")?.choices?.join(",") === "Classic,Tile,Height,X", "pitchSource choices");
 assert(def.parameters.find((p) => p.key === "pitchRange")?.defaultValue === "21", "pitchRange default is current span");
@@ -112,7 +110,7 @@ vm.runInContext(
   { filename: "node-graph-module-sizing.js" },
 );
 
-assert(ctx.nodeGraphModuleVisibleBodyRowCount("sturmianGrid") === 8, "sturmian packs 14 params into 8 rows");
+assert(ctx.nodeGraphModuleVisibleBodyRowCount("sturmianGrid") === 6, "sturmian packs 14 params into 6 rows");
 assert(ctx.nodeGraphModuleVisibleBodyRowCount("mixStereo2") === 2, "ungrouped modules still count one row per param");
 
 const shown = { slidersHidden: false, ioHidden: false, displayHeightGu: 8 };
@@ -120,8 +118,8 @@ const hidden = { slidersHidden: true, ioHidden: false, displayHeightGu: 8 };
 const shownH = ctx.nodeGraphModuleSliderBodyHeightGu("sturmianGrid", shown);
 const hiddenH = ctx.nodeGraphModuleSliderBodyHeightGu("sturmianGrid", hidden);
 const rawH = ctx.nodeGraphModuleSliderBodyHeightGu("sturmianGrid", null);
-const eight = 8 * (30 / 28) + 7 * (2 / 28);
-assert(Math.abs(shownH - eight) < 1e-9, `shown height is 8 compact rows (got ${shownH})`);
+const six = 6 * (30 / 28) + 5 * (2 / 28);
+assert(Math.abs(shownH - six) < 1e-9, `shown height is 6 compact rows (got ${shownH})`);
 assert(hiddenH === 0, "Hide Sliders collapses the param body height");
 assert(rawH > 0, "raw (no ui) height stays the definition body");
 
