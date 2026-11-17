@@ -82,7 +82,7 @@
   ]);
 
   // Photorealistic P3-style CRT amber phosphor (Tube Saturation face default).
-  // Nonlinear energy: deep glass floor, warm bias glow, body amber, yellow peak, soft bloom tip.
+  // Nonlinear energy: deep glass floor, warm bias glow, body amber, yellow peak, white tip.
   const DEFAULT_CRT_AMBER_STOPS = Object.freeze([
     { t: 0, color: "#050200" },
     { t: 0.08, color: "#1a0a00" },
@@ -91,7 +91,7 @@
     { t: 0.62, color: "#d07008" },
     { t: 0.78, color: "#ffb020" },
     { t: 0.9, color: "#ffe08a" },
-    { t: 1, color: "#fff6d8" },
+    { t: 1, color: "#ffffff" },
   ]);
 
   // Black/white channel presets only (no hue/RGB ramps). Labels are lowercase.
@@ -351,7 +351,7 @@
         "#d07008",
         "#ffb020",
         "#ffe08a",
-        "#fff6d8",
+        "#ffffff",
       ],
       stops: DEFAULT_CRT_AMBER_STOPS,
     },

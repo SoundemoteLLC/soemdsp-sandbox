@@ -9686,7 +9686,7 @@ const nodeGraphModuleDefinitions = (
         { t: 0.62, color: "#d07008" },
         { t: 0.78, color: "#ffb020" },
         { t: 0.9, color: "#ffe08a" },
-        { t: 1, color: "#fff6d8" },
+        { t: 1, color: "#ffffff" },
       ] },
     inputAliases: { Mono: "In" },
     inputLabels: { In: "Mono" },
