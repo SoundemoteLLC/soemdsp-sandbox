@@ -105,7 +105,9 @@ function nodeGraphScope1dTraceFrameChannels(canvas, channels, settings, resetBuf
   }
   const sampleRate = Math.max(1, nodeGraphFiniteNumber(nodeGraphScopeSampleRate(driver), 44100));
   const syncState = nodeGraphScopeSyncState(canvas);
-  const passSamples = nodeGraphScopePassSamples(syncState, settings, sampleRate);
+  // Beats: the transport's beat of each sample (scope-sync.js).
+  const beatClock = nodeGraphScopeBeatClock(driver);
+  const passSamples = nodeGraphScopePassSamples(syncState, settings, sampleRate, nodeGraphScopeBeatsPerSample(driver, sampleRate));
   const phaseInc = 1 / passSamples;
   // Cycles needs edges for the period even with Sync off.
   const findEdges = nodeGraphScopeWindowCycles(settings) > 0;
@@ -144,7 +146,11 @@ function nodeGraphScope1dTraceFrameChannels(canvas, channels, settings, resetBuf
   const externalSync = drawOptions?.syncBuffer;
   const syncBuf = externalSync?.length ? externalSync : list[0].buffer;
   const syncStart = Math.max(0, syncBuf.length - maxCount);
-  const level = sync || findEdges
+  // Beats + Sync: sweeps start on transport beats, not edges (no clock: free).
+  const beatWindow = nodeGraphScopeWindowBeats(settings);
+  const beats = sync && beatClock ? beatWindow : 0;
+  const edgeSync = sync && !beatWindow;
+  const level = (edgeSync || findEdges)
     ? nodeGraphScopeSyncLevel(
       syncState,
       syncBuf,
@@ -180,11 +186,13 @@ function nodeGraphScope1dTraceFrameChannels(canvas, channels, settings, resetBuf
     syncPrev = syncSample;
     nodeGraphScopeSyncTrackPeriod(syncState, edgeT);
     let step;
-    if (resetEdge) {
+    if (beats > 0) {
+      step = nodeGraphScopeSyncPenBeatStep(pen, beatClock.end - (maxCount - index) * beatClock.per, beats);
+    } else if (resetEdge) {
       nodeGraphScopeSyncPenRestart(pen);
       step = NODE_GRAPH_SCOPE_PEN_BREAK_DRAW;
     } else {
-      step = nodeGraphScopeSyncPenStep(pen, phaseInc, sync, sync ? edgeT : -1);
+      step = nodeGraphScopeSyncPenStep(pen, phaseInc, edgeSync, edgeSync ? edgeT : -1);
     }
     if (step !== NODE_GRAPH_SCOPE_PEN_DRAW && step !== NODE_GRAPH_SCOPE_PEN_WAIT) {
       breakAll();

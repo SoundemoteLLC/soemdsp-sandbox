@@ -535,7 +535,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.4-dark-velvet-warp-snhit-1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.4-dark-velvet-warp-snhit-1-beats-1";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -3624,7 +3624,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-set-plan.js?v=step-register-1-limits-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-handle-message.js?v=2026.11.16.3-levels",
-  "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015-lvl",
+  "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015-lvl-beats-1",
   "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-db-1",
   "./public/modules/_shared/output-amplitude.js?v=output-amp-1",
   // Yellow Graph: DOMAIN param chase for MOD (DSP is native opcodes 111Ã¢â‚¬â€œ124).

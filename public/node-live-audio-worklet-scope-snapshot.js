@@ -21,6 +21,28 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
         sampleStride: stride,
       };
     };
+    // Transport clock for Beats windows (lib/visual/scope-sync.js): the
+    // engine's beat position after this block (one past every ring's newest
+    // sample) and its tempo. The rings were filled in this block, so they end
+    // on it.
+    let transportBeat = NaN;
+    let transportBpm = NaN;
+    const native = this.nativeGraph;
+    if (native && typeof native.soemdsp_graph_project_beats === "function" && typeof native.soemdsp_graph_tempo_bpm === "function") {
+      try {
+        transportBeat = Number(native.soemdsp_graph_project_beats(this.nativeGraphHandle));
+        transportBpm = Number(native.soemdsp_graph_tempo_bpm(this.nativeGraphHandle));
+      } catch (_e) {
+        transportBeat = NaN;
+      }
+    }
+    const transportFor = (meta, writeRate) => {
+      if (Number.isFinite(transportBeat) && transportBpm > 0 && writeRate > 0) {
+        meta.beatEnd = transportBeat;
+        meta.beatsPerSample = transportBpm / (60 * writeRate);
+      }
+      return meta;
+    };
     for (const [nodeId, samples] of this.scopeBuffers) {
       if (!(samples instanceof Float32Array)) {
         continue;
@@ -45,13 +67,13 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
       const nextPosted = totalPosted + freshCount;
       samples.nodeGraphScopeTotalPosted = nextPosted;
       const rateMeta = captureRateForKey(nodeId);
-      values.push([nodeId, ordered, {
+      values.push([nodeId, ordered, transportFor({
         absoluteFrame: nextPosted,
         sampleRate: rateMeta.sampleRate,
         sampleStride: rateMeta.sampleStride,
         sourceSampleRate: engineSampleRate,
         startFrame: Math.max(0, nextPosted - freshCount),
-      }]);
+      }, rateMeta.sampleRate)]);
       transfer.push(ordered.buffer);
     }
     for (const [key, state] of this.visualInputBuffers || []) {
@@ -85,13 +107,13 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
       for (let index = 0; index < count; index += 1) {
         ordered[index] = state.buffer[(start + index) % state.capacity] || 0;
       }
-      values.push([key, ordered, {
+      values.push([key, ordered, transportFor({
         absoluteFrame,
         sampleRate: writeSampleRate,
         sampleStride,
         sourceSampleRate,
         startFrame: absoluteFrame - count,
-      }]);
+      }, writeSampleRate)]);
       transfer.push(ordered.buffer);
       state.postedFrame = absoluteFrame;
     }

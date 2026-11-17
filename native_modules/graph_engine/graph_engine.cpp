@@ -16978,6 +16978,18 @@ extern "C" void soemdsp_graph_set_host_beats(int handle, double beats) {
   g->projectBeats = beats;
 }
 
+// Scopes (Beats window): the shared beat position after the last block (the
+// beat one past its last sample) and the tempo it runs at.
+extern "C" double soemdsp_graph_project_beats(int handle) {
+  Circuit* g = get(handle);
+  return g ? g->projectBeats : 0.0;
+}
+
+extern "C" double soemdsp_graph_tempo_bpm(int handle) {
+  Circuit* g = get(handle);
+  return g ? circuit_tempo_bpm(*g) : 120.0;
+}
+
 // Plugin: whether the host transport is running. Stopped holds the beat
 // position inside a block (Host BPM: steady Phase / Beat, no T).
 extern "C" void soemdsp_graph_set_host_playing(int handle, int playing) {
