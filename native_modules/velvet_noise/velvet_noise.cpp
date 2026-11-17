@@ -1,9 +1,9 @@
 // soemdsp-native-module: velvet_noise
-// soemdsp-native-label: Velvet Noise
+// soemdsp-native-label: Dark Velvet Noise
 // soemdsp-native-target: velvetNoise
 // soemdsp-native-kind: noise
 //
-// Velvet Noise: a stereo random-event generator. One event at a random position in
+// Dark Velvet Noise: a stereo random-event generator. One event at a random position in
 // every 1/Density period, nothing in between. What an event looks like is the Shape:
 //
 //   Trigger          one sample (a velvet impulse).

@@ -6052,12 +6052,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if (type === "velvetReverb") {
       push("density", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("density", 2500));
       push("tapCount", P.NATIVE_GRAPH_PARAM_STAGES, disc("tapCount", 64));
-      push("darkness", P.NATIVE_GRAPH_PARAM_WIDTH, disc("darkness", 1));
+      push("darkness", P.NATIVE_GRAPH_PARAM_WIDTH, cont("darkness", 1)); // continuous pulse width
       push("stereoSpread", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("stereoSpread", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
-      push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 0));
-      push("tailDarkness", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, disc("tailDarkness", 0));
+      push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 0.025)); // tail length s
+      push("tailDarkness", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("tailDarkness", 0));
       continue;
     }
     if (type === "softpopOscillator") {
