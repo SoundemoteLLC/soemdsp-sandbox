@@ -506,11 +506,11 @@ function syncNodeUiDevModuleIdleStroke() {
   const selectedColorOut = document.getElementById("nodeUiDevModuleSelectedStrokeColorValue");
   const selectedAlphaInput = document.getElementById("nodeUiDevModuleSelectedStrokeAlpha");
   const selectedAlphaOut = document.getElementById("nodeUiDevModuleSelectedStrokeAlphaValue");
-  const color = normalizeNodeUiDevColor(colorInput?.value, "#8000ff");
+  const color = normalizeNodeUiDevColor(colorInput?.value, "#6922ec");
   const idleAlphaInput = document.getElementById("nodeUiDevModuleStrokeAlpha");
   const idleAlphaOut = document.getElementById("nodeUiDevModuleStrokeAlphaValue");
   const idleAlphaRaw = Number(idleAlphaInput?.value);
-  const idleAlphaPercent = Number.isFinite(idleAlphaRaw) ? Math.max(0, Math.min(100, idleAlphaRaw)) : 17;
+  const idleAlphaPercent = Number.isFinite(idleAlphaRaw) ? Math.max(0, Math.min(100, idleAlphaRaw)) : 31;
   if (idleAlphaOut) idleAlphaOut.textContent = `${idleAlphaPercent}%`;
   const selectedColor = normalizeNodeUiDevColor(selectedColorInput?.value, "#f9aeae");
   const selectedAlphaRaw = Number(selectedAlphaInput?.value);

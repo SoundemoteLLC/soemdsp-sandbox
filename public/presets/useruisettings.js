@@ -39,7 +39,7 @@
     "workspaceBackgroundColor": "#19191a",
     "moduleFillColor": "#171a1f",
     "moduleFillAlpha": 100,
-    "moduleStrokeColor": "#8000ff",
+    "moduleStrokeColor": "#6922ec",
     "moduleSelectedStrokeColor": "#e2a86d",
     "moduleSelectedStrokeAlpha": 100,
     "sliderLabelColor": "#cfdde5",

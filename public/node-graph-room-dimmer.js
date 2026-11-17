@@ -638,7 +638,7 @@ void main() {
     );
   }
 
-  function collectLights(canvas) {
+  function collectLights(canvas, veilOffWorkspace = false) {
     if (!canvas?.width || !canvas?.height) {
       return { rects: [], rectStr: [], rectSoft: [], rectRound: [] };
     }
@@ -653,9 +653,11 @@ void main() {
     const rectSoft = [];
     const rectRound = [];
     const deep = dimDeep();
-    // 0…0.5: clip handles this (no shader hole). 0.5…1: fade the hole so
-    // the veil eases onto the plates with the heatmap lamps (no 0.5 pop).
-    if (deep > 0) {
+    // While the veil is clipped off the workspace (always, when dim > 0: the GL scene darkens the
+    // workspace itself), the veil only covers the top and bottom bars. Workspace and screen punches
+    // would then only land on the bars, wherever a screen's client rect runs past the workspace
+    // edge under zoom/pan, revealing slices of a bar. The bars dim as a whole, so skip them.
+    if (deep > 0 && !veilOffWorkspace) {
       pushWorkspaceOpen(canvasRect, canvas, rects, rectStr, rectSoft, rectRound, 1 - deep);
       for (const el of document.querySelectorAll(SCREEN_SELECTOR)) {
         if (rects.length >= MAX_RECTS) break;
@@ -747,7 +749,7 @@ void main() {
       return;
     }
 
-    const { rects, rectStr, rectSoft, rectRound } = collectLights(canvas);
+    const { rects, rectStr, rectSoft, rectRound } = collectLights(canvas, true);
     const { locs } = state;
 
     gl.viewport(0, 0, canvas.width, canvas.height);

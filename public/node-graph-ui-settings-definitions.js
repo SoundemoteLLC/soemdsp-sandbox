@@ -168,8 +168,8 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: "#171a1f", id: "nodeUiDevModuleFillColor", key: "moduleFillColor", type: "color" },
   { defaultValue: 100, id: "nodeUiDevModuleFillAlpha", key: "moduleFillAlpha", max: 100, min: 0, type: "number" },
   { defaultValue: "#030113", id: "nodeUiDevModuleTitleFillColor", key: "moduleTitleFillColor", type: "color" },
-  { defaultValue: "#8000ff", id: "nodeUiDevModuleStrokeColor", key: "moduleStrokeColor", type: "color" },
-  { defaultValue: 17, id: "nodeUiDevModuleStrokeAlpha", key: "moduleStrokeAlpha", max: 100, min: 0, type: "number" },
+  { defaultValue: "#6922ec", id: "nodeUiDevModuleStrokeColor", key: "moduleStrokeColor", type: "color" },
+  { defaultValue: 31, id: "nodeUiDevModuleStrokeAlpha", key: "moduleStrokeAlpha", max: 100, min: 0, type: "number" },
   { defaultValue: "#f9aeae", id: "nodeUiDevModuleSelectedStrokeColor", key: "moduleSelectedStrokeColor", type: "color" },
   // Module corners, top and bottom apart. Shape: 0 Round, 1 Squircle, 2 Pill (full end, ignores Radius).
   { defaultValue: 1, id: "nodeUiDevModuleTopShape", key: "moduleTopShape", max: 2, min: 0, step: 1, type: "number" },
