@@ -1,18 +1,16 @@
 // Dark Velvet Reverb face: where the taps land, drawn like the Dark Velvet
 // Noise paper's sequence plots (Fagerstrom et al., DAFx2020 paper 31, Fig. 3a):
 // bipolar rectangular pulses (no zero line is drawn). Every tap is a sharp-cornered
-// rectangle (nodeGraphGlLinesRect) at its delay (time axis 0 .. Length), as
-// wide as its real pulse (Darkness / Tail Darkness; never thinner than Line
-// thickness so a 1-sample pulse stays visible), up from the zero line for a +
-// tap and down for a - tap (the signs the audio uses). Height = amplitude only
+// rectangle at its delay (time axis 0 .. Length), as wide as its real pulse
+// (Darkness / Tail Darkness; exact fractional width, antialiased in device
+// pixels), up from the zero line for a + tap and down for a - tap (the signs
+// the audio uses). Height = amplitude only
 // (sign x the Amp Decay envelope; darkness never shrinks or grows it) in dB, mirrored: 0 dB at the top /
 // bottom edge, -60 dB on the zero line. Both channels: Left in the Left lamp
-// colour (red), Right in the Right lamp colour (blue); where a Left and a Right
-// pulse overlap (same side of the zero line) the overlap paints the shared
-// R+B=White meet colour (TraceStroke.meetColorForMode "combine", share =
-// overlap / union area), the same blend the stereo scopes use. Spread 0 = the
-// channels are identical, so every pulse is white. Darker (wider) pulses draw
-// dimmer: ink x 1/w (the audio's pulse gain), floored at 0.2.
+// colour (red), Right in the Right lamp colour (blue), drawn additively so a
+// Left+Right overlap sums toward R+B=White and a dense cluster bursts.
+// Spread 0 = the channels are identical, so every pulse adds toward white.
+// Darker (wider) pulses draw dimmer: ink x 1/w (the audio's pulse gain), floored at 0.2.
 // Text: the tap count ("64 taps"; "48 / 64 taps" when taps that would bunch up
 // under the cell floor are not used; "4096 taps max" past the engine's table) and
 // the tail length ("25.0 ms"; "... s max" only when the delay line truly cannot
@@ -33,9 +31,14 @@
 // NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB). The trigger is latched until
 // one bright frame has been drawn, so a snapshot that arrives between paints
 // still gets a frame, and a stale bus value cannot retrigger the next paints.
-// Height and width stay the static layout. L and R stay independent; overlap
-// still uses the R+B=White meet blend.
-// GPU only (gl-line-renderer).
+// Height and width stay the static layout (exact fractional pulse width; no
+// whole-pixel snap). Rects are drawn with coverage-weighted alpha in device
+// pixels (partial edge coverage; a width < 1 device px is a 1 px bar with
+// alpha = width). Taps go in a GL layer with quadBlend "add" (SRC_ALPHA, ONE)
+// so overlaps accumulate: sparse taps stay distinct thin lines, dense clusters
+// stack into a bright burst, and L red + R blue add to the R+B=White look.
+// Per-tap alpha is below 1 so a single tap does not already saturate.
+// GPU only (gl-line-renderer); the face does not edit that shared renderer.
 
 const nodeGraphVelvetTapsWasm = { promise: null, exports: null, failed: false };
 
@@ -243,6 +246,59 @@ function nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, countL, countR, armFromB
 
 nodeGraphVelvetTapsInstallIngestArm();
 
+
+// Idle / triggered fill alpha on the additive layer. Below 1 so overlaps can
+// still stack into a burst; high enough that an isolated thin tap reads.
+const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = 0.5;
+const NODE_GRAPH_VELVET_TAP_ON_ALPHA = 0.68;
+
+// Coverage spans along one axis in device pixels: each { p, c, w } is a run
+// of `w` pixels starting at `p` with per-pixel coverage `c` in (0, 1].
+function nodeGraphVelvetTapsAxisSpans(a, b) {
+  if (b < a) { const t = a; a = b; b = t; }
+  const spans = [];
+  if (!(b > a)) return spans;
+  const first = Math.floor(a);
+  const last = Math.ceil(b) - 1;
+  if (last < first) return spans;
+  if (first === last) {
+    spans.push({ p: first, c: b - a, w: 1 });
+    return spans;
+  }
+  spans.push({ p: first, c: (first + 1) - a, w: 1 });
+  if (last - first > 1) spans.push({ p: first + 1, c: 1, w: last - first - 1 });
+  spans.push({ p: last, c: b - last, w: 1 });
+  return spans;
+}
+
+// Sharp-cornered rectangle at exact CSS-pixel edges, antialiased by
+// coverage-weighted alpha in device pixels (accounts for batch.scale / dpr).
+// Widths or heights < 1 device px become a 1 px bar with alpha *= that size.
+function nodeGraphVelvetTapsCoverageRect(batch, xa, ya, wa, ha, rgba) {
+  if (!batch || typeof nodeGraphGlLinesRect !== "function") return;
+  if (!(wa > 0) || !(ha > 0)) return;
+  const k = Number(batch.scale) > 0 ? Number(batch.scale) : 1;
+  const xs = nodeGraphVelvetTapsAxisSpans(xa * k, (xa + wa) * k);
+  const ys = nodeGraphVelvetTapsAxisSpans(ya * k, (ya + ha) * k);
+  if (!xs.length || !ys.length) return;
+  const saved = batch.scale;
+  batch.scale = 1;
+  const cr = rgba[0];
+  const cg = rgba[1];
+  const cb = rgba[2];
+  const ca = rgba[3];
+  for (let i = 0; i < xs.length; i += 1) {
+    const x = xs[i];
+    for (let j = 0; j < ys.length; j += 1) {
+      const y = ys[j];
+      const cov = x.c * y.c;
+      if (!(cov > 0) || !(x.w > 0) || !(y.w > 0)) continue;
+      nodeGraphGlLinesRect(batch, x.p, y.p, x.w, y.w, [cr, cg, cb, ca * cov]);
+    }
+  }
+  batch.scale = saved;
+}
+
 function drawNodeGraphVelvetTapsDisplay(section) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(section?.dataset?.node || "") : null;
   const canvas = section?.querySelector?.(".node-display-face");
@@ -306,11 +362,11 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     for (let i = 0; i < layout.countR; i += 1) peak = Math.max(peak, Math.abs(layout.levelR[i]));
     const span = x1 - x0;
     const at = (t) => x0 + span * Math.max(0, Math.min(1, t / layout.length));
-    const minW = Math.max(0.5, halfPx * 2);
     // Darker taps draw dimmer: the audio gain of a pulse is 1 / width (in
     // samples), so the ink is scaled by 1 / w, floored at kDimFloor so the
     // darkest pulses stay visible. A triggered tap is binary: full channel
-    // ink for this one frame, otherwise that static shade.
+    // ink for this one frame, otherwise that static shade. Width stays the
+    // real pulse (no whole-pixel snap); thin pulses AA via coverage alpha.
     const kDimFloor = 0.2;
     const sr = layout.sampleRate || 48000;
     const nodeId = String(node?.id || section?.dataset?.node || "");
@@ -322,60 +378,42 @@ function drawNodeGraphVelvetTapsDisplay(section) {
       : null;
     const ingest = nodeGraphVelvetTapsInstallIngestArm();
     const lit = nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, layout.count, layout.countR, !ingest);
-    const shade = (ink, g) => [ink[0] * g, ink[1] * g, ink[2] * g, ink[3]];
+    const shade = (ink, r) => {
+      const g = r.g;
+      const a = r.on ? NODE_GRAPH_VELVET_TAP_ON_ALPHA : NODE_GRAPH_VELVET_TAP_IDLE_ALPHA;
+      return [ink[0] * g, ink[1] * g, ink[2] * g, a];
+    };
     // One sharp rectangle per tap: x range = the real pulse, y = zero line to
     // the mirrored dB height (lvl <= 1 of the peak, so it stays in the face).
     const rect = (p, wd, signed, on) => {
       const lvl = Math.abs(signed) / (peak || 1);
       const db = lvl > 0 ? 20 * Math.log10(lvl) : -120;
       const hNorm = Math.max(0, 1 + db / 60);
-      let xa = at(p);
-      let xb = at(p + wd);
-      if (xb - xa < minW) { const c = (xa + xb) * 0.5; xa = c - minW * 0.5; xb = c + minW * 0.5; }
+      const xa = at(p);
+      const xb = at(p + wd);
       const g = Math.max(kDimFloor, Math.min(1, 1 / Math.max(1, wd * sr)));
-      return { xa, xb, s: Math.sign(signed), hh: hNorm * reach, hNorm, g: on ? 1 : g };
+      return { xa, xb, s: Math.sign(signed), hh: hNorm * reach, hNorm, g: on ? 1 : g, on: !!on };
     };
     const rl = [];
     const rr = [];
     for (let i = 0; i < layout.count; i += 1) rl.push(rect(layout.pos[i], layout.width[i], layout.level[i], lit.onL[i]));
     for (let i = 0; i < layout.countR; i += 1) rr.push(rect(layout.posR[i], layout.widthR[i], layout.levelR[i], lit.onR[i]));
-    const fill = (r, xa, xb, hh, ink) => {
-      if (!(hh > 0) || !(xb > xa) || !r.s) return;
-      nodeGraphGlLinesRect(batch, xa, r.s > 0 ? mid - hh : mid, xb - xa, hh, ink);
+    // Taps are their own additive layer so text and the length bar stay
+    // normal-over, while overlapping pulses (same or opposite channel) sum
+    // light. L red + R blue therefore still reads as R+B=White, and a dense
+    // cluster bursts instead of overdrawing at one tap's brightness.
+    const taps = typeof nodeGraphGlLinesLayer === "function" ? nodeGraphGlLinesLayer(batch) : batch;
+    if (taps && taps !== batch) taps.quadBlend = "add";
+    const fill = (r, ink) => {
+      if (!(r.hh > 0) || !(r.xb > r.xa) || !r.s) return;
+      nodeGraphVelvetTapsCoverageRect(taps, r.xa, r.s > 0 ? mid - r.hh : mid, r.xb - r.xa, r.hh, shade(ink, r));
     };
-    for (const r of rl) fill(r, r.xa, r.xb, r.hh, shade(inkL, r.g));
-    for (const r of rr) fill(r, r.xa, r.xb, r.hh, shade(inkR, r.g));
-    // L and R overlap: the shared R+B=White meet colour on the intersection.
-    // Taps are one per grid cell on both sides, so a Left tap can only meet
-    // Right taps of nearby cells.
-    // Each side brings its dimmed ink, so dark overlaps whiten less (the shared
-    // meet eases toward white by the dimmer ink).
-    const meet = (share, l, r) => {
-      const m = typeof TraceStroke !== "undefined" && typeof TraceStroke.meetColorForMode === "function"
-        ? TraceStroke.meetColorForMode("combine", l, r, share)
-        : [Math.min(1, l[0] + r[0]), Math.min(1, l[1] + r[1]), Math.min(1, l[2] + r[2])];
-      return [m[0], m[1], m[2], Math.max(l[3], r[3])];
-    };
-    const reachCells = 4;
-    for (let i = 0; i < rl.length; i += 1) {
-      const a = rl[i];
-      if (!a.s || !(a.hh > 0)) continue;
-      for (let j = Math.max(0, i - reachCells); j <= Math.min(rr.length - 1, i + reachCells); j += 1) {
-        const b = rr[j];
-        if (b.s !== a.s || !(b.hh > 0)) continue;
-        const xa = Math.max(a.xa, b.xa);
-        const xb = Math.min(a.xb, b.xb);
-        if (!(xb > xa)) continue;
-        const hh = Math.min(a.hh, b.hh);
-        const inter = (xb - xa) * hh;
-        const union = (a.xb - a.xa) * a.hh + (b.xb - b.xa) * b.hh - inter;
-        fill(a, xa, xb, hh, meet(union > 0 ? inter / union : 1, shade(inkL, a.g), shade(inkR, b.g)));
-      }
-    }
+    for (const r of rl) fill(r, inkL);
+    for (const r of rr) fill(r, inkR);
     if (dotR > 0) {
       for (const [list, ink] of [[rl, inkL], [rr, inkR]]) {
         for (const r of list) {
-          if (r.hNorm > 0 && r.s) nodeGraphGlLinesDot(batch, (r.xa + r.xb) * 0.5, mid - r.s * r.hh, dotR, smoothing, shade(ink, r.g));
+          if (r.hNorm > 0 && r.s) nodeGraphGlLinesDot(taps, (r.xa + r.xb) * 0.5, mid - r.s * r.hh, dotR, smoothing, shade(ink, r));
         }
       }
     }

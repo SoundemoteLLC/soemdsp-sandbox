@@ -208,6 +208,43 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
   check(sides.R[1] === 1 && sides.R[0] === 0, "latch R is independent of L");
 }
 
+// ---- Device-pixel coverage spans (subpixel AA) and stackable add-alpha
+{
+  const covStart = faceSrc.indexOf("const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA");
+  const covEnd = faceSrc.indexOf("function drawNodeGraphVelvetTapsDisplay");
+  if (covStart < 0 || covEnd < 0) throw new Error("could not extract coverage helpers from the face");
+  const cov = { Math };
+  vm.runInNewContext(
+    faceSrc.slice(covStart, covEnd) + `
+      this.NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = NODE_GRAPH_VELVET_TAP_IDLE_ALPHA;
+      this.NODE_GRAPH_VELVET_TAP_ON_ALPHA = NODE_GRAPH_VELVET_TAP_ON_ALPHA;
+      this.nodeGraphVelvetTapsAxisSpans = nodeGraphVelvetTapsAxisSpans;
+    `,
+    cov,
+  );
+  const idleA = cov.NODE_GRAPH_VELVET_TAP_IDLE_ALPHA;
+  const onA = cov.NODE_GRAPH_VELVET_TAP_ON_ALPHA;
+  check(idleA > 0.3 && idleA < 1, `idle alpha ${idleA} is visible but below 1 so overlaps can stack`);
+  check(onA > idleA && onA < 1, `triggered alpha ${onA} is brighter than idle and still below 1`);
+  check(idleA * 3 >= 1, `three idle overlaps reach a burst (3 x ${idleA} = ${idleA * 3})`);
+
+  const spans = cov.nodeGraphVelvetTapsAxisSpans;
+  const compact = (s) => s.map((x) => `${x.p}:${x.c.toFixed(4)}x${x.w}`).join(",");
+  let s = spans(0.25, 0.75);
+  check(s.length === 1 && s[0].p === 0 && s[0].w === 1 && Math.abs(s[0].c - 0.5) < 1e-12, `sub-pixel width 0.5 is a 1 px bar with alpha 0.5 (${compact(s)})`);
+  s = spans(0, 2);
+  check(s.length === 2 && s[0].c === 1 && s[1].c === 1 && s[0].p === 0 && s[1].p === 1, `exact 2 px span is two full pixels (${compact(s)})`);
+  s = spans(0.25, 2.25);
+  check(
+    s.length === 3 && s[0].p === 0 && Math.abs(s[0].c - 0.75) < 1e-12 && s[1].p === 1 && s[1].c === 1 && s[1].w === 1 && s[2].p === 2 && Math.abs(s[2].c - 0.25) < 1e-12,
+    `fractional edges get partial coverage (${compact(s)})`,
+  );
+  const fwd = compact(spans(1.2, 4.6));
+  const rev = compact(spans(4.6, 1.2));
+  check(fwd === rev && fwd.length > 0, "coverage spans are independent of endpoint order");
+  check(spans(1, 1).length === 0, "a zero-width span is empty");
+}
+
 if (failed) {
   console.error(`${failed} check(s) failed`);
   process.exit(1);
