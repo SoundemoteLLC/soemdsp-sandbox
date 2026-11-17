@@ -1,8 +1,10 @@
 // Dark Velvet Reverb display levels: peak-hold of |width-filtered pulse
 // x gain x table norm| per tap, L and R, taken by soemdsp_velvet_reverb_take_levels.
-// The face treats a peak above NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB)
-// as a binary trigger: it pops on the next paint, holds for the snapshot
-// period, and goes dark promptly after a later quiet snapshot has been seen.
+// The face can treat a peak above NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB)
+// as a binary trigger (pop, hold for a snapshot period, prompt off). That
+// live flash is currently off (NODE_GRAPH_VELVET_TAP_LIVE_FLASH); animation
+// tests are skipped until the flag is turned back on. Static darkness and
+// coverage tests still run.
 //   node scripts/test_velvet_reverb_tap_levels.mjs
 import fs from "node:fs";
 import path from "node:path";
@@ -14,12 +16,13 @@ let failed = 0;
 const check = (ok, msg) => { if (!ok) { failed += 1; console.error("FAIL", msg); } else console.log("ok  ", msg); };
 
 const faceSrc = fs.readFileSync(path.join(root, "public", "node-graph-velvet-taps-display.js"), "utf8");
-const armStart = faceSrc.indexOf("const NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL");
-const armEnd = faceSrc.indexOf("nodeGraphVelvetTapsInstallIngestArm();");
+const armStart = faceSrc.indexOf("const NODE_GRAPH_VELVET_TAP_LIVE_FLASH");
+const armEnd = faceSrc.indexOf("// Idle fill is the log-width darkness shade");
 if (armStart < 0 || armEnd < 0) throw new Error("could not extract tap-trigger helpers from the face");
 const latch = { Map, Uint8Array, Float32Array, Math, Number, String };
 vm.runInNewContext(
   faceSrc.slice(armStart, armEnd) + `
+    this.NODE_GRAPH_VELVET_TAP_LIVE_FLASH = NODE_GRAPH_VELVET_TAP_LIVE_FLASH;
     this.NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL = NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL;
     this.nodeGraphVelvetTapsTriggerState = nodeGraphVelvetTapsTriggerState;
     this.nodeGraphVelvetTapsApplySnapshot = nodeGraphVelvetTapsApplySnapshot;
@@ -163,7 +166,7 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
 }
 
 // ---- Snapshot-period latch (face helpers): pop, hold, then prompt off
-{
+if (latch.NODE_GRAPH_VELVET_TAP_LIVE_FLASH) {
   const apply = (id, side, levels) => latch.nodeGraphVelvetTapsApplySnapshot(
     latch.nodeGraphVelvetTapsTriggerState(id),
     side,
@@ -239,14 +242,19 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
   check(sides.onR[1] === 1 && sides.onR[0] === 0, "latch R is independent of L");
 }
 
+else {
+  check(!latch.NODE_GRAPH_VELVET_TAP_LIVE_FLASH, "live tap flash is off; latch tests skipped");
+}
+
 // ---- Device-pixel coverage spans (subpixel AA) and stackable add-alpha
 {
-  const covStart = faceSrc.indexOf("const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA");
+  const covStart = faceSrc.indexOf("const NODE_GRAPH_VELVET_TAP_LIVE_FLASH");
   const covEnd = faceSrc.indexOf("function drawNodeGraphVelvetTapsDisplay");
   if (covStart < 0 || covEnd < 0) throw new Error("could not extract coverage helpers from the face");
-  const cov = { Math };
+  const cov = { Math, Map, Uint8Array, Float32Array, Number, String };
   vm.runInNewContext(
     faceSrc.slice(covStart, covEnd) + `
+      this.NODE_GRAPH_VELVET_TAP_LIVE_FLASH = NODE_GRAPH_VELVET_TAP_LIVE_FLASH;
       this.NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = NODE_GRAPH_VELVET_TAP_IDLE_ALPHA;
       this.NODE_GRAPH_VELVET_TAP_ON_ALPHA = NODE_GRAPH_VELVET_TAP_ON_ALPHA;
       this.NODE_GRAPH_VELVET_TAP_ON_LIFT = NODE_GRAPH_VELVET_TAP_ON_LIFT;
@@ -300,25 +308,30 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
   const onDark = cov.nodeGraphVelvetTapsShade(ink, d8, true, 1);
   check(idle1[0] === ink[0] && idle1[3] === idleA, "idle width-1 uses full channel ink at idle alpha");
   check(idle2[0] < idle1[0] && idle8[0] < idle2[0] && idle64[0] < idle8[0], "idle rgb follows the monotonic darkness shade");
-  check(on1[0] > idle1[0] && on1[3] === 1, "triggered width-1 at 0 dB is brighter (lifted toward white) than idle");
-  check(onDark[0] === on1[0] && onDark[0] > idle8[0], "a 0 dB hit reaches the same full lift for any width");
-  const midWide = cov.nodeGraphVelvetTapsShade(ink, d8, true, Math.pow(10, -20 / 20));
-  const midThin = cov.nodeGraphVelvetTapsShade(ink, 1, true, Math.pow(10, -20 / 20));
-  check(midWide[0] > idle8[0] && midWide[0] < midThin[0], "at a mid level, a wider tap stays dimmer than a width-1 flash");
+  if (cov.NODE_GRAPH_VELVET_TAP_LIVE_FLASH) {
+    check(on1[0] > idle1[0] && on1[3] === 1, "triggered width-1 at 0 dB is brighter (lifted toward white) than idle");
+    check(onDark[0] === on1[0] && onDark[0] > idle8[0], "a 0 dB hit reaches the same full lift for any width");
+    const midWide = cov.nodeGraphVelvetTapsShade(ink, d8, true, Math.pow(10, -20 / 20));
+    const midThin = cov.nodeGraphVelvetTapsShade(ink, 1, true, Math.pow(10, -20 / 20));
+    check(midWide[0] > idle8[0] && midWide[0] < midThin[0], "at a mid level, a wider tap stays dimmer than a width-1 flash");
 
-  // Relative flash: absolute 60 dB window, monotonic in level, no fake full-bright.
-  const amt = cov.nodeGraphVelvetTapsFlashAmount;
-  const db = (v) => Math.pow(10, v / 20);
-  check(amt(1) === 1, "0 dB (peak 1) is full lift");
-  check(Math.abs(amt(db(-60))) < 1e-12, "-60 dB is no lift over idle");
-  check(amt(db(-90)) === 0 && amt(TRIGGER) === 0, "a just-triggered -90 dB hit stays at zero lift");
-  check(amt(2) === 1, "peaks above 1 (clipped) stay at the full lift, no extra headroom");
-  check(amt(db(-40)) > amt(db(-50)) && amt(db(-20)) > amt(db(-40)) && amt(0.5) > amt(db(-20)) && amt(1) > amt(0.5), "flash amount is monotonic in level");
-  const quiet = cov.nodeGraphVelvetTapsShade(ink, 1, true, TRIGGER);
-  const mid = cov.nodeGraphVelvetTapsShade(ink, 1, true, db(-20));
-  const full = cov.nodeGraphVelvetTapsShade(ink, 1, true, 1);
-  check(quiet[3] === 1 && quiet[0] === idle1[0], "a barely-audible hit is visibly lit (alpha 1) with no lift over idle");
-  check(mid[0] > quiet[0] && mid[0] < full[0] && full[0] === on1[0], "flash colour rises with level up to the current full lift");
+    // Relative flash: absolute 60 dB window, monotonic in level, no fake full-bright.
+    const amt = cov.nodeGraphVelvetTapsFlashAmount;
+    const db = (v) => Math.pow(10, v / 20);
+    check(amt(1) === 1, "0 dB (peak 1) is full lift");
+    check(Math.abs(amt(db(-60))) < 1e-12, "-60 dB is no lift over idle");
+    check(amt(db(-90)) === 0 && amt(TRIGGER) === 0, "a just-triggered -90 dB hit stays at zero lift");
+    check(amt(2) === 1, "peaks above 1 (clipped) stay at the full lift, no extra headroom");
+    check(amt(db(-40)) > amt(db(-50)) && amt(db(-20)) > amt(db(-40)) && amt(0.5) > amt(db(-20)) && amt(1) > amt(0.5), "flash amount is monotonic in level");
+    const quiet = cov.nodeGraphVelvetTapsShade(ink, 1, true, TRIGGER);
+    const mid = cov.nodeGraphVelvetTapsShade(ink, 1, true, db(-20));
+    const full = cov.nodeGraphVelvetTapsShade(ink, 1, true, 1);
+    check(quiet[3] === 1 && quiet[0] === idle1[0], "a barely-audible hit is visibly lit (alpha 1) with no lift over idle");
+    check(mid[0] > quiet[0] && mid[0] < full[0] && full[0] === on1[0], "flash colour rises with level up to the current full lift");
+  } else {
+    check(idleA === 1, "live flash is off; idle alpha is solid 1");
+    check(cov.nodeGraphVelvetTapsShade(ink, 1, true, 1)[0] === on1[0], "flash helpers remain available while the flag is off");
+  }
 
   const spans = cov.nodeGraphVelvetTapsAxisSpans;
   const compact = (s) => s.map((x) => `${x.p}:${x.c.toFixed(4)}x${x.w}`).join(",");

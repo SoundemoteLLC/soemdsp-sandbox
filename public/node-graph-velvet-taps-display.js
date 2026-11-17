@@ -26,9 +26,14 @@
 // "Text" on this face: tap count / length readouts and the held-length bar,
 // Left, Right, Line thickness, Dot size) over the module definition's
 // defaultDisplaySettings (Dot size 0) for any key the node has not stored.
-// Live animation is a level-relative flash (no fade, no easing): a tap is
-// idle (the static darkness shade) or lit, with lift scaled from the snapshot
-// peak. The
+// Live tap flash is currently off (NODE_GRAPH_VELVET_TAP_LIVE_FLASH). Taps
+// draw static only: height is amplitude, width is the real pulse (1 device
+// px minimum), brightness is the log-width darkness map. The flash helpers
+// and worklet peak-hold path are kept but not armed. To re-enable, set that
+// flag true and also NODE_LIVE_VELVET_TAP_LIVE_FLASH in
+// node-live-audio-worklet-native-graph.js, and (optionally) idle alpha back
+// to 0.92 so the flash can pop. When the flag is on, a level-relative flash
+// (no fade, no easing) lights a tap from the snapshot peak: the
 // worklet posts per-tap peak-hold levels (TapLevelsL / TapLevelsR) at the
 // display-telemetry rate. A tap is triggered when that peak is above
 // NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB). A hit pops bright on the next
@@ -36,8 +41,8 @@
 // strobe if paints run faster than snapshots). After a quiet snapshot, and
 // once the hit has been painted at least once, the tap goes dark promptly.
 // Height stays the static amplitude layout. A tap narrower than 1 device px
-// is drawn as a 1 px bar at full coverage (brightness follows darkness and
-// the trigger flash only, never Length or zoom). Wider taps keep exact
+// is drawn as a 1 px bar at full coverage (brightness follows the log-width
+// darkness map, and the trigger flash when it is on, never Length or zoom). Wider taps keep exact
 // fractional edges with coverage-weighted alpha. Taps go in a GL layer with
 // quadBlend "add" (SRC_ALPHA, ONE)
 // so overlaps accumulate: sparse taps stay distinct thin lines, dense clusters
@@ -154,6 +159,12 @@ function nodeGraphVelvetTapsSeconds(s) {
   return `${s.toFixed(2)} s`;
 }
 
+
+// Live tap flash (peak-hold telemetry + latch). false = static face only:
+// do not read TapLevels, do not wrap the data bus, and (in the worklet)
+// do not arm soemdsp_velvet_reverb_set_display. Flip both flags to true
+// to bring the animation back.
+const NODE_GRAPH_VELVET_TAP_LIVE_FLASH = false;
 
 // Binary on/off trigger: a posted peak above this is "signal present".
 // -90 dB of the width-filtered |pulse x gain x norm|. Exact 0 stays idle.
@@ -297,14 +308,15 @@ function nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, countL, countR, armFromB
   return { onL: left.on, onR: right.on, levelL: left.level, levelR: right.level };
 }
 
-nodeGraphVelvetTapsInstallIngestArm();
+if (NODE_GRAPH_VELVET_TAP_LIVE_FLASH) nodeGraphVelvetTapsInstallIngestArm();
 
 
-// Idle fill is near the pre-animation static look (log-width darkness shade
-// at almost solid alpha). A lit tap is opaque; its lift toward white follows
-// the snapshot peak on a 60 dB map. Overlaps still add and may clip to white
-// (a burst) if the signal itself piles up or clips.
-const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = 0.92;
+// Idle fill is the log-width darkness shade at solid alpha (no flash
+// headroom while LIVE_FLASH is off). When the flash is on, 0.92 leaves
+// room for an alpha pop. A lit tap is opaque; its lift toward white
+// follows the snapshot peak on a 60 dB map. Overlaps still add and may
+// clip to white (a burst) if the signal itself piles up or clips.
+const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = NODE_GRAPH_VELVET_TAP_LIVE_FLASH ? 0.92 : 1;
 const NODE_GRAPH_VELVET_TAP_ON_ALPHA = 1;
 const NODE_GRAPH_VELVET_TAP_ON_LIFT = 0.4;
 // 0 dB (peak 1) = full lift; -60 dB = no lift over idle. Peaks above 1
@@ -474,11 +486,10 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     for (let i = 0; i < layout.countR; i += 1) peak = Math.max(peak, Math.abs(layout.levelR[i]));
     const span = x1 - x0;
     const at = (t) => x0 + span * Math.max(0, Math.min(1, t / layout.length));
-    // Darker taps draw dimmer: the audio gain of a pulse is 1 / width (in
-    // samples), so the ink is scaled by 1 / w, floored at 0.2 so the
-    // darkest pulses stay visible. A triggered tap is binary: full channel
-    // ink while the hit is held, otherwise that static shade. Width stays the
-    // real pulse; a sub-pixel pulse is a 1 device-px bar at full coverage.
+    // Darker taps draw dimmer on the log-width map (Wref 64, floor 0.2).
+    // Width stays the real pulse; a sub-pixel pulse is a 1 device-px bar at
+    // full coverage. Live flash (when NODE_GRAPH_VELVET_TAP_LIVE_FLASH) lifts
+    // a hit from this shade; it is off, so every tap stays on this shade.
     const sr = layout.sampleRate || 48000;
     const nodeId = String(node?.id || section?.dataset?.node || "");
     // Empty ids would otherwise share one Map slot. Keep the bus lookup on
@@ -490,14 +501,17 @@ function drawNodeGraphVelvetTapsDisplay(section) {
       }
       stateId = section._velvetTapStateId;
     }
-    const rawL = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
-      ? nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, "TapLevelsL"))
-      : null;
-    const rawR = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
-      ? nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, "TapLevelsR"))
-      : null;
-    const ingest = nodeGraphVelvetTapsInstallIngestArm();
-    const lit = nodeGraphVelvetTapsTakeLit(stateId, rawL, rawR, layout.count, layout.countR, !ingest);
+    let lit = { onL: [], onR: [], levelL: [], levelR: [] };
+    if (NODE_GRAPH_VELVET_TAP_LIVE_FLASH) {
+      const rawL = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
+        ? nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, "TapLevelsL"))
+        : null;
+      const rawR = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
+        ? nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, "TapLevelsR"))
+        : null;
+      const ingest = nodeGraphVelvetTapsInstallIngestArm();
+      lit = nodeGraphVelvetTapsTakeLit(stateId, rawL, rawR, layout.count, layout.countR, !ingest);
+    }
     const shade = (ink, r) => nodeGraphVelvetTapsShade(ink, r.g, r.on, r.level);
     // One sharp rectangle per tap: x range = the real pulse, y = zero line to
     // the mirrored dB height (lvl <= 1 of the peak, so it stays in the face).
@@ -513,12 +527,12 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     const rl = [];
     const rr = [];
     for (let i = 0; i < layout.count; i += 1) {
-      const r = rect(layout.pos[i], layout.width[i], layout.level[i], lit.onL[i]);
+      const r = rect(layout.pos[i], layout.width[i], layout.level[i], NODE_GRAPH_VELVET_TAP_LIVE_FLASH && lit.onL[i]);
       r.level = lit.levelL ? lit.levelL[i] : 0;
       rl.push(r);
     }
     for (let i = 0; i < layout.countR; i += 1) {
-      const r = rect(layout.posR[i], layout.widthR[i], layout.levelR[i], lit.onR[i]);
+      const r = rect(layout.posR[i], layout.widthR[i], layout.levelR[i], NODE_GRAPH_VELVET_TAP_LIVE_FLASH && lit.onR[i]);
       r.level = lit.levelR ? lit.levelR[i] : 0;
       rr.push(r);
     }

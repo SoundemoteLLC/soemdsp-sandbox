@@ -8946,8 +8946,11 @@ NodeLiveAudioProcessor.prototype.syncNativeHypersawPublish =
  * Dark Velvet Reverb face telemetry: copy per-tap peak-hold levels (L/R)
  * from the graph-hosted native instance and reset the peaks. Runs at the
  * existing display-telemetry rate (postModuleScopeSnapshot / Simulation FPS).
- * Peak-hold is armed only while the node is in scopeCaptureNodeIds (visible face).
+ * Peak-hold is armed only while the node is in scopeCaptureNodeIds (visible face)
+ * and NODE_LIVE_VELVET_TAP_LIVE_FLASH is true. Keep that flag in sync with
+ * NODE_GRAPH_VELVET_TAP_LIVE_FLASH in node-graph-velvet-taps-display.js.
  */
+const NODE_LIVE_VELVET_TAP_LIVE_FLASH = false;
 NodeLiveAudioProcessor.prototype.syncNativeVelvetTapsPublish =
   function syncNativeVelvetTapsPublish() {
     if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) {
@@ -8987,7 +8990,7 @@ NodeLiveAudioProcessor.prototype.syncNativeVelvetTapsPublish =
         }
       }
       if (!(handle > 0)) continue;
-      const visible = Boolean(capture && capture.has(nodeId));
+      const visible = NODE_LIVE_VELVET_TAP_LIVE_FLASH && Boolean(capture && capture.has(nodeId));
       try {
         setDisplay(handle, visible ? 1 : 0);
       } catch (_e) { /* leave prior arming */ }
