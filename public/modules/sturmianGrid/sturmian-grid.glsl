@@ -141,10 +141,6 @@ float w = resolution.x;
 float h = resolution.y;
 vec3 color = BG;
 float mask = floor(stepPattern + 0.5);
-float totalStep = floor(time * rate / 15.0);
-if (reset > 0.5) totalStep = mod(totalStep, reset);
-float activeStep = mod(totalStep, max(1.0, steps));
-float barIndex = floor(totalStep / max(1.0, steps));
 float cellWidth = max(2.0, cell);
 float cellHeight = cellWidth;
 float gridX = px.x;
@@ -152,7 +148,7 @@ float gridY = px.y;
 float col = floor(gridX / cellWidth);
 float row = floor(gridY / cellHeight);
 if (px.y < h * STURM_MAP_TOP) {
-  float n = row - 2.0 + barIndex * walk;
+  float n = row - 2.0 + playBar * walk;
   float aa = alpha; float bb = beta;
   if (snap > 0.5) { aa = floor(aa * steps + 0.5) / steps; bb = floor(bb * steps + 0.5) / steps; }
   float z = fract(col * aa + n * bb + rho + drift * time);
@@ -161,9 +157,38 @@ if (px.y < h * STURM_MAP_TOP) {
   if(view < 0.5) base = tile < 0.5 ? BG : (tile < 1.5 ? vec3(150.0,151.0,255.0)/255.0 : vec3(255.0,42.0,101.0)/255.0);
   else if(view < 1.5) base = tile == 1.0 ? vec3(255.0,42.0,101.0)/255.0 : vec3(26.0,30.0,40.0)/255.0;
   else base = mix(vec3(18.0,20.0,30.0)/255.0, vec3(255.0,42.0,101.0)/255.0, z);
-  vec2 local = fract(vec2(gridX/cellWidth, gridY/cellHeight));
-  if(local.x<0.035||local.y<0.07) base*=0.35;
-  if(abs(col-activeStep)<0.5)base=mix(base,vec3(1.0,0.84,0.58),0.52);
+  // Dim columns outside the sounding bar, like soundemote-dev.
+  if (col < -0.5 || col >= steps) base *= 0.55;
+  // 1 CSS-pixel gutter between blocks (soundemote-dev's 1px grid lines).
+  float fx = mod(gridX, cellWidth);
+  float fy = mod(gridY, cellHeight);
+  float gridH = h * STURM_MAP_TOP;
+  if (cellWidth >= 8.0 && (fx < 1.0 || fy < 1.0)) base = mix(base, vec3(0.0), 0.45);
+  // Dashed bar bounds at 0 and steps.
+  if ((abs(gridX) < 1.0 || abs(gridX - steps * cellWidth) < 1.0) && mod(gridY, 8.0) < 4.0)
+    base = mix(base, vec3(1.0), 0.35);
+  // Track-row frames across the sounding bar.
+  for (int track = 0; track < 4; track++) {
+    float trackN = playBar * walk + float(track) * spread;
+    if (abs(n - trackN) > 0.5 || col < -0.5 || col >= steps) continue;
+    bool muted = mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5;
+    vec3 tc = muted ? vec3(0.55) : laneColor(track);
+    bool edge = (col < 0.5 && fx < 2.0) || (col > steps - 1.5 && fx > cellWidth - 2.0) || fy < 2.0 || fy > cellHeight - 2.0;
+    if (edge) base = mix(base, tc, 0.85);
+  }
+  // Playhead: pale full-height column, 1px white outline, inset hits on firing tracks.
+  if (playing > 0.5 && abs(col - playStep) < 0.5) {
+    base = mix(base, vec3(1.0), 0.16);
+    if (fx < 1.0 || fx > cellWidth - 1.0 || gridY < 1.0 || gridY > gridH - 1.0) base = vec3(1.0);
+    for (int track = 0; track < 4; track++) {
+      float trackN = playBar * walk + float(track) * spread;
+      if (abs(n - trackN) > 0.5) continue;
+      if (mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5) continue;
+      if (mod(floor(mask / exp2(float(track * 3) + tile)), 2.0) < 0.5) continue;
+      if (fx >= 2.0 && fx <= cellWidth - 2.0 && fy >= 2.0 && fy <= cellHeight - 2.0)
+        base = mix(laneColor(track), base, 0.15);
+    }
+  }
   color=base;
 }
 // Four color-coded lanes and their 0/1/2/mute shader buttons.

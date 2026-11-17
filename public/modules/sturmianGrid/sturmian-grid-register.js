@@ -15,6 +15,8 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     displayHeightGu: 26,
     chrome: "LayoutB",
     customDisplayArea: true,
+    // LayoutB side-band labels (jack + short text; not labels-hidden).
+    layoutBPortLabels: true,
     digitalInputs: ["Restart", "Adv"],
     inputLabels: { Restart: "↺", Adv: "▸" },
     inputs: ["Restart", "Adv"],
@@ -25,8 +27,10 @@ registerNodeGraphChromelessModule("sturmianGrid", {
       Hat: "H",
       Melody: "M",
       Pitch: "♯/♭",
+      f: "ƒ",
     },
-    outputs: ["Kick", "Snare", "Hat", "Melody", "Pitch"],
+    outputAliases: { "ƒ": "f", Frequency: "f" },
+    outputs: ["Kick", "Snare", "Hat", "Melody", "Pitch", "f"],
     parameters: [
       { key: "alpha", label: "α", defaultValue: "0.2955977425", min: "0.001", max: "0.999", mid: "0.3", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
       { key: "beta", label: "β", defaultValue: "0.1607132448", min: "0.001", max: "0.999", mid: "0.2", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
@@ -45,7 +49,7 @@ registerNodeGraphChromelessModule("sturmianGrid", {
   },
   catalog: {
     category: "Sequence",
-    description: "A shader-drawn 2D Sturmian grid with four trigger lanes and a pentatonic pitch output. Patch it into separate sound modules.",
-    notes: ["sturmian", "grid", "sequence", "kick trigger", "snare trigger", "hat trigger", "melody trigger", "pitch", "webgl"],
+    description: "A shader-drawn 2D Sturmian grid with four trigger lanes, a pentatonic pitch output, and ƒ in Hz. Patch it into separate sound modules.",
+    notes: ["sturmian", "grid", "sequence", "kick trigger", "snare trigger", "hat trigger", "melody trigger", "pitch", "frequency", "webgl"],
   },
 });

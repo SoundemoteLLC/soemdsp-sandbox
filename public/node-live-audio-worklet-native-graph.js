@@ -876,6 +876,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "hat") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "melody") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
     if (p === "pitch" || p === "\u266f/\u266d") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
     if (p === "__phase") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   }
   if (t === "vactrol") {
@@ -10850,6 +10851,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Ramp"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SQUARE) {
+    if (type === "sturmianGrid") return ["f", "ƒ"];
     if (type === "vactrol") return ["Light"];
     if (type === "hostBpm") return ["Phase"];
     if (type === "resonantCompressor") return ["Env"];
@@ -10897,7 +10899,8 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "blitTrigger") return ["__LoopShift"];
     // Face playhead — not a patchable jack.
     if (type === "basicShape" || type === "sineWavetable" || type === "sinCos" || type === "clock"
-      || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc") {
+      || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc"
+      || type === "sturmianGrid") {
       return ["__Phase"];
     }
     // Pitch Manager face tap: the 0-1 input value.

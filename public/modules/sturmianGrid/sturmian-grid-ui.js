@@ -1,6 +1,6 @@
 // GLSL draws every visible pixel. Transparent standard control surfaces use
 // the sandbox's shared slider gestures and modifier rules.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "cell", "stepPattern"];
 const STURMIAN_PARAMS = [
   { key: "alpha", min: 0.001, max: 0.999, scale: "linear" }, { key: "beta", min: 0.001, max: 0.999, scale: "linear" },
@@ -68,16 +68,40 @@ function sturmianValues(nodeId, preview = null) {
   return result;
 }
 
+function sturmianPlayhead(nodeId, steps) {
+  const stepCount = Math.max(1, Number(steps) || 1);
+  let playStep = 0;
+  let playBar = 0;
+  let playing = 0;
+  const read = (port) => (typeof nodeGraphModuleScopeLatestOutputValue === "function"
+    ? Number(nodeGraphModuleScopeLatestOutputValue(nodeId, port, Number.NaN))
+    : Number.NaN);
+  const phase = read("__Phase");
+  if (Number.isFinite(phase)) {
+    playStep = Math.max(0, Math.min(stepCount - 1, Math.floor(phase * stepCount + 1e-6)));
+    playing = 1;
+  }
+  // playBar stays 0 until a native hidden bar tap exists. Default Reset after
+  // == Steps already keeps the engine bar at 0, which matches this view.
+  return { playStep, playBar, playing };
+}
+
 function sturmianPaint(face) {
   if (!face?.isConnected) return;
   const canvas = face.querySelector("canvas");
   if (!canvas || !face._sturmianShader) return;
-  const rect = face.getBoundingClientRect();
-  const logicalWidth = Math.max(1, face.clientWidth);
-  const logicalHeight = Math.max(1, face.clientHeight);
-  const pixelRatio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-  const width = Math.max(1, Math.round(rect.width * pixelRatio));
-  const height = Math.max(1, Math.round(rect.height * pixelRatio));
+  // Layout CSS box x dpr, never workspace zoom. getBoundingClientRect grows
+  // with the camera and made cell count / control packing re-flow at extreme
+  // zooms. Do not mark this canvas as a display-face: the module still paints
+  // through its own WebGL2 context, and the face-texture path would swallow it.
+  const metrics = typeof ensureFaceMetrics === "function"
+    ? ensureFaceMetrics(face, { observe: true })
+    : null;
+  const logicalWidth = Math.max(1, metrics?.cssW || face.clientWidth || face.offsetWidth || 1);
+  const logicalHeight = Math.max(1, metrics?.cssH || face.clientHeight || face.offsetHeight || 1);
+  const pixelRatio = Math.max(1, Math.min(2, Number(metrics?.dpr || window.devicePixelRatio) || 1));
+  const width = Math.max(1, Math.round(logicalWidth * pixelRatio));
+  const height = Math.max(1, Math.round(logicalHeight * pixelRatio));
   if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
   let gpu = face._sturmianGpu;
   if (!gpu) {
@@ -91,7 +115,8 @@ function sturmianPaint(face) {
       return shader;
     };
     try {
-      const uniforms = STURMIAN_FLOATS.map((key) => `uniform float ${key};`).join("\n");
+      const uniforms = STURMIAN_FLOATS.map((key) => `uniform float ${key};`).join("\n")
+        + "\nuniform float playStep; uniform float playBar; uniform float playing;";
       const vertex = compile(gl.VERTEX_SHADER, "#version 300 es\nin vec2 aPos; out vec2 vUv; void main(){vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);}");
       const fragment = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\nin vec2 vUv; out vec4 out_color; uniform vec2 resolution; uniform float time;\n${sturmianGlslConstants()}\n${uniforms}\n${face._sturmianShader.functions}\nvoid main(){ vec2 uv=vUv; ${face._sturmianShader.body}\n}`);
       const program = gl.createProgram();
@@ -101,7 +126,7 @@ function sturmianPaint(face) {
       const quad = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, quad);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
-      gpu = face._sturmianGpu = { gl, program, quad, position: gl.getAttribLocation(program, "aPos"), resolution: gl.getUniformLocation(program, "resolution"), time: gl.getUniformLocation(program, "time"), floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])) };
+      gpu = face._sturmianGpu = { gl, program, quad, position: gl.getAttribLocation(program, "aPos"), resolution: gl.getUniformLocation(program, "resolution"), time: gl.getUniformLocation(program, "time"), playStep: gl.getUniformLocation(program, "playStep"), playBar: gl.getUniformLocation(program, "playBar"), playing: gl.getUniformLocation(program, "playing"), floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])) };
     } catch (error) { face.dataset.shaderError = String(error.message || error); console.error("[Sturmian Grid] GLSL", error); return; }
   }
   const nodeId = face.dataset.node;
@@ -112,6 +137,10 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.time, (performance.now() - face._sturmianStarted) / 1000);
   const values = sturmianValues(nodeId, face._sturmianPreview);
   for (const key of STURMIAN_FLOATS) gl.uniform1f(gpu.floats[key], values[key]);
+  const play = sturmianPlayhead(nodeId, values.steps);
+  gl.uniform1f(gpu.playStep, play.playStep);
+  gl.uniform1f(gpu.playBar, play.playBar);
+  gl.uniform1f(gpu.playing, play.playing);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   face.dataset.shaderError = "";
 }
