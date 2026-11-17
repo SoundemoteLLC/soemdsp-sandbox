@@ -211,7 +211,7 @@ static const double kLn1000 = 6.907755278982137;
 struct Layout {
   double* pos;    // seconds
   double* width;  // seconds
-  double* level;  // linear and signed (the tap's +/- sign, as the audio plays it), before the 1/width pulse gain (|1| = first-tap level)
+  double* level;  // amplitude only, signed: sign x Amp Decay envelope (x the last tap's fraction); no darkness gain (1/width or the Tail Darkness energy make-up), so the face height is amplitude and its brightness is darkness
   double* posR;   // Right taps, same units
   double* widthR;
   double* levelR;
@@ -324,11 +324,12 @@ static void build_table(
 
     if (openL) {
       if (posL + widthL < (double)(kDelaySize - 1)) {
-        const double envL = part * rampGain * soemdsp_maths::dsp_exp(-decayK * (posL + 0.5 * widthL));
+        const double ampL = part * soemdsp_maths::dsp_exp(-decayK * (posL + 0.5 * widthL)); // amplitude (face height)
+        const double envL = rampGain * ampL;
         if (out) {
           out->pos[countL] = (double)(int)posL / sampleRate;
           out->width[countL] = widthL / sampleRate;
-          out->level[countL] = signL * envL;
+          out->level[countL] = signL * ampL;
         }
         set_tap(t.left[countL++], (int)posL, widthL, signL * envL);
         // A tap averages `width` samples (gain 1/width), so its energy on
@@ -341,11 +342,12 @@ static void build_table(
     }
     if (openR) {
       if (blendPosR + widthR < (double)(kDelaySize - 1)) {
-        const double envR = part * rampGain * soemdsp_maths::dsp_exp(-decayK * (blendPosR + 0.5 * widthR));
+        const double ampR = part * soemdsp_maths::dsp_exp(-decayK * (blendPosR + 0.5 * widthR));
+        const double envR = rampGain * ampR;
         if (out) {
           out->posR[countR] = (double)(int)blendPosR / sampleRate;
           out->widthR[countR] = widthR / sampleRate;
-          out->levelR[countR] = signR * envR;
+          out->levelR[countR] = signR * ampR;
         }
         set_tap(t.right[countR++], (int)blendPosR, widthR, signR * envR);
         sumR += envR * envR * width_energy(widthR);
@@ -629,7 +631,7 @@ double soemdsp_velvet_reverb_right(int handle) {
 }
 
 int soemdsp_velvet_reverb_version() {
-  return 4; // 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
+  return 5; // 5: the layout level is amplitude only (sign x Amp Decay envelope, no darkness make-up), so darkness never changes the face height. 4: one job per parameter: Taps = the count (Density x Decay no more), Length (decay) only spreads them, Amp Decay = dB at the end of the tail (0 = gated), Density Skew = Step Graph rational warp of the positions; layout exports Right taps too. 3: the layout level carries the tap sign (signL * envL, the same value set_tap gets) so the face can draw a bipolar plot. 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; Density x Decay sets the tap count (no Tap Count); layout export for the face. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
 }
 
 } // extern "C"

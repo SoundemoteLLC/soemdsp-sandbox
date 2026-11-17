@@ -2748,10 +2748,11 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       const divider = type === "clockDividerFace";
       const lamps = [
         ["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"],
-        ["line", clock ? "Pulse" : divider ? "Ring" : "Line", "lineHue", "lineBrightness", "lineSaturation"],
+        // Dark Velvet Reverb tap face: the line lamp only colours the text, so it is "Text".
+        ["line", clock ? "Pulse" : divider ? "Ring" : (type === "pulseTrainFace" && node?.type === "velvetReverb") ? "Text" : "Line", "lineHue", "lineBrightness", "lineSaturation"],
       ];
       // Dark Velvet Reverb tap face (pulseTrainFace look): Background, Line
-      // (zero line + text), Left / Right channel inks; no playhead.
+      // = Text (the readouts), Left / Right channel inks; no playhead.
       const velvetTaps = type === "pulseTrainFace" && node?.type === "velvetReverb";
       if (velvetTaps) {
         lamps.push(["left", "Left", "leftHue", "leftBrightness", "leftSaturation"]);

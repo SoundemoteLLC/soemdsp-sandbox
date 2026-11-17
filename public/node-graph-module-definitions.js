@@ -7081,6 +7081,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["density", "Taps"]], h: 40 },
       { kind: "cells", params: [["decay", "Length", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["densitySkew", "Skew"]], h: 40 },
       { kind: "cells", params: [["darkness", "Darkness"], ["tailDarkness", "Tail Dark"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
@@ -7092,7 +7093,12 @@ const nodeGraphModuleDefinitions = (
     // Same look settings as the Pulse Train face; Dot size 0 by default (stems only).
     layout: "pulseCurve",
     displayType: "pulseTrainFace",
-    defaultDisplaySettings: { dotThickness: 0 },
+    // Left #FF7171 / Right #5454F9 as HBS lamps (hue, brightness, saturation; exact).
+    defaultDisplaySettings: {
+      dotThickness: 0,
+      leftHue: 0, leftBrightness: 0.63, leftSaturation: 1,
+      rightHue: 238.5, rightBrightness: 0.59, rightSaturation: 0.96,
+    },
     spectrumCompanion: false,
     displayModes: [
       { key: "face", label: "Taps", renderer: "pulseTrainFace", settingsSchema: "pulseTrainFace" },
@@ -7194,6 +7200,33 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "s",
+      },
+      // Amp Decay (velvet_reverb v4): tap level at the end of the tail, an
+      // exponential fade along Length. 0 dB = flat (a gated reverb), -60 dB = RT60.
+      {
+        defaultValue: "-60",
+        key: "ampDecay",
+        label: "Amp Decay",
+        max: "0",
+        mid: "-30",
+        min: "-96",
+        nonlinearSlider: false,
+        step: "any",
+        unit: "dB",
+      },
+      // Density Skew: where the taps sit along Length (Step Graph rational curve,
+      // segment_rational01 with contour = -skew). + packs them toward the start,
+      // - toward the end; 0 = even. The tap count does not change. At +-1 the
+      // curve's ends put every tap at the start / the end.
+      {
+        defaultValue: "0",
+        key: "densitySkew",
+        label: "Density Skew",
+        max: "1",
+        mid: "0",
+        min: "-1",
+        nonlinearSlider: false,
+        step: "any",
       },
       {
         defaultValue: "1",

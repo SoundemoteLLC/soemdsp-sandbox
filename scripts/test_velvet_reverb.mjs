@@ -19,7 +19,7 @@ for (const i of WebAssembly.Module.imports(mod)) { imports[i.module] ??= {}; imp
 const x = (await WebAssembly.instantiate(mod, imports)).exports;
 
 const FS = 48000;
-check(x.soemdsp_velvet_reverb_version() >= 4, `velvet_reverb version ${x.soemdsp_velvet_reverb_version()}`);
+check(x.soemdsp_velvet_reverb_version() >= 5, `velvet_reverb version ${x.soemdsp_velvet_reverb_version()}`);
 
 // Wet impulse response (Mix 1): impulse on both channels at sample 0.
 const tapsOf = ({ taps, density, decay = 0.025 }) => taps ?? (density ?? 2500) * decay;
@@ -167,6 +167,22 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   check(maxMove < 0.2 / 6, `Skew sweep -0.9..+0.9 in 0.02 steps moves taps smoothly (largest move ${(maxMove * 1000).toFixed(2)} ms)`);
   const e1 = layout({ taps: 64, decay: 0.2, skew: 1 }), e0 = layout({ taps: 64, decay: 0.2, skew: -1 });
   check(e1.count === 64 && e0.count === 64 && e1.pos.every((q) => q < 0.001) && e0.pos.every((q) => q > 0.199 - 1 / FS), `Skew +1 / -1 = the curve's ends: all 64 taps at the start / the end`);
+}
+
+// ---- Face height is amplitude only: sign x the Amp Decay envelope at the pulse
+// centre, with no darkness gain (no 1/width, no Tail Darkness make-up).
+{
+  const opts = { taps: 150, decay: 0.3, amp: -40, seed: 9 };
+  let worst = 0, n = 0;
+  for (const [dark, tail] of [[1, 0], [1, 400], [64, 0], [8, 200]]) {
+    const l = layout({ ...opts, dark, tail });
+    for (let i = 0; i < l.count - 1; i += 1) { // the last tap also carries its fraction
+      const want = Math.pow(10, (opts.amp / 20) * (l.pos[i] + 0.5 * l.width[i]) / l.length);
+      worst = Math.max(worst, Math.abs(Math.abs(l.level[i]) / want - 1));
+      n += 1;
+    }
+  }
+  check(worst < 0.005, `layout amplitude = the Amp Decay envelope at Darkness 1 / 8 / 64 and Tail Darkness 0 / 200 / 400 (${n} taps, worst ${(worst * 100).toFixed(3)}% off)`);
 }
 
 // ---- Deterministic: a pure function of Seed and the settings

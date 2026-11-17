@@ -37,7 +37,13 @@ const loadAndRead = async (patch, label) => {
     const def = nodeGraphModuleDefinitions?.[node?.type]?.defaultDisplaySettings || {};
     const look = normalizeNodeGraphPulseTrainFaceSettings({ ...def, ...(node?.traceDisplaySettings || {}) });
     const lv = lay ? [...lay.level, ...lay.levelR] : [];
-    return { mounted: true, neg: lv.filter((v) => v < 0).length, pos: lv.filter((v) => v > 0).length, dot: look.dotThickness, count: lay?.count ?? -1, length: lay?.length ?? -1, flags: lay?.flags ?? -1, id: el.dataset.node, rect: el.getBoundingClientRect().toJSON() };
+    const n = lay?.count || 0;
+    const mean = n ? Array.from(lay.pos).reduce((a, b) => a + b, 0) / n / lay.length : -1;
+    const q = Math.max(1, Math.floor(n / 10));
+    let first = 0, last = 0;
+    for (let k = 0; k < q && n; k += 1) { first += Math.abs(lay.level[k]); last += Math.abs(lay.level[n - 1 - k]); }
+    const knobs = (nodeGraphModuleDefinitions?.velvetReverb?.parameters || []).filter((p) => p.key === "ampDecay" || p.key === "densitySkew").map((p) => `${p.key} ${p.min}..${p.max} = ${p.defaultValue}`);
+    return { mounted: true, left: look.leftPaint, right: look.rightPaint, mean, endDb: first > 0 ? 20 * Math.log10(last / first) : 0, knobs, neg: lv.filter((v) => v < 0).length, pos: lv.filter((v) => v > 0).length, dot: look.dotThickness, count: lay?.count ?? -1, length: lay?.length ?? -1, flags: lay?.flags ?? -1, id: el.dataset.node, rect: el.getBoundingClientRect().toJSON() };
   }).then((r) => ({ ...r, label }));
 };
 
@@ -55,6 +61,13 @@ check(r2.dot === 0, `bare module: Dot size defaults to ${r2.dot} (0, from defaul
 check(r2.pos > 0 && r2.neg > 0, `bipolar: ${r2.pos} + taps, ${r2.neg} - taps in the face layout`);
 check(r2.mounted && r2.count === 40, `bare module, Taps 40 over Length 0.8 s: face shows ${r2.count} taps (40)`);
 if (SHOT_DIR && r2.mounted) await page.locator(".node-velvet-taps-display").first().screenshot({ timeout: 120000, path: path.join(SHOT_DIR, "velvet_taps_32.png") });
+check(r2.left === "rgb(255 113 113)" && r2.right === "rgb(84 84 249)", `default inks: Left ${r2.left} (#FF7171), Right ${r2.right} (#5454F9)`);
+check(r2.knobs?.length === 2, `definitions carry Amp Decay and Density Skew: ${(r2.knobs || []).join("; ")}`);
+// Tail Darkness off: wider late pulses get their lost energy back, which would tilt the levels.
+const knobbed = { ...bare, nodes: [{ ...bare.nodes[0], params: { ...bare.nodes[0].params, density: 200, tailDarkness: 0, ampDecay: 0, densitySkew: 0.6 } }] };
+const rk = await loadAndRead(knobbed, "knobs");
+check(rk.count === 200 && Math.abs(rk.endDb) < 0.5 && rk.mean < 0.4, `Amp Decay 0 dB + Skew 0.6 on the face: ${rk.count} taps, end ${rk.endDb.toFixed(2)} dB (flat), mean position ${rk.mean.toFixed(3)} of Length (packed early)`);
+if (SHOT_DIR && rk.mounted) await page.locator(".node-velvet-taps-display").first().screenshot({ timeout: 120000, path: path.join(SHOT_DIR, "velvet_taps_knobs.png") });
 const big = { ...bare, nodes: [{ ...bare.nodes[0], params: { density: 20000, decay: 1, darkness: 2, tailDarkness: 0, seed: 5 } }] };
 const r3 = await loadAndRead(big, "big");
 // The Taps definition max is the engine's table (4096), so the knob stops there and no limit flag is needed.
