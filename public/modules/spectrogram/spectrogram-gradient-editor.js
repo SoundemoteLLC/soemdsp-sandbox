@@ -29,11 +29,16 @@
 (function nodeGraphGradientSelectorModule(global) {
   const STYLE_ID = "node-gradient-selector-styles";
 
+  // Classic preset: CIELAB L* climbs nearly linearly under sRGB interpolation.
   const DEFAULT_STOPS = Object.freeze([
     { t: 0, color: "#000000" },
-    { t: 0.25, color: "#000080" },
-    { t: 0.5, color: "#00c0ff" },
-    { t: 0.75, color: "#ffff00" },
+    { t: 0.161, color: "#000391" },
+    { t: 0.319, color: "#0046a3" },
+    { t: 0.44, color: "#007097" },
+    { t: 0.56, color: "#009c27" },
+    { t: 0.639, color: "#77aa00" },
+    { t: 0.72, color: "#dca900" },
+    { t: 0.859, color: "#ffd302" },
     { t: 1, color: "#ffffff" },
   ]);
 
@@ -243,9 +248,22 @@
 
   const PRESETS = Object.freeze([
     {
+      // Black, dark blue, turquoise, light green, yellow, white.
+      // Stop colors and positions keep CIELAB L* nearly linear in sRGB lerp.
       id: "classic",
       label: "classic",
-      colors: ["#000000", "#000080", "#00c0ff", "#ffff00", "#ffffff"],
+      colors: ["#000000", "#000391", "#0046a3", "#007097", "#009c27", "#77aa00", "#dca900", "#ffd302", "#ffffff"],
+      stops: Object.freeze([
+        Object.freeze({ t: 0, color: "#000000" }),
+        Object.freeze({ t: 0.161, color: "#000391" }),
+        Object.freeze({ t: 0.319, color: "#0046a3" }),
+        Object.freeze({ t: 0.44, color: "#007097" }),
+        Object.freeze({ t: 0.56, color: "#009c27" }),
+        Object.freeze({ t: 0.639, color: "#77aa00" }),
+        Object.freeze({ t: 0.72, color: "#dca900" }),
+        Object.freeze({ t: 0.859, color: "#ffd302" }),
+        Object.freeze({ t: 1, color: "#ffffff" }),
+      ]),
     },
     {
       id: "grayscale",
@@ -253,9 +271,20 @@
       colors: ["#000000", "#404040", "#a0a0a0", "#ffffff"],
     },
     {
+      // Black, dark red, red, orange, yellow, white. L* nearly linear in sRGB lerp.
       id: "hot",
       label: "hot",
-      colors: ["#000000", "#7f0000", "#ff0000", "#ffff00", "#ffffff"],
+      colors: ["#000000", "#570400", "#ae0100", "#ff0000", "#ff6416", "#ff8f00", "#ffd302", "#ffffff"],
+      stops: Object.freeze([
+        Object.freeze({ t: 0, color: "#000000" }),
+        Object.freeze({ t: 0.161, color: "#570400" }),
+        Object.freeze({ t: 0.36, color: "#ae0100" }),
+        Object.freeze({ t: 0.532, color: "#ff0000" }),
+        Object.freeze({ t: 0.62, color: "#ff6416" }),
+        Object.freeze({ t: 0.701, color: "#ff8f00" }),
+        Object.freeze({ t: 0.859, color: "#ffd302" }),
+        Object.freeze({ t: 1, color: "#ffffff" }),
+      ]),
     },
     {
       id: "inferno",
