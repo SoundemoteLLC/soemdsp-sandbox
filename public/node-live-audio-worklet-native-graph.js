@@ -300,6 +300,8 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_ACID_STEP0 = 420;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_STEP_REG_STEP0 = 460;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_STURMIAN_PATTERN = 420;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_STURMIAN_RESET = 421;
+NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_STURMIAN_PITCH_SOURCE = 422;
+NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_STURMIAN_PITCH_RANGE = 423;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_WAVEFORM = 11;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_AMPLITUDE = 12;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_SHAPE = 13;
@@ -531,6 +533,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "view") return P.NATIVE_GRAPH_PARAM_MODE;
     if (k === "cell") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
     if (k === "semitoneOffset") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
+    if (k === "pitchSource") return P.NATIVE_GRAPH_PARAM_STURMIAN_PITCH_SOURCE;
+    if (k === "pitchRange") return P.NATIVE_GRAPH_PARAM_STURMIAN_PITCH_RANGE;
     return undefined;
   }
   if (t === "pitchQuantizer") {
@@ -7833,6 +7837,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("cell", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("cell", 14));
       push("stepPattern", P.NATIVE_GRAPH_PARAM_STURMIAN_PATTERN, disc("stepPattern", 3170));
       push("semitoneOffset", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, disc("semitoneOffset", 0));
+      push("pitchSource", P.NATIVE_GRAPH_PARAM_STURMIAN_PITCH_SOURCE, disc("pitchSource", 0));
+      push("pitchRange", P.NATIVE_GRAPH_PARAM_STURMIAN_PITCH_RANGE, disc("pitchRange", 21));
       continue;
     }
     if (type === "blitTrigger") {
@@ -11122,7 +11128,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         || type === "clockDivider" || type === "triggerDivider"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
-    if (type === "sturmianGrid") ports.push(P.NATIVE_GRAPH_PORT_PHASE01);
+    if (type === "sturmianGrid") ports.push(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_TRI);
     if (type === "stepRegister") ports.push(P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_PHASE01);
     if (type === "pitchManager") ports.push(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW);
     if (type === "blitTrigger") ports.push(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_PHASE01);

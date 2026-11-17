@@ -44,6 +44,7 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     // there is no separate View Plane control.
     parameterRows: [
       ["rate", "semitoneOffset"],
+      ["pitchSource", "pitchRange"],
       ["alpha", "beta", "rho"],
       ["drift"],
       ["steps", "reset"],
@@ -55,6 +56,10 @@ registerNodeGraphChromelessModule("sturmianGrid", {
       { key: "rate", label: "Rate", defaultValue: "8", min: "0", max: "20000", mid: "8", step: "any", nonlinearSlider: true, linearSmoothing: false, kind: "frequency", unit: "Hz" },
       // Same convention as Pitch Quantizer / Acid Sequencer: integer st, -48..+48.
       { key: "semitoneOffset", label: "Semitone Offset", defaultValue: "0", min: "-48", mid: "0", max: "48", step: "1", nonlinearSlider: false, linearSmoothing: false, showSign: true, unit: "st" },
+      // Classic (default) is the original floor(x*10) pentatonic map, span 21 st.
+      // Tile / Height / X are scale-agnostic; patch ♯/♭ into Pitch Quantizer for scales.
+      { key: "pitchSource", label: "Pitch Source", defaultValue: "0", min: "0", max: "3", mid: "0", step: "1", nonlinearSlider: false, linearSmoothing: false, choices: ["Classic", "Tile", "Height", "X"], displayChoices: true },
+      { key: "pitchRange", label: "Pitch Range", defaultValue: "21", min: "0", max: "48", mid: "21", step: "1", nonlinearSlider: false, linearSmoothing: false, unit: "st" },
       { key: "alpha", label: "α", defaultValue: "0.2955977425", min: "0.001", max: "0.999", mid: "0.3", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
       { key: "beta", label: "β", defaultValue: "0.1607132448", min: "0.001", max: "0.999", mid: "0.2", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
       { key: "rho", label: "ρ", defaultValue: "0", min: "0", max: "1", mid: "0.5", step: "0.0001", nonlinearSlider: false, linearSmoothing: false, wraparound: true },
@@ -74,7 +79,7 @@ registerNodeGraphChromelessModule("sturmianGrid", {
   },
   catalog: {
     category: "Sequence",
-    description: "A compact 2D Sturmian grid with four trigger lanes, a pentatonic pitch output, and ƒ in Hz. Patch it into separate sound modules.",
+    description: "A compact 2D Sturmian grid with four trigger lanes, a melody pitch output, and ƒ in Hz. Patch it into separate sound modules.",
     notes: ["sturmian", "grid", "sequence", "kick trigger", "snare trigger", "hat trigger", "melody trigger", "pitch", "frequency", "webgl"],
   },
 });

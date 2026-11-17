@@ -63,11 +63,14 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
   float fy = mod(gridY, cell);
   float gridW = cols * cell;
   float gridH = rows * cell;
-  if (cell >= 8.0 && (mod(devX, cellDev) < pr || (gridY < gridH && mod(devY, cellDev) < pr)))
-    base = mix(base, vec3(0.0), 0.45);
+  // 1 CSS-pixel gutters (left/top of each cell, plus the outer right/bottom).
+  // Painted last as solid black so tile red/blue and lane edges cannot bleed.
+  bool gutter = fx < 1.0 || fy < 1.0 || gridX >= gridW - 1.0 || gridY >= gridH - 1.0;
   float barX0 = padLeft * cellDev;
   float barX1 = (padLeft + playCols) * cellDev;
-  if (((devX >= barX0 && devX < barX0 + pr) || (devX >= barX1 && devX < barX1 + pr))
+  // Sounding-bar bounds sit just inside the gutter so the dashed line stays visible.
+  if (!gutter && ((devX >= barX0 + pr && devX < barX0 + 2.0 * pr)
+      || (devX >= barX1 - 2.0 * pr && devX < barX1 - pr))
       && mod(devY, 8.0 * pr) < 4.0 * pr)
     base = mix(base, vec3(1.0), 0.35);
   for (int track = 0; track < 4; track++) {
@@ -76,16 +79,23 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
     if (!inBar) continue;
     bool muted = mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5;
     vec3 tc = muted ? vec3(0.55) : laneColor(track);
-    bool edge = (devX >= barX0 && devX < barX0 + 2.0 * pr)
-      || (devX >= barX1 - 2.0 * pr && devX < barX1)
-      || mod(devY, cellDev) < 2.0 * pr
-      || mod(devY, cellDev) >= cellDev - 2.0 * pr;
-    if (edge) base = mix(base, tc, 0.85);
+    // Inset 1 CSS px so lane rims stay off the black gutter.
+    bool edge = (fx >= 1.0 && fx < 2.0)
+      || (fx >= cell - 1.0 && fx < cell)
+      || (fy >= 1.0 && fy < 2.0)
+      || (fy >= cell - 1.0 && fy < cell);
+    if (!gutter && edge) base = mix(base, tc, 0.85);
   }
-  if (playing > 0.5 && abs(m - playStep) < 0.5) {
-    base = mix(base, vec3(1.0), 0.16);
-    if (mod(devX, cellDev) < pr || mod(devX, cellDev) >= cellDev - pr
-        || devY < pr || devY >= floor(gridH * pr + 1e-4) - pr) base = vec3(1.0);
+  // Playhead: sounding-bar column (m = col - padLeft), full face height, inset
+  // so the white frame is inside the cell, not on the gutter.
+  bool playCol = playing > 0.5 && inBar && abs(m - playStep) < 0.5;
+  if (playCol && !gutter) {
+    base = mix(base, vec3(1.0), 0.22);
+    bool frame = (fx >= 1.0 && fx < 2.0)
+      || (fx >= cell - 1.0 && fx < cell)
+      || (gridY >= 1.0 && gridY < 2.0)
+      || (gridY >= gridH - 1.0 && gridY < gridH);
+    if (frame) base = vec3(1.0);
     if (trackHit >= 0) {
       if (mod(floor(mask / exp2(float(12 + trackHit))), 2.0) < 0.5
           && mod(floor(mask / exp2(float(trackHit * 3) + tile)), 2.0) > 0.5
@@ -93,12 +103,13 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
         base = mix(laneColor(trackHit), base, 0.15);
     }
   }
-  // Hit flash: lit when this column just fired, fading over one beat.
-  if (flashAmt > 0.0 && abs(m - flashStep) < 0.5 && trackHit >= 0
+  // Hit flash: lit when this column just fired, fading over one beat, inset.
+  if (!gutter && flashAmt > 0.0 && abs(m - flashStep) < 0.5 && trackHit >= 0
       && mod(floor(flashMask / exp2(float(trackHit))), 2.0) > 0.5
-      && fx >= 1.0 && fx < cell - 1.0 && fy >= 1.0 && fy < cell - 1.0) {
+      && fx >= 2.0 && fx < cell - 2.0 && fy >= 2.0 && fy < cell - 2.0) {
     base = mix(base, vec3(1.0), 0.55 * flashAmt);
     base = mix(base, laneColor(trackHit), 0.35 * flashAmt);
   }
+  if (gutter) base = vec3(0.0);
   out_color = vec4(base, 1.0);
 }
