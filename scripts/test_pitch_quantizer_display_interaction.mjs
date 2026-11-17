@@ -272,11 +272,38 @@ assert(
 
 const idleCs = paint(cSharp, 0, null);
 const liveCs = paint(cSharp, 0, 1);
-assert(lum(liveCs.top) < lum(idleCs.top) && lum(liveCs.bottom) < lum(idleCs.bottom), "live sharp is darker than its light idle pad");
+assert(lum(liveCs.top) < lum(idleCs.top) && lum(liveCs.bottom) < lum(idleCs.bottom), "live sharp is darker than its dim idle pad");
 assert(liveCs.stroke > 0, "live sharp keeps a dark ring");
 assert(
   JSON.stringify(paint(cSharp, 0, 0)) === JSON.stringify(idleCs),
   "a live natural does not darken a neighboring sharp",
 );
 
-console.log("ok  pitch quantizer WebGL face: shared keyboard keys, inverted palette, live key-on, no rogue DOM");
+const colorDelta = (a, b) => ({
+  dl: Math.abs(lum(a) - lum(b)),
+  dc: Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]),
+});
+const enCs = paint(cSharp, 1 << 1, null);
+const idleNatDelta = colorDelta(enC.top, idleC.top);
+assert(
+  idleNatDelta.dl >= 0.35 || idleNatDelta.dc >= 0.5,
+  "enabled vs disabled natural is strongly distinct (luminance or color)",
+);
+assert(tealBias(enC) >= 0.4, "enabled natural fill is solid bright teal");
+assert(lum(idleC.top) <= 0.15, "disabled natural is near-black");
+const idleSharpDelta = colorDelta(enCs.top, idleCs.top);
+assert(
+  idleSharpDelta.dl >= 0.25 || idleSharpDelta.dc >= 0.45,
+  "enabled vs disabled sharp is strongly distinct (luminance or color)",
+);
+assert(tealBias(enCs) >= 0.4, "enabled sharp fill is solid bright teal");
+assert(tealBias(idleCs) < 0.08 && lum(idleCs.top) < 0.55, "disabled sharp is dim desaturated grey");
+assert(enCs.stroke > 0, "enabled sharp keeps the electric teal stroke");
+
+assert(typeof ctx.nodeGraphPitchQuantizerFacePaintSig === "function", "paint signature helper is exported");
+const sigOf = (mask) => ctx.nodeGraphPitchQuantizerFacePaintSig(280, 100, 1, mask, false, null);
+assert(sigOf(C_MAJOR) !== sigOf(C_MAJOR ^ (1 << 0)), "toggling a natural must change the paint signature");
+assert(sigOf(C_MAJOR) !== sigOf(C_MAJOR ^ (1 << 1)), "toggling a sharp must change the paint signature");
+assert(sigOf(C_MAJOR) === sigOf(C_MAJOR), "unchanged mask keeps the same paint signature");
+
+console.log("ok  pitch quantizer WebGL face: shared keyboard keys, high-contrast enabled, live key-on, no rogue DOM");

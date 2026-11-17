@@ -21,28 +21,28 @@ const NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK = Object.freeze({
   plateStroke: [0.498, 0.780, 0.851, 0.28],
   plateStrokeJacked: [0.89, 0.36, 0.36, 0.8],
   seam: [0.01960784, 0.02352941, 0.02745098, 0.72],
-  // Natural (formerly white) keys: dark pads, Keyboard-style top-to-bottom gradient.
-  naturalFill: [0.071, 0.086, 0.102, 1],
-  naturalTop: [0.118, 0.141, 0.161, 1],
-  naturalBottom: [0.071, 0.086, 0.102, 1],
-  naturalStroke: [0.173, 0.208, 0.227, 1],
-  naturalLabel: [0.55, 0.62, 0.65, 1],
-  // Sharp (formerly black) keys: light pads, same gradient shape.
-  sharpFill: [0.773, 0.808, 0.827, 1],
-  sharpTop: [0.890, 0.910, 0.922, 1],
-  sharpBottom: [0.773, 0.808, 0.827, 1],
-  sharpStroke: [0.55, 0.60, 0.63, 1],
-  sharpLabel: [0.086, 0.102, 0.118, 1],
-  // Enabled notes: electric teal accent, flat glow (outset rect, not radial).
+  // Disabled naturals: near-black pads, Keyboard-style top-to-bottom gradient.
+  naturalFill: [0.035, 0.040, 0.046, 1],
+  naturalTop: [0.070, 0.078, 0.086, 1],
+  naturalBottom: [0.035, 0.040, 0.046, 1],
+  naturalStroke: [0.12, 0.14, 0.15, 1],
+  naturalLabel: [0.42, 0.46, 0.48, 1],
+  // Disabled sharps: dim desaturated grey, still lighter than naturals.
+  sharpFill: [0.28, 0.30, 0.32, 1],
+  sharpTop: [0.40, 0.42, 0.44, 1],
+  sharpBottom: [0.28, 0.30, 0.32, 1],
+  sharpStroke: [0.18, 0.20, 0.21, 1],
+  sharpLabel: [0.10, 0.11, 0.12, 1],
+  // Enabled notes: solid bright teal fill plus electric stroke, flat glow.
   electric: [0.239, 1, 0.816, 1],
-  electricFillNatural: [0.055, 0.184, 0.173, 1],
-  electricFillSharp: [0.847, 1, 0.965, 1],
-  electricTopNatural: [0.090, 0.310, 0.270, 1],
-  electricBottomNatural: [0.055, 0.184, 0.173, 1],
-  electricTopSharp: [0.92, 1, 0.98, 1],
-  electricBottomSharp: [0.847, 1, 0.965, 1],
-  electricLabelNatural: [0.91, 1, 0.985, 1],
-  electricLabelSharp: [0.024, 0.133, 0.118, 1],
+  electricFillNatural: [0.12, 0.78, 0.62, 1],
+  electricFillSharp: [0.16, 0.85, 0.68, 1],
+  electricTopNatural: [0.22, 0.98, 0.80, 1],
+  electricBottomNatural: [0.12, 0.78, 0.62, 1],
+  electricTopSharp: [0.28, 1.00, 0.84, 1],
+  electricBottomSharp: [0.16, 0.85, 0.68, 1],
+  electricLabelNatural: [0.02, 0.10, 0.08, 1],
+  electricLabelSharp: [0.02, 0.10, 0.08, 1],
   glow: [0.239, 1, 0.816, 0.28],
   glowOuter: [0.239, 1, 0.816, 0.10],
 });
@@ -189,8 +189,9 @@ function nodeGraphPitchQuantizerDarkenRgba(rgba, amount) {
 }
 
 /**
- * Keyboard-shaped look tables for the shared state-paint path. Idle and
- * enabled (teal / in-scale) each have a base plus an inverted "blue"
+ * Keyboard-shaped look tables for the shared state-paint path. Idle
+ * (disabled: near-black naturals, dim grey sharps) and enabled (solid
+ * bright teal fill plus stroke) each have a base plus an inverted "blue"
  * (active) slot: where Keyboard brightens a sounding key, these darken it
  * and add a dark ring so the live class stays distinct from the teal.
  */
@@ -265,6 +266,11 @@ function nodeGraphPitchQuantizerLivePitchClass(nodeId) {
   const pitch = Number(nodeGraphModuleScopeLatestOutputValue(nodeId, "pitch", Number.NaN));
   if (!Number.isFinite(pitch)) return null;
   return (((Math.round(pitch) % 12) + 12) % 12);
+}
+
+function nodeGraphPitchQuantizerFacePaintSig(bw, bh, strokeDev, mask, jacked, livePc) {
+  const liveSig = livePc == null ? "-" : String(livePc);
+  return `${Math.max(1, bw | 0)}x${Math.max(1, bh | 0)}:s${Math.max(1, strokeDev | 0)}:m${mask}:j${jacked ? 1 : 0}:p${liveSig}`;
 }
 
 function nodeGraphPitchQuantizerKeyPaint(key, mask, livePc) {
@@ -419,8 +425,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     const bw = Math.max(1, m.width);
     const bh = Math.max(1, m.height);
     const strokeDev = Math.max(1, Math.round(dpr));
-    const liveSig = livePc == null ? "-" : String(livePc);
-    const sig = `${bw}x${bh}:s${strokeDev}:m${mask}:j${jacked ? 1 : 0}:p${liveSig}`;
+    const sig = nodeGraphPitchQuantizerFacePaintSig(bw, bh, strokeDev, mask, jacked, livePc);
     if (sig === lastSig) return;
     lastSig = sig;
     const batch = typeof nodeGraphGlLinesBegin === "function"
