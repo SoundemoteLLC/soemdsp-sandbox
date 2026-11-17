@@ -1226,6 +1226,9 @@ function nodeGraphViewportCullMustStayAwake(elementOrNodeId) {
   if (typeof nodeGraphMiniPerformPresentsNode === "function" && nodeGraphMiniPerformPresentsNode(nodeId)) {
     return true; // Mini Performance View is showing it.
   }
+  if (typeof nodeGraphModuleFacePagePresentsNode === "function" && nodeGraphModuleFacePagePresentsNode(nodeId)) {
+    return true; // Command Center Module page is showing its display.
+  }
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   if (
     patchNode

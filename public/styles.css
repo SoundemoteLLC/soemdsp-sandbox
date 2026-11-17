@@ -25910,6 +25910,122 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
   inset: 0;
   width: 100%;
   height: 100%;
+
+/* Module page (Command Center nav): the selected module's controls as mirror
+   readouts on its own slider inputs. Same shell as the Emoji / Pencil pages. */
+.node-module-face-page {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: var(--node-unified-window-min-width, 24px);
+  min-height: var(--node-unified-window-min-height, 120px);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(127, 199, 217, 0.42);
+  border-radius: var(--node-module-frame-radius);
+  corner-shape: var(--node-module-corner-shape, squircle);
+  background: rgba(9, 12, 15, 0.96);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+}
+
+.node-module-face-page[hidden] {
+  display: none !important;
+}
+
+/* One row per module face row: its controls side by side, in face order. */
+.node-module-face-page-row {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.node-module-face-page-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 14px;
+}
+
+.node-module-face-page-empty {
+  margin: 12px 4px;
+  color: rgba(207, 221, 229, 0.62);
+  font-size: 0.8rem;
+}
+
+#nodeModuleFacePage .node-module-face-page-row > .node-slider-readout {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  height: var(--node-slider-readout-height, 30px);
+  min-height: var(--node-slider-readout-height, 30px);
+  max-height: none;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(to right,
+      transparent var(--value-start, 0px),
+      var(--node-slider-position-color, rgb(68 164 255 / 0.37)) var(--value-start, 0px),
+      var(--node-slider-position-color, rgb(68 164 255 / 0.37)) var(--value-end, 0px),
+      transparent var(--value-end, 0px)),
+    var(--node-slider-amount-color, hsl(200 31% 15% / 0.55));
+}
+
+#nodeModuleFacePage .node-module-face-page-row > .node-slider-readout .node-slider-readout-label {
+  color: var(--node-slider-label-color, #cfdde5);
+}
+
+#nodeModuleFacePage .node-module-face-page-row > .node-slider-readout .node-slider-readout-value {
+  color: var(--node-slider-value-color, #ffffff);
+}
+
+#nodeModuleFacePage .node-module-face-page-row > .node-slider-readout .node-slider-readout-unit {
+  color: var(--node-slider-unit-color, #7fc7d9);
+}
+
+.node-module-face-page-display {
+  flex: 0 0 auto;
+  padding: 8px 10px 0;
+}
+
+.node-module-face-page-display[hidden] {
+  display: none;
+}
+
+.node-module-face-page-display-canvas {
+  display: block;
+  margin: 0 auto;
+  touch-action: none;
+}
+
+.node-module-face-page-display-canvas[hidden],
+.node-module-face-page-face[hidden] {
+  display: none;
+}
+
+/* Sliders hidden: the module's one-module GL pass, one band per host. */
+.node-module-face-page-face {
+  display: block;
+  touch-action: none;
+}
+
+.node-module-face-page-face-band {
+  position: relative;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.node-module-face-page-face-band > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
   pointer-events: none;
   z-index: 5;
   mix-blend-mode: screen;

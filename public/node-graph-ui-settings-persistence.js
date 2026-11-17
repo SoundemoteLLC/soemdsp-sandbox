@@ -24,6 +24,7 @@ const nodeGraphWorkspaceWindowStateKeys = Object.freeze([
   "emoji",
   "pencil",
   "miniPerform",
+  "moduleFace",
 ]);
 
 const nodeGraphWorkspaceWindowElements = Object.freeze({
@@ -43,6 +44,7 @@ const nodeGraphWorkspaceWindowElements = Object.freeze({
   emoji: "nodeEmojiPage",
   pencil: "nodePencilPage",
   miniPerform: "nodeMiniPerformPage",
+  moduleFace: "nodeModuleFacePage",
 });
 
 const nodeGraphSharedInspectorWindowKeys = Object.freeze([

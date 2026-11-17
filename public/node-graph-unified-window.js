@@ -46,6 +46,14 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     icon: "🎛️",
     showInNav: true,
   }),
+  moduleFace: Object.freeze({
+    key: "moduleFace",
+    elementId: "nodeModuleFacePage",
+    workspaceKey: "moduleFace",
+    label: "Module",
+    icon: "\uD83D\uDD79\uFE0F",
+    showInNav: true,
+  }),
   pages: Object.freeze({
     key: "pages",
     elementId: "nodePagesPage",
@@ -133,6 +141,7 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
 const nodeGraphUnifiedWindowPageOrder = Object.freeze([
   "commandCenter",
   "moduleBrowser",
+  "moduleFace",
   "pages",
   "moduleActions",
   "traceDisplaySettings",
@@ -500,6 +509,8 @@ function applyNodeGraphUnifiedWindowSize(element, pageKey = "", size = null) {
     applyNodeGraphEmojiPageSize(box, element);
   } else if (key === "pencil" && typeof applyNodeGraphPencilPageSize === "function") {
     applyNodeGraphPencilPageSize(box, element);
+  } else if (key === "moduleFace" && typeof applyNodeGraphModuleFacePageSize === "function") {
+    applyNodeGraphModuleFacePageSize(box, element);
   } else if (key === "uiSettings" && typeof applyNodeUserUiSettingsWindowSize === "function") {
     applyNodeUserUiSettingsWindowSize(box, element);
   }
@@ -639,6 +650,11 @@ function closeNodeGraphUnifiedWindowPage(page = "", options = {}) {
       case "pages":
         if (typeof setNodeGraphPagesPageOpen === "function") {
           setNodeGraphPagesPageOpen(false);
+        }
+        break;
+      case "moduleFace":
+        if (typeof setNodeGraphModuleFacePageOpen === "function") {
+          setNodeGraphModuleFacePageOpen(false);
         }
         break;
       default:
@@ -951,6 +967,11 @@ function openNodeGraphUnifiedWindowPage(page = "", options = {}) {
       case "pages":
         if (typeof setNodeGraphPagesPageOpen === "function") {
           setNodeGraphPagesPageOpen(true);
+        }
+        break;
+      case "moduleFace":
+        if (typeof setNodeGraphModuleFacePageOpen === "function") {
+          setNodeGraphModuleFacePageOpen(true);
         }
         break;
       default:
@@ -1643,6 +1664,17 @@ function syncNodeGraphUnifiedWindowNavBars() {
       page: "emoji",
       prepare(element) {
         const existing = element.querySelector("#nodeEmojiUnifiedNavHost, :scope > .node-unified-window-nav-host");
+        if (existing) {
+          return existing;
+        }
+        return ensureNodeGraphUnifiedWindowNavHost(element);
+      },
+    },
+    {
+      elementId: "nodeModuleFacePage",
+      page: "moduleFace",
+      prepare(element) {
+        const existing = element.querySelector("#nodeModuleFaceUnifiedNavHost, :scope > .node-unified-window-nav-host");
         if (existing) {
           return existing;
         }
