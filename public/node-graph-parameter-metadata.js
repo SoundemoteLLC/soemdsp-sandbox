@@ -593,6 +593,8 @@ function nodeGraphParameterDefinitionMetadata(parameter) {
     // MOD always clamps to min…max (except "use real mod values"); no per-param opt-out.
     // Resource params use constraint cpu|gpu|ram; wraparound always wraps.
     hardClamp: Boolean(parameter.hardClamp),
+    // Absolute limit above the (spawn) slider max for resource-clamped params.
+    hardMax: parameter.hardMax,
     // VCA multiply opt-in/out for native Control flags (Softwave Amp opts out).
     modMultiply: Object.hasOwn(parameter, "modMultiply")
       ? Boolean(parameter.modMultiply)
@@ -982,6 +984,8 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
     hardClamp: Object.hasOwn(source, "hardClamp")
       ? Boolean(source.hardClamp)
       : Boolean(fallback.hardClamp),
+    // The definition's absolute limit wins over a saved copy.
+    hardMax: fallback.hardMax ?? source.hardMax,
     modMultiply: (() => {
       if (Object.hasOwn(source, "modMultiply")) return Boolean(source.modMultiply);
       if (Object.hasOwn(fallback, "modMultiply")) return Boolean(fallback.modMultiply);

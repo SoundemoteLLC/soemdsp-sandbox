@@ -62,6 +62,18 @@ static inline double segment_rational01(double p, double contour) {
     : p / (1.0 - c + c * p);
 }
 
+// Bipolar rational: segment_rational01 mirrored about the middle (odd around
+// p = 0.5, so 0.5 maps to 0.5). contour 0 = identity; contour < 0 flattens the
+// middle (inputs near 0.5 stay near it), contour > 0 steepens it. The same
+// shape as the Additive Graph / XY Pad "bipolarRational" curve.
+static inline double segment_bipolar_rational01(double p, double contour) {
+  p = clamp01(p);
+  const double u = p * 2.0 - 1.0;
+  const double a = u < 0.0 ? -u : u;
+  const double r = segment_rational01(a, contour);
+  return ((u < 0.0 ? -r : r) + 1.0) * 0.5;
+}
+
 static inline double segment_exponential01(double p, double contour) {
   p = clamp01(p);
   const double t = segment_contour_soft_cap(contour);
@@ -143,6 +155,7 @@ using soemdsp::math::segment_shape_normalize;
 using soemdsp::math::segment_apply_skew_percent;
 using soemdsp::math::segment_contour_soft_cap;
 using soemdsp::math::segment_rational01;
+using soemdsp::math::segment_bipolar_rational01;
 using soemdsp::math::segment_exponential01;
 using soemdsp::math::segment_logarithmic01;
 using soemdsp::math::segment_smoothstep01;

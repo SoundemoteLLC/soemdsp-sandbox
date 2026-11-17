@@ -110,10 +110,14 @@ function nodeGraphParamApplyDomainBounds(value, metadata = {}) {
   if (!nodeGraphParamShouldHardClampDomain(meta)) {
     return n;
   }
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+  // hardMax: the absolute limit when the slider (spawn) max is lower, so typed
+  // values past the slider still work up to it (Dark Velvet Reverb Taps).
+  const hardMax = Number(meta.hardMax);
+  const top = Number.isFinite(hardMax) && hardMax > max ? hardMax : max;
+  if (!Number.isFinite(min) || !Number.isFinite(top) || top <= min) {
     return n;
   }
-  return nodeGraphParamClamp(n, min, max);
+  return nodeGraphParamClamp(n, min, top);
 }
 
 /**

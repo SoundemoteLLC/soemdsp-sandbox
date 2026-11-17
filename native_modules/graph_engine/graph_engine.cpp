@@ -779,7 +779,7 @@ extern "C" double soemdsp_velvet_noise_trigger_pos(int handle);
 extern "C" double soemdsp_velvet_noise_trigger_neg(int handle);
 extern "C" int soemdsp_velvet_noise_version();
 
-extern "C" int soemdsp_velvet_reverb_create();
+extern "C" int soemdsp_velvet_reverb_create(double sampleRate);
 extern "C" void soemdsp_velvet_reverb_destroy(int handle);
 extern "C" void soemdsp_velvet_reverb_reset(int handle);
 extern "C" void soemdsp_velvet_reverb_set_seed(int handle, double seed);
@@ -5642,7 +5642,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeFilterMorphOscillator) return soemdsp_filter_morph_oscillator_create();
   if (typeId == kTypeFluvNoise) return soemdsp_fluv_noise_create();
   if (typeId == kTypeVelvetNoise) return soemdsp_velvet_noise_create();
-  if (typeId == kTypeVelvetReverb) return soemdsp_velvet_reverb_create();
+  if (typeId == kTypeVelvetReverb) return soemdsp_velvet_reverb_create((double)sampleRate);
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
   if (typeId == kTypeSoftpopFilter) return soemdsp_softpop_filter_create();
   if (typeId == kTypeSoftpop2) return soemdsp_softpop2_create();

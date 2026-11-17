@@ -13,9 +13,10 @@
 // overlap / union area), the same blend the stereo scopes use. Spread 0 = the
 // channels are identical, so every pulse is white. Darker (wider) pulses draw
 // dimmer: ink x 1/w (the audio's pulse gain), floored at 0.2.
-// Text: the tap count ("64 taps"; "4096 taps max" past the engine's table) and
-// the tail length ("25.0 ms"; "5.46 s max" when the delay line holds a longer
-// Length). The held length also draws a mark: a full-height bar at the right
+// Text: the tap count ("64 taps"; "48 / 64 taps" when taps that would bunch up
+// under the cell floor are not used; "4096 taps max" past the engine's table) and
+// the tail length ("25.0 ms"; "... s max" only when the delay line truly cannot
+// hold the Length; it holds the definition max at any sample rate). The held length also draws a mark: a full-height bar at the right
 // end (the tap table limit shows as "max" in the text only).
 // The layout comes from velvet_reverb.wasm (soemdsp_velvet_reverb_layout: the
 // same build_table the audio uses) and is rebuilt only when a setting changes.
@@ -33,7 +34,7 @@ function nodeGraphVelvetTapsLoad() {
   if (nodeGraphVelvetTapsWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphVelvetTapsWasm.promise;
   }
-  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5")
+  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1")
     .then((response) => {
       if (!response.ok) throw new Error(`velvet_reverb wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -113,6 +114,9 @@ function nodeGraphVelvetTapsLayout(section, node) {
     flags: x.soemdsp_velvet_reverb_layout_flags() | 0,
     sampleRate: sr,
     paused: !(args[0] > 0),
+    // What Taps asks for (whole taps, up to the table). Fewer play where they
+    // would bunch under the cell floor (flag 4): the text reads "48 / 64 taps".
+    setting: Math.max(1, Math.ceil(Math.min(Number(args[0]) || 0, x.soemdsp_velvet_reverb_max_taps?.() || 4096) - 1e-6)),
   };
   section._velvetTapsKey = key;
   section._velvetTapsLayout = layout;
@@ -159,7 +163,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
   if (layout) {
     const countText = layout.paused
       ? "paused"
-      : `${layout.count} ${layout.count === 1 ? "tap" : "taps"}${layout.flags & 1 ? " max" : ""}`;
+      : `${layout.count}${layout.count < layout.setting ? ` / ${layout.setting}` : ""} ${layout.setting === 1 ? "tap" : "taps"}${layout.flags & 1 ? " max" : ""}`;
     const lenText = layout.paused ? "" : `${nodeGraphVelvetTapsSeconds(layout.length)}${layout.flags & 2 ? " max" : ""}`;
     const measure = (t, px) => (typeof nodeGraphGlLinesMeasureText === "function" ? nodeGraphGlLinesMeasureText(t, px) : t.length * px * 0.6);
     let px = textPx;

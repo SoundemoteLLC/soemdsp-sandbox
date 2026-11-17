@@ -38,7 +38,8 @@ const loadAndRead = async (patch, label) => {
     const look = normalizeNodeGraphPulseTrainFaceSettings({ ...def, ...(node?.traceDisplaySettings || {}) });
     const lv = lay ? [...lay.level, ...lay.levelR] : [];
     const n = lay?.count || 0;
-    const mean = n ? Array.from(lay.pos).reduce((a, b) => a + b, 0) / n / lay.length : -1;
+    // Mean distance from the middle of the tail (0.25 when even; Skew + packs toward the middle).
+    const mean = n ? Array.from(lay.pos).reduce((a, b) => a + Math.abs(b / lay.length - 0.5), 0) / n : -1;
     const q = Math.max(1, Math.floor(n / 10));
     let first = 0, last = 0;
     for (let k = 0; k < q && n; k += 1) { first += Math.abs(lay.level[k]); last += Math.abs(lay.level[n - 1 - k]); }
@@ -66,12 +67,17 @@ check(r2.knobs?.length === 2, `definitions carry Amp Decay and Density Skew: ${(
 // Tail Darkness off: wider late pulses get their lost energy back, which would tilt the levels.
 const knobbed = { ...bare, nodes: [{ ...bare.nodes[0], params: { ...bare.nodes[0].params, density: 200, tailDarkness: 0, ampDecay: 0, densitySkew: 0.6 } }] };
 const rk = await loadAndRead(knobbed, "knobs");
-check(rk.count === 200 && Math.abs(rk.endDb) < 0.5 && rk.mean < 0.4, `Amp Decay 0 dB + Skew 0.6 on the face: ${rk.count} taps, end ${rk.endDb.toFixed(2)} dB (flat), mean position ${rk.mean.toFixed(3)} of Length (packed early)`);
+check(rk.count === 200 && Math.abs(rk.endDb) < 0.5 && rk.mean < 0.2, `Amp Decay 0 dB + Skew 0.6 on the face: ${rk.count} taps, end ${rk.endDb.toFixed(2)} dB (flat), mean distance ${rk.mean.toFixed(3)} of Length from the middle (packed toward it)`);
 if (SHOT_DIR && rk.mounted) await page.locator(".node-velvet-taps-display").first().screenshot({ timeout: 120000, path: path.join(SHOT_DIR, "velvet_taps_knobs.png") });
 const big = { ...bare, nodes: [{ ...bare.nodes[0], params: { density: 20000, decay: 1, darkness: 2, tailDarkness: 0, seed: 5 } }] };
 const r3 = await loadAndRead(big, "big");
-// The Taps definition max is the engine's table (4096), so the knob stops there and no limit flag is needed.
-check(r3.mounted && r3.count === 4096 && !(r3.flags & 1), `Taps 20000 typed: the definition max holds it at ${r3.count} taps (limit flag ${r3.flags & 1})`);
+// Taps: spawn slider max 300, hardMax = the engine's table (4096); a typed value past the slider max
+// still works and stops at hardMax, so no limit flag is needed.
+{
+  const tapsDef = await page.evaluate(() => (nodeGraphModuleDefinitions?.velvetReverb?.parameters || []).find((p) => p.key === "density"));
+  check(tapsDef?.max === "300" && tapsDef?.hardMax === "4096", `Taps spawn max ${tapsDef?.max}, hardMax ${tapsDef?.hardMax}`);
+}
+check(r3.mounted && r3.count === 4096 && !(r3.flags & 1), `Taps 20000 typed: past the 300 slider max, hardMax holds it at ${r3.count} taps (limit flag ${r3.flags & 1})`);
 if (SHOT_DIR && r3.mounted) await page.locator(".node-velvet-taps-display").first().screenshot({ timeout: 120000, path: path.join(SHOT_DIR, "velvet_taps_max.png") });
 const newErrors = errors.slice(before);
 check(newErrors.length === 0, `no page errors (${newErrors.slice(0, 3).join(" | ")})`);

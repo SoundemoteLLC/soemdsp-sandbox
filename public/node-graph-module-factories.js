@@ -949,6 +949,12 @@ function createNodeGraphParameter(node, type, parameter) {
   if (metadata?.hardClamp || parameter.hardClamp) {
     input.dataset.hardClamp = "true";
   }
+  // hardMax: the absolute limit of a resource-constrained param when its slider
+  // (spawn) max is lower; typed values clamp there instead of at the slider max.
+  {
+    const hardMax = Number(parameter.hardMax ?? metadata?.hardMax);
+    if (Number.isFinite(hardMax)) input.dataset.hardMax = String(hardMax);
+  }
   input.dataset.domainValue = String(seedValue);
   applyNodeGraphInputUnboundedValue(input, seedValue);
   input.setAttribute("aria-label", `${nodeGraphNodeLabels[type]} ${parameter.label}`);

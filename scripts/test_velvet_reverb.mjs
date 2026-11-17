@@ -19,13 +19,13 @@ for (const i of WebAssembly.Module.imports(mod)) { imports[i.module] ??= {}; imp
 const x = (await WebAssembly.instantiate(mod, imports)).exports;
 
 const FS = 48000;
-check(x.soemdsp_velvet_reverb_version() >= 5, `velvet_reverb version ${x.soemdsp_velvet_reverb_version()}`);
+check(x.soemdsp_velvet_reverb_version() >= 6, `velvet_reverb version ${x.soemdsp_velvet_reverb_version()}`);
 
 // Wet impulse response (Mix 1): impulse on both channels at sample 0.
 const tapsOf = ({ taps, density, decay = 0.025 }) => taps ?? (density ?? 2500) * decay;
 function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, n } = {}) {
   const T = tapsOf({ taps, density, decay });
-  const h = x.soemdsp_velvet_reverb_create();
+  const h = x.soemdsp_velvet_reverb_create(FS);
   if (!h) throw new Error("create failed");
   x.soemdsp_velvet_reverb_set_seed(h, seed);
   const len = n ?? Math.ceil(decay * FS) + 2048;
@@ -106,13 +106,16 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   }
   check(lens[0] < lens[1] && lens[1] < lens[2], `more Length = longer tail: ${lens.map((v) => v.toFixed(3)).join(" < ")} s`);
   const counts = [[50, 0.5], [50, 5], [62.5, 0.025], [64, 0.001], [33.3, 1], [1, 0.2]].map(([taps, decay]) => [taps, layout({ taps, decay }).count]);
-  check(counts.every(([want, got]) => got === Math.ceil(want - 1e-9)), `tap count = ceil(Taps) at any Length: ${counts.map(([w, g]) => `${w}->${g}`).join(", ")}`);
+  // ceil(Taps), unless the Length cannot give every tap a 4-sample cell (the cell floor): 64 in 1 ms keep 12.
+  const wantOf = (taps, decay) => Math.ceil(Math.min(taps, Math.max(1, decay * FS) / 4) - 1e-9);
+  const want = [[50, 0.5], [50, 5], [62.5, 0.025], [64, 0.001], [33.3, 1], [1, 0.2]].map(([t, d]) => wantOf(t, d));
+  check(counts.every(([, got], i) => got === want[i]), `tap count = ceil(Taps) at any Length, held by the cell floor only where it must: ${counts.map(([w, g]) => `${w}->${g}`).join(", ")}`);
   const a = nonzeroStarts(ir({ taps: 80, decay: 0.2, dark: 1 }).L), b = nonzeroStarts(ir({ taps: 80, decay: 2, dark: 1, n: 2 * FS + 2048 }).L);
   check(Math.abs(a - 80) <= 3 && Math.abs(b - 80) <= 3, `Length does not add taps: 80 taps -> ${a} onsets over 0.2 s, ${b} over 2 s`);
   const lay = layout({ taps: 20000, decay: 1 });
   check(lay.count === x.soemdsp_velvet_reverb_max_taps() && (lay.flags & 1), `past the engine's ${x.soemdsp_velvet_reverb_max_taps()} taps the layout says so (count ${lay.count}, flags ${lay.flags})`);
-  const lay2 = layout({ taps: 100, decay: 10 });
-  check((lay2.flags & 2) && lay2.length < 5.5 && lay2.length > 5.4, `a Length past the delay line is held there and flagged (${lay2.length.toFixed(3)} s, flags ${lay2.flags})`);
+  const lay2 = layout({ taps: 100, decay: 30 });
+  check((lay2.flags & 2) && lay2.length < 13.5 && lay2.length > 12, `only a Length that truly cannot fit (30 s, past the definition max) is held and flagged (${lay2.length.toFixed(3)} s, flags ${lay2.flags})`);
   const lay3 = layout({ taps: 120, decay: 0.4, dark: 5 });
   check(lay3.count === 120 && lay3.flags === 0 && lay3.pos.every((p, i) => i === 0 || p >= lay3.pos[i - 1] - 0.4 / 120) && lay3.pos[lay3.count - 1] < 0.4 && lay3.width.every((wd) => wd * FS >= 1 && wd * FS <= 5), "layout: 120 taps inside 0.4 s, widths 1..5 samples");
   const r3 = ir({ taps: 120, decay: 0.4, dark: 5 }).L;
@@ -148,25 +151,30 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   check(worst < 0.5, `Amp Decay is exponential (dB falls linearly with time): worst ${worst.toFixed(3)} dB off at Darkness 1`);
 }
 
-// ---- Density Skew: Step Graph rational warp of the positions, count unchanged
+// ---- Density Skew: Step Graph bipolar rational warp of the positions
 {
-  const meanPos = (skew) => { const l = layout({ taps: 200, decay: 1, skew }); return [l.count, l.pos.reduce((p, q) => p + q, 0) / l.count / l.length]; };
+  // Mean distance from the middle of the tail (0.25 when even).
+  const meanPos = (skew) => { const l = layout({ taps: 200, decay: 1, skew }); return [l.count, l.pos.reduce((p, q) => p + Math.abs(q / l.length - 0.5), 0) / l.count]; };
   const [c0, m0] = meanPos(0), [cp, mp] = meanPos(0.6), [cn, mn] = meanPos(-0.6);
   check(c0 === 200 && cp === 200 && cn === 200, `Density Skew leaves the tap count alone (${c0}, ${cp}, ${cn})`);
-  check(Math.abs(m0 - 0.5) < 0.03 && mp < 0.4 && mn > 0.6, `+ packs taps toward the start, - toward the end: mean position ${mp.toFixed(3)} / ${m0.toFixed(3)} / ${mn.toFixed(3)} of Length`);
+  check(Math.abs(m0 - 0.25) < 0.03 && mp < 0.2 && mn > 0.3, `+ packs taps toward the middle, - toward both ends: mean distance from the middle ${mp.toFixed(3)} / ${m0.toFixed(3)} / ${mn.toFixed(3)} of Length`);
   const l1 = layout({ taps: 100, decay: 0.5, skew: 0.5 }), l2 = layout({ taps: 100, decay: 0.5, skew: 0.5, amp: 0 });
   check(l1.pos.every((p, i) => p === l2.pos[i]), "Density Skew and Amp Decay are independent (same positions at any Amp Decay)");
   let prev = null, maxMove = 0;
-  // The rational curve's ends (+-1) pack every tap onto the start / the end, so
-  // the last steps there are steep; smoothness is checked over -0.9 .. +0.9.
+  // The definition range is -0.9..+0.9 (off the curve's steep ends).
   for (let k = 0; k <= 90; k += 1) {
     const l = layout({ taps: 64, decay: 0.2, skew: -0.9 + k * 0.02 });
     if (prev) for (let i = 0; i < l.count; i += 1) maxMove = Math.max(maxMove, Math.abs(l.pos[i] - prev.pos[i]));
     prev = l;
   }
   check(maxMove < 0.2 / 6, `Skew sweep -0.9..+0.9 in 0.02 steps moves taps smoothly (largest move ${(maxMove * 1000).toFixed(2)} ms)`);
-  const e1 = layout({ taps: 64, decay: 0.2, skew: 1 }), e0 = layout({ taps: 64, decay: 0.2, skew: -1 });
-  check(e1.count === 64 && e0.count === 64 && e1.pos.every((q) => q < 0.001) && e0.pos.every((q) => q > 0.199 - 1 / FS), `Skew +1 / -1 = the curve's ends: all 64 taps at the start / the end`);
+  const e1 = layout({ taps: 64, decay: 0.2, skew: 0.9 }), e0 = layout({ taps: 64, decay: 0.2, skew: -0.9 });
+  // The bipolar curve is odd about the middle: +-0.9 mirror each other's spacing pattern.
+  const mean = (a) => a.reduce((p, q) => p + q, 0) / Math.max(1, a.length);
+  check(Math.abs(mean(e1.pos) - 0.1) < 0.01 && Math.abs(mean(e0.pos) - 0.1) < 0.02, `Skew +-0.9 stay centred on the tail (${(mean(e1.pos) * 1000).toFixed(1)} / ${(mean(e0.pos) * 1000).toFixed(1)} ms, ${e1.count} / ${e0.count} taps)`);
+  const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+  const sk = defs.slice(defs.indexOf('key: "densitySkew",'), defs.indexOf('key: "densitySkew",') + 200);
+  check(/max: "0.9"/.test(sk) && /min: "-0.9"/.test(sk), "Density Skew definition range is -0.9..+0.9");
 }
 
 // ---- Face height is amplitude only: sign x the Amp Decay envelope at the pulse
@@ -238,7 +246,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const noiseIn = (n, seed) => { let s = seed >>> 0 || 1; const a = new Float64Array(n); for (let i = 0; i < n; i += 1) { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; a[i] = (s / 4294967296) * 2 - 1; } return a; };
   const input = noiseIn(FS, 7);
   const level = (dark) => {
-    const h = x.soemdsp_velvet_reverb_create(); x.soemdsp_velvet_reverb_set_seed(h, 3);
+    const h = x.soemdsp_velvet_reverb_create(FS); x.soemdsp_velvet_reverb_set_seed(h, 3);
     let e = 0;
     for (let i = 0; i < input.length; i += 1) { const v = x.soemdsp_velvet_reverb_sample(h, input[i], input[i], 256, dark, 1, 1, FS, 0.1, 0, -60, 0); if (i > FS / 4) e += v * v; }
     x.soemdsp_velvet_reverb_destroy(h);
@@ -279,6 +287,82 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   check(lay.countR === lay.count && tR > lay.countR * 0.9 && mR === tR, `Right layout = Right impulse response (positions and signs, ${mR}/${tR})`);
   const mono = layout({ ...opts, spread: 0 });
   check(mono.posR.every((p, i) => p === mono.pos[i]) && mono.levelR.every((v, i) => v === mono.level[i]), "Spread 0: Right taps = Left taps (the face draws them white)");
+}
+
+// ---- Cell floor: taps that would bunch up are not used (fewer taps, never stacked)
+{
+  const floorOf = (w) => Math.max(4, w);
+  for (const skew of [-0.9, -0.6, 0.6, 0.9]) {
+    const lay = layout({ taps: 4096, decay: 0.05, skew, dark: 1 });
+    let shared = 0, overlap = 0, close2 = 0;
+    for (let i = 1; i < lay.count; i += 1) {
+      const a = Math.round(lay.pos[i - 1] * FS), b = Math.round(lay.pos[i] * FS);
+      if (b <= a) shared += 1;
+      if (lay.pos[i] * FS < lay.pos[i - 1] * FS + Math.floor(lay.width[i - 1] * FS + 1e-9) - 1e-6) overlap += 1; // whole samples (a fractional end sample may touch the next start)
+      // A whole cell lies between taps i-2 and i, so they are at least a floor apart.
+      if (i >= 2 && b - Math.round(lay.pos[i - 2] * FS) < floorOf(1) - 1) close2 += 1;
+    }
+    check(lay.count < 4096 && (lay.flags & 4) && shared === 0 && overlap === 0 && close2 === 0,
+      `Skew ${skew}, 4096 taps in 50 ms: ${lay.count} / 4096 taps play (flag ${lay.flags}), none share a sample (${shared}), none overlap (${overlap}), every cell >= the 4-sample floor (${close2} short)`);
+  }
+  const dense = layout({ taps: 64, decay: 0.025, skew: 0.9 });
+  const plain = layout({ taps: 64, decay: 0.025, skew: 0 });
+  check(dense.count < 64 && plain.count === 64 && !(plain.flags & 4), `Taps 64 / 25 ms: Skew 0.9 plays ${dense.count} / 64, Skew 0 all ${plain.count}`);
+  // Smooth: the kept count moves continuously with Skew (the last tap fades in).
+  let jump = 0, prevN = null;
+  const counts = [];
+  for (let k = 0; k <= 200; k += 1) {
+    const lay = layout({ taps: 256, decay: 0.05, skew: -0.9 + k * 0.009 });
+    counts.push(lay.count);
+    if (prevN !== null) jump = Math.max(jump, Math.abs(lay.count - prevN));
+    prevN = lay.count;
+  }
+  // Continuous, but steep near the ends (the curve itself is): no more than 3% of the taps per step.
+  check(jump <= 8, `Skew -0.9..0.9 (256 taps, 50 ms): the played count steps by at most ${jump} per 0.009 (${Math.min(...counts)}..${Math.max(...counts)})`);
+  const steps = [];
+  let prev = null;
+  for (let k = 0; k <= 100; k += 1) {
+    const r = ir({ taps: 256, decay: 0.05, skew: 0.5 + k * 0.004, n: 3000 }).L;
+    if (prev) steps.push(dist(prev, r));
+    prev = r;
+  }
+  const med = [...steps].sort((p, q) => p - q)[steps.length >> 1];
+  check(Math.max(...steps) < 6 * med + 1e-9, `audio: Skew 0.5..0.9 sweep through the thinning has no pop (largest step ${Math.max(...steps).toFixed(4)} vs median ${med.toFixed(4)})`);
+  // Darker pulses need wider cells: Darkness 32 keeps fewer of the same taps.
+  const dark = layout({ taps: 256, decay: 0.05, dark: 32 });
+  check(dark.count < 256 && dark.count >= 70 && dark.count <= 80, `Darkness 32: 256 taps in 50 ms keep ${dark.count} (2400 samples / 32-sample cells = 75)`);
+}
+
+// ---- 12 s Length: the delay line is sized from the sample rate, so it always fits
+{
+  const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+  const vr = defs.slice(defs.indexOf("\n  velvetReverb: {"));
+  const dec = vr.slice(vr.indexOf('key: "decay",') - 200, vr.indexOf('key: "decay",') + 400);
+  const defMax = Number(/max: "([^"]+)"/.exec(dec.slice(dec.indexOf('key: "decay",')))?.[1]);
+  check(defMax === 12 && x.soemdsp_velvet_reverb_max_length() === defMax, `Length definition max ${defMax} s = the delay line's design length ${x.soemdsp_velvet_reverb_max_length()} s`);
+  const fits = [44100, 48000, 96000, 192000].map((sr) => {
+    const count = x.soemdsp_velvet_reverb_layout(64, 1024, 1, sr, 12, 1024, 1, -60, 0);
+    return [sr, count, x.soemdsp_velvet_reverb_layout_length(), x.soemdsp_velvet_reverb_layout_flags()];
+  });
+  check(fits.every(([, c, len, fl]) => c === 64 && Math.abs(len - 12) < 1e-9 && fl === 0), `12 s with the widest pulses (Darkness / Tail Darkness 1024) fits unflagged at ${fits.map(([sr, c, len, fl]) => `${sr / 1000} kHz (${c} taps, ${len} s, flags ${fl})`).join(", ")}`);
+  const mb = (sr) => x.soemdsp_velvet_reverb_block_bytes(sr) / 1e6;
+  console.log(`     memory per instance: ${mb(44100).toFixed(1)} MB at 44.1 kHz, ${mb(48000).toFixed(1)} MB at 48 kHz, ${mb(96000).toFixed(1)} MB at 96 kHz, ${mb(192000).toFixed(1)} MB at 192 kHz`);
+  check(mb(96000) < 2.1 * mb(48000) && mb(48000) < 25, `memory follows the sample rate (${mb(48000).toFixed(1)} / ${mb(96000).toFixed(1)} MB at 48 / 96 kHz)`);
+  // The audio holds a tap near 12 s: impulse response energy right before the end.
+  const { L } = ir({ taps: 64, decay: 12, amp: 0, n: 12 * FS + 2048 });
+  let last = 0;
+  for (let i = 0; i < L.length; i += 1) if (L[i] !== 0) last = i;
+  check(last / FS > 11.5 && last / FS <= 12 + 0.01, `audio: the last tap of a 12 s tail plays at ${(last / FS).toFixed(3)} s`);
+  // A 96 kHz instance holds 12 s too (the line grows with the rate it is created at).
+  const h = x.soemdsp_velvet_reverb_create(96000);
+  let lastHi = 0;
+  for (let i = 0; i < 12 * 96000 + 4096; i += 1) {
+    const v = i === 0 ? 1 : 0;
+    const o = x.soemdsp_velvet_reverb_sample(h, v, v, 32, 1, 1, 1, 96000, 12, 0, 0, 0);
+    if (o !== 0) lastHi = i;
+  }
+  x.soemdsp_velvet_reverb_destroy(h);
+  check(lastHi / 96000 > 11 && lastHi / 96000 <= 12.01, `96 kHz: the last tap of a 12 s tail plays at ${(lastHi / 96000).toFixed(3)} s`);
 }
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }

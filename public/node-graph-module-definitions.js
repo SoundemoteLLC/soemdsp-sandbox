@@ -7079,11 +7079,12 @@ const nodeGraphModuleDefinitions = (
   },
   velvetReverb: {
     face: [
-      { kind: "cells", params: [["density", "Taps"]], h: 40 },
+      // Amp Decay sits left of Darkness, Tail Dark under Darkness; Skew is a horizontal slider like Length.
+      { kind: "cells", params: [["density", "Taps"], ["mix", "Mix"]], h: 40 },
       { kind: "cells", params: [["decay", "Length", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["densitySkew", "Skew"]], h: 40 },
-      { kind: "cells", params: [["darkness", "Darkness"], ["tailDarkness", "Tail Dark"]], h: 40 },
-      { kind: "cells", params: [["stereoSpread", "Spread"], ["mix", "Mix"]], h: 40 },
+      { kind: "cells", params: [["densitySkew", "Skew", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["ampDecay", "Amp Decay"], ["darkness", "Darkness"]], h: 40 },
+      { kind: "cells", params: [["stereoSpread", "Spread"], ["tailDarkness", "Tail Dark"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "processor",
@@ -7119,14 +7120,17 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       // Taps (velvet_reverb v4): how many taps; Length only spreads them. Key stays
       // "density" (engine slot). Continuous: the last tap fades in by its fraction.
-      // 0 pauses (the reverb keeps the taps it has). Max = the engine's tap table.
+      // 0 pauses (the reverb keeps the taps it has). max = the spawn slider max
+      // (user-editable, like Clock Rate's 999); hardMax = the engine's tap table,
+      // the absolute limit a typed value or an edited range can reach.
       {
         defaultValue: "64",
         // Cost is O(taps) per sample: mark for the CPU debug overlay.
         constraint: "cpu",
+        hardMax: "4096",
         key: "density",
         label: "Taps",
-        max: "4096",
+        max: "300",
         mid: "64",
         min: "0",
         nonlinearSlider: true,
@@ -7185,15 +7189,16 @@ const nodeGraphModuleDefinitions = (
         tooltip: "RNG seed for tap positions, signs, and pulse widths. Same seed = identical taps."
       },
       // Length (velvet_reverb v4; key stays "decay"): the tail in seconds the Taps
-      // spread over, so longer = sparser, not more taps. The delay line holds
-      // about 5.4 s at 48 kHz (2.7 s at 96 kHz); a longer Length is held there
-      // (the face marks it).
+      // spread over, so longer = sparser, not more taps. This max is the source of
+      // truth: the native delay line is sized from the sample rate to hold it plus
+      // the widest pulse (velvet_reverb v6, kMaxLengthSeconds, checked by
+      // test_velvet_reverb.mjs), so every Length here fits at any rate.
       {
         defaultValue: "0.025",
         key: "decay",
         kind: "time",
         label: "Length",
-        max: "5",
+        max: "12",
         maxDigits: 5,
         mid: "0.5",
         min: "0.001",
@@ -7214,17 +7219,18 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         unit: "dB",
       },
-      // Density Skew: where the taps sit along Length (Step Graph rational curve,
-      // segment_rational01 with contour = -skew). + packs them toward the start,
-      // - toward the end; 0 = even. The tap count does not change. At +-1 the
-      // curve's ends put every tap at the start / the end.
+      // Density Skew: where the taps sit along Length (Step Graph bipolar
+      // rational curve, segment_bipolar_rational01 with contour = -skew).
+      // + packs them toward the middle of the tail, - toward both ends; 0 = even.
+      // -0.9..0.9 keeps it off the curve's steep ends. Taps that would bunch
+      // closer than the cell floor are not used (the face reads "48 / 64 taps").
       {
         defaultValue: "0",
         key: "densitySkew",
         label: "Density Skew",
-        max: "1",
+        max: "0.9",
         mid: "0",
-        min: "-1",
+        min: "-0.9",
         nonlinearSlider: false,
         step: "any",
       },

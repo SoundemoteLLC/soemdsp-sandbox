@@ -589,6 +589,10 @@ function normalizeNodeSliderValue(slider, value, min = Number(slider.min), max =
   if (!hard) {
     return value;
   }
+  // A definition hardMax (absolute limit) above the slider max wins: typed
+  // values past the spawn slider max still work up to it.
+  const hardMax = Number(slider?.dataset?.hardMax);
+  if (Number.isFinite(hardMax) && hardMax > max) max = hardMax;
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
     return value;
   }
