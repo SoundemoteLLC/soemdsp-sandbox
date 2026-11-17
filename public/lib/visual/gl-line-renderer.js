@@ -2505,6 +2505,31 @@ void main() {
     gl.uniform1i(s.imgTexLoc, 0);
   }
 
+  function nodeGraphGlLinesSnapImageQuad(batch, im) {
+    const src = im?.source;
+    const snap = Boolean(src && (src.dataset?.pixelSnap === "1" || src.classList?.contains("display-canvas-pixel-snap")));
+    if (!snap) return { x0: im.x, y0: im.y, x1: im.x + im.w, y1: im.y + im.h };
+    const cam = batch.camera;
+    if (cam) {
+      const z = cam.zoom > 0 ? cam.zoom : 1;
+      const dev = batch.scale > 0 ? batch.scale : 1;
+      const k = z * dev;
+      const sx0 = Math.round((im.x - (cam.x || 0)) * k);
+      const sy0 = Math.round((im.y - (cam.y || 0)) * k);
+      const sw = Math.max(1, Math.round(im.w * k));
+      const sh = Math.max(1, Math.round(im.h * k));
+      return {
+        x0: (cam.x || 0) + sx0 / k,
+        y0: (cam.y || 0) + sy0 / k,
+        x1: (cam.x || 0) + (sx0 + sw) / k,
+        y1: (cam.y || 0) + (sy0 + sh) / k,
+      };
+    }
+    const x0 = Math.round(im.x);
+    const y0 = Math.round(im.y);
+    return { x0, y0, x1: x0 + Math.max(1, Math.round(im.w)), y1: y0 + Math.max(1, Math.round(im.h)) };
+  }
+
   function drawImages(batch, alphaDst) {
     const { s, w, h } = batch;
     const gl = s.gl;
@@ -2567,7 +2592,8 @@ void main() {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.uniform1f(s.imgAlphaLoc, im.alpha);
-      const x0 = im.x; const x1 = im.x + im.w; const y0 = im.y; const y1 = im.y + im.h;
+      const snapped = nodeGraphGlLinesSnapImageQuad(batch, im);
+      const x0 = snapped.x0; const x1 = snapped.x1; const y0 = snapped.y0; const y1 = snapped.y1;
       if (im.tint) {
         const t = im.tint;
         const q = scratch(s, "quadScratch", 48);
