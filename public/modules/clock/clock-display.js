@@ -7,6 +7,9 @@
 // (dot), Fill, Start (phase-start marker), Blink (playhead + start marker flash on gate rise) HBS;
 // Line thickness (gate + playhead), Start thickness, Blink time (0 = off),
 // Height (% of the face height the gate spans, centered).
+// The face is also the Pulse Width control: drag an end of the gate to move
+// Pulse Start or Pulse End, or inside it to move both (same params and law as
+// the Pulse Width band, so either one follows the other).
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
 
 const nodeGraphClockFaceDisplaySettingsDefaults = Object.freeze({
@@ -275,6 +278,78 @@ function drawNodeGraphClockFace(section) {
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "clock face: GL present failed");
 }
 
+/**
+ * What a press at u (0..1 across the cycle) grabs, by the Pulse Width band's
+ * rule on the face axis, where the gate wraps with Phase: inside the gate and
+ * clear of its ends moves both ("span"), otherwise the nearer end ("lo" =
+ * Pulse Start, "hi" = Pulse End). edge is the end grab width, 0..1.
+ */
+function nodeGraphClockFaceGrabMode(u, gateStart, gateEnd, edge) {
+  const inside = gateEnd >= gateStart
+    ? u > gateStart + edge && u < gateEnd - edge
+    : u > gateStart + edge || u < gateEnd - edge;
+  if (inside) return "span";
+  return Math.abs(u - gateStart) <= Math.abs(u - gateEnd) ? "lo" : "hi";
+}
+
+/**
+ * Drag on the face edits Pulse Start / Pulse End through their own sliders,
+ * exactly as the Pulse Width band does: an end of the gate moves that end, the
+ * inside moves both (each end clamps on its own), right or up raises, the
+ * shared fine/coarse modifiers scale the drag, Ctrl/Cmd+click resets both.
+ * Limits come from the param definitions; the gate is redrawn from the params.
+ */
+function nodeGraphClockFaceInstallGateDrag(section) {
+  section.style.touchAction = "none";
+  section.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    const article = section.closest(".dsp-node");
+    const lo = nodeGraphModuleFaceInput(article, "pulseStart");
+    const hi = nodeGraphModuleFaceInput(article, "pulseEnd");
+    const node = nodeGraphPatchNode(section.dataset.node || "");
+    if (!lo || !hi || !node) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // The gate where the face draws it (see drawNodeGraphClockFace).
+    const clamp01 = (v) => Math.max(0, Math.min(1, v));
+    const wrapPhase = (v) => v - Math.floor(v);
+    const startPhase = wrapPhase(nodeGraphClockFaceParam(node, "phase", 0));
+    const pulseStart = clamp01(nodeGraphClockFaceParam(node, "pulseStart", 0));
+    const pulseEnd = clamp01(nodeGraphClockFaceParam(node, "pulseEnd", 0.5));
+    const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd);
+    const gateStart = endless ? 0 : wrapPhase(pulseStart - startPhase);
+    let gateEnd = endless ? 1 : wrapPhase(pulseEnd - startPhase);
+    if (!endless && gateEnd === 0 && gateStart > 0) gateEnd = 1;
+    const look = nodeGraphClockFaceSettingsForNode(node);
+    const p = nodeGraphModuleFaceLocalPoint(section, event);
+    const g = nodeGraphClockFaceGeometry(section.offsetWidth, section.offsetHeight, 0, 1, look.lineThickness, look.gateHeight);
+    const span = Math.max(1, g.x1 - g.x0);
+    const mode = nodeGraphClockFaceGrabMode((p.x - g.x0) / span, gateStart, gateEnd, NODE_GRAPH_FACE_BAND_HANDLE_PX / span);
+    const tl = nodeGraphModuleFaceTravel(lo);
+    const th = nodeGraphModuleFaceTravel(hi);
+    const set = (input, t, drag) => setNodeGraphModuleFaceValue(input, nodeSliderValueFromTravel(input, t), drag);
+    const resetOnClick = nodeGraphNumericResetClickModifier(event);
+    const captureOpts = resetOnClick
+      ? { resetOnClick: true, onReset: () => nodeGraphModuleFaceResetWidget(article, { type: "band", lo: "pulseStart", hi: "pulseEnd" }) }
+      : {};
+    let lx = event.clientX;
+    let ly = event.clientY;
+    let ax = 0;
+    let ay = 0;
+    nodeGraphModuleFaceCapture(section, event, (ev, drag) => {
+      const k = nodeGraphNumericDragMultiplier(ev);
+      ax += (ev.clientX - lx) * p.sx * k;
+      ay += (ev.clientY - ly) * p.sy * k;
+      lx = ev.clientX;
+      ly = ev.clientY;
+      const du = (ax - ay) / span;
+      if (mode !== "hi") set(lo, clamp01(tl + du), drag);
+      if (mode !== "lo") set(hi, clamp01(th + du), drag);
+      section._clockForceDraw = true;
+    }, captureOpts);
+  });
+}
+
 function createNodeGraphClockFace(nodeId, type = "clock") {
   const id = nodeId && typeof nodeId === "object" ? String(nodeId.dataset?.node || nodeId.id || "") : String(nodeId || "");
   const section = document.createElement("section");
@@ -283,6 +358,7 @@ function createNodeGraphClockFace(nodeId, type = "clock") {
   section.dataset.nodeType = String(type || "clock");
   section.dataset.parameterVisual = "true";
   section.append(nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-clock-canvas"));
+  nodeGraphClockFaceInstallGateDrag(section);
   nodeGraphInstallDrawingFacePump(section, {
     clockKey: (el) => `clock:${el.dataset?.node || ""}`,
     forceKey: "_clockForceDraw",
