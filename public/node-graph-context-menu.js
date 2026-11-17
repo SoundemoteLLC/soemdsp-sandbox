@@ -2222,8 +2222,8 @@ function configureNodeSceneContextMenu(mode) {
       toggleCollapsedButton.removeAttribute("aria-disabled");
       setVisLines(toggleCollapsedButton, collapsedNow, "Collapsed");
       toggleCollapsedButton.title = collapsedNow
-        ? "Expand this module (show title, display, buttons, I/O, sliders)."
-        : "Collapse this module (hide display, title, buttons, I/O, sliders).";
+        ? "Expand this module."
+        : "Collapse this module (hide the body; other hide settings stay as they are).";
     }
     toggleTitleButton.disabled = multiModuleMode ? !selectedNodes.length : !targetNode;
     setVisLines(toggleTitleButton, multiTitleHidden, "Title");

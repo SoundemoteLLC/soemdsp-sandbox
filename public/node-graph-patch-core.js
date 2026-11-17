@@ -852,6 +852,7 @@ function validateNodeGraphPatch(patch) {
       || ui.oscilloscopeForceShow
       || ui.slidersHidden
       || ui.slidersForceShow
+      || ui.collapsed
       || ui.displayHeightOffsetGu
       || ui.displayHeightGu
     ) {

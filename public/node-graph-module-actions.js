@@ -3458,6 +3458,7 @@ function applyNodeGraphPatchNodeUi(targetNode, ui) {
     || normalizedUi.oscilloscopeForceShow
     || normalizedUi.slidersHidden
     || normalizedUi.slidersForceShow
+    || normalizedUi.collapsed
     || hasFaceSize
   ) {
     targetNode.ui = normalizedUi;
@@ -3498,28 +3499,8 @@ function toggleNodeGraphModuleCollapsedFromContext() {
     if (already === wantCollapsed) {
       continue;
     }
-    ui.titleHidden = wantCollapsed;
-    ui.buttonsHidden = wantCollapsed;
-    ui.ioHidden = wantCollapsed;
-    if (typeof nodeGraphModuleTypeHasHideableSliders === "function"
-      && nodeGraphModuleTypeHasHideableSliders(targetNode.type)) {
-      ui.slidersHidden = wantCollapsed;
-    }
-    if (typeof nodeGraphPatchNodeHasHideableOscilloscope === "function"
-      && nodeGraphPatchNodeHasHideableOscilloscope(targetNode)) {
-      const next = typeof nodeGraphPatchNodeUiSetSectionWantHidden === "function"
-        ? nodeGraphPatchNodeUiSetSectionWantHidden(
-          ui,
-          "oscilloscope",
-          wantCollapsed,
-          nodeGraphMvp.moduleOscilloscopesVisible,
-        )
-        : ui;
-      next.oscilloscopeHidden = wantCollapsed;
-      applyNodeGraphPatchNodeUi(targetNode, next);
-    } else {
-      applyNodeGraphPatchNodeUi(targetNode, ui);
-    }
+    ui.collapsed = wantCollapsed;
+    applyNodeGraphPatchNodeUi(targetNode, ui);
     changedCount += 1;
   }
   if (changedCount) {

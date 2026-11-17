@@ -90,6 +90,9 @@ function normalizeNodeGraphPatchNodeUi(ui = {}, type = "") {
       ? false
       : Boolean(source.slidersForceShow || source.slidersShown),
     titleHidden,
+    // Independent of the per-section hide flags. Collapse hides the body
+    // visually; uncollapse restores those flags unchanged.
+    collapsed: Boolean(source.collapsed),
   };
   // Layout canvas pin and whole-module tile (node-graph-screen-solo.js) survive load/save.
   if (source.showInCanvas) normalized.showInCanvas = true;
@@ -882,7 +885,7 @@ function cloneNodeGraphPatch(patch) {
               },
           }
           : {}),
-        ...(ui.buttonsHidden || ui.buttonsForceShow || ui.ioHidden || ui.hideUnused || ui.modRailAlwaysOn || ui.interfaceControlsHidden || ui.interfaceControlsForceShow || ui.movementLocked || ui.titleHidden || ui.oscilloscopeHidden || ui.oscilloscopeForceShow || ui.slidersHidden || ui.slidersForceShow || ui.displayHeightOffsetGu || ui.displayHeightGu || ui.showInCanvas || ui.canvasWholeModule ? { ui } : {}),
+        ...(ui.buttonsHidden || ui.buttonsForceShow || ui.ioHidden || ui.hideUnused || ui.modRailAlwaysOn || ui.interfaceControlsHidden || ui.interfaceControlsForceShow || ui.movementLocked || ui.titleHidden || ui.oscilloscopeHidden || ui.oscilloscopeForceShow || ui.slidersHidden || ui.slidersForceShow || ui.collapsed || ui.displayHeightOffsetGu || ui.displayHeightGu || ui.showInCanvas || ui.canvasWholeModule ? { ui } : {}),
       };
     }),
     requiredAssets: typeof nodeGraphRequiredAssetsForPatch === "function"
