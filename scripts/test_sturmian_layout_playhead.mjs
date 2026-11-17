@@ -93,7 +93,9 @@ const reg = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmia
 assert(reg.includes("planScopeCapture: true"), "register opts into scope capture");
 assert(reg.includes('["reset", "walk", "snap"]'), "Reset After stays in the param band");
 assert(ui.includes('kind === "reset"') && ui.includes("resetCellSize"), "Reset After drag cell on the strip");
-assert(glsl.includes("sturmianGlyphSpan(14, 15, 4, 15, 16, 5"), "reset label uses strip glyphs");
+assert(glsl.includes("l0 = 14") && glsl.includes("sturmianFitScale"), "reset label uses fitting strip glyphs");
+assert(glsl.includes("cell >= 16.0"), "gutters only when the cell is at least 16px");
+assert(glsl.includes("labelCount = 1") && glsl.includes("labelCount = 0"), "RESET compact forms: R+value then value only");
 const plan = fs.readFileSync(path.join(root, "public/node-graph-execution-plan.js"), "utf8");
 assert(plan.includes("planScopeCapture"), "execution plan honors planScopeCapture");
 

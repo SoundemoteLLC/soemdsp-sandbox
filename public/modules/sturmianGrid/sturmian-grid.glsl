@@ -129,10 +129,10 @@ int sturmianDigitGlyph(int d) {
   return 0;
 }
 
-bool sturmianGlyphSpan(int c0, int c1, int c2, int c3, int c4, int count, vec2 p, float scale) {
+bool sturmianGlyphSpan(int c0, int c1, int c2, int c3, int c4, int count, vec2 p, float scale, float gap) {
   if (scale < 0.5 || count <= 0) return false;
-  float advance = 6.0 * scale;
-  float width = float(count) * 5.0 * scale + float(count > 1 ? count - 1 : 0) * scale;
+  float advance = 5.0 * scale + gap;
+  float width = float(count) * 5.0 * scale + float(count > 1 ? count - 1 : 0) * gap;
   if (p.x < 0.0 || p.y < 0.0 || p.x >= width || p.y >= 7.0 * scale) return false;
   int i = int(floor(p.x / advance));
   if (i < 0 || i >= count) return false;
@@ -142,6 +142,12 @@ bool sturmianGlyphSpan(int c0, int c1, int c2, int c3, int c4, int count, vec2 p
   else if (i == 3) code = c3;
   else if (i == 4) code = c4;
   return sturmianGlyphAt(code, vec2(p.x - float(i) * advance, p.y), scale);
+}
+
+// Largest whole-pixel glyph scale that fits needW x needH into avail. 0 if even 1x overflows.
+float sturmianFitScale(float availW, float availH, float needW, float needH) {
+  if (needW < 1.0 || needH < 1.0 || availW < 1.0 || availH < 1.0) return 0.0;
+  return max(0.0, min(floor(availW / needW), floor(availH / needH)));
 }
 
 // --- MAIN ---
@@ -211,13 +217,15 @@ if (inGrid) {
   fy = mod(gridY, cell);
   float gridW = cols * cell;
   float gridSpanH = rows * cell;
-  // 1-texel gutters: left/top of each cell plus the outer right/bottom.
+  // 1-texel gutters when the cell is at least 16 screen pixels. Below that
+  // the 1px stroke is relatively thick, so squares touch. Track-span and
+  // playhead frames stay 1px with their Display Settings alphas.
   float colStartDev = floor(col * cell * pr + 1e-4);
   float rowStartDev = floor(row * cell * pr + 1e-4);
   float gridEndX = floor(gridW * pr + 1e-4);
   float gridEndY = floor(gridSpanH * pr + 1e-4);
-  gutter = devX < colStartDev + 1.0 || devY < rowStartDev + 1.0
-    || devX >= gridEndX - 1.0 || devY >= gridEndY - 1.0;
+  gutter = cell >= 16.0 && (devX < colStartDev + 1.0 || devY < rowStartDev + 1.0
+    || devX >= gridEndX - 1.0 || devY >= gridEndY - 1.0);
   if (gutter) base = vec3(0.0);
   for (int track = 0; track < 4; track++) {
     float trackN = firstN + float(track) * spreadN;
@@ -244,10 +252,15 @@ if (inGrid) {
     float x0 = stripPadX + lc * (colW + stripGapX);
     float y0 = gridLimit + stripPadY + lr * (rowH + stripGapY);
     vec3 lcCol = laneColor(lane);
-    float gx = 5.0 * max(1.0, floor(labelW / 6.0));
-    float gy = 7.0 * max(1.0, floor(labelW / 6.0));
-    if (sturmianGlyphAt(3 + lane, vec2(px.x - x0, px.y - (y0 + floor((rowH - gy) * 0.5))), max(1.0, floor(labelW / 6.0))))
-      base = lcCol;
+    // Largest whole-pixel scale that fits the 5x7 letter in the label slot.
+    float lgs = sturmianFitScale(labelW - 2.0, rowH - 2.0, 5.0, 7.0);
+    if (lgs < 1.0) lgs = sturmianFitScale(labelW, rowH, 5.0, 7.0);
+    if (lgs >= 1.0) {
+      float lgw = 5.0 * lgs;
+      float lgh = 7.0 * lgs;
+      if (sturmianGlyphAt(3 + lane, vec2(px.x - (x0 + floor((labelW - lgw) * 0.5)), px.y - (y0 + floor((rowH - lgh) * 0.5))), lgs))
+        base = lcCol;
+    }
     float by = y0 + floor((rowH - btnSize) * 0.5);
     float bx = x0 + labelW + innerGap;
     for (int t = 0; t < 4; t++) {
@@ -259,12 +272,16 @@ if (inGrid) {
           || px.x >= bx + btnSize - 1.0 || px.y >= by + btnSize - 1.0;
         if (edge) base = on ? vec3(1.0) : vec3(151.0, 151.0, 255.0) / 255.0 * 0.35 + base * 0.65;
         else {
-          float gs = max(1.0, floor(btnSize / 9.0));
-          float gw = 5.0 * gs;
-          float gh = 7.0 * gs;
-          vec2 gp = vec2(px.x - (bx + floor((btnSize - gw) * 0.5)), px.y - (by + floor((btnSize - gh) * 0.5)));
-          int code = t < 3 ? t : 6;
-          if (sturmianGlyphAt(code, gp, gs)) base = on ? vec3(13.0, 16.0, 24.0) / 255.0 : vec3(199.0, 211.0, 229.0) / 255.0;
+          float inner = btnSize - 2.0;
+          float gs = sturmianFitScale(inner - 2.0, inner - 2.0, 5.0, 7.0);
+          if (gs < 1.0) gs = sturmianFitScale(inner, inner, 5.0, 7.0);
+          if (gs >= 1.0) {
+            float gw = 5.0 * gs;
+            float gh = 7.0 * gs;
+            vec2 gp = vec2(px.x - (bx + floor((btnSize - gw) * 0.5)), px.y - (by + floor((btnSize - gh) * 0.5)));
+            int code = t < 3 ? t : 6;
+            if (sturmianGlyphAt(code, gp, gs)) base = on ? vec3(13.0, 16.0, 24.0) / 255.0 : vec3(199.0, 211.0, 229.0) / 255.0;
+          }
         }
       }
       bx += btnSize + innerGap;
@@ -279,16 +296,6 @@ if (inGrid) {
       || px.x >= rx + rs - 1.0 || px.y >= ry + rs - 1.0;
     if (edge) base = vec3(151.0, 151.0, 255.0) / 255.0 * 0.35 + base * 0.65;
     else {
-      float gs = max(1.0, floor(rs / 31.0));
-      if (14.0 * gs + max(1.0, gs) + 2.0 > rs - 2.0) gs = max(1.0, floor((rs - 4.0) / 15.0));
-      float lgw = 29.0 * gs;
-      float gh = 7.0 * gs;
-      float vgap = max(1.0, gs);
-      float blockH = gh + vgap + gh;
-      float textX = rx + floor((rs - lgw) * 0.5);
-      float textY = ry + floor((rs - blockH) * 0.5);
-      vec3 ink = vec3(199.0, 211.0, 229.0) / 255.0;
-      if (sturmianGlyphSpan(14, 15, 4, 15, 16, 5, vec2(px.x - textX, px.y - textY), gs)) base = ink;
       int c0 = 0;
       int c1 = 19;
       int c2 = 19;
@@ -321,16 +328,66 @@ if (inGrid) {
           n += 1;
         }
       }
-      float nw = float(n) * 5.0 * gs + float(n > 1 ? n - 1 : 0) * gs;
-      float nx = rx + floor((rs - nw) * 0.5);
-      float ny = textY + gh + vgap;
-      if (sturmianGlyphSpan(c0, c1, c2, c3, c4, n, vec2(px.x - nx, px.y - ny), gs)) base = ink;
+      // Fit RESET+value, then "R"+value, then value only. Prefer 1px inner
+      // padding and letter gaps; if even 1x overflows, hide rather than clip.
+      float gs = 0.0;
+      float gap = 0.0;
+      float pad = 0.0;
+      int labelCount = 0;
+      float valG = float(n) * 5.0 + float(n > 1 ? n - 1 : 0);
+      float valT = float(n) * 5.0;
+      for (int pass = 0; pass < 2; pass++) {
+        if (gs >= 1.0) break;
+        float p = pass == 0 ? 1.0 : 0.0;
+        float availW = rs - 2.0 - 2.0 * p;
+        float availH = rs - 2.0 - 2.0 * p;
+        float s = sturmianFitScale(availW, availH, max(29.0, valG), 15.0);
+        if (s >= 1.0) { gs = s; gap = s; pad = p; labelCount = 5; break; }
+        s = sturmianFitScale(availW, availH, max(25.0, valT), 15.0);
+        if (s >= 1.0) { gs = s; gap = 0.0; pad = p; labelCount = 5; break; }
+        s = sturmianFitScale(availW, availH, max(5.0, valG), 15.0);
+        if (s >= 1.0) { gs = s; gap = s; pad = p; labelCount = 1; break; }
+        s = sturmianFitScale(availW, availH, max(5.0, valT), 15.0);
+        if (s >= 1.0) { gs = s; gap = 0.0; pad = p; labelCount = 1; break; }
+        s = sturmianFitScale(availW, availH, max(5.0, valG), 7.0);
+        if (s >= 1.0) { gs = s; gap = s; pad = p; labelCount = 0; break; }
+        s = sturmianFitScale(availW, availH, max(1.0, valT), 7.0);
+        if (s >= 1.0) { gs = s; gap = 0.0; pad = p; labelCount = 0; break; }
+      }
+      if (gs >= 1.0) {
+        vec3 ink = vec3(199.0, 211.0, 229.0) / 255.0;
+        float availW = rs - 2.0 - 2.0 * pad;
+        float availH = rs - 2.0 - 2.0 * pad;
+        float boxX = rx + 1.0 + pad;
+        float boxY = ry + 1.0 + pad;
+        float gh = 7.0 * gs;
+        float vgap = labelCount > 0 ? max(1.0, gs) : 0.0;
+        float lw = labelCount > 0
+          ? float(labelCount) * 5.0 * gs + float(labelCount > 1 ? labelCount - 1 : 0) * gap
+          : 0.0;
+        float nw = float(n) * 5.0 * gs + float(n > 1 ? n - 1 : 0) * gap;
+        float blockH = labelCount > 0 ? gh + vgap + gh : gh;
+        float oy = boxY + floor((availH - blockH) * 0.5);
+        if (labelCount > 0) {
+          int l0 = 14;
+          int l1 = 15;
+          int l2 = 4;
+          int l3 = 15;
+          int l4 = 16;
+          float lx = boxX + floor((availW - lw) * 0.5);
+          if (sturmianGlyphSpan(l0, l1, l2, l3, l4, labelCount, vec2(px.x - lx, px.y - oy), gs, gap)) base = ink;
+        }
+        float nx = boxX + floor((availW - nw) * 0.5);
+        float ny = oy + (labelCount > 0 ? gh + vgap : 0.0);
+        if (sturmianGlyphSpan(c0, c1, c2, c3, c4, n, vec2(px.x - nx, px.y - ny), gs, gap)) base = ink;
+      }
     }
   }
 }
 
 // Playhead wash stays (16% white column). Hit flash fills the triggered
-// square with its track color (no inset / inner stroke); black gutters stay.
+// square with its track color (no inset / inner stroke). Black gutters stay
+// when the cell is at least 16px; below that, squares touch.
 // 1px track-span and playhead strokes use Display Settings alphas (default 1).
 if (playing > 0.5 && px.y >= 0.0 && px.y < gridLimit) {
   float stepCol = padLeft + floor(playStep + 0.5);

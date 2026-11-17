@@ -4,15 +4,18 @@
 // pixels (baseCell is the hidden cell param, default 14) and are not stretched
 // to fill the plate; leftover space is a centered integer black margin. The
 // face texture is snapped to the integer framebuffer size of the on-screen
-// quad (CSS x workspace zoom; 4096 cap) so every texel is 1:1. Gutters, track
-// outline, playhead and lane toggles are integer device pixels. The playhead
-// is a 16% white column plus a 1px white frame; a triggered step fills its
+// quad (CSS x workspace zoom; 4096 cap) so every texel is 1:1. Gutters (when
+// the cell is at least 16px), track outline, playhead and lane toggles are
+// integer device pixels. Strip and RESET bitmap text use the largest whole-
+// pixel scale that fits in the cell (compact "R"/value, then value only, then
+// hide) so glyphs never overflow. The playhead is a 16% white column plus a
+// 1px white frame; a triggered step fills its
 // square with the track color (no inset). Track-span and playhead stroke
 // alphas live in Display Settings (default 1). A Reset After drag-number
 // cell sits to the right of the K/S/H/M toggles and stays in sync with the
 // param-band slider. The shared 2.5x threshold is unchanged; this plate
 // pins nearest and opts into compositor pixel-snap.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23-stg24";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23-stg24-stg25";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_UI_DEFAULT_MASK = 3170;
 let sturmianShaderPromise = null;
