@@ -137,15 +137,17 @@ assert(shownBands.includes("face") || shownBands.includes("scope"), "display fac
 assert(!hiddenBands.includes("params"), "Hide Sliders omits the params band");
 assert(hiddenBands.includes("io") || hiddenBands.includes("face") || hiddenBands.includes("scope"), "Hide Sliders leaves IO or display");
 
-// Lane map lives on the grid face, not the param body.
+// K/S/H/M lives in the WebGL face (same texture as the grid), not a DOM strip.
 const uiSrc = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid-ui.js"), "utf8");
-assert(uiSrc.includes("sturmian-side"), "K/S/H/M strip still mounted on the grid face");
-assert(uiSrc.includes("sturmianCreateLaneMap"), "lane map factory still present");
+assert(uiSrc.includes("sturmianLaneButtons"), "K/S/H/M strip laid out in the WebGL face");
+assert(uiSrc.includes("sturmianHitFace"), "face hit-test covers cells and lane toggles");
+assert(!uiSrc.includes("sturmian-side") && !uiSrc.includes("sturmianCreateLaneMap"), "lane map is not a DOM strip");
+assert(uiSrc.includes("display-canvas-pixel-snap"), "plate opts into compositor pixel-snap");
 assert(uiSrc.includes("sturmianLayoutParamRows"), "common sliders packed after mount");
 assert(uiSrc.includes("queueMicrotask"), "pack waits until the param body exists");
 
 const css = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid.css"), "utf8");
 assert(css.includes(".sturmian-param-row"), "compact row CSS");
-assert(css.includes(".sturmian-side"), "lane strip CSS");
+assert(!css.includes(".sturmian-side") && !css.includes(".sturmian-lane-map"), "lane strip CSS removed");
 
 console.log("ok  sturmian common-slider parameterRows and Hide Sliders");
