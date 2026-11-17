@@ -95,7 +95,7 @@ assert(glsl.includes("hitBits") && glsl.includes("(bits & bit) != 0u"), "binary 
 assert(!glsl.includes("flashAmt"), "no smooth hit fade");
 assert(!glsl.includes("mix(base, laneColor(trackHit), 0.85)"), "no inset 0.85 hit fill");
 assert(glsl.includes("trackStrokeAlpha") && glsl.includes("playheadStrokeAlpha"), "separate stroke alphas");
-assert(glsl.includes("sturmianGridVLine") && glsl.includes("sturmianOnRectLines"), "strokes sit on grid gutter/edge lines");
+assert(glsl.includes("sturmianGridLeading") && glsl.includes("sturmianGridTrailing") && glsl.includes("sturmianOnRectLines"), "strokes use leading/trailing cell-edge lines");
 assert(ui.includes("sturmianAccumulateHits") && ui.includes("sturmianClearDrawnHits"), "hits latch until after the frame is drawn");
 assert(glsl.includes("playing > 0.5"), "playhead gated on playing");
 const reg = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid-register.js"), "utf8");
@@ -107,5 +107,97 @@ assert(glsl.includes("cell >= 16.0"), "gutters only when the cell is at least 16
 assert(glsl.includes("labelCount = 1") && glsl.includes("labelCount = 0"), "RESET compact forms: R+value then value only");
 const plan = fs.readFileSync(path.join(root, "public/node-graph-execution-plan.js"), "utf8");
 assert(plan.includes("planScopeCapture"), "execution plan honors planScopeCapture");
+
+
+// Track-span and playhead frames: all 4 sides land on packed-grid pixels
+// at every auto-fit size, Steps, Track Spread, and gutter state.
+function gridLineStart(i, cellDev) {
+  return Math.floor(Math.max(0, i) * cellDev + 1e-4);
+}
+function gridLeading(i, count, cellDev, gridEnd) {
+  const last = Math.max(0, gridEnd - 1);
+  if (i <= 0) return 0;
+  if (i >= count) return last;
+  return Math.min(last, Math.max(0, gridLineStart(i, cellDev)));
+}
+function gridTrailing(i, count, cellDev, gridEnd, guttersOn) {
+  const last = Math.max(0, gridEnd - 1);
+  if (i >= count) return last;
+  const start = gridLineStart(i, cellDev);
+  const line = guttersOn ? start : start - 1;
+  return Math.min(last, Math.max(0, line));
+}
+function assertRectOnCanvas(lineL, lineR, lineT, lineB, lastX, lastY, label) {
+  assert(lineL >= 0 && lineT >= 0, `${label} left/top on-canvas`);
+  assert(lineR <= lastX && lineB <= lastY, `${label} right/bottom on-canvas, got R=${lineR}/${lastX} B=${lineB}/${lastY}`);
+  assert(lineR > lineL, `${label} right is past left (L=${lineL} R=${lineR})`);
+  assert(lineB > lineT, `${label} bottom is past top (T=${lineT} B=${lineB})`);
+  const sides = [lineL, lineR, lineT, lineB];
+  assert(sides.every((v) => Number.isFinite(v) && Math.floor(v) === v), `${label} whole-pixel edges`);
+}
+
+let spanCases = 0;
+const widths = [64, 100, 101, 240, 400, 401, 800, 1920];
+const heights = [32, 80, 81, 200, 300, 600];
+const stepList = [2, 3, 7, 12, 16, 24, 32];
+const spreads = [1, 2, 3, 4];
+for (const width of widths) {
+  for (const height of heights) {
+    for (const steps of stepList) {
+      for (const spread of spreads) {
+        const layout = gridLayout(width, height, steps, spread, 1, 14);
+        const { playCols, cell, cols, rows, padLeft, ox, oy } = layout;
+        const guttersOn = cell >= 16;
+        const cellDev = cell;
+        const gridEndX = cols * cell;
+        const gridEndY = rows * cell;
+        const lastX = gridEndX - 1;
+        const lastY = gridEndY - 1;
+        const faceLastX = width - ox - 1;
+        const faceLastY = height - oy - 1;
+        const span = 3 * spread + 1;
+        const above = Math.max(0, Math.floor((rows - span) * 0.5));
+        for (let track = 0; track < 4; track += 1) {
+          const trackRow = above + track * spread;
+          if (trackRow < 0 || trackRow >= rows) continue;
+          const lineL = gridLeading(padLeft, cols, cellDev, gridEndX);
+          const lineR = gridTrailing(padLeft + playCols, cols, cellDev, gridEndX, guttersOn);
+          const lineT = gridLeading(trackRow, rows, cellDev, gridEndY);
+          const lineB = gridTrailing(trackRow + 1, rows, cellDev, gridEndY, guttersOn);
+          assertRectOnCanvas(lineL, lineR, lineT, lineB, lastX, lastY, `span ${width}x${height} steps=${steps} spread=${spread} track=${track}`);
+          assert(lineR <= faceLastX && lineB <= faceLastY, `span stays on the face (not in the margin) at ${width}x${height} steps=${steps}`);
+          if (padLeft + playCols >= cols) {
+            assert(lineR === lastX, "span at packed right edge clamps inward");
+          } else if (guttersOn) {
+            assert(lineR === (padLeft + playCols) * cell, "gutter-on right sits on the next cell leading gutter");
+          } else {
+            assert(lineR === (padLeft + playCols) * cell - 1, "gutter-off right sits on the last pixel of the last span cell");
+          }
+          if (trackRow + 1 >= rows) {
+            assert(lineB === lastY, "span at packed bottom edge clamps inward");
+          } else if (guttersOn) {
+            assert(lineB === (trackRow + 1) * cell, "gutter-on bottom sits on the next row leading gutter");
+          } else {
+            assert(lineB === (trackRow + 1) * cell - 1, "gutter-off bottom sits on the last pixel of the track row");
+          }
+          spanCases += 1;
+        }
+        for (let step = 0; step < playCols; step += 1) {
+          const stepCol = padLeft + step;
+          const lineL = gridLeading(stepCol, cols, cellDev, gridEndX);
+          const lineR = gridTrailing(stepCol + 1, cols, cellDev, gridEndX, guttersOn);
+          const lineT = gridLeading(0, rows, cellDev, gridEndY);
+          const lineB = gridTrailing(rows, rows, cellDev, gridEndY, guttersOn);
+          assertRectOnCanvas(lineL, lineR, lineT, lineB, lastX, lastY, `playhead ${width}x${height} steps=${steps} step=${step}`);
+          assert(lineT === 0 && lineB === lastY, "playhead top/bottom span the packed grid and clamp inward at the edge");
+          assert(lineR <= faceLastX && lineB <= faceLastY, "playhead stays on the face");
+        }
+      }
+    }
+  }
+}
+assert(spanCases > 1000, `sweep covered many span frames, got ${spanCases}`);
+assert(glsl.includes("sturmianGridTrailing(padLeft + playCols"), "track span uses trailing right edge");
+assert(glsl.includes("clamp(line, 0.0, last)"), "edge lines clamp inward onto the last cell pixel");
 
 console.log("ok  sturmian whole-pixel cells and playhead step map");
