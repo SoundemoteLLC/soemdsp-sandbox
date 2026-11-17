@@ -11,12 +11,31 @@ function nodeGraphModuleVisibleBodyRowCount(type, node = null) {
   const paramMeta = node?.paramMeta && typeof node.paramMeta === "object"
     ? node.paramMeta
     : null;
-  return parameters.filter((parameter) => {
+  const visibleParams = parameters.filter((parameter) => {
     if (typeof nodeGraphParameterEffectiveVisible === "function") {
       return nodeGraphParameterEffectiveVisible(parameter, paramMeta?.[parameter.key]);
     }
     return parameter?.hidden !== true;
-  }).length;
+  });
+  // Optional compact rows: several params share one horizontal slider row.
+  const groups = nodeGraphModuleDefinitions[type]?.parameterRows;
+  if (Array.isArray(groups) && groups.length) {
+    const visibleKeys = new Set(visibleParams.map((parameter) => parameter.key));
+    const used = new Set();
+    let rows = 0;
+    for (const group of groups) {
+      const keys = Array.isArray(group) ? group : [group];
+      if (keys.some((key) => visibleKeys.has(key))) {
+        rows += 1;
+        keys.forEach((key) => used.add(key));
+      }
+    }
+    for (const key of visibleKeys) {
+      if (!used.has(key)) rows += 1;
+    }
+    return rows;
+  }
+  return visibleParams.length;
 }
 
 function nodeGraphModuleVisibleSliderRowCountForUi(type, ui = {}, node = null) {

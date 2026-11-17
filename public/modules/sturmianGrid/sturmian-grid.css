@@ -90,3 +90,15 @@
 .node-graph-workspace.gl-graph-on .dsp-node .node-sturmian-grid {
   pointer-events: auto;
 }
+
+/* Compact common-slider rows in the param band under the grid. */
+.dsp-node > .dsp-node-body > .sturmian-param-row {
+  display: grid;
+  grid-template-columns: repeat(var(--sturmian-param-cols, 1), minmax(0, 1fr));
+  column-gap: 1px;
+  align-items: stretch;
+  min-width: 0;
+}
+.dsp-node > .dsp-node-body > .sturmian-param-row > .node-parameter-row {
+  min-width: 0;
+}

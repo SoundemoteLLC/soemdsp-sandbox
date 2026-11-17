@@ -37,16 +37,19 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     },
     outputAliases: { "ƒ": "f", Frequency: "f" },
     outputs: ["Kick", "Snare", "Hat", "Melody", "Pitch", "f"],
-    // Param-band face (under the grid, not on it). Compact common-slider rows.
-    // There is no separate View Plane control: Plane is the first View choice.
-    face: [
-      { kind: "cells", params: [["rate", "Rate"], ["semitoneOffset", "Semi"]], horizontal: true, h: 30 },
-      { kind: "cells", params: [["alpha", "α"], ["beta", "β"], ["rho", "ρ"]], h: 40 },
-      { kind: "cells", params: [["drift", "Drift"]], horizontal: true, h: 30 },
-      { kind: "cells", params: [["steps", "Steps"], ["reset", "Reset After"]], h: 40 },
-      { kind: "cells", params: [["spread", "Track Spread"], ["walk", "Bar Walk"]], h: 40 },
-      { kind: "cells", params: [["snap", "Rational Snap"]], horizontal: true },
-      { kind: "cells", params: [["view", "View"]], horizontal: true },
+    // Compact common-slider rows in the param band (not definition.face).
+    // definition.face mounts a handwritten WebGL .node-face and hides the
+    // common sliders (has-module-face); that path is for Clock / Velvet-style
+    // knobs and made Sturmian's controls disappear. Plane is a View choice;
+    // there is no separate View Plane control.
+    parameterRows: [
+      ["rate", "semitoneOffset"],
+      ["alpha", "beta", "rho"],
+      ["drift"],
+      ["steps", "reset"],
+      ["spread", "walk"],
+      ["snap"],
+      ["view"],
     ],
     parameters: [
       { key: "rate", label: "Rate", defaultValue: "8", min: "0", max: "20000", mid: "8", step: "any", nonlinearSlider: true, linearSmoothing: false, kind: "frequency", unit: "Hz" },
