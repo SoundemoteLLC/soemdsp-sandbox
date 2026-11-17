@@ -339,7 +339,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     ]),
     colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "thresholdColor"]),
     toggles: Object.freeze(["skipDiscontinuities", "autoRange", "pauseOnSilence", "pauseAtEnd"]),
-    choices: Object.freeze(["barInk", "facePolarity", "stereoBlend"]),
+    choices: Object.freeze(["historyMode", "barInk", "facePolarity", "stereoBlend"]),
   }),
   // Phosphor energy faces: color via shared Gradient editor (not single swatches).
   // Field order = nodeGraphPhosphorDisplayFieldOrder (Bright…Ghost/Trail…Dot Budget).
@@ -540,7 +540,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     ]),
     colors: Object.freeze(["backgroundColor", "strokeColor"]),
     toggles: Object.freeze(["pauseOnSilence"]),
-    choices: Object.freeze(["barInk", "facePolarity", "stereoBlend", "xyzLayout"]),
+    choices: Object.freeze(["historyMode", "barInk", "facePolarity", "stereoBlend", "xyzLayout"]),
   }),
   // 1D Waterfall RGB — Size / Blur / Dot density / Bright; RGB Add or CMY Multiply.
   waterfallRgb: Object.freeze({
@@ -558,7 +558,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     ]),
     colors: Object.freeze(["backgroundColor", "strokeColor"]),
     toggles: Object.freeze(["cmyMode", "skipDiscontinuities", "pauseOnSilence"]),
-    choices: Object.freeze(["barInk", "facePolarity"]),
+    choices: Object.freeze(["historyMode", "barInk", "facePolarity"]),
   }),
   numberReadout: Object.freeze({
     // Value LED: Digits -> Decimals -> Padding -> Bright -> Ghost -> Trail -> Burn x.
@@ -2664,6 +2664,17 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
       Object.freeze({ value: "discrete", label: "Discrete" }),
       Object.freeze({ value: "linear", label: "Linear" }),
       Object.freeze({ value: "reconstructed", label: "Sinc" }),
+    ]),
+  }),
+  // Instant Waterfall / RGB / XYZ: History in seconds or in beats at the
+  // transport tempo (the Beats count is historyCycles; lib/visual/scope-sync.js).
+  historyMode: Object.freeze({
+    label: "History",
+    aria: "History: seconds or beats at the tempo",
+    id: "nodeTraceDisplayHistoryMode",
+    options: Object.freeze([
+      Object.freeze({ value: "seconds", label: "Seconds" }),
+      Object.freeze({ value: "beats", label: "Beats" }),
     ]),
   }),
   windowMode: Object.freeze({

@@ -345,8 +345,10 @@ function nodeGraphTraceDisplayHistorySampleCount(buffer, settings, options = {})
     }
     // No period lock yet — fall back to free-run History (seconds) so the face isn't empty.
   }
-  // Sync off: Instant Waterfall History (seconds) window.
-  const historySeconds = typeof nodeGraphWaterfallClampHistorySeconds === "function"
+  // Sync off: Instant Waterfall History (seconds, or Beats) window.
+  const historySeconds = safeSettings.historyMode === "beats" && typeof nodeGraphWaterfallHistorySeconds === "function"
+    ? nodeGraphWaterfallHistorySeconds(safeSettings, buffer)
+    : typeof nodeGraphWaterfallClampHistorySeconds === "function"
     ? nodeGraphWaterfallClampHistorySeconds(
       safeSettings.historySeconds,
       nodeGraphWaterfallSettingsDefaults?.historySeconds ?? 0.25,

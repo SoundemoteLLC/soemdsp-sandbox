@@ -21,6 +21,8 @@
 // back-to-back passes of Beats, like any Free window. Without the engine's
 // beat position (a worklet from before it was sent) Beats is the patch tempo
 // and runs free.
+// Waterfalls (Instant Waterfall / RGB / XYZ, History = Beats) scroll, so they
+// only take the length: nodeGraphScopeBeatsSeconds.
 //
 //   Free: passes run back to back (a pen wraps; a window is the newest one).
 //   Sync: a pass starts on a rising edge. A pen that reaches the right edge
@@ -161,6 +163,15 @@
     if (clock) return clock.per;
     const rate = Number(sampleRate) > 0 ? Number(sampleRate) : 48000;
     return patchTempoBpm() / (60 * rate);
+  }
+
+  /**
+   * Seconds of `beats` at the transport tempo: the ring's clock (sampleRate =
+   * the ring's rate), else the patch tempo.
+   */
+  function nodeGraphScopeBeatsSeconds(beats, buffer, sampleRate) {
+    const rate = Number(sampleRate) > 0 ? Number(sampleRate) : 48000;
+    return nodeGraphScopeClampWindowCycles(beats) / (nodeGraphScopeBeatsPerSample(buffer, rate) * rate);
   }
 
   /** Beats between sweep starts under Sync: whole beats, at least one. */
@@ -595,6 +606,7 @@
     nodeGraphScopeWindowBeats,
     nodeGraphScopeBeatClock,
     nodeGraphScopeBeatsPerSample,
+    nodeGraphScopeBeatsSeconds,
     nodeGraphScopePassSamples,
     nodeGraphScopeSyncState,
     nodeGraphScopeSyncLevel,

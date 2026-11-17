@@ -1016,6 +1016,7 @@ function applyNodeGraphTraceDisplaySettingsForm(options = {}) {
         || k === "zoomSeconds"
         || k === "historyHz"
         || k === "historyCycles"
+        || k === "historyMode"
         || k === "timeMs"
         || k === "windowCycles"
         || k === "windowMode"

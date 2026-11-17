@@ -32,8 +32,13 @@ function nodeGraphWaterfallNowMs() {
  * Freerun History window in seconds (Instant Waterfall only).
  * Reads historySeconds only — normalize migrates legacy historyHz once on load.
  * 0 / non-positive = empty window (one current bar). Missing → default 0.25.
+ * History = Beats: historyCycles beats at the transport tempo (buffer = the
+ * ring, for the engine's tempo; lib/visual/scope-sync.js).
  */
-function nodeGraphWaterfallHistorySeconds(settings) {
+function nodeGraphWaterfallHistorySeconds(settings, buffer = null) {
+  if (String(settings?.historyMode) === "beats" && typeof nodeGraphScopeBeatsSeconds === "function") {
+    return nodeGraphScopeBeatsSeconds(settings?.historyCycles ?? 4, buffer, nodeGraphWaterfallVisualHz(buffer));
+  }
   const n = Number(settings?.historySeconds);
   if (Number.isFinite(n)) {
     // Explicit 0 / non-positive stays 0 (one bar). Do not consult legacy historyHz.
@@ -448,7 +453,7 @@ function nodeGraphOnsetPaint(spec, live) {
   if (!autoRange) onset.range = null;
   // One fixed x scale: History seconds across the face, every pass. A
   // Reset-gap scale moves impulses whenever the gap changes.
-  const faceSamples = Math.max(1, Math.round(hz * Math.max(nodeGraphWaterfallHistorySeconds(settings), 0)));
+  const faceSamples = Math.max(1, Math.round(hz * Math.max(nodeGraphWaterfallHistorySeconds(settings, live), 0)));
   const blendMode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
   const plateBg = blendMode === "multiply" ? "#ffffff" : (spec.bg || "#000000");
   const startPx = Math.floor(position * width) % width;
@@ -2454,7 +2459,7 @@ function nodeGraphWaterfallPaint(spec) {
     return true;
   }
 
-  const history = nodeGraphWaterfallHistorySeconds(settings);
+  const history = nodeGraphWaterfallHistorySeconds(settings, live);
   // Pause on silence: keep the hold. No scroll, no new columns.
   // Eat the silent window so it does not burst-scroll when sound returns.
   if (silenceHold && !st.reprint) {

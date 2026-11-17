@@ -743,7 +743,11 @@ function normalizeNodeGraphWaterfallHistory(source, defaults = {}) {
   }
   const historySeconds = nodeGraphWaterfallClampHistorySeconds(sec, defSec);
   const historyCycles = nodeGraphTraceDisplayClampHistoryCycles(cycles, defCycles);
+  // History: Seconds (default) or Beats (historyCycles beats at the transport
+  // tempo, lib/visual/scope-sync.js).
+  const mode = String(source?.historyMode ?? defaults?.historyMode ?? "seconds").toLowerCase();
   return {
+    historyMode: mode === "beats" ? "beats" : "seconds",
     historySeconds,
     historyCycles,
     zoomSeconds: historySeconds,

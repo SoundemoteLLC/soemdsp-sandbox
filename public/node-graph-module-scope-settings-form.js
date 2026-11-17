@@ -35,6 +35,11 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = key === "historyCycles" ? "History (cycles)" : "History (Hz)";
     title = "Live history window (Hz when free-run; History (cycles) when synced).";
   }
+  // Instant Waterfall History = Beats: the historyCycles value counts beats.
+  if (key === "historyCycles" && nodeGraphDisplaySettingsHistoryIsBeats(formType)) {
+    label = "History (beats)";
+    title = "";
+  }
   if (key === "cloudSpeed" && formType === "ensembleCloud") {
     label = "Speed";
     title = "Waterfall scroll. 0 = freeze. 1 = default. Higher = faster.";
@@ -1428,6 +1433,17 @@ function nodeGraphDisplaySettingsWindowRowKey(formType) {
   return nodeGraphScopeWindowMode(settings?.windowMode) === "time" ? "timeMs" : "windowCycles";
 }
 
+/** Instant Waterfall / RGB / XYZ form whose History is Beats. */
+function nodeGraphDisplaySettingsHistoryIsBeats(formType) {
+  if (formType !== "waterfall" && formType !== "waterfallRgb" && formType !== "waterfallXyz") {
+    return false;
+  }
+  if (typeof nodeGraphTraceDisplayCurrentSettingsForFormType !== "function") {
+    return false;
+  }
+  return nodeGraphTraceDisplayCurrentSettingsForFormType(formType)?.historyMode === "beats";
+}
+
 /** Whether the form's Window is Beats (the Cycles stepper then reads Beats). */
 function nodeGraphDisplaySettingsWindowRowIsBeats(formType) {
   if (!formType || typeof nodeGraphTraceDisplayCurrentSettingsForFormType !== "function") {
@@ -1501,9 +1517,11 @@ function syncNodeGraphWaterfallHistoryLabel(root, settings = {}) {
   if (!titleSpan && !field) {
     return;
   }
-  const key = "historySeconds";
-  const label = "History (seconds)";
-  const title = "History window duration in seconds across the face. Longer = slower scroll. At 0 the face is the current bar.";
+  // History = Beats (Instant Waterfall): the stepper is historyCycles, in beats.
+  const beats = settings?.historyMode === "beats";
+  const key = beats ? "historyCycles" : "historySeconds";
+  const label = beats ? "History (beats)" : "History (seconds)";
+  const title = beats ? "" : "History window duration in seconds across the face. Longer = slower scroll. At 0 the face is the current bar.";
   if (titleSpan) {
     titleSpan.textContent = label;
   }
@@ -1775,8 +1793,15 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     const freeRunKey = orderedPrimary.includes("historySeconds") || !orderedPrimary.includes("historyHz")
       ? "historySeconds"
       : "historyHz";
+    // Instant Waterfall: History Seconds | Beats right above its one stepper.
+    const historyBeats = isInstantWaterfall && choiceKeys.includes("historyMode")
+      && nodeGraphDisplaySettingsHistoryIsBeats(type);
+    if (isInstantWaterfall && choiceKeys.includes("historyMode")) {
+      rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("historyMode"));
+      usedChoices.add("historyMode");
+    }
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(
-      (!isInstantWaterfall && syncOnForStack) ? "historyCycles" : freeRunKey,
+      historyBeats || (!isInstantWaterfall && syncOnForStack) ? "historyCycles" : freeRunKey,
       type,
       { syncOn: !isInstantWaterfall && syncOnForStack },
     ));
