@@ -480,6 +480,8 @@ function nodeGraphGlGraphRebuildChrome() {
         unitEl,
         unitBox,
         unitAnchor: unitEl && unitBox ? nodeGraphGlGraphTextAnchor(unitEl, unitBox) : null,
+        // 2+ sliders side by side in one param-band row: vertical handle.
+        vertical: nodeGraphGlGraphSliderSharesRow(readout, row),
         // Text metrics read once here (ZP-5); presents never call getComputedStyle.
         ...nodeGraphGlGraphSliderTextMetrics(labelEl, valueEl, unitEl),
       });
@@ -684,6 +686,119 @@ function nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhos
   const end = nodeGraphGlGraphCssPx(readout, "--ghost-end");
   if (!(end > start)) return;
   nodeGraphGlLinesRect(batch, x + start * zoom, y, (end - start) * zoom, h, ghostFill);
+}
+
+/**
+ * True when this slider's parameter row sits on one line with another visible
+ * parameter row (any module's packed param band). Those draw vertical. A row
+ * alone on its line, and choice controls, stay horizontal.
+ */
+function nodeGraphGlGraphSliderSharesRow(readout, row) {
+  if (!readout || !row?.parentElement) return false;
+  if (readout.classList.contains("displays-choices") || readout.classList.contains("choices-divided")) return false;
+  const top = row.offsetTop;
+  const height = row.offsetHeight;
+  if (!(height > 0)) return false;
+  let onLine = 0;
+  for (const sibling of row.parentElement.children) {
+    if (!sibling.classList?.contains("node-parameter-row") || sibling.hidden || !(sibling.offsetHeight > 0)) continue;
+    if (Math.abs(sibling.offsetTop - top) < Math.max(1, height * 0.5)) onLine += 1;
+    if (onLine >= 2) return true;
+  }
+  return false;
+}
+
+/**
+ * Vertical param-band slider text: Clock's face-cell layout
+ * (node-graph-module-face.js, vertical "cell"): centred lines, label 12.6 px,
+ * value 13.8 px, unit as large as the value in the unit ink, 14 px apart.
+ * A cell at least 52 px tall stacks Label / Value / Unit (a unitless cell
+ * centres Label / Value; a two-word value too wide wraps onto the unit line);
+ * a shorter cell draws Label above Value with the unit after the value.
+ */
+function nodeGraphGlGraphDrawSliderStackedText(batch, slider, x, y, w, h, zoom, labelInk, valueInk, unitInk) {
+  const label = String(slider.labelEl?.textContent || "").replace(/\s+/g, " ").trim();
+  let text = String(slider.valueEl?.textContent || "").replace(/\s+/g, " ").trim();
+  let unit = slider.unitEl && !slider.unitEl.classList.contains("is-empty")
+    ? String(slider.unitEl.textContent || "").replace(/\s+/g, " ").trim()
+    : "";
+  if (slider.input && typeof nodeGraphModuleFaceValueParts === "function") {
+    const parts = nodeGraphModuleFaceValueParts(slider.input);
+    text = String(parts.text ?? text);
+    unit = String(parts.unit || "");
+  }
+  const z = zoom;
+  const cx = x + w * 0.5;
+  const maxWidth = Math.max(1, w - 4 * z);
+  const put = (str, cy, px, rgba) => {
+    if (!str) return;
+    nodeGraphGlLinesText(batch, str, cx, cy, nodeGraphGlGraphTextOpts({
+      px: Math.max(4, px * z), rgba, align: "center", baseline: "middle", weight: 400, maxWidth,
+    }));
+  };
+  const cellH = h / Math.max(1e-6, z);
+  const cw = w / Math.max(1e-6, z);
+  const step = 14 * z;
+  const cy = y + h * 0.5;
+  if (cellH >= 52) {
+    const sp = text.indexOf(" ");
+    const wraps = !unit && sp > 0 && text.length * 7.6 > cw - 4;
+    if (!unit && !wraps) {
+      put(label, cy - step * 0.5, 12.6, labelInk);
+      put(text, cy + step * 0.5, 13.8, valueInk);
+      return;
+    }
+    put(label, cy - step, 12.6, labelInk);
+    if (wraps) {
+      put(text.slice(0, sp), cy, 13.8, valueInk);
+      put(text.slice(sp + 1), cy + step, 13.8, valueInk);
+    } else {
+      put(text, cy, 13.8, valueInk);
+      put(unit, cy + step, 13.8, unitInk);
+    }
+    return;
+  }
+  put(label, cy - 7 * z, 12.6, labelInk);
+  put(unit ? `${text} ${unit}` : text, cy + 7 * z, 13.8, valueInk);
+}
+
+/** Travel 0..1 of a slider value (thumb base, or a given domain value). */
+function nodeGraphGlGraphSliderTravel(input, value) {
+  if (!input || typeof nodeSliderTravelFromValue !== "function") return NaN;
+  const t = Number(nodeSliderTravelFromValue(input, value));
+  return Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : NaN;
+}
+
+/**
+ * Vertical param-band slider: a fill, no grab handle, the same geometry as the
+ * vertical face cells (node-graph-module-face.js): unipolar fills from the
+ * bottom up to the value, bipolar fills out from the middle (the mid value's
+ * travel) to the value. The MOD ghost is a translucent fill of the same
+ * geometry at the modulated value, drawn over the real fill.
+ */
+function nodeGraphGlGraphDrawSliderFillVertical(batch, readout, input, x, y, w, h, hideGhost, fill, ghostFill) {
+  if (!(w > 0) || !(h > 0) || !input) return;
+  const domainRaw = Number(input.dataset?.domainValue);
+  const t = nodeGraphGlGraphSliderTravel(input, Number.isFinite(domainRaw) ? domainRaw : Number(input.value));
+  if (!Number.isFinite(t)) return;
+  const bipolar = input.dataset?.bipolar === "true";
+  let mid = 0.5;
+  if (bipolar) {
+    const midValue = Number(input.dataset?.mid);
+    const midTravel = Number.isFinite(midValue) ? nodeGraphGlGraphSliderTravel(input, midValue) : NaN;
+    if (Number.isFinite(midTravel)) mid = midTravel;
+  }
+  const span = (travel) => (bipolar
+    ? { top: 1 - Math.max(mid, travel), size: Math.abs(travel - mid) }
+    : { top: 1 - travel, size: travel });
+  const real = span(t);
+  if (real.size > 0) nodeGraphGlLinesRect(batch, x, y + real.top * h, w, real.size * h, fill);
+  if (hideGhost || !readout?.classList.contains("has-ghost-slider")) return;
+  const sentRaw = Number(input.dataset?.sentDomainValue);
+  const tg = Number.isFinite(sentRaw) ? nodeGraphGlGraphSliderTravel(input, sentRaw) : NaN;
+  if (!Number.isFinite(tg)) return;
+  const ghost = span(tg);
+  if (ghost.size > 0) nodeGraphGlLinesRect(batch, x, y + ghost.top * h, w, ghost.size * h, ghostFill);
 }
 
 // Wraparound handle: the part that would leave the track is clipped, and that
@@ -1201,11 +1316,19 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
         nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
         return;
       }
+      if (slider.vertical) {
+        nodeGraphGlGraphDrawSliderFillVertical(batch, readout, slider.input, x, y, w, h, hideGhost, valueFill, ghostFill);
+        return;
+      }
       // Generic slider: position handle only, on the face-cell well.
       // Wraparound clips it to the track and draws the overflow on the other edge.
       nodeGraphGlGraphDrawSliderHandle(batch, readout, x, y, h, zoom, slider.w, valueFill);
       nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
     });
+    if (slider.vertical && typeof nodeGraphGlLinesText === "function") {
+      nodeGraphGlGraphDrawSliderStackedText(batch, slider, x, y, w, h, zoom, labelInk, ink, slider.unitInk || [127 / 255, 199 / 255, 217 / 255, 1]);
+      continue;
+    }
     if (typeof nodeGraphGlLinesText === "function") {
       const labelText = String(slider.labelEl?.textContent || "").replace(/\s+/g, " ").trim();
       const valueText = String(slider.valueEl?.textContent || "").replace(/\s+/g, " ").trim();
@@ -1659,6 +1782,50 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   });
 }
 
+/**
+ * A cable that is not drawn (an end's jack is hidden: sliders hidden, the param
+ * hidden, Hide In/Out) keeps a wire dot on each of its jacks that is still
+ * visible, anchored to that jack. No stroke, no patch slot, not pickable, and
+ * never a dot at a hidden jack, over a module body or along the hidden path.
+ * ends: [{ at, el, square, rail, node }] - at is the jack centre (null when
+ * not laid out), el the jack element (checked for layout visibility).
+ */
+function nodeGraphGlGraphPushWireJackDots(wires, color, ends) {
+  const rgba = nodeGraphGlGraphCssColor(color);
+  const dots = [];
+  for (const end of ends) {
+    const x = Number(end?.at?.x);
+    const y = Number(end?.at?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (typeof nodeGraphPortElementIsRenderableForWire === "function" && !nodeGraphPortElementIsRenderableForWire(end.el)) continue;
+    dots.push({ x, y, rgba, square: !end.rail && end.square === true, param: end.rail === true, node: String(end.node || "") });
+  }
+  if (!dots.length) return;
+  wires.push({
+    rgba,
+    kind: "",
+    style: "ribbon",
+    index: -1,
+    dotOnly: true,
+    xy: new Float32Array([dots[0].x, dots[0].y, dots[0].x, dots[0].y]),
+    param: dots[0].param,
+    dots,
+  });
+}
+
+/** The jack element of a wire end, for the layout-visibility check (null = none laid out). */
+function nodeGraphGlGraphWireJackEl(node, port, io) {
+  if (io === "modulation") {
+    const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;
+    return typeof nodeGraphModulationPortSelector === "function"
+      ? surface?.querySelector(nodeGraphModulationPortSelector(node, port)) || null
+      : null;
+  }
+  return typeof nodeGraphPortElementForWireEndpoint === "function"
+    ? nodeGraphPortElementForWireEndpoint(node, port, io) || null
+    : null;
+}
+
 function nodeGraphGlGraphRebuild(options = {}) {
   nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
   nodeGraphGlGraphState.firstCable = new Map();
@@ -1694,6 +1861,14 @@ function nodeGraphGlGraphRebuild(options = {}) {
       const from = nodeGraphPortCenter(connection.sourceNode, connection.sourcePort, "output");
       const to = nodeGraphPortCenter(connection.destinationNode, connection.destinationPort, "input");
       const fromColor = colorOf(connection.sourceNode, connection.sourcePort, "output");
+      if (!from || !to) {
+        // One end's jack is hidden: no cable, dots on the visible jacks only.
+        nodeGraphGlGraphPushWireJackDots(wires, colorOf(connection.destinationNode, connection.destinationPort, "input") || fromColor, [
+          { at: from, el: nodeGraphGlGraphWireJackEl(connection.sourceNode, connection.sourcePort, "output"), square: square(connection.sourceNode, connection.sourcePort, "output"), rail: rail(connection.sourceNode, connection.sourcePort), node: connection.sourceNode },
+          { at: to, el: nodeGraphGlGraphWireJackEl(connection.destinationNode, connection.destinationPort, "input"), square: square(connection.destinationNode, connection.destinationPort, "input"), rail: false, node: connection.destinationNode },
+        ]);
+        continue;
+      }
       nodeGraphGlGraphPushWire(
         wires, from, to, fromColor, zoom, connection,
         square(connection.sourceNode, connection.sourcePort, "output"),
@@ -1722,6 +1897,15 @@ function nodeGraphGlGraphRebuild(options = {}) {
         ? nodeGraphModulationPortCenter(modulation.destinationNode, modulation.destinationParam)
         : null;
       const fromColor = colorOf(modulation.sourceNode, modulation.sourcePort, "output");
+      if (!from || !to) {
+        // Target param row hidden (sliders hidden or the param hidden) or the
+        // outlet hidden: no cable, dots on the visible jacks only.
+        nodeGraphGlGraphPushWireJackDots(wires, colorOf(modulation.destinationNode, modulation.destinationParam, "modulation") || fromColor, [
+          { at: from, el: nodeGraphGlGraphWireJackEl(modulation.sourceNode, modulation.sourcePort, "output"), square: square(modulation.sourceNode, modulation.sourcePort, "output"), rail: rail(modulation.sourceNode, modulation.sourcePort), node: modulation.sourceNode },
+          { at: to, el: nodeGraphGlGraphWireJackEl(modulation.destinationNode, modulation.destinationParam, "modulation"), square: square(modulation.destinationNode, modulation.destinationParam, "modulation"), rail: rail(modulation.destinationNode, modulation.destinationParam), node: modulation.destinationNode },
+        ]);
+        continue;
+      }
       nodeGraphGlGraphPushWire(
         wires, from, to, fromColor, zoom, modulation,
         square(modulation.sourceNode, modulation.sourcePort, "output"),
@@ -2025,6 +2209,7 @@ function nodeGraphGlGraphWireLiveBakeUpdate(p) {
   for (let i = 0; i < st.wires.length; i += 1) {
     const wire = st.wires[i];
     if (!nodeGraphGlGraphWireIsLive(wire)) continue;
+    if (wire.dotOnly) continue;
     const xy = wire.xy;
     if (!xy || xy.length < 4) continue;
     list.push({ wire, picked: false });
@@ -2733,7 +2918,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     // Baked cables are already in the zoom-1 picture, and so is a live one
     // whenever its own picture was made; otherwise it strokes here.
     const isLive = nodeGraphGlGraphWireIsLive(wire);
-    if (isLive ? !wireLiveBake : !wireBake) {
+    if (!wire.dotOnly && (isLive ? !wireLiveBake : !wireBake)) {
       const stroke = frameCamera ? strokeWorld : strokeWorld * zoom;
       let pts = frameCamera ? src : screen.subarray(0, src.length);
       if (wire.param && railEnds.length) {
@@ -3576,7 +3761,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-clock-face, .node-sturmian-grid, .sturmian-side, .sturmian-lane-map, .sturmian-lane-toggle, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-keyboard-surface, .node-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell, [data-vactrol-show-key]",
+    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-clock-face, .node-sturmian-grid, .node-arp-keys-face, .node-pitch-quantizer-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-keyboard-surface, .node-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell, [data-vactrol-show-key]",
   ));
 }
 
