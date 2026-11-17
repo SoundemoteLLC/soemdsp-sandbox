@@ -1300,20 +1300,6 @@ function createNodeGraphModuleElement(type, node) {
       inputPorts,
       outputPorts,
     );
-  } else if (definition.layout === "pitchQuantizer") {
-    if ((typeof nodeGraphModuleShouldMountDisplayFace === "function"
-      ? nodeGraphModuleShouldMountDisplayFace(type, patchNode.ui)
-      : !patchNodeUi.oscilloscopeHidden)
-      && typeof createNodeGraphPitchQuantizerFace === "function") {
-      article.append(createNodeGraphPitchQuantizerFace(node));
-    }
-    appendNodeGraphModuleIoSection(
-      article,
-      createNodeGraphLayoutAIoSection(node, type, inputPorts, outputPorts),
-      node,
-      inputPorts,
-      outputPorts,
-    );
   } else if (definition.layout === "acidSequencer") {
     if ((typeof nodeGraphModuleShouldMountDisplayFace === "function"
       ? nodeGraphModuleShouldMountDisplayFace(type, patchNode.ui)
