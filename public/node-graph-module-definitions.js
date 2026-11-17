@@ -7631,7 +7631,7 @@ const nodeGraphModuleDefinitions = (
     // Advance (trigger): wired, each rise plays the next step on the beat.
     inputs: ["Reset", "Advance"],
     digitalInputs: ["Reset", "Advance"],
-    inputLabels: { Advance: "Adv" },
+    inputLabels: { Advance: "▶" },
     outputs: ["Out", "T", "Velocity", "Step"],
     // ~ = the BLIT signal (gold, analog); trigger symbol = hard one-sample trigger (white).
     digitalOutputs: ["T", "Step"],

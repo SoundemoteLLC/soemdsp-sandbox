@@ -16,9 +16,9 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     chrome: "LayoutA",
     customDisplayArea: true,
     digitalInputs: ["Restart", "Adv"],
-    // Restart uses the app-wide Reset mark (↺). Adv matches blitTrigger ("Adv"),
-    // not a triangle glyph. ƒ matches Clock / other frequency inlets.
-    inputLabels: { Restart: "↺", Adv: "Adv", f: "ƒ" },
+    // Restart uses the app-wide Reset mark (↺). Adv uses ▶ (BLACK RIGHT-POINTING TRIANGLE).
+    // ƒ matches Clock / other frequency inlets.
+    inputLabels: { Restart: "↺", Adv: "▶", f: "ƒ" },
     inputAliases: { "ƒ": "f", Frequency: "f" },
     inputs: ["Restart", "Adv", "f"],
     // Wired ƒ replaces Rate (Rate row striped). Wired Adv owns Rate and ƒ.
