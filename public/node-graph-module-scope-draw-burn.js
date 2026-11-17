@@ -443,11 +443,26 @@ function drawNodeGraphLineBurnOscilloscopeItem(renderer, item, pixelRatio) {
     return;
   }
   const nodeId = String(item?.slot?.nodeId || "");
+  // Hit stream (definition displayHitSignal, e.g. Modal Snare __Strike): the
+  // module's own strikes, written beside the trace every sample, so Cycles
+  // counts hits and Sync starts on one (lib/visual/scope-sync.js). Its Reset
+  // jack is the module's (a re-strike is already a hit), not a sweep reset.
+  let hitBuffer = null;
+  const hitNode = nodeGraphModuleScopeNodeForSlot(item.slot);
+  const hitSignal = typeof nodeGraphModuleDefinitions === "object"
+    ? String(nodeGraphModuleDefinitions?.[String(hitNode?.type || "")]?.displayHitSignal || "")
+    : "";
+  if (nodeId && hitSignal) {
+    const hits = nodeGraphModuleScopeState.buffers.get(`${nodeId}:${hitSignal}`);
+    if (hits?.length) {
+      hitBuffer = hits;
+    }
+  }
   // Prefer the sink's own Reset capture (full-rate visual input buffer).
   // Only when *fresh* samples arrived this post — stale Reset rings after
   // disconnect used to false-trigger rising edges and snap the pen (Y tears).
   let resetBuffer = null;
-  if (nodeId) {
+  if (nodeId && !hitSignal) {
     const own = nodeGraphModuleScopeState.buffers.get(`${nodeId}:Reset`);
     const ownRecent = Math.floor(nodeGraphFiniteNumber(own?.nodeGraphScopeRecentSampleCount));
     if (own && ownRecent > 0) {
@@ -472,6 +487,7 @@ function drawNodeGraphLineBurnOscilloscopeItem(renderer, item, pixelRatio) {
     buffer,
     settings,
     resetBuffer,
+    hitBuffer,
   );
   // Prefer buffer absolute frame; fall back to undrawn-window end so the
   // cursor still advances when metadata is partial.

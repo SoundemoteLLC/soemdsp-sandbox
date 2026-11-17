@@ -1512,6 +1512,7 @@ extern "C" void soemdsp_modal_snare_destroy(int handle);
 extern "C" double soemdsp_modal_snare_env(int handle);
 extern "C" double soemdsp_modal_snare_f(int handle);
 extern "C" double soemdsp_modal_snare_right(int handle);
+extern "C" double soemdsp_modal_snare_strike(int handle);
 extern "C" double soemdsp_modal_snare_sample(
   int handle, double trigger, double reset, double tune, double tone,
   double snappy, double bodyDecay, double snapDecay, double bend, double amplitude,
@@ -12375,7 +12376,7 @@ static void process_electro_snare(Circuit& g, Node& node, int frames) {
 // shape=tone, width=snappy, timeNumerator=bodyDecay s, timeDenominator=snapDecay s,
 // center=bend oct, amplitude, lpfFrequency=noiseFreq Hz, resonance=noiseQ,
 // level=click, offsetMs=clickDecay ms, saturate=noiseTilt, mix=bodyNoise (-1..1).
-// Out: Snare L -> Left, Snare R -> Right, Env -> Mono.
+// Out: Snare L -> Left, Snare R -> Right, Env -> Mono; face tap __Strike -> Phase01.
 static void process_modal_snare(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
@@ -12407,6 +12408,7 @@ static void process_modal_snare(Circuit& g, Node& node, int frames) {
     node.buf[kPortRight][f] = soemdsp_modal_snare_right(node.nativeHandle);
     node.buf[kPortMono][f] = soemdsp_modal_snare_env(node.nativeHandle);
     node.buf[kPortSaw][f] = soemdsp_modal_snare_f(node.nativeHandle);  // f out (Hz)
+    node.buf[kPortPhase01][f] = soemdsp_modal_snare_strike(node.nativeHandle);  // face tap __Strike: hit velocity on each struck sample (display Cycles = hits)
   }
 }
 
