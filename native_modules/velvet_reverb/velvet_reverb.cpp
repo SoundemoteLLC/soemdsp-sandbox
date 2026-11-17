@@ -217,13 +217,26 @@ static void build_table(
   const double maxLength = (double)(kDelaySize - 4) - widest;
   if (length > maxLength) length = maxLength;
 
-  // Taps sit one per 1/Density period over the length. When Density x Decay
-  // asks for more than Tap Count, the taps spread out to cover the length
-  // (Tap Count is the most taps the tail uses). The tap count is continuous:
-  // the last tap's period is the part of the length that is left, and that tap
-  // is scaled by the same fraction, so it fades in and out.
+  // Taps sit one per 1/Density period over the length. The tap count is
+  // continuous: the last tap's period is the part of the length that is left,
+  // and that tap is scaled by the same fraction, so it fades in and out.
+  //
+  // When Density x Decay asks for more than Tap Count, Tap Count taps still
+  // cover the whole length and Density keeps working: the first period stays
+  // 1/Density and the periods widen along the tail (block edges at
+  // length * (i / taps)^warp, warp = ln(Density x Decay) / ln(Tap Count)), so
+  // higher Density packs the early reflections tighter and leaves the late
+  // tail sparser. At Density x Decay = Tap Count warp is 1 (even spacing), so
+  // the two regimes meet without a jump. Each tap's level is scaled by
+  // sqrt(period / mean period) so the energy per second still follows the
+  // -60 dB decay.
   double grid = rawGrid;
-  if (grid * (double)taps < length) grid = length / (double)taps;
+  double warp = 1.0;
+  if (grid * (double)taps < length) {
+    if (taps > 1) warp = soemdsp_maths::dsp_ln(length / grid) / soemdsp_maths::dsp_ln((double)taps);
+    grid = length / (double)taps;
+  }
+  const bool warped = warp != 1.0;
   double exactTaps = length / grid;
   if (exactTaps > (double)taps) exactTaps = (double)taps;
   int count = (int)exactTaps;
@@ -254,10 +267,20 @@ static void build_table(
   const double headEnergy = mean_width_energy(headWidth);
 
   for (int i = 0; i < count; ++i) {
-    const double blockStart = (double)i * grid;
     const bool last = (i == count - 1);
-    const double block = last ? grid * lastPart : grid; // the last period is what is left
-    const double part = last ? lastPart : 1.0;
+    double blockStart = (double)i * grid;
+    double block = last ? grid * lastPart : grid; // the last period is what is left
+    double part = last ? lastPart : 1.0;
+    if (warped) {
+      // Widening periods (count == taps, every period whole).
+      const double u0 = (double)i / (double)count;
+      const double u1 = (double)(i + 1) / (double)count;
+      blockStart = length * soemdsp_maths::dsp_exp(warp * soemdsp_maths::dsp_ln(u0 > 0.0 ? u0 : 1e-300));
+      if (i == 0) blockStart = 0.0;
+      const double blockEnd = length * soemdsp_maths::dsp_exp(warp * soemdsp_maths::dsp_ln(u1));
+      block = blockEnd - blockStart;
+      part = __builtin_sqrt(block / grid); // grid = mean period here
+    }
     double maxWidth = headWidth;
     double rampGain = 1.0;
     if (ramp) {
@@ -521,7 +544,7 @@ double soemdsp_velvet_reverb_right(int handle) {
 }
 
 int soemdsp_velvet_reverb_version() {
-  return 2; // 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB. 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
+  return 2; // 2: Darkness / Tail Darkness are continuous (fractional pulse widths); Decay is the tail length in seconds (RT60), the taps span it and fade to -60 dB; past Tap Count, Density still sets the first spacing (widening periods). 1: split out of Velvet Noise (diffuser only; the generator is its own module now)
 }
 
 } // extern "C"

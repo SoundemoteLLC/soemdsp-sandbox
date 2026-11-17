@@ -7122,7 +7122,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "Hz",
-        tooltip: "Tap density (taps per second) over the tail. Higher density = smoother, denser reflections. When Density x Decay is more than Tap Count, the taps spread out to cover the whole tail. 0 Hz pauses: the reverb keeps the taps it has."
+        tooltip: "Tap density (taps per second) over the tail. Higher density = smoother, denser reflections. When Density x Decay is more than Tap Count, Density still sets the spacing at the start of the tail and the spacing widens toward the end, so higher Density keeps packing the early reflections tighter. 0 Hz pauses: the reverb keeps the taps it has."
       },
       {
         defaultValue: "64",
@@ -7137,7 +7137,7 @@ const nodeGraphModuleDefinitions = (
         min: "8",
         nonlinearSlider: true,
         step: "1",
-        tooltip: "Most taps the tail uses. A long Decay at high Density needs Density x Decay taps; with fewer, the taps spread out (sparser, grainier tail). CPU cost grows with taps. Range here is 8 to 256; the engine allows up to 4096 if you raise Max in the parameter settings."
+        tooltip: "Most taps the tail uses. A long Decay at high Density needs Density x Decay taps; with fewer, the spacing widens along the tail (the late tail gets sparser). CPU cost grows with taps. Range here is 8 to 256; the engine allows up to 4096 if you raise Max in the parameter settings."
       },
       {
         defaultValue: "1",

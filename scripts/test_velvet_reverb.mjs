@@ -153,5 +153,21 @@ const db = (v) => 10 * Math.log10(v);
   check(spreadDb.every((v) => v < 0.5 && v > -9), `wet level vs Darkness 1 at 1.5/2/4.33/16.5/64: ${spreadDb.map((v) => v.toFixed(2)).join(", ")} dB`);
 }
 
+// ---- Past Tap Count, higher Density still changes the sound (early taps pack tighter)
+{
+  const opts = { taps: 64, decay: 0.5, n: 26000 };
+  const dens = [128, 500, 2500, 20000];
+  const irs = dens.map((density) => ir({ ...opts, density }).L);
+  let allDiffer = true;
+  for (let i = 1; i < irs.length; i += 1) if (dist(irs[i - 1], irs[i]) < 0.05) allDiffer = false;
+  check(allDiffer, `Density 128 / 500 / 2500 / 20000 Hz with 64 taps over 0.5 s all sound different`);
+  // Taps in the first 50 ms: more with higher Density.
+  const early = irs.map((r) => { let c = 0; let prev = 0; for (let i = 0; i < 2400; i += 1) { if (r[i] !== 0 && prev === 0) c += 1; prev = r[i]; } return c; });
+  check(early[0] < early[1] && early[1] < early[2] && early[2] <= early[3], `taps starting in the first 50 ms rise with Density: ${early.join(" < ")}`);
+  let prev = null; const s = [];
+  for (let k = 0; k <= 100; k += 1) { const r = ir({ ...opts, density: 127.9 + k * 0.002 }).L; if (prev) s.push(dist(prev, r)); prev = r; }
+  const sorted = [...s].sort((p, q) => p - q);
+  check(sorted[sorted.length - 1] < 10 * sorted[sorted.length >> 1] + 1e-9, `Density across the Tap Count edge (128 Hz x 0.5 s = 64 taps): largest step ${sorted[sorted.length - 1].toFixed(5)} vs median ${sorted[sorted.length >> 1].toFixed(5)}`);
+}
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log("all velvet reverb checks passed");
