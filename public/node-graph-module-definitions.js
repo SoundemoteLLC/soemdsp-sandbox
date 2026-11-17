@@ -8884,10 +8884,13 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Pair 4 stereo balance. 0 = unchanged. −1 = left only. +1 = right only." },
       {
         defaultValue: "0",
+        // max = the spawn slider max (user-editable); hardMax keeps the previous
+        // typed ceiling (+12 dB).
+        hardMax: "12",
         key: "amplitude",
         kind: "decibels",
         label: "Amplitude (All)",
-        max: "12",
+        max: "0",
         mid: "0",
         min: "-140",
         minusInf: true,
@@ -8898,7 +8901,7 @@ const nodeGraphModuleDefinitions = (
         smoothingSeconds: 0.0333,
         step: "any",
         unit: "dB",
-        tooltip: "Master gain after all four pairs (−∞…+12 dB). 0 dB is unity." },
+        tooltip: "Master gain after all four pairs. Spawn slider max is 0 dB (unity); type or edit the range up to +12 dB. −∞ is silence." },
     ] },
   mixStereo2: {
     planRole: "processor",
@@ -8965,10 +8968,13 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Pair 2 stereo balance. 0 = unchanged. −1 = left only. +1 = right only." },
       {
         defaultValue: "0",
+        // max = the spawn slider max (user-editable); hardMax keeps the previous
+        // typed ceiling (+12 dB).
+        hardMax: "12",
         key: "amplitude",
         kind: "decibels",
         label: "Gain",
-        max: "12",
+        max: "0",
         mid: "0",
         min: "-140",
         minusInf: true,
@@ -8979,7 +8985,7 @@ const nodeGraphModuleDefinitions = (
         smoothingSeconds: 0.0333,
         step: "any",
         unit: "dB",
-        tooltip: "Master gain after both pairs (−∞…+12 dB). 0 dB is unity." },
+        tooltip: "Master gain after both pairs. Spawn slider max is 0 dB (unity); type or edit the range up to +12 dB. −∞ is silence." },
     ] },
   // Legacy type id → MixStereo4 (load alias until patches re-save).
   mixStereo: {
@@ -9027,7 +9033,9 @@ const nodeGraphModuleDefinitions = (
         max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
       {
         defaultValue: "0", key: "amplitude", kind: "decibels", label: "Amplitude (All)",
-        max: "12", mid: "0", min: "-140", minusInf: true, nonlinearSlider: true,
+        // max = spawn slider max; hardMax keeps the previous +12 dB typed ceiling.
+        hardMax: "12",
+        max: "0", mid: "0", min: "-140", minusInf: true, nonlinearSlider: true,
         linearSmoothing: true, smoothingType: "linear", smoothingMode: "internal",
         smoothingSeconds: 0.0333, step: "any", unit: "dB" },
     ] },
