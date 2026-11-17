@@ -1475,10 +1475,17 @@ function nodeGraphGlGraphDragFrom(point, endpoint) {
 
 /** One wire end dot (square jack or round) into `batch`. */
 function nodeGraphGlGraphDrawWireEnd(batch, end, feather) {
+  // In a dark room the cables are darkened (with a floor); the dots at their ends get exactly the same
+  // darkening, so a dot is never brighter than the wire it ends.
+  const dark = !nodeGraphGlGraphState.view && typeof nodeGraphRoomAmbientDark === "function"
+    ? Math.min(nodeGraphRoomAmbientDark(), 1 - NODE_CABLE_FLOOR) : 0;
+  const rgba = dark > 0
+    ? [end.rgba[0] * (1 - dark), end.rgba[1] * (1 - dark), end.rgba[2] * (1 - dark), end.rgba.length > 3 ? end.rgba[3] : 1]
+    : end.rgba;
   if (end.square) {
-    nodeGraphGlLinesRect(batch, end.x - end.reach, end.y - end.reach, end.reach * 2, end.reach * 2, end.rgba);
+    nodeGraphGlLinesRect(batch, end.x - end.reach, end.y - end.reach, end.reach * 2, end.reach * 2, rgba);
   } else {
-    nodeGraphGlLinesDot(batch, end.x, end.y, end.reach, feather, end.rgba);
+    nodeGraphGlLinesDot(batch, end.x, end.y, end.reach, feather, rgba);
   }
 }
 
