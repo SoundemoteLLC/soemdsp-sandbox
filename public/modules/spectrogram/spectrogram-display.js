@@ -44,13 +44,16 @@ function spectrogramDefaultGradientStops() {
   }
   return [
     { t: 0, color: "#000000" },
-    { t: 0.161, color: "#000391" },
-    { t: 0.319, color: "#0046a3" },
-    { t: 0.44, color: "#007097" },
-    { t: 0.56, color: "#009c27" },
-    { t: 0.639, color: "#77aa00" },
-    { t: 0.72, color: "#dca900" },
-    { t: 0.859, color: "#ffd302" },
+    { t: 0.0909, color: "#00020a" },
+    { t: 0.1818, color: "#011325" },
+    { t: 0.2727, color: "#042b3a" },
+    { t: 0.3636, color: "#0a464f" },
+    { t: 0.4545, color: "#126550" },
+    { t: 0.5455, color: "#4d8117" },
+    { t: 0.6364, color: "#9d8c1e" },
+    { t: 0.7273, color: "#c3a34b" },
+    { t: 0.8182, color: "#ddc087" },
+    { t: 0.9091, color: "#f0dfc2" },
     { t: 1, color: "#ffffff" },
   ];
 }

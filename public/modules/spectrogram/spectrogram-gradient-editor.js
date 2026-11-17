@@ -29,16 +29,21 @@
 (function nodeGraphGradientSelectorModule(global) {
   const STYLE_ID = "node-gradient-selector-styles";
 
-  // Classic preset: CIELAB L* climbs nearly linearly under sRGB interpolation.
+  // Classic preset: inspired-by cool-to-warm, designed in OKLCH with OKLab L
+  // rising linearly from 0 to 1. 12 stops keep sRGB interpolation close to
+  // the designed lightness curve (not a remake of the old even hue list).
   const DEFAULT_STOPS = Object.freeze([
     { t: 0, color: "#000000" },
-    { t: 0.161, color: "#000391" },
-    { t: 0.319, color: "#0046a3" },
-    { t: 0.44, color: "#007097" },
-    { t: 0.56, color: "#009c27" },
-    { t: 0.639, color: "#77aa00" },
-    { t: 0.72, color: "#dca900" },
-    { t: 0.859, color: "#ffd302" },
+    { t: 0.0909, color: "#00020a" },
+    { t: 0.1818, color: "#011325" },
+    { t: 0.2727, color: "#042b3a" },
+    { t: 0.3636, color: "#0a464f" },
+    { t: 0.4545, color: "#126550" },
+    { t: 0.5455, color: "#4d8117" },
+    { t: 0.6364, color: "#9d8c1e" },
+    { t: 0.7273, color: "#c3a34b" },
+    { t: 0.8182, color: "#ddc087" },
+    { t: 0.9091, color: "#f0dfc2" },
     { t: 1, color: "#ffffff" },
   ]);
 
@@ -248,20 +253,23 @@
 
   const PRESETS = Object.freeze([
     {
-      // Black, dark blue, turquoise, light green, yellow, white.
-      // Stop colors and positions keep CIELAB L* nearly linear in sRGB lerp.
+      // Inspired-by cool-to-warm: dark blue, teal, green, gold, near-white.
+      // Designed in OKLCH with OKLab L rising linearly from 0 to 1.
       id: "classic",
       label: "classic",
-      colors: ["#000000", "#000391", "#0046a3", "#007097", "#009c27", "#77aa00", "#dca900", "#ffd302", "#ffffff"],
+      colors: ["#000000", "#00020a", "#011325", "#042b3a", "#0a464f", "#126550", "#4d8117", "#9d8c1e", "#c3a34b", "#ddc087", "#f0dfc2", "#ffffff"],
       stops: Object.freeze([
         Object.freeze({ t: 0, color: "#000000" }),
-        Object.freeze({ t: 0.161, color: "#000391" }),
-        Object.freeze({ t: 0.319, color: "#0046a3" }),
-        Object.freeze({ t: 0.44, color: "#007097" }),
-        Object.freeze({ t: 0.56, color: "#009c27" }),
-        Object.freeze({ t: 0.639, color: "#77aa00" }),
-        Object.freeze({ t: 0.72, color: "#dca900" }),
-        Object.freeze({ t: 0.859, color: "#ffd302" }),
+        Object.freeze({ t: 0.0909, color: "#00020a" }),
+        Object.freeze({ t: 0.1818, color: "#011325" }),
+        Object.freeze({ t: 0.2727, color: "#042b3a" }),
+        Object.freeze({ t: 0.3636, color: "#0a464f" }),
+        Object.freeze({ t: 0.4545, color: "#126550" }),
+        Object.freeze({ t: 0.5455, color: "#4d8117" }),
+        Object.freeze({ t: 0.6364, color: "#9d8c1e" }),
+        Object.freeze({ t: 0.7273, color: "#c3a34b" }),
+        Object.freeze({ t: 0.8182, color: "#ddc087" }),
+        Object.freeze({ t: 0.9091, color: "#f0dfc2" }),
         Object.freeze({ t: 1, color: "#ffffff" }),
       ]),
     },
@@ -271,18 +279,22 @@
       colors: ["#000000", "#404040", "#a0a0a0", "#ffffff"],
     },
     {
-      // Black, dark red, red, orange, yellow, white. L* nearly linear in sRGB lerp.
+      // Inspired-by fire: deep red, orange, amber, pale. OKLab L linear 0..1.
       id: "hot",
       label: "hot",
-      colors: ["#000000", "#570400", "#ae0100", "#ff0000", "#ff6416", "#ff8f00", "#ffd302", "#ffffff"],
+      colors: ["#000000", "#090000", "#290201", "#471404", "#652a09", "#834310", "#a25c18", "#bb7c20", "#d99929", "#e5be6b", "#f2dfb3", "#ffffff"],
       stops: Object.freeze([
         Object.freeze({ t: 0, color: "#000000" }),
-        Object.freeze({ t: 0.161, color: "#570400" }),
-        Object.freeze({ t: 0.36, color: "#ae0100" }),
-        Object.freeze({ t: 0.532, color: "#ff0000" }),
-        Object.freeze({ t: 0.62, color: "#ff6416" }),
-        Object.freeze({ t: 0.701, color: "#ff8f00" }),
-        Object.freeze({ t: 0.859, color: "#ffd302" }),
+        Object.freeze({ t: 0.0909, color: "#090000" }),
+        Object.freeze({ t: 0.1818, color: "#290201" }),
+        Object.freeze({ t: 0.2727, color: "#471404" }),
+        Object.freeze({ t: 0.3636, color: "#652a09" }),
+        Object.freeze({ t: 0.4545, color: "#834310" }),
+        Object.freeze({ t: 0.5455, color: "#a25c18" }),
+        Object.freeze({ t: 0.6364, color: "#bb7c20" }),
+        Object.freeze({ t: 0.7273, color: "#d99929" }),
+        Object.freeze({ t: 0.8182, color: "#e5be6b" }),
+        Object.freeze({ t: 0.9091, color: "#f2dfb3" }),
         Object.freeze({ t: 1, color: "#ffffff" }),
       ]),
     },

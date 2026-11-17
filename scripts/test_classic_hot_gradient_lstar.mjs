@@ -1,7 +1,8 @@
-// Classic and Hot shared presets should climb in CIELAB L* nearly linearly
-// under the app's sRGB stop interpolation, without a yellow brightness spike.
-// Patches store copied gradientStops, not a preset id, so picking Classic/Hot
-// takes the new look while already-saved custom stops stay as-is.
+// Classic and Hot are inspired-by OKLab-L-linear ramps (cool-to-warm / fire),
+// not remakes of the old even-spaced hue lists. OKLab L rises with t at the
+// authored stops; sRGB interpolation stays within about 1.5 CIELAB L* of the
+// designed lightness polyline, including the first dark interval. No pure
+// #ff0000 / #ffff00 stops. Patches store copied gradientStops, not a preset id.
 //   node scripts/test_classic_hot_gradient_lstar.mjs
 import fs from "node:fs";
 import path from "node:path";
@@ -38,24 +39,60 @@ const classic = presets.find((p) => p.id === "classic");
 const hot = presets.find((p) => p.id === "hot");
 const defaults = vm.runInContext("SPECTROGRAM_DEFAULT_GRADIENT_STOPS", ctx);
 
-const classicColors = ["#000000", "#000391", "#0046a3", "#007097", "#009c27", "#77aa00", "#dca900", "#ffd302", "#ffffff"];
-const hotColors = ["#000000", "#570400", "#ae0100", "#ff0000", "#ff6416", "#ff8f00", "#ffd302", "#ffffff"];
+const classicStops = [
+  { t: 0, color: "#000000" },
+  { t: 0.0909, color: "#00020a" },
+  { t: 0.1818, color: "#011325" },
+  { t: 0.2727, color: "#042b3a" },
+  { t: 0.3636, color: "#0a464f" },
+  { t: 0.4545, color: "#126550" },
+  { t: 0.5455, color: "#4d8117" },
+  { t: 0.6364, color: "#9d8c1e" },
+  { t: 0.7273, color: "#c3a34b" },
+  { t: 0.8182, color: "#ddc087" },
+  { t: 0.9091, color: "#f0dfc2" },
+  { t: 1, color: "#ffffff" },
+];
+const hotStops = [
+  { t: 0, color: "#000000" },
+  { t: 0.0909, color: "#090000" },
+  { t: 0.1818, color: "#290201" },
+  { t: 0.2727, color: "#471404" },
+  { t: 0.3636, color: "#652a09" },
+  { t: 0.4545, color: "#834310" },
+  { t: 0.5455, color: "#a25c18" },
+  { t: 0.6364, color: "#bb7c20" },
+  { t: 0.7273, color: "#d99929" },
+  { t: 0.8182, color: "#e5be6b" },
+  { t: 0.9091, color: "#f2dfb3" },
+  { t: 1, color: "#ffffff" },
+];
+
+function pack(stops) {
+  return JSON.stringify(stops.map((s) => [Number(s.t), String(s.color).toLowerCase()]));
+}
 
 check(Boolean(classic?.stops && hot?.stops), "Classic and Hot ship explicit stop positions, not only even colors");
+check(classic?.label === "classic" && hot?.label === "hot", "Preset names stay Classic and Hot (labels classic / hot)");
 check(
-  classic.colors.map((c) => c.toLowerCase()).join() === classicColors.join()
-    && classic.stops.map((s) => s.color.toLowerCase()).join() === classicColors.join(),
-  "Classic colors are the reworked black / blue / turquoise / green / yellow / white ramp",
+  pack(classic.colors.map((c, i) => ({ t: classic.stops[i].t, color: c }))) === pack(classicStops)
+    && pack(classic.stops) === pack(classicStops)
+    && classic.stops.length === 12,
+  "Classic is the inspired-by OKLab-linear cool-to-warm ramp (12 stops)",
 );
 check(
-  hot.colors.map((c) => c.toLowerCase()).join() === hotColors.join()
-    && hot.stops.map((s) => s.color.toLowerCase()).join() === hotColors.join(),
-  "Hot colors are the reworked black / red / orange / yellow / white ramp",
+  pack(hot.colors.map((c, i) => ({ t: hot.stops[i].t, color: c }))) === pack(hotStops)
+    && pack(hot.stops) === pack(hotStops)
+    && hot.stops.length === 12,
+  "Hot is the inspired-by OKLab-linear fire ramp (12 stops)",
 );
 check(
-  JSON.stringify(defaults.map((s) => [s.t, s.color.toLowerCase()]))
-    === JSON.stringify(classic.stops.map((s) => [s.t, s.color.toLowerCase()])),
+  pack(defaults) === pack(classic.stops),
   "Spectrogram default stops match the Classic preset so picking Classic equals the face default",
+);
+check(
+  ![classic, hot].some((p) => p.stops.some((s) => ["#ffff00", "#ff0000"].includes(s.color.toLowerCase()))),
+  "Classic and Hot do not use pure #ffff00 / #ff0000 stops",
 );
 
 function srgbToLin(u) {
@@ -71,6 +108,13 @@ function rgb01ToLstar(rgb) {
   const d = 6 / 29;
   const fy = Y > d ** 3 ? Y ** (1 / 3) : Y / (3 * d * d) + 4 / 29;
   return 116 * fy - 16;
+}
+function rgb01ToOkL(rgb) {
+  const [r, g, b] = rgb.map(srgbToLin);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
 }
 function lerp(a, b, u) {
   return a.map((x, i) => x + (b[i] - x) * u);
@@ -88,33 +132,72 @@ function sampleStops(stops, t) {
   }
   return list[list.length - 1].rgb;
 }
-function lstarCurve(stops, n = 256) {
-  return Array.from({ length: n }, (_, i) => {
-    const t = i / (n - 1);
-    return { t, L: rgb01ToLstar(sampleStops(stops, t)) };
-  });
+function designedLstar(stops, t) {
+  const list = stops.map((s) => ({ t: Number(s.t), L: rgb01ToLstar(hexToRgb01(s.color)) })).sort((a, b) => a.t - b.t);
+  if (t <= list[0].t) return list[0].L;
+  if (t >= list[list.length - 1].t) return list[list.length - 1].L;
+  for (let i = 1; i < list.length; i += 1) {
+    const a = list[i - 1];
+    const b = list[i];
+    if (t <= b.t) {
+      const u = (t - a.t) / Math.max(1e-9, b.t - a.t);
+      return a.L + (b.L - a.L) * u;
+    }
+  }
+  return list[list.length - 1].L;
 }
+
 function metrics(stops) {
-  const rows = lstarCurve(stops);
+  const n = 256;
+  const firstEnd = Number(stops[1]?.t ?? 0);
   let maxAbs = 0;
   let maxDrop = 0;
   let err2 = 0;
-  for (let i = 0; i < rows.length; i += 1) {
-    const d = rows[i].L - 100 * rows[i].t;
+  let firstMax = 0;
+  let prev = null;
+  let maxOkDev = 0;
+  const L0 = rgb01ToLstar(sampleStops(stops, 0));
+  const L1 = rgb01ToLstar(sampleStops(stops, 1));
+  for (let i = 0; i < n; i += 1) {
+    const t = i / (n - 1);
+    const rgb = sampleStops(stops, t);
+    const L = rgb01ToLstar(rgb);
+    const d = L - designedLstar(stops, t);
     maxAbs = Math.max(maxAbs, Math.abs(d));
     err2 += d * d;
-    if (i > 0 && rows[i].L < rows[i - 1].L) {
-      maxDrop = Math.max(maxDrop, rows[i - 1].L - rows[i].L);
-    }
+    if (t <= firstEnd + 1e-12) firstMax = Math.max(firstMax, Math.abs(d));
+    if (prev != null && L < prev) maxDrop = Math.max(maxDrop, prev - L);
+    prev = L;
+    maxOkDev = Math.max(maxOkDev, Math.abs(rgb01ToOkL(rgb) - t));
   }
-  return { maxAbs, rmse: Math.sqrt(err2 / rows.length), maxDrop, L0: rows[0].L, L1: rows[rows.length - 1].L };
+  let maxStopOk = 0;
+  for (const s of stops) {
+    maxStopOk = Math.max(maxStopOk, Math.abs(rgb01ToOkL(hexToRgb01(s.color)) - Number(s.t)));
+  }
+  return {
+    maxAbs,
+    rmse: Math.sqrt(err2 / n),
+    firstMax,
+    maxDrop,
+    maxOkDev,
+    maxStopOk,
+    L0,
+    L1,
+  };
 }
 
 for (const [name, preset] of [["Classic", classic], ["Hot", hot]]) {
   const m = metrics(preset.stops);
   check(m.L0 < 0.5 && m.L1 > 99.5, `${name} still runs black to white (L* ${m.L0.toFixed(2)}…${m.L1.toFixed(2)})`);
   check(m.maxDrop < 0.05, `${name} L* is monotonic under sRGB interpolation (max drop ${m.maxDrop.toFixed(3)})`);
-  check(m.maxAbs < 4 && m.rmse < 1.5, `${name} L* stays close to linear (max |Δ| ${m.maxAbs.toFixed(2)}, RMSE ${m.rmse.toFixed(2)})`);
+  check(
+    m.maxStopOk < 0.045,
+    `${name} stop OKLab L tracks t (max |okL-t| ${m.maxStopOk.toFixed(4)})`,
+  );
+  check(
+    m.maxAbs < 1.5 && m.firstMax < 1.5 && m.rmse < 0.6,
+    `${name} sRGB interp stays within 1.5 L* of the designed curve, including the first interval (max |Δ| ${m.maxAbs.toFixed(2)}, first ${m.firstMax.toFixed(2)}, RMSE ${m.rmse.toFixed(2)})`,
+  );
 }
 
 const editorSrc = fs.readFileSync(path.join(root, "public/modules/spectrogram/spectrogram-gradient-editor.js"), "utf8");
@@ -136,4 +219,4 @@ if (failed) {
   console.error(`FAILED ${failed}`);
   process.exit(1);
 }
-console.log("ok  Classic and Hot L* ramps are even, and saved stops stay copies");
+console.log("ok  Classic and Hot are inspired-by OKLab-linear ramps, and saved stops stay copies");
