@@ -1,0 +1,96 @@
+{
+  "version": 11,
+  "cases": {
+    "default-ir": {
+      "shaL": "37b3f127a74152d145769b1ded2a11402f6aff6f9f7be694633fac4b8e984dd4",
+      "shaR": "133bf9753ef39f403d7d27bf7c871987717096e7321ee7c53223dcb6b67195fc",
+      "n": 4096,
+      "first": -0.6775464598005265,
+      "last": 0
+    },
+    "1024-6s-d1-impulse": {
+      "shaL": "bf1496107047fc88b7e6ca4b3869b2ed15cb1d19adb07683ba013a506a54f382",
+      "shaR": "3af54a79118107418e61c3138a4c4ef3111eb3928561d22bc3d447312e045d76",
+      "n": 8000,
+      "first": -0.11613685252326378,
+      "last": 0
+    },
+    "300-1s-d64": {
+      "shaL": "f2c0ab4a339dd1860b7e1f52b08caf72895a0904ca7f1b2d3f16b13162c955fe",
+      "shaR": "a5c9936b4b2009e099c35da70a2de952bccd0e9dc060c2325ac5c57f846953e5",
+      "n": 48256,
+      "first": -0.34672287522464607,
+      "last": 0
+    },
+    "64-6s-tail1024": {
+      "shaL": "6bc0d129d938d313e41a92d5d7d37c36083f5711b6e6ffb5941ad4971bd226a8",
+      "shaR": "1a27d3c1fc1d255a7550d7b63a0e589c29039ecb21f9c923eaab53a04381db07",
+      "n": 4096,
+      "first": -0.444454740561131,
+      "last": 0
+    },
+    "4096-025-thinned": {
+      "shaL": "29eed9346af5b2d9e5a382cb4a88e0c0ca120abbccc6605e1731e6e7a1edb341",
+      "shaR": "758e4ffef4150a3188761bede67d513bcaf0a9b3d804f7b44622d8a8d6bccabb",
+      "n": 2048,
+      "first": -0.24244995352730792,
+      "last": 0
+    },
+    "noise-1024-1s": {
+      "shaL": "0c6e9607fdfe79b518c59038ef1b2e547a2820cea47eed6b82a3e1b2cad65a0d",
+      "shaR": "bd30290a99385c7af6cdb0cba2a81748738cf510a7ca46aa8d5ff3345fa20af9",
+      "n": 4096,
+      "first": 0.05876076822180132,
+      "last": -0.13909177183753285
+    },
+    "silence-then-noise": {
+      "shaL": "23e31f5e97664e47dab5b5be97b348292088ab07eb7f55d95cfeb3c736a625d8",
+      "shaR": "c7995f73d23d39259b9a3d801d6fa0ac9b85cf6c4a8959e8c221de821a9f8f7d",
+      "n": 8192,
+      "first": 0,
+      "last": -0.28114254285169493
+    },
+    "midblock-dark": {
+      "shaL": "4b27139b7438d01fc89c087f8b32501bf1f086d0afafceebfedaa422cb22854e",
+      "shaR": "26aa051ec894021d75782f7ce0c49bd07ec0013ee4fce80d6e9b1d2c4cd7000b",
+      "n": 2048,
+      "first": -0.06530438731248761,
+      "last": 0.04063395296876299
+    },
+    "midblock-mix": {
+      "shaL": "63c7b871484091745a1899f1ece04b3623efe658139e7191031631cc8d574214",
+      "shaR": "d75d395865be31378ac7e56a4994eb58348ecc8df4a351822973b5e1921c0657",
+      "n": 1024,
+      "first": -0.5266171752303259,
+      "last": 0
+    },
+    "midblock-length": {
+      "shaL": "677e4c7c6f2e68495d672ed1c752fe2a72c2943a90fa3cec2844f52b342cbeca",
+      "shaR": "91258713fef42801f65c6cfd9fa3106d52670e8a13cde44de258998f66a023d8",
+      "n": 3072,
+      "first": 0,
+      "last": 0.4663400741908612
+    },
+    "fade-then-stable": {
+      "shaL": "8bda1de94bf79abe1ea1ca6e5758884870c33318b73a3f6a832e8fd305a48a80",
+      "shaR": "ddf345c930c4b0957c59195baa317afab452e3e694ee249b35ad86eba00050e4",
+      "n": 4800,
+      "first": -0.22750957669775496,
+      "last": -0.05454504245650568
+    },
+    "amp0-gated": {
+      "shaL": "fee7dd9a41472eaedbcd161253f8718305d6a75dc71630544726459c9a3223a3",
+      "shaR": "039d1e622daef29deb4fc850a5d6fe10066417898fe97338fc28eb44d0d1465e",
+      "n": 8192,
+      "first": -0.125,
+      "last": 0
+    },
+    "skew-gap0": {
+      "shaL": "f3e600556603a496906f6cfdb63fb56111f5d20b99f990c519b2d40b07fb838a",
+      "shaR": "16b3f2134254c968dfef085616da9c6ec3509e4cc449b5be521bd322bb97ef95",
+      "n": 4096,
+      "first": -0.3186799645959819,
+      "last": 0
+    }
+  }
+}

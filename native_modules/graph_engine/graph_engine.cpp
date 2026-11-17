@@ -800,6 +800,26 @@ extern "C" double soemdsp_velvet_reverb_sample(
   double tailRandom,
   double tailCurve
 );
+extern "C" void soemdsp_velvet_reverb_process_block(
+  int handle,
+  const double* inL,
+  const double* inR,
+  double* outL,
+  double* outR,
+  int frames,
+  double taps,
+  double darkness,
+  double stereoSpread,
+  const double* mix,
+  double sampleRate,
+  double decay,
+  double tailDarkness,
+  double ampDecayDb,
+  double densitySkew,
+  double minGapMs,
+  double tailRandom,
+  double tailCurve
+);
 extern "C" double soemdsp_velvet_reverb_right(int handle);
 extern "C" int soemdsp_velvet_reverb_version();
 
@@ -15793,44 +15813,74 @@ static void process_velvet_reverb(Circuit& g, Node& node, int frames) {
   const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
   const double referenceVoltage = circuit_pitch_ref_v(g);
 
-  for (int f = 0; f < frames; f++) {
+  // Evaluate controls per sample (smoothing / live ƒ), then process constant-
+  // parameter runs with the bit-identical block path. A mid-block knob or
+  // cable change starts a table fade on the same sample as sample() would.
+  double inL[kMaxBlockFrames];
+  double inR[kMaxBlockFrames];
+  double mixA[kMaxBlockFrames];
+  double tapsA[kMaxBlockFrames];
+  double darkA[kMaxBlockFrames];
+  double spreadA[kMaxBlockFrames];
+  double lengthA[kMaxBlockFrames];
+  double tailA[kMaxBlockFrames];
+  double ampA[kMaxBlockFrames];
+  double skewA[kMaxBlockFrames];
+  double gapA[kMaxBlockFrames];
+  double randA[kMaxBlockFrames];
+  double curveA[kMaxBlockFrames];
+  const int n = frames < kMaxBlockFrames ? frames : kMaxBlockFrames;
+  for (int f = 0; f < n; f++) {
     control_frame(g, node, f);
-    // Taps (tap count; the f input replaces the knob when wired).
-    const double taps = resolve_osc_hz(
+    tapsA[f] = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
     );
     const double m = g.mixMono[f];
     const double l = g.mixLeft[f];
     const double r = g.mixRight[f];
-    const double inL = stereo_route_feed(route.feedL, m, l, r);
-    const double inR = stereo_route_feed(route.feedR, m, l, r);
+    inL[f] = stereo_route_feed(route.feedL, m, l, r);
+    inR[f] = stereo_route_feed(route.feedR, m, l, r);
+    darkA[f] = control_audio(g, node.width, f);
+    spreadA[f] = control_audio(g, node.diffusionAmount, f);
+    mixA[f] = control_audio(g, node.mix, f);
+    lengthA[f] = control_audio(g, node.timeNumerator, f);
+    tailA[f] = control_audio(g, node.timeDenominator, f);
+    ampA[f] = control_audio(g, node.level, f);
+    skewA[f] = control_audio(g, node.shape, f);
+    gapA[f] = control_audio(g, node.offsetMs, f);
+    randA[f] = control_audio(g, node.center, f);
+    curveA[f] = control_audio(g, node.saturate, f);
+  }
 
-    const double darkness = control_audio(g, node.width, f);
-    const double spread = control_audio(g, node.diffusionAmount, f);
-    const double mix = control_audio(g, node.mix, f);
-
-    const double outL = soemdsp_velvet_reverb_sample(
+  int i = 0;
+  while (i < n) {
+    int run = 1;
+    while (i + run < n
+      && tapsA[i + run] == tapsA[i]
+      && darkA[i + run] == darkA[i]
+      && spreadA[i + run] == spreadA[i]
+      && lengthA[i + run] == lengthA[i]
+      && tailA[i + run] == tailA[i]
+      && ampA[i + run] == ampA[i]
+      && skewA[i + run] == skewA[i]
+      && gapA[i + run] == gapA[i]
+      && randA[i + run] == randA[i]
+      && curveA[i + run] == curveA[i]
+    ) {
+      run += 1;
+    }
+    soemdsp_velvet_reverb_process_block(
       node.nativeHandle,
-      inL,
-      inR,
-      taps,
-      darkness,
-      spread,
-      mix,
-      sr,
-      control_audio(g, node.timeNumerator, f), // Length: the tail s the taps spread over
-      control_audio(g, node.timeDenominator, f), // Tail Darkness (0 = off)
-      control_audio(g, node.level, f), // Amp Decay: dB at the end of the tail (0 = gated)
-      control_audio(g, node.shape, f), // Density Skew
-      control_audio(g, node.offsetMs, f), // Min Gap ms (least spacing between taps)
-      control_audio(g, node.center, f), // Tail Random (0 = smooth tail dark, 1 = previous random widths)
-      control_audio(g, node.saturate, f) // Tail Curve (-1..+1 log-width sweep bend; 0 = geometric)
+      inL + i, inR + i,
+      node.buf[kPortLeft] + i, node.buf[kPortRight] + i,
+      run,
+      tapsA[i], darkA[i], spreadA[i], mixA + i, sr,
+      lengthA[i], tailA[i], ampA[i], skewA[i], gapA[i], randA[i], curveA[i]
     );
-    const double outR = soemdsp_velvet_reverb_right(node.nativeHandle);
-
-    node.buf[kPortLeft][f] = outL;
-    node.buf[kPortRight][f] = outR;
-    node.buf[kPortMono][f] = 0.5 * (outL + outR);
+    i += run;
+  }
+  for (int f = 0; f < n; f++) {
+    node.buf[kPortMono][f] = 0.5 * (node.buf[kPortLeft][f] + node.buf[kPortRight][f]);
   }
 }
 

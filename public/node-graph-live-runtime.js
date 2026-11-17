@@ -535,7 +535,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.7-dark-velvet-taps-snhit-1-beats-1-vbip-1-vrbknobs1-v12s1-v6s1-stg1-skw1-stg6-gap1-stg7-trand1-stg11-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-vfit1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.7-dark-velvet-taps-snhit-1-beats-1-vbip-1-vrbknobs1-v12s1-v6s1-stg1-skw1-stg6-gap1-stg7-trand1-stg11-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-vfit1-vblk1";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
