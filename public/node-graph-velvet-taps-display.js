@@ -34,7 +34,7 @@ function nodeGraphVelvetTapsLoad() {
   if (nodeGraphVelvetTapsWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphVelvetTapsWasm.promise;
   }
-  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1-v6s1-skw1-gap1")
+  nodeGraphVelvetTapsWasm.promise = fetch("/native_modules/velvet_reverb/velvet_reverb.wasm?v=dvel-taps-5-v12s1-v6s1-skw1-gap1-trand1")
     .then((response) => {
       if (!response.ok) throw new Error(`velvet_reverb wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -95,6 +95,7 @@ function nodeGraphVelvetTapsLayout(section, node) {
     nodeGraphVelvetTapsParam(node, "ampDecay", -60),
     nodeGraphVelvetTapsParam(node, "densitySkew", 0),
     nodeGraphVelvetTapsParam(node, "minGap", 1),
+    nodeGraphVelvetTapsParam(node, "tailRandom", 1),
   ];
   const key = args.join(",");
   if (section._velvetTapsKey === key && section._velvetTapsLayout) return section._velvetTapsLayout;
