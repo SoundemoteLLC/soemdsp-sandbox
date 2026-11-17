@@ -7106,7 +7106,6 @@ const nodeGraphModuleDefinitions = (
     // Left #FF7171 / Right #5454F9 as HBS lamps (hue, brightness, saturation; exact).
     defaultDisplaySettings: {
       dotThickness: 0,
-      fadeTime: 0.15,
       leftHue: 0, leftBrightness: 0.63, leftSaturation: 1,
       rightHue: 238.5, rightBrightness: 0.59, rightSaturation: 0.96,
     },

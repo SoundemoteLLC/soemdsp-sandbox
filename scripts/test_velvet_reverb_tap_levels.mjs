@@ -1,13 +1,36 @@
 // Dark Velvet Reverb display levels: peak-hold of |width-filtered pulse
 // x gain x table norm| per tap, L and R, taken by soemdsp_velvet_reverb_take_levels.
+// The face treats a peak above NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB)
+// as a binary trigger and latches it until one bright frame is drawn.
 //   node scripts/test_velvet_reverb_tap_levels.mjs
 import fs from "node:fs";
 import path from "node:path";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let failed = 0;
 const check = (ok, msg) => { if (!ok) { failed += 1; console.error("FAIL", msg); } else console.log("ok  ", msg); };
+
+const faceSrc = fs.readFileSync(path.join(root, "public", "node-graph-velvet-taps-display.js"), "utf8");
+const armStart = faceSrc.indexOf("const NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL");
+const armEnd = faceSrc.indexOf("nodeGraphVelvetTapsInstallIngestArm();");
+if (armStart < 0 || armEnd < 0) throw new Error("could not extract tap-trigger helpers from the face");
+const latch = { Map, Uint8Array, Float32Array, Math, Number, String };
+vm.runInNewContext(
+  faceSrc.slice(armStart, armEnd) + `
+    this.NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL = NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL;
+    this.nodeGraphVelvetTapsTriggerState = nodeGraphVelvetTapsTriggerState;
+    this.nodeGraphVelvetTapsEnsureTriggers = nodeGraphVelvetTapsEnsureTriggers;
+    this.nodeGraphVelvetTapsArmTriggers = nodeGraphVelvetTapsArmTriggers;
+    this.nodeGraphVelvetTapsConsumeTriggers = nodeGraphVelvetTapsConsumeTriggers;
+    this.nodeGraphVelvetTapsTakeLit = nodeGraphVelvetTapsTakeLit;
+  `,
+  latch,
+);
+
+const TRIGGER = latch.NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL;
+check(Number.isFinite(TRIGGER) && Math.abs(TRIGGER - Math.pow(10, -90 / 20)) < 1e-12, `trigger threshold is -90 dB (${TRIGGER})`);
 
 const mod = await WebAssembly.compile(fs.readFileSync(path.join(root, "native_modules", "velvet_reverb", "velvet_reverb.wasm")));
 const imports = {};
@@ -48,17 +71,18 @@ function create() {
   return h;
 }
 
-const peak = (a) => { let m = 0; for (let i = 0; i < a.length; i += 1) m = Math.max(m, a[i]); return m; };
+const on = (v) => v > TRIGGER;
+const anyOn = (a) => { for (let i = 0; i < a.length; i += 1) if (on(a[i])) return true; return false; };
 const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
 
-// ---- Zero input gives zero levels (display on)
+// ---- Zero input stays off
 {
   const h = create();
   x.soemdsp_velvet_reverb_set_display(h, 1);
   for (let i = 0; i < 4000; i += 1) sample(h, 0, 0);
   const lv = take(h);
   check(lv.L.length > 0 && lv.R.length > 0, `zero input: took ${lv.L.length} L / ${lv.R.length} R taps`);
-  check(peak(lv.L) === 0 && peak(lv.R) === 0, `zero input: levels are 0 (L ${peak(lv.L)}, R ${peak(lv.R)})`);
+  check(!anyOn(lv.L) && !anyOn(lv.R), "zero input: every tap is below the -90 dB trigger");
   x.soemdsp_velvet_reverb_destroy(h);
 }
 
@@ -69,35 +93,35 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
   sample(h, 1, 1);
   for (let i = 1; i < 4000; i += 1) sample(h, 0, 0);
   const lv = take(h);
-  check(peak(lv.L) === 0 && peak(lv.R) === 0, `display off: impulse leaves levels at 0 (L ${peak(lv.L)}, R ${peak(lv.R)})`);
+  check(!anyOn(lv.L) && !anyOn(lv.R), "display off: impulse stays below the trigger");
   x.soemdsp_velvet_reverb_destroy(h);
 }
 
-// ---- Impulse on L only: L lights, R stays 0 (spread 1, independent lines)
+// ---- Impulse on L only: L on, R off (spread 1, independent lines)
 {
   const h = create();
   x.soemdsp_velvet_reverb_set_display(h, 1);
   sample(h, 1, 0);
   for (let i = 1; i < 4000; i += 1) sample(h, 0, 0);
   const lv = take(h);
-  check(peak(lv.L) > 1e-6, `impulse L: Left peak ${peak(lv.L).toExponential(2)}`);
-  check(peak(lv.R) === 0, `impulse L: Right stays 0 (got ${peak(lv.R)})`);
+  check(anyOn(lv.L), "impulse L: at least one Left tap is on");
+  check(!anyOn(lv.R), "impulse L: every Right tap stays off");
   x.soemdsp_velvet_reverb_destroy(h);
 }
 
-// ---- Impulse on R only: R lights, L stays 0
+// ---- Impulse on R only: R on, L off
 {
   const h = create();
   x.soemdsp_velvet_reverb_set_display(h, 1);
   sample(h, 0, 1);
   for (let i = 1; i < 4000; i += 1) sample(h, 0, 0);
   const lv = take(h);
-  check(peak(lv.R) > 1e-6, `impulse R: Right peak ${peak(lv.R).toExponential(2)}`);
-  check(peak(lv.L) === 0, `impulse L silent: Left stays 0 (got ${peak(lv.L)})`);
+  check(anyOn(lv.R), "impulse R: at least one Right tap is on");
+  check(!anyOn(lv.L), "impulse R: every Left tap stays off");
   x.soemdsp_velvet_reverb_destroy(h);
 }
 
-// ---- Levels respond in tap order (later taps light later)
+// ---- Triggers respond in tap order (later taps light later)
 {
   const lay = layout();
   const startL = starts(lay.pos);
@@ -114,29 +138,74 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
   const untilFirst = Math.min(first + 2, mid - 1);
   for (let i = 1; i < untilFirst; i += 1) sample(h, 0, 0);
   const early = take(h);
-  const earlyLit = [];
-  const earlyQuiet = [];
+  const earlyMissed = [];
+  const earlyLate = [];
   for (let i = 0; i < early.L.length; i += 1) {
-    if (startL[i] <= untilFirst - 1) { if (!(early.L[i] > 1e-9)) earlyQuiet.push(i); }
-    else if (startL[i] > untilFirst) { if (early.L[i] > 1e-12) earlyLit.push(i); }
+    if (startL[i] <= untilFirst - 1) { if (!on(early.L[i])) earlyMissed.push(i); }
+    else if (startL[i] > untilFirst) { if (on(early.L[i])) earlyLate.push(i); }
   }
-  check(earlyQuiet.length === 0, `after sample ${untilFirst}: early taps have lit (${earlyQuiet.length} missed)`);
-  check(earlyLit.length === 0, `after sample ${untilFirst}: later taps still quiet (lit ${earlyLit.join(",") || "none"})`);
+  check(earlyMissed.length === 0, `after sample ${untilFirst}: early taps are on (${earlyMissed.length} missed)`);
+  check(earlyLate.length === 0, `after sample ${untilFirst}: later taps still off (on ${earlyLate.join(",") || "none"})`);
 
   for (let i = untilFirst; i < mid + 2; i += 1) sample(h, 0, 0);
   const middle = take(h);
-  check(!(early.L[0] > 0) || middle.L[0] === 0, "take_levels clears a spent early peak");
-  check(middle.L[midI] > 1e-9, `mid tap ${midI} (start ${mid}) lit after sample ${mid + 2}: ${middle.L[midI]}`);
+  check(!on(middle.L[0]), "take_levels clears a spent early peak (first tap off)");
+  check(on(middle.L[midI]), `mid tap ${midI} (start ${mid}) is on after sample ${mid + 2}`);
   const stillLate = [];
   for (let i = 0; i < middle.L.length; i += 1) {
-    if (startL[i] > mid + 2 && middle.L[i] > 1e-12) stillLate.push(i);
+    if (startL[i] > mid + 2 && on(middle.L[i])) stillLate.push(i);
   }
-  check(stillLate.length === 0, `after mid window: later taps still quiet (lit ${stillLate.join(",") || "none"})`);
+  check(stillLate.length === 0, `after mid window: later taps still off (on ${stillLate.join(",") || "none"})`);
 
   for (let i = mid + 2; i < last + 4; i += 1) sample(h, 0, 0);
   const late = take(h);
-  check(late.L[lay.count - 1] > 1e-9, `last tap lit after sample ${last + 4}: ${late.L[lay.count - 1]}`);
+  check(on(late.L[lay.count - 1]), `last tap is on after sample ${last + 4}`);
   x.soemdsp_velvet_reverb_destroy(h);
+}
+
+// ---- One-frame latch (face helpers): at least one bright consume per trigger
+{
+  const state = latch.nodeGraphVelvetTapsTriggerState("latch-test");
+  const n = 3;
+  const tL = latch.nodeGraphVelvetTapsEnsureTriggers(state, "triggeredL", n);
+  const tR = latch.nodeGraphVelvetTapsEnsureTriggers(state, "triggeredR", n);
+
+  latch.nodeGraphVelvetTapsArmTriggers(tL, [0, TRIGGER * 2, TRIGGER * 0.5]);
+  check(tL[0] === 0 && tL[1] === 1 && tL[2] === 0, "arm: only peaks above -90 dB set the latch");
+
+  const first = latch.nodeGraphVelvetTapsConsumeTriggers(tL);
+  check(first[1] === 1 && first[0] === 0, "consume: triggered tap is on for this frame");
+  check(tL[0] === 0 && tL[1] === 0 && tL[2] === 0, "consume: latch clears after the bright frame");
+  const second = latch.nodeGraphVelvetTapsConsumeTriggers(tL);
+  check(second[1] === 0, "second consume without a new snapshot stays off");
+
+  // Snapshots faster than draws: two arms, then one consume still bright once
+  latch.nodeGraphVelvetTapsArmTriggers(tL, [TRIGGER * 2, 0, 0]);
+  latch.nodeGraphVelvetTapsArmTriggers(tL, [0, 0, 0]); // later silent snapshot must not clear the latch
+  const held = latch.nodeGraphVelvetTapsConsumeTriggers(tL);
+  check(held[0] === 1, "latch holds across a later empty snapshot until it is drawn");
+  const after = latch.nodeGraphVelvetTapsConsumeTriggers(tL);
+  check(after[0] === 0, "after the guaranteed bright frame the tap goes idle");
+
+  // Draws faster than snapshots: TakeLit fallback arms once per new array identity
+  const snap = new Float32Array([0, TRIGGER * 2, 0]);
+  const litA = latch.nodeGraphVelvetTapsTakeLit("bus-fallback", snap, null, 3, 0, true);
+  const litB = latch.nodeGraphVelvetTapsTakeLit("bus-fallback", snap, null, 3, 0, true);
+  check(litA.onL[1] === 1, "draw-time fallback: first paint of a new snapshot is bright");
+  check(litB.onL[1] === 0, "draw-time fallback: the same snapshot does not retrigger the next paint");
+  const snap2 = new Float32Array([0, TRIGGER * 2, 0]);
+  const litC = latch.nodeGraphVelvetTapsTakeLit("bus-fallback", snap2, null, 3, 0, true);
+  check(litC.onL[1] === 1, "draw-time fallback: a new snapshot identity can trigger again");
+
+  // L/R independent latch
+  latch.nodeGraphVelvetTapsArmTriggers(tL, [TRIGGER * 2, 0, 0]);
+  latch.nodeGraphVelvetTapsArmTriggers(tR, [0, TRIGGER * 2, 0]);
+  const sides = {
+    L: latch.nodeGraphVelvetTapsConsumeTriggers(tL),
+    R: latch.nodeGraphVelvetTapsConsumeTriggers(tR),
+  };
+  check(sides.L[0] === 1 && sides.L[1] === 0, "latch L is independent of R");
+  check(sides.R[1] === 1 && sides.R[0] === 0, "latch R is independent of L");
 }
 
 if (failed) {

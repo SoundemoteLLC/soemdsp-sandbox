@@ -176,12 +176,8 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     title = "Plot scale: 1 = -1..+1 fills the height (2D Plot: the square, both axes).";
   }
   if (formType === "pulseTrainFace" && key === "fadeTime") {
-    label = node?.type === "velvetReverb" ? "Fade (s)" : "Fade time (s)";
-    if (node?.type === "velvetReverb") {
-      title = "";
-    } else {
-      title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
-    }
+    label = "Fade time (s)";
+    title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
   }
   if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "additiveWaveform" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace" || formType === "waterfall" || formType === "waterfallRgb" || formType === "waterfallXyz") && key === "lineSmoothing") {
     label = "Line blur";
@@ -2398,7 +2394,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         ...(type === "clockFace" ? ["startThickness", "blinkTime", "gateHeight"] : []),
         "dotThickness",
         ...(type === "sinCosFace" ? ["padExtra"] : []),
-        ...(type === "pulseTrainFace" ? ["fadeTime"] : []),
+        ...(type === "pulseTrainFace" && node?.type !== "velvetReverb" ? ["fadeTime"] : []),
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
     }
