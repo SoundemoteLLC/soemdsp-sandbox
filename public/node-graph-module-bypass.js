@@ -98,6 +98,9 @@ const NODE_GRAPH_BYPASS_OUT_ALIASES = Object.freeze({
  * Values: "pass" | "silence" | "sink" | "crossover-avg" | "minmax" | "reverb"
  */
 const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
+  // Triggered resonators (no audio in) → 0
+  combPluck: "silence",
+  modeResonator: "silence",
   // Envelopes → 0
   expAdsr: "silence",
   attackDecay: "silence",

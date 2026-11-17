@@ -1993,11 +1993,14 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   modeResonator: {
     category: "scientificFilter",
-    description: "Ping a clean decaying mode—metallic rings and predictable resonance tails.",
+    description: "Trigger a clean decaying mode with a built-in exciter—metallic rings and predictable resonance tails.",
     label: "Mode Resonator",
     notes: [
       "mode",
       "ping",
+      "trigger",
+      "exciter",
+      "pluck",
       "ring",
       "complex pole",
       "decay seconds",
@@ -2009,7 +2012,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   combResonator: {
     category: "scientificFilter",
-    description: "Pitch-tuned comb/KS-style resonance for plucks, hollow bodies, and harmonic peaks.",
+    description: "Pitch-tuned comb/KS-style resonance on audio for hollow bodies and harmonic peaks (Comb Pluck is the triggered one).",
     label: "Comb Resonator",
     notes: [
       "comb",
@@ -2023,6 +2026,24 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "feedforward",
       "scientific",
       "harmonic",
+    ],
+  },
+  combPluck: {
+    category: "scientificFilter",
+    description: "Trigger the Comb Resonator loop with a built-in exciter: Karplus-Strong plucks, pongs and pows.",
+    label: "Comb Pluck",
+    notes: [
+      "comb",
+      "pluck",
+      "karplus-strong",
+      "string",
+      "trigger",
+      "exciter",
+      "velocity",
+      "pong",
+      "pow",
+      "decay seconds",
+      "damping",
     ],
   },
   waveguide: {
@@ -3521,6 +3542,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   clockDivider: {
     source: "public/modules/clockDivider/clock-divider-live-evaluator.js",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/public/modules/clockDivider/clock-divider-live-evaluator.js",
+  },
+  combPluck: {
+    source: "native_modules/comb_pluck/comb_pluck.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/comb_pluck/comb_pluck.cpp",
   },
   combResonator: {
     source: "native_modules/comb_resonator/comb_resonator.cpp",

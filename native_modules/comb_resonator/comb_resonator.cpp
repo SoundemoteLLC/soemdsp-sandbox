@@ -3,15 +3,19 @@
 // soemdsp-native-target: combResonator
 // soemdsp-native-kind: filter
 //
-// Feedback/feedforward comb with Thiran fractional delay.
-// Matches public/modules/combResonator/comb-resonator-math.js.
+// Feedback/feedforward comb with Thiran fractional delay. Strict effect
+// (docs/COMB_PLUCK_PLAN.md): audio in only, no Trigger (Comb Pluck is the
+// triggered generator). The loop math is shared with Comb Pluck in
+// soemdsp/filter/comb_core.h.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
+#include <soemdsp/filter/comb_core.h>
 
 namespace {
 
 using namespace soemdsp_maths;
+using soemdsp::comb::CombCore;
 
 static const int kMaxInstances = 384;  // 3 per graph node (Mono / Left / Right lanes)
 static const double kMinHz = 10.0;
@@ -22,115 +26,33 @@ static const int kMaxCapacity = 23048;
 struct State {
   bool active;
   void* poolBlock; // one shared-pool block with all the buffers of this instance
-  float* buffer; // in the pool block
-  int capacity;
-  int writeIndex;
-  int filled;
-  double lp;
-  double thiranX1;
-  double thiranY1;
+  CombCore comb;   // buffer lives in the pool block
 };
 
 static State gPool[kMaxInstances];
 
+// Limits mirror the module definition (the only source of truth for limits).
 static const char kMetadataJson[] =
   "{"
     "\"module\":\"comb_resonator\","
     "\"label\":\"Comb Resonator\","
     "\"targetType\":\"combResonator\","
     "\"kind\":\"filter\","
-    "\"inputs\":[\"In\",\"Left\",\"Right\",\"Trigger\",\"f\"],"
+    "\"inputs\":[\"In\",\"Left\",\"Right\",\"f\"],"
     "\"outputs\":[\"Mono\",\"Left\",\"Right\"],"
     "\"parameters\":["
       "{\"key\":\"frequency\",\"label\":\"Frequency\",\"kind\":\"frequency\",\"defaultValue\":110,"
         "\"min\":10,\"mid\":110,\"max\":20000,\"step\":\"any\",\"unit\":\"Hz\"},"
-      "{\"key\":\"decay\",\"label\":\"Decay\",\"defaultValue\":1,\"min\":0.001,\"mid\":1,\"max\":10,"
+      "{\"key\":\"decay\",\"label\":\"Decay\",\"defaultValue\":1,\"min\":0.001,\"mid\":1,\"max\":60,"
         "\"step\":\"any\",\"unit\":\"s\"},"
       "{\"key\":\"hold\",\"label\":\"Hold\",\"defaultValue\":0,\"min\":0,\"mid\":0,\"max\":1,\"step\":1},"
-      "{\"key\":\"damping\",\"label\":\"Damping\",\"defaultValue\":0,\"min\":0,\"mid\":0,\"max\":1,\"step\":\"any\"},"
+      "{\"key\":\"damping\",\"label\":\"Damping\",\"defaultValue\":0,\"min\":0,\"mid\":0.35,\"max\":1,\"step\":\"any\"},"
       "{\"key\":\"topology\",\"label\":\"Topology\",\"defaultValue\":0,\"min\":0,\"mid\":0,\"max\":1,\"step\":1},"
-      "{\"key\":\"invert\",\"label\":\"Invert\",\"defaultValue\":0,\"min\":0,\"mid\":0,\"max\":1,\"step\":1},"
-      "{\"key\":\"depth\",\"label\":\"Depth\",\"defaultValue\":1,\"min\":0,\"mid\":1,\"max\":1,\"step\":\"any\"},"
-      "{\"key\":\"amplitude\",\"label\":\"Amplitude\",\"defaultValue\":1,\"min\":0,\"mid\":1,\"max\":2,\"step\":\"any\"}"
+      "{\"key\":\"invert\",\"label\":\"Polarity\",\"defaultValue\":0,\"min\":0,\"mid\":0,\"max\":1,\"step\":1},"
+      "{\"key\":\"depth\",\"label\":\"Depth\",\"defaultValue\":1,\"min\":0,\"mid\":0.5,\"max\":1,\"step\":\"any\"},"
+      "{\"key\":\"amplitude\",\"label\":\"Amplitude\",\"defaultValue\":1,\"min\":0,\"mid\":1,\"max\":1,\"step\":\"any\"}"
     "]"
   "}";
-
-static void ensure_buffer(State* s, double sampleRate) {
-  const double rate = maxd(1.0, sampleRate);
-  int capacity = (int)(rate * kMaxSeconds) + 8;
-  if (capacity < 64) capacity = 64;
-  if (capacity > kMaxCapacity) capacity = kMaxCapacity;
-  if (s->capacity != capacity) {
-    s->capacity = capacity;
-    s->writeIndex = 0;
-    s->filled = 0;
-    s->lp = 0.0;
-    s->thiranX1 = 0.0;
-    s->thiranY1 = 0.0;
-    for (int i = 0; i < capacity; i++) s->buffer[i] = 0.0f;
-  }
-}
-
-static double read_int(State* s, int delayInt) {
-  const int capacity = s->capacity;
-  if (capacity < 2 || s->filled <= 0) return 0.0;
-  int d = delayInt;
-  if (d < 1) d = 1;
-  if (d > capacity - 2) d = capacity - 2;
-  int i = s->writeIndex - d;
-  i %= capacity;
-  if (i < 0) i += capacity;
-  return (double)s->buffer[i];
-}
-
-static double thiran(State* s, double x, double frac) {
-  double d = frac;
-  if (d < 1e-12) {
-    s->thiranX1 = x;
-    s->thiranY1 = x;
-    return x;
-  }
-  if (d > 0.999999) d = 0.999999;
-  const double a = (1.0 - d) / (1.0 + d);
-  const double y = a * x + s->thiranX1 - a * s->thiranY1;
-  s->thiranX1 = x;
-  s->thiranY1 = safe(y);
-  return s->thiranY1;
-}
-
-static double read_frac(State* s, double delaySamples) {
-  const int capacity = s->capacity;
-  if (capacity < 2) return 0.0;
-  double D = delaySamples;
-  if (D < 2.0) D = 2.0;
-  if (D > (double)(capacity - 2)) D = (double)(capacity - 2);
-  const int dInt = (int)dsp_floor(D);
-  const double frac = D - (double)dInt;
-  return thiran(s, read_int(s, dInt), frac);
-}
-
-static double feedback_gain(double decaySec, double delaySamples, double rate, int hold) {
-  if (hold) return 1.0 - 1e-12;
-  const double D = maxd(1.0, delaySamples);
-  const double tau = maxd(1e-6, decaySec);
-  double g = dsp_exp(-D / (tau * rate));
-  if (!(g >= 0.0) || g * 0.0 != 0.0) g = 0.0;
-  if (g > 1.0 - 1e-12) g = 1.0 - 1e-12;
-  return g;
-}
-
-static double loop_filter(State* s, double x, double damping) {
-  const double d = clamp(damping, 0.0, 1.0);
-  if (d <= 1e-9) {
-    s->lp = x;
-    return x;
-  }
-  const double coef = d * d;
-  const double a = 1.0 - coef;
-  s->lp += a * (x - s->lp);
-  s->lp = safe(s->lp);
-  return s->lp;
-}
 
 }  // namespace
 
@@ -142,13 +64,9 @@ extern "C" int soemdsp_comb_resonator_create() {
       void* blk = soemdsp::memory_pool::alloc(bytes);
       if (!blk) return 0; // out of memory budget: the engine reports it
       s.poolBlock = blk;
-      s.buffer = (float*)blk;
-      s.capacity = 0;
-      s.writeIndex = 0;
-      s.filled = 0;
-      s.lp = 0.0;
-      s.thiranX1 = 0.0;
-      s.thiranY1 = 0.0;
+      s.comb.buffer = (float*)blk;
+      s.comb.capacity = 0;
+      soemdsp::comb::comb_reset_state(&s.comb);
       s.active = true;
       return i + 1;
     }
@@ -161,7 +79,7 @@ extern "C" void soemdsp_comb_resonator_destroy(int handle) {
   if (gPool[handle - 1].active) {
     soemdsp::memory_pool::release(gPool[handle - 1].poolBlock);
     gPool[handle - 1].poolBlock = nullptr;
-    gPool[handle - 1].buffer = nullptr;
+    gPool[handle - 1].comb.buffer = nullptr;
   }
   gPool[handle - 1].active = false;
 }
@@ -182,17 +100,9 @@ extern "C" double soemdsp_comb_resonator_sample(
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   State& s = gPool[handle - 1];
   if (!s.active) return 0.0;
-  ensure_buffer(&s, sampleRate);
+  soemdsp::comb::comb_ensure_buffer(&s.comb, sampleRate, kMaxSeconds, kMaxCapacity);
   const double rate = maxd(1.0, sampleRate);
-  const int capacity = s.capacity;
-
-  double f0 = safe(frequencyHz);
-  if (f0 < kMinHz) f0 = kMinHz;
-  if (f0 > rate * 0.499) f0 = rate * 0.499;
-
-  double delaySamples = rate / f0;
-  if (delaySamples < 2.0) delaySamples = 2.0;
-  if (delaySamples > (double)(capacity - 2)) delaySamples = (double)(capacity - 2);
+  const double delaySamples = soemdsp::comb::comb_delay_samples(&s.comb, frequencyHz, rate, kMinHz);
 
   const double amp = safe(amplitude);
   const double x = safe(input) * ((amp * 0.0 == 0.0) ? amp : 1.0);
@@ -201,13 +111,13 @@ extern "C" double soemdsp_comb_resonator_sample(
 
   double y;
   if (isFf) {
-    const double delayed = read_frac(&s, delaySamples);
+    const double delayed = soemdsp::comb::comb_read_frac(&s.comb, delaySamples);
     const double amt = clamp(depth, 0.0, 1.0);
     y = x + sign * amt * delayed;
   } else {
-    const double delayed = read_frac(&s, delaySamples);
-    const double fb = loop_filter(&s, delayed, damping);
-    const double g = feedback_gain(decaySec, delaySamples, rate, hold);
+    const double delayed = soemdsp::comb::comb_read_frac(&s.comb, delaySamples);
+    const double fb = soemdsp::comb::comb_loop_filter(&s.comb, delayed, damping);
+    const double g = soemdsp::comb::comb_feedback_gain(decaySec, delaySamples, rate, hold);
     y = x + sign * g * fb;
   }
 
@@ -216,14 +126,11 @@ extern "C" double soemdsp_comb_resonator_sample(
 
   // Feedback writes the clipped output so the loop cannot explode.
   // Feedforward writes the (unclipped) input history.
-  s.buffer[s.writeIndex] = isFf ? (float)x : (float)y;
-
-  s.writeIndex = (s.writeIndex + 1) % capacity;
-  if (s.filled < capacity) s.filled += 1;
+  soemdsp::comb::comb_write(&s.comb, isFf ? (float)x : (float)y);
 
   return y;
 }
 
-extern "C" int soemdsp_comb_resonator_version() { return 1; }
+extern "C" int soemdsp_comb_resonator_version() { return 2; }
 extern "C" const char* soemdsp_comb_resonator_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_comb_resonator_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

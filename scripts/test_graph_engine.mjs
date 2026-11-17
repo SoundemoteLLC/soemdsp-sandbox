@@ -363,6 +363,92 @@ const shuffled = (n) => {
   }
 }
 
+// ---------------------------------------------------------------- 5a. Comb Pluck / Mode Resonator / Comb Resonator
+// docs/COMB_PLUCK_PLAN.md: Comb Pluck and Mode Resonator fire the shared exciter on a Trigger
+// rising edge (> 0.5, re-arm < 0.4, height = velocity); Comb Resonator is a strict effect.
+{
+  const COMB = 66, MODE = 67, CPLUCK = 266, ATT_OFFSET = 71;
+  const P_FREQ = 10, P_SHAPE_SEL = 11, P_AMP = 12, P_DAMP = 13, P_RETRIG = 21, P_DECAY = 52;
+  const PORT_TRIG = 20, PORT_PEAK = 3, PORT_VEL = 4, PORT_HITS = 5, PORT_ELAPSED = 10;
+  // gates: [[block, level], ...] on a Bias into the chosen input port of node 2.
+  const run = (type, gates, { blocks = 60, inPort = PORT_TRIG, params = [] } = {}) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_add_node(h, 2, type);
+    x.soemdsp_graph_set_smooth_type(h, 1, ATT_OFFSET, 3); x.soemdsp_graph_set_smooth_time(h, 1, ATT_OFFSET, 0);
+    for (const [k, v] of params) x.soemdsp_graph_set_param(h, 2, k, v);
+    x.soemdsp_graph_connect(h, 1, 0, 2, inPort);
+    x.soemdsp_graph_compile(h);
+    let peak = 0;
+    const last = {};
+    for (let b = 0; b < blocks; b++) {
+      for (const [gb, lv] of gates) if (gb === b) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, lv);
+      x.soemdsp_graph_process_block(h, BLK);
+      for (const v of port(h, 2, 0)) peak = Math.max(peak, Math.abs(v));
+      if (type !== COMB) {
+        last.hits = port(h, 2, PORT_HITS)[BLK - 1];
+        last.vel = port(h, 2, PORT_VEL)[BLK - 1];
+        last.elapsed = port(h, 2, PORT_ELAPSED)[BLK - 1];
+        last.tapPeak = port(h, 2, PORT_PEAK)[BLK - 1];
+      }
+    }
+    x.soemdsp_graph_destroy(h);
+    return { peak, ...last };
+  };
+  const held = [[5, 1], [40, 0]];
+  const cp = run(CPLUCK, held);
+  check(cp.hits === 1 && cp.peak > 0.9 && cp.peak < 1.1, `comb pluck: a held gate fires one hit (hits ${cp.hits}, peak ${cp.peak.toFixed(3)}, expected 1 and about 1)`);
+  const elapsedWant = (60 - 5) * BLK / SR;
+  check(Math.abs(cp.elapsed - elapsedWant) < 2 * BLK / SR, `comb pluck: __Elapsed counts from the edge (${cp.elapsed.toFixed(4)} s, expected about ${elapsedWant.toFixed(4)})`);
+  const soft = run(CPLUCK, [[5, 0.7], [40, 0]]);
+  check(Math.abs(soft.peak - 0.7) < 0.08 && Math.abs(soft.vel - 0.7) < 0.01, `comb pluck: trigger height is velocity (peak ${soft.peak.toFixed(3)}, __Vel ${soft.vel.toFixed(3)}, expected 0.7)`);
+  const hyst = run(CPLUCK, [[5, 1], [15, 0.45], [25, 1], [35, 0.3], [45, 1]]);
+  check(hyst.hits === 2, `comb pluck: re-arms only below 0.4 (dip to 0.45 then 0.3 gave ${hyst.hits} hits, expected 2)`);
+  const lvl = run(CPLUCK, held, { params: [[P_AMP, 0.5]] });
+  check(Math.abs(lvl.peak - 0.5) < 0.06, `comb pluck: Level 0.5 peaks at ${lvl.peak.toFixed(3)} (expected about 0.5)`);
+  const choke = run(CPLUCK, [[5, 1], [10, 0], [12, 1]], { params: [[P_RETRIG, 1], [P_DECAY, 4]] });
+  const stack = run(CPLUCK, [[5, 1], [10, 0], [12, 1]], { params: [[P_RETRIG, 0], [P_DECAY, 4]] });
+  check(choke.hits === 2 && stack.hits === 2 && stack.peak > choke.peak, `comb pluck: Stack adds into the ring (peak ${stack.peak.toFixed(3)}), Choke restarts it (peak ${choke.peak.toFixed(3)})`);
+  let shapesOk = true;
+  for (let s = 0; s < 4; s++) {
+    const r = run(CPLUCK, held, { params: [[P_SHAPE_SEL, s], [P_DAMP, 0.4], [P_FREQ, 220]] });
+    if (!(r.hits === 1 && r.peak > 0.5 && r.peak < 1.3)) shapesOk = false;
+  }
+  check(shapesOk, "comb pluck: every Shape (Bump / Triangle / Saw / Noise) rings once near full level");
+  // The ring decays at Decay (1/e per Decay seconds): about 0.37 of the hit 1 s after it.
+  const ringAt = (type) => {
+    const h = fresh();
+    x.soemdsp_graph_add_node(h, 1, BIAS);
+    x.soemdsp_graph_add_node(h, 2, type);
+    x.soemdsp_graph_set_smooth_type(h, 1, ATT_OFFSET, 3); x.soemdsp_graph_set_smooth_time(h, 1, ATT_OFFSET, 0);
+    x.soemdsp_graph_connect(h, 1, 0, 2, PORT_TRIG);
+    x.soemdsp_graph_compile(h);
+    const blocksPerSec = Math.round(SR / BLK);
+    let first = 0, later = 0;
+    for (let b = 0; b < blocksPerSec + 8; b++) {
+      if (b === 2) x.soemdsp_graph_set_param(h, 1, ATT_OFFSET, 1);
+      x.soemdsp_graph_process_block(h, BLK);
+      let pk = 0;
+      for (const v of port(h, 2, 0)) pk = Math.max(pk, Math.abs(v));
+      if (b >= 2 && b < 6) first = Math.max(first, pk);
+      if (b >= blocksPerSec + 2 - 4 && b < blocksPerSec + 2 + 4) later = Math.max(later, pk);
+    }
+    x.soemdsp_graph_destroy(h);
+    return later / first;
+  };
+  const cpRing = ringAt(CPLUCK);
+  const mdRing = ringAt(MODE);
+  check(cpRing > 0.25 && cpRing < 0.45 && mdRing > 0.3 && mdRing < 0.45, `comb pluck / mode resonator: 1 s after a hit with Decay 1 s the ring is at ${cpRing.toFixed(3)} / ${mdRing.toFixed(3)} of its start (expected about 0.37)`);
+  const md = run(MODE, held);
+  check(md.hits === 1 && md.peak > 0.85 && md.peak <= 1.0, `mode resonator: a held gate fires one hit (hits ${md.hits}, peak ${md.peak.toFixed(3)})`);
+  const mdAudio = run(MODE, [[5, 1]], { inPort: 0 });
+  check(mdAudio.peak === 0, `mode resonator: strictly triggered, audio on the old In port does nothing (peak ${mdAudio.peak})`);
+  const combTrig = run(COMB, held);
+  check(combTrig.peak === 0, `comb resonator: strict effect, Trigger no longer feeds the comb (peak ${combTrig.peak})`);
+  const combIn = run(COMB, [[5, 1], [6, 0]], { inPort: 0 });
+  check(combIn.peak > 0.5, `comb resonator: audio In still rings the comb (peak ${combIn.peak.toFixed(3)})`);
+}
+
 // ---------------------------------------------------------------- 5b. RMS Meter (stereo in, one set of outs)
 {
   const RMS = 227;

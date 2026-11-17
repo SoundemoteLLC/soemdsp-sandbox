@@ -201,6 +201,7 @@ const nodeGraphNodeLabels = Object.freeze({
   resonatorFilter: "Shaped Resonator Filter",
   modeResonator: "Mode Resonator",
   combResonator: "Comb Resonator",
+  combPluck: "Comb Pluck",
   waveguide: "Waveguide",
   phaser: "Phaser",
   vocoder: "Vocoder",
@@ -14747,21 +14748,40 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   // Complex 2-pole ring: ping-stable, decay in seconds, rings at Frequency. Not Shaped Resonator Filter.
+  // Strictly triggered (docs/COMB_PLUCK_PLAN.md 2b): Trigger fires the shared pluck
+  // exciter (soemdsp/trigger/pluck_exciter.h) into the poles; no audio input.
   modeResonator: {
-    // Hand-written face (node-graph-module-face.js): Freq | Decay, Amp, Hold Off / Hold On.
+    // Hand-written face (node-graph-module-face.js): Freq | Decay, Shape, Soft | Width,
+    // Stack / Choke, Amp, Hold Off / Hold On. Hit view above it
+    // (modules/combPluck/pluck-hit-display.js): predicted ring + live playhead.
     face: [
       { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"]], h: 40 },
+      { kind: "choices", param: "shape", labels: ["Bump", "Triangle", "Saw", "Noise"], h: 26 },
+      { kind: "cells", params: [["soft", "Soft"], ["width", "Width"]], h: 40 },
+      { kind: "choices", param: "retrigger", labels: ["Stack", "Choke"], h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "choices", param: "hold", labels: ["Hold Off", "Hold On"], h: 26 },
     ],
-    planRole: "processor",
+    planRole: "source",
+    planFreeRun: true,
+    customDisplayArea: true,
+    displayType: "pluckHitFace",
+    displayHeightGu: 3,
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "pluckHitFace", settingsSchema: "pluckHitFace" },
+    ],
+    defaultDisplayMode: "face",
     inputAliases: { Freq: "f", "ƒ": "f" },
-    inputs: ["In", "Trigger", "f"],
+    inputs: ["Trigger", "f"],
     // ƒ = absolute Hz; when wired it replaces Frequency per sample (resolve_osc_hz).
     inputTooltips: {
-      f: "Hz cable. When wired it replaces Frequency (absolute cutoff / center), every sample." },
+      Trigger: "Rising edge fires one hit: it fires when the signal rises above 0.5 and re-arms once it falls below 0.4, so a held gate plays once and its release does nothing. The height just after the edge (peak of the first 16 samples) is the velocity and scales the hit.",
+      f: "Hz cable. When wired it replaces Frequency (absolute ring frequency), every sample." },
     inputLabels: { f: "ƒ" },
     outputs: ["Out"],
+    outputTooltips: {
+      Out: "The ring: Amplitude x velocity, clamped to ±1." },
     parameters: [
       {
         defaultValue: "440",
@@ -14807,6 +14827,63 @@ const nodeGraphModuleDefinitions = (
         tooltip: "On = undamped ring (r = 1): after excitation the mode holds a pure sinusoid forever."
       },
       {
+        choices: ["Bump", "Triangle", "Saw", "Noise"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "shape",
+        label: "Shape",
+        linearSmoothing: false,
+        max: "3",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip:
+          "Exciter fired on each Trigger edge, one burst shorter than the period. Bump = one smooth hump (Soft widens it). Triangle = one band-limited triangle cycle. Saw = one band-limited saw cycle (DSF rolloff). Noise = a filtered noise burst. Every shape has its DC removed, so the ring never drifts."
+      },
+      {
+        defaultValue: "0.5",
+        key: "soft",
+        label: "Soft",
+        max: "1",
+        // Mid high: like DSF Bright mirrored, most of the change is near the soft end.
+        mid: "0.88",
+        min: "0",
+        nonlinearSlider: true,
+        step: "any",
+        tooltip:
+          "Softness of the exciter, latched at each hit. Bump: 1 = gentle hump, 0 = narrow punchy spike. Triangle / Saw: 1 = sine, 0 = sharp corners (geometric harmonic rolloff, like DSF Bright). Noise: 1 = dark, 0 = white."
+      },
+      {
+        defaultValue: "0.5",
+        key: "width",
+        label: "Width",
+        max: "0.9",
+        mid: "0.5",
+        min: "0.05",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip:
+          "Exciter length as a fraction of one period (1/Frequency), latched at each hit. Narrow = bright tick or pong, wide = round pow or thump. Tied to the period, so the timbre follows pitch. Kept under one period so the burst never overlaps its own echo."
+      },
+      {
+        choices: ["Stack", "Choke"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "retrigger",
+        label: "Retrigger",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip:
+          "What a new hit does to a ring that is still sounding. Stack = adds into it (re-plucking a ringing string). Choke = fades the old ring out over 2 ms, clears it, then rings fresh."
+      },
+      {
         defaultValue: "1",
         key: "amplitude",
         label: "Amplitude",
@@ -14815,23 +14892,42 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Impulse-normalized level: peak ring envelope stays roughly constant across Frequency × Decay."
+        tooltip: "Impulse-normalized level: each hit's ring peaks near Amplitude x velocity at any Frequency, Decay, Shape or Width (the exciter's strength at Frequency is divided out, at most 64x). The output is clamped to ±1."
       },
     ]
   },
   // Delay+feedback comb: pitch from delay D=fs/f0. Sibling of Mode Resonator (poles vs delay loop).
   combResonator: {
+    // Hand-written face (node-graph-module-face.js): Freq | Decay, Damping | Depth, Amp,
+    // Hold, Topology, Polarity. Decay view above it (modules/combPluck/pluck-hit-display.js):
+    // the loop envelope from Decay / Damping / Hold, or the Feedforward response.
+    face: [
+      { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"]], h: 40 },
+      { kind: "cells", params: [["damping", "Damping"], ["depth", "Depth"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
+      { kind: "choices", param: "hold", labels: ["Hold Off", "Hold On"], h: 26 },
+      { kind: "choices", param: "topology", labels: ["Feedback", "Feedforward"], h: 26 },
+      { kind: "choices", param: "invert", labels: ["+", "−"], h: 26 },
+    ],
     planRole: "processor",
+    customDisplayArea: true,
+    displayType: "pluckHitFace",
+    displayHeightGu: 3,
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "pluckHitFace", settingsSchema: "pluckHitFace" },
+    ],
+    defaultDisplayMode: "face",
     // Stereo per soemdsp/routing/stereo_route.h: one independent comb per
-    // running lane. Trigger folds into the Mono feed. ƒ = absolute Hz.
+    // running lane. Strict effect (audio in only); the triggered version is
+    // Comb Pluck (docs/COMB_PLUCK_PLAN.md). ƒ = absolute Hz.
     inputAliases: { Freq: "f", "ƒ": "f", Mono: "In" },
-    inputs: ["In", "Left", "Right", "Trigger", "f"],
+    inputs: ["In", "Left", "Right", "f"],
     inputLabels: { In: "Mono", f: "ƒ" },
     inputTooltips: {
       In: "Mono audio in. Alone (or with only one side) it feeds both channels.",
       Left: "Left audio in. Alone it counts as mono; with Right wired, Left channel = Left + Mono.",
       Right: "Right audio in. Alone it counts as mono; with Left wired, Right channel = Right + Mono.",
-      Trigger: "Excitation added to the Mono feed (both channels).",
       f: "Hz cable. When wired it replaces Frequency (absolute pitch), every sample.",
     },
     outputs: ["Mono", "Left", "Right"],
@@ -14947,7 +15043,169 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Input scale before the comb (impulse / audio / Trigger)."
+        tooltip: "Input scale before the comb."
+      },
+    ]
+  },
+  // Comb Pluck (combPluck, native type 266, docs/COMB_PLUCK_PLAN.md): the Comb
+  // Resonator loop (soemdsp/filter/comb_core.h) struck on each Trigger edge by the
+  // shared pluck exciter (soemdsp/trigger/pluck_exciter.h). Mono out.
+  combPluck: {
+    // Hand-written face (node-graph-module-face.js): Freq | Decay, Damping | Level,
+    // Shape, Soft | Width, Stack / Choke, Polarity. Hit view above it
+    // (modules/combPluck/pluck-hit-display.js): predicted ring + live playhead.
+    face: [
+      { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"]], h: 40 },
+      { kind: "cells", params: [["damping", "Damping"], ["level", "Level"]], h: 40 },
+      { kind: "choices", param: "shape", labels: ["Bump", "Triangle", "Saw", "Noise"], h: 26 },
+      { kind: "cells", params: [["soft", "Soft"], ["width", "Width"]], h: 40 },
+      { kind: "choices", param: "retrigger", labels: ["Stack", "Choke"], h: 26 },
+      { kind: "choices", param: "invert", labels: ["+", "−"], h: 26 },
+    ],
+    planRole: "source",
+    planFreeRun: true,
+    customDisplayArea: true,
+    displayType: "pluckHitFace",
+    displayHeightGu: 3,
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "pluckHitFace", settingsSchema: "pluckHitFace" },
+    ],
+    defaultDisplayMode: "face",
+    inputAliases: { Freq: "f", "ƒ": "f" },
+    inputs: ["Trigger", "f"],
+    inputLabels: { f: "ƒ" },
+    inputTooltips: {
+      Trigger: "Rising edge fires one hit: it fires when the signal rises above 0.5 and re-arms once it falls below 0.4, so a held gate plays once and its release does nothing. The height just after the edge (peak of the first 16 samples) is the velocity and scales the hit.",
+      f: "Hz cable. When wired it replaces Frequency (absolute pitch), every sample.",
+    },
+    outputs: ["Out"],
+    outputTooltips: {
+      Out: "The plucked comb, mono. Each hit peaks near Level x velocity.",
+    },
+    parameters: [
+      {
+        defaultValue: "110",
+        key: "frequency",
+        kind: "frequency",
+        label: "Frequency",
+        max: "20000",
+        maxDigits: 5,
+        mid: "110",
+        min: "10",
+        step: "any",
+        unit: "Hz",
+        tooltip:
+          "Pitch of the pluck: loop delay D = fs/f (fractional, Thiran). When ƒ is wired, that Hz is the pitch (absolute). Unwired uses this knob (Hz)."
+      },
+      {
+        defaultValue: "1",
+        key: "decay",
+        kind: "time",
+        label: "Decay",
+        max: "60",
+        maxDigits: 5,
+        mid: "1",
+        min: "0.001",
+        step: "any",
+        unit: "s",
+        tooltip:
+          "Seconds for the ring to fall to 1/e (about -8.7 dB), same law as Comb Resonator: loop gain g = exp(-D/(τ·fs)). T60 is about 6.9 x Decay."
+      },
+      {
+        defaultValue: "0.2",
+        key: "damping", unit: "%",
+        label: "Damping",
+        max: "1",
+        mid: "0.35",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip:
+          "One-pole lowpass in the loop (Karplus-Strong). 0 = bright, every partial rings for Decay. Higher = the top partials die faster than the body (pow instead of pong)."
+      },
+      {
+        choices: ["+", "−"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "invert",
+        label: "Polarity",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "+ = all harmonics of Frequency. − = inverted loop: odd harmonics of Frequency/2, hollow and an octave down."
+      },
+      {
+        choices: ["Bump", "Triangle", "Saw", "Noise"],
+        defaultValue: "1",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "shape",
+        label: "Shape",
+        linearSmoothing: false,
+        max: "3",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip:
+          "Exciter fired on each Trigger edge, one burst shorter than the period. Bump = one smooth hump (Soft widens it). Triangle = one band-limited triangle cycle. Saw = one band-limited saw cycle (DSF rolloff). Noise = a filtered noise burst. Every shape has its DC removed, so the loop never drifts."
+      },
+      {
+        defaultValue: "0.3",
+        key: "soft",
+        label: "Soft",
+        max: "1",
+        // Mid high: like DSF Bright mirrored, most of the change is near the soft end.
+        mid: "0.88",
+        min: "0",
+        nonlinearSlider: true,
+        step: "any",
+        tooltip:
+          "Softness of the exciter, latched at each hit. Bump: 1 = gentle hump, 0 = narrow punchy spike. Triangle / Saw: 1 = sine, 0 = sharp corners (geometric harmonic rolloff, like DSF Bright). Noise: 1 = dark, 0 = white."
+      },
+      {
+        defaultValue: "0.5",
+        key: "width",
+        label: "Width",
+        max: "0.9",
+        mid: "0.5",
+        min: "0.05",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip:
+          "Exciter length as a fraction of one period (1/Frequency), latched at each hit. Narrow = bright tick or pong, wide = round pow or thump. Tied to the period, so the timbre follows pitch. Kept under one period so the burst never overlaps its own echo."
+      },
+      {
+        choices: ["Stack", "Choke"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "retrigger",
+        label: "Retrigger",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip:
+          "What a new hit does to a ring that is still sounding. Stack = adds into it (re-plucking a ringing string). Choke = fades the old ring out over 2 ms, clears it, then rings fresh."
+      },
+      {
+        defaultValue: "1",
+        key: "level",
+        label: "Level",
+        max: "1",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Output level. The first pass of the loop is the exciter itself, so each hit peaks near Level x velocity at any Frequency or Decay."
       },
     ]
   },

@@ -578,6 +578,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "comb_pluck",
+      "label": "Comb Pluck",
+      "targetType": "combPluck",
+      "kind": "generator",
+      "source": "native_modules/comb_pluck/comb_pluck.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/comb_pluck/comb_pluck.cpp",
+      "localSourceUrl": "/native_modules/comb_pluck/comb_pluck.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/comb_pluck/comb_pluck.wasm",
+      "wasmUrl": "native_modules/comb_pluck/comb_pluck.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "comb_resonator",
       "label": "Comb Resonator",
       "targetType": "combResonator",
@@ -1931,7 +1949,7 @@
       "name": "mode_resonator",
       "label": "Mode Resonator",
       "targetType": "modeResonator",
-      "kind": "filter",
+      "kind": "generator",
       "source": "native_modules/mode_resonator/mode_resonator.cpp",
       "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/mode_resonator/mode_resonator.cpp",
       "localSourceUrl": "/native_modules/mode_resonator/mode_resonator.cpp",

@@ -241,6 +241,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   resonatorFilter: 65,
   combResonator: 66,
   modeResonator: 67,
+  combPluck: 266, // Comb Pluck (graph 359)
   chaoticPhaseLockingFilter: 68,
   inertialFilter: 69,
   expAdsr: 70,
@@ -1001,6 +1002,14 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (t === "bradley2a") {
     if (p === "out l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "out r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+  }
+  // Comb Pluck / Mode Resonator hit-view taps (graph 359): __Elapsed on Phase01,
+  // __Peak on Saw, __Vel on Ramp, __Hits on Square. Audio stays on Mono.
+  if (t === "combPluck" || t === "modeResonator") {
+    if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
+    if (p === "__peak") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "__vel") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "__hits") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
   }
   // Robin Sinepulse: Kick audio on Mono, sweep Hz (ƒ) on Left, 0–1 envelope on Right.
   // Face playhead (__Elapsed seconds, −1 idle) on Phase01.
@@ -6854,10 +6863,30 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "modeResonator") {
+      // Strict trigger (graph 359): shape=waveform, soft=center, width=width,
+      // retrigger=mode (0 Stack / 1 Choke).
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1));
       push("hold", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("hold", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("shape", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("shape", 0));
+      push("soft", P.NATIVE_GRAPH_PARAM_CENTER, cont("soft", 0.5));
+      push("width", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width", 0.5));
+      push("retrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("retrigger", 0));
+      continue;
+    }
+    if (type === "combPluck") {
+      // Comb Pluck (graph 359): decay=timeNumerator, damping=shape, invert=stages,
+      // shape=waveform, soft=center, width=width, retrigger=mode, level=amplitude.
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
+      push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1));
+      push("damping", P.NATIVE_GRAPH_PARAM_SHAPE, cont("damping", 0.2));
+      push("invert", P.NATIVE_GRAPH_PARAM_STAGES, disc("invert", 0));
+      push("shape", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("shape", 1));
+      push("soft", P.NATIVE_GRAPH_PARAM_CENTER, cont("soft", 0.3));
+      push("width", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width", 0.5));
+      push("retrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("retrigger", 0));
+      push("level", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("level", 1));
       continue;
     }
     if (type === "chaoticPhaseLockingFilter") {
@@ -10614,6 +10643,14 @@ NodeLiveAudioProcessor.prototype.bindNativeGraphBlockViews = function bindNative
 /** Map native audio port id → face port name(s) for nodeOutputs / scopes. */
 NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPortNames(type, portId) {
   const P = NodeLiveAudioProcessor;
+  // Comb Pluck / Mode Resonator hit view (pluck-hit-display.js): seconds since the
+  // last Trigger edge (-1 before any), output peak follower, last velocity, hit count.
+  if (type === "combPluck" || type === "modeResonator") {
+    if (portId === P.NATIVE_GRAPH_PORT_PHASE01) return ["__Elapsed"];
+    if (portId === P.NATIVE_GRAPH_PORT_SAW) return ["__Peak"];
+    if (portId === P.NATIVE_GRAPH_PORT_RAMP) return ["__Vel"];
+    if (portId === P.NATIVE_GRAPH_PORT_SQUARE) return ["__Hits"];
+  }
   if (type === "midiCc" || type === "midiLag") {
     if (portId === P.NATIVE_GRAPH_PORT_MONO) return ["Out", "Mono"];
     if (portId === P.NATIVE_GRAPH_PORT_LEFT) return ["White"];
@@ -11375,6 +11412,9 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       let ports;
       if (type === "midiCc" || type === "midiLag") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RIGHT, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_LEFT);
+      } else if (type === "combPluck" || type === "modeResonator") {
+        // Hit view taps: __Elapsed / __Peak / __Vel / __Hits.
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SQUARE);
       } else if (type === "blitTrigger") {
         // + __LoopShift (Phase01): the Loop Shift so far, for the face.
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_PHASE01);

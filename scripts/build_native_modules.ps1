@@ -447,11 +447,17 @@ $modules = @(
   ) },
   @{ Name = "mode_resonator"; Simd = $false; Exports = @(
     "soemdsp_mode_resonator_create", "soemdsp_mode_resonator_destroy", "soemdsp_mode_resonator_sample",
+    "soemdsp_mode_resonator_elapsed", "soemdsp_mode_resonator_peak", "soemdsp_mode_resonator_velocity", "soemdsp_mode_resonator_hits",
     "soemdsp_mode_resonator_version", "soemdsp_mode_resonator_metadata_json", "soemdsp_mode_resonator_metadata_json_size"
   ) },
   @{ Name = "comb_resonator"; Simd = $false; Exports = @(
     "soemdsp_comb_resonator_create", "soemdsp_comb_resonator_destroy", "soemdsp_comb_resonator_sample",
     "soemdsp_comb_resonator_version", "soemdsp_comb_resonator_metadata_json", "soemdsp_comb_resonator_metadata_json_size"
+  ) }
+  @{ Name = "comb_pluck"; Simd = $false; Exports = @(
+    "soemdsp_comb_pluck_create", "soemdsp_comb_pluck_destroy", "soemdsp_comb_pluck_sample",
+    "soemdsp_comb_pluck_elapsed", "soemdsp_comb_pluck_peak", "soemdsp_comb_pluck_velocity", "soemdsp_comb_pluck_hits",
+    "soemdsp_comb_pluck_version", "soemdsp_comb_pluck_metadata_json", "soemdsp_comb_pluck_metadata_json_size"
   ) }
   @{ Name = "gain"; Simd = $false; Exports = @("soemdsp_gain_sample", "soemdsp_gain_version", "soemdsp_gain_metadata_json", "soemdsp_gain_metadata_json_size") }
   @{ Name = "bias"; Simd = $false; Exports = @("soemdsp_bias_sample", "soemdsp_bias_version", "soemdsp_bias_metadata_json", "soemdsp_bias_metadata_json_size") }
