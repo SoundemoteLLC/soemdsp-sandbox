@@ -3333,7 +3333,7 @@
     },
     {
       "name": "velvet_noise",
-      "label": "Velvet Noise",
+      "label": "Dark Velvet Noise",
       "targetType": "velvetNoise",
       "kind": "noise",
       "source": "native_modules/velvet_noise/velvet_noise.cpp",
@@ -3351,7 +3351,7 @@
     },
     {
       "name": "velvet_reverb",
-      "label": "Velvet Reverb",
+      "label": "Dark Velvet Reverb",
       "targetType": "velvetReverb",
       "kind": "reverb",
       "source": "native_modules/velvet_reverb/velvet_reverb.cpp",

@@ -137,8 +137,8 @@ const nodeGraphNodeLabels = Object.freeze({
   harmonicSeries: "Harmonic Series",
   noiseGenerator: "Noise Generator",
   fluvNoise: "Fluv Noise",
-  velvetNoise: "Velvet Noise",
-  velvetReverb: "Velvet Reverb",
+  velvetNoise: "Dark Velvet Noise",
+  velvetReverb: "Dark Velvet Reverb",
   randomWalk: "Random Walk",
   cheapWalk: "Cheap Walk",
   piNoise: "Pi Noise",
@@ -7122,7 +7122,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "any",
         unit: "Hz",
-        tooltip: "Tap density (taps per second). Higher density = smoother, denser reflections. 0 Hz pauses: the reverb keeps the taps it has. At very low density the taps are far apart and only those that fit the delay line (about 5.5 s) are used."
+        tooltip: "Tap density (taps per second) over the tail. Higher density = smoother, denser reflections. When Density x Decay is more than Tap Count, the taps spread out to cover the whole tail. 0 Hz pauses: the reverb keeps the taps it has."
       },
       {
         defaultValue: "64",
@@ -7137,7 +7137,7 @@ const nodeGraphModuleDefinitions = (
         min: "8",
         nonlinearSlider: true,
         step: "1",
-        tooltip: "Number of sparse taps. Tap Count / Density sets tail length. CPU cost grows with taps. Range here is 8 to 256; the engine allows up to 4096 if you raise Max in the parameter settings."
+        tooltip: "Most taps the tail uses. A long Decay at high Density needs Density x Decay taps; with fewer, the taps spread out (sparser, grainier tail). CPU cost grows with taps. Range here is 8 to 256; the engine allows up to 4096 if you raise Max in the parameter settings."
       },
       {
         defaultValue: "1",
@@ -7147,7 +7147,8 @@ const nodeGraphModuleDefinitions = (
         mid: "8",
         min: "1",
         nonlinearSlider: false,
-        step: "1",
+        // Continuous (velvet_reverb v2): 1.66 is a 1.66-sample pulse.
+        step: "any",
         unit: "smp",
         tooltip: "Maximum randomized rectangular pulse width. 1 = bright velvet noise; higher values = wider rectangular pulses for natural 6 dB/oct high-frequency damping."
       },
@@ -7159,7 +7160,7 @@ const nodeGraphModuleDefinitions = (
         mid: "32",
         min: "0",
         nonlinearSlider: false,
-        step: "1",
+        step: "any",
         unit: "smp",
         tooltip: "Darkness at the end of the tail. The widest pulse grows from Darkness at the first tap to this at the last, so the tail gets darker as it goes, like a room where the highs die first. The tail's level stays set by Decay; this only changes its colour. 0 = off (the whole tail uses Darkness)."
       },
@@ -7190,17 +7191,22 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         tooltip: "RNG seed for tap positions, signs, and pulse widths. Same seed = identical taps."
       },
+      // Decay is the tail length (velvet_reverb v2): taps span Decay seconds and
+      // fall to -60 dB at the end, so the tail always fades out (no gating).
+      // Was a dB/s rate with the length set by Tap Count / Density.
       {
-        defaultValue: "0",
+        defaultValue: "0.025",
         key: "decay",
+        kind: "time",
         label: "Decay",
-        max: "600",
-        mid: "60",
-        min: "0",
+        max: "5",
+        maxDigits: 5,
+        mid: "0.5",
+        min: "0.001",
         nonlinearSlider: true,
         step: "any",
-        unit: "dB/s",
-        tooltip: "Tail decay rate: tap level falls by this many dB every second, like a reverb tail (60 dB/s = a 1 s T60). 0 = flat; small values are almost flat. The tail length is still Tap Count / Density, so raise Tap Count or lower Density for a longer tail."
+        unit: "s",
+        tooltip: "Tail length (RT60): the taps span this many seconds and their level falls to -60 dB at the end, so more Decay = a longer tail that always fades out. The delay line holds about 5.4 s at 48 kHz (2.7 s at 96 kHz); a longer Decay is held there."
       },
       {
         defaultValue: "1",

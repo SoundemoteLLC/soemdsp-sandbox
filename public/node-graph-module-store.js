@@ -1087,15 +1087,15 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   velvetNoise: {
     category: "noise",
-    description: "Velvet Noise event generator: random events (trigger, sinc, PolyBLEP saw, half sine, sine, rect sine), random-sign or bipolar. A starting point for rain, weather and vinyl dust.",
-    label: "Velvet Noise",
-    notes: ["velvet noise", "event generator", "sparse", "sinc", "polyblep", "saw", "rain", "vinyl", "dust", "crackle", "generator", "noise", "native"],
+    description: "Dark Velvet Noise event generator: random events (trigger, sinc, PolyBLEP saw, half sine, sine, rect sine), random-sign or bipolar. A starting point for rain, weather and vinyl dust.",
+    label: "Dark Velvet Noise",
+    notes: ["velvet noise", "dark velvet noise", "event generator", "sparse", "sinc", "polyblep", "saw", "rain", "vinyl", "dust", "crackle", "generator", "noise", "native"],
   },
   velvetReverb: {
     category: "space",
-    description: "Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser: a sparse-tap reverb with Decay and Tail Darkness.",
-    label: "Velvet Reverb",
-    notes: ["velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
+    description: "Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser: a sparse-tap reverb; Decay is the tail length (RT60), and Tail Darkness darkens the tail.",
+    label: "Dark Velvet Reverb",
+    notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
   randomWalk: {
     category: "noise",
