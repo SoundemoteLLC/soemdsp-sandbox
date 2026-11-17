@@ -1547,6 +1547,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   if (tDst === "sturmianGrid") {
     if (p === "restart") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
     if (p === "adv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
+    if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_F;
   }
   if (tDst === "script") return this.mapNativeGraphSrcPortId(port, type, nodeId);
   // Sidechain: Wet L/R on Left/Right, Dry L/R on the reverb Dry slots, Envelope

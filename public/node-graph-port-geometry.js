@@ -144,6 +144,15 @@ function nodeGraphPortElementIsLayoutVisible(element) {
   return rect.width > 0.5 && rect.height > 0.5;
 }
 
+function nodeGraphMarkOwnedParamRows(node, keys) {
+  for (const key of keys) {
+    if (!key) continue;
+    for (const row of node.querySelectorAll(`.node-parameter-row[data-param="${key}"]`)) {
+      row.classList.add("f-jack-owns-frequency");
+    }
+  }
+}
+
 function nodeGraphFrequencyRowOwnedByFJack(nodeId) {
   const node = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeId) : null;
   if (!node) return;
@@ -151,10 +160,27 @@ function nodeGraphFrequencyRowOwnedByFJack(nodeId) {
   const def = typeof nodeGraphModuleDefinition === "function" ? nodeGraphModuleDefinition(node.dataset?.nodeType) : null;
   const keys = ["frequency"];
   if (def?.fJackParam && def.fJackParam !== "frequency") keys.push(String(def.fJackParam));
-  for (const key of keys) {
-    for (const row of node.querySelectorAll(`.node-parameter-row[data-param="${key}"]`)) {
-      row.classList.add("f-jack-owns-frequency");
-    }
+  nodeGraphMarkOwnedParamRows(node, keys);
+}
+
+// Adv (or Advance) owns the listed param and input jacks, with the same
+// 135deg stripes used when a wired ƒ owns Frequency / Rate.
+function nodeGraphAdvJackOwns(nodeId) {
+  const node = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeId) : null;
+  if (!node) return;
+  const def = typeof nodeGraphModuleDefinition === "function" ? nodeGraphModuleDefinition(node.dataset?.nodeType) : null;
+  if (!def?.advJackParam && !def?.advJackOwnsInputs) return;
+  const keys = [];
+  if (def.advJackParam) keys.push(String(def.advJackParam));
+  nodeGraphMarkOwnedParamRows(node, keys);
+  const ports = Array.isArray(def.advJackOwnsInputs) ? def.advJackOwnsInputs : [];
+  for (const port of ports) {
+    const el = typeof nodeGraphPortElementForWireEndpoint === "function"
+      ? nodeGraphPortElementForWireEndpoint(node, port, "input")
+      : null;
+    if (!el) continue;
+    el.classList.add("f-jack-owns-frequency");
+    el.closest?.(".node-io-row")?.classList.add("f-jack-owns-frequency");
   }
 }
 
@@ -164,6 +190,9 @@ function markNodeGraphPortConnected(node, port, io) {
   const key = String(port || "").trim().toLowerCase();
   if (key === "f" || key === "ƒ") {
     nodeGraphFrequencyRowOwnedByFJack(node);
+  }
+  if (key === "adv" || key === "advance") {
+    nodeGraphAdvJackOwns(node);
   }
 }
 

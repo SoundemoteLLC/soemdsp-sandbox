@@ -581,6 +581,16 @@ function validateNodeGraphPatch(patch) {
           value = Number.isFinite(n) && n >= 0 && n < six.length ? six[n] : 1;
         }
       }
+      // Sturmian Grid Rate: stored BPM -> Hz (old engine rate was BPM/15).
+      if (type === "sturmianGrid" && parameter.key === "rate") {
+        if (
+          typeof nodeGraphSturmianRateMetaLooksLikeBpm === "function"
+          && nodeGraphSturmianRateMetaLooksLikeBpm(rawParamMeta.rate)
+          && Number.isFinite(Number(value))
+        ) {
+          value = Number(value) / 15;
+        }
+      }
       // Thump Decay Body: old 0…10 atten → new 0…1 inverted UI (10→0, 0→1).
       if (parameter.key === "decayBody") {
         const n = Number(value);

@@ -707,6 +707,16 @@ function normalizeNodeGraphPatchMetadataAlias(alias) {
   return String(alias ?? "").trim().slice(0, 64);
 }
 
+/** Saved Sturmian Rate was BPM (engine ran at rate/15 steps per second). */
+function nodeGraphSturmianRateMetaLooksLikeBpm(metadata) {
+  if (!metadata || typeof metadata !== "object") return false;
+  const unit = String(metadata.unit || "").trim().toLowerCase();
+  if (unit === "bpm") return true;
+  if (unit === "hz") return false;
+  const sourceMax = Number(metadata.max);
+  return Number.isFinite(sourceMax) && sourceMax >= 100000;
+}
+
 function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
   let parameter = nodeGraphModuleDefinitions[type]?.parameters?.find(
     (candidate) => candidate.key === key,
@@ -835,6 +845,16 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
     def = Number.isFinite(fallback.def) ? fallback.def : 4;
     forceChaosflyTaps = true;
   }
+  // Sturmian Grid Rate: old BPM (max 300000) -> Hz. Keep the new definition's
+  // range and unit so the slider is not left on the BPM scale after convert.
+  let forceSturmianRateHz = false;
+  if (type === "sturmianGrid" && key === "rate" && nodeGraphSturmianRateMetaLooksLikeBpm(source)) {
+    min = fallback.min;
+    max = fallback.max;
+    mid = Number.isFinite(fallback.mid) ? fallback.mid : 8;
+    def = Number.isFinite(fallback.def) ? fallback.def : 8;
+    forceSturmianRateHz = true;
+  }
   // Thump Envelope Decay Body: was 0…10 (patch atten); now 0…1 inverted UI.
   if (key === "decayBody"
     && Number.isFinite(fallback.max)
@@ -929,7 +949,7 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
       : (Object.hasOwn(source, "divideChoicesVisibly")
         ? Boolean(source.divideChoicesVisibly)
         : Boolean(fallback.divideChoicesVisibly)),
-    kind,
+    kind: forceSturmianRateHz ? (fallback.kind || "frequency") : kind,
     bipolar: forceChaosflyOctUnit
       ? true
       : (Object.hasOwn(source, "bipolar")
@@ -999,9 +1019,11 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
     constraint: Object.hasOwn(source, "constraint")
       ? String(source.constraint ?? "")
       : String(fallback.constraint || ""),
-    unit: forceChaosflyOctUnit
-      ? String(fallback.unit || "oct")
-      : String(Object.hasOwn(source, "unit") ? source.unit ?? "" : fallback.unit),
+    unit: forceSturmianRateHz
+      ? String(fallback.unit || "Hz")
+      : (forceChaosflyOctUnit
+        ? String(fallback.unit || "oct")
+        : String(Object.hasOwn(source, "unit") ? source.unit ?? "" : fallback.unit)),
     wraparound: fallback.wraparound && Object.hasOwn(source, "wraparound")
       ? Boolean(source.wraparound)
       : fallback.wraparound,

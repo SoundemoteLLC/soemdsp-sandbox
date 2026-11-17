@@ -7267,7 +7267,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   cursor: var(--node-dot-cursor);
 }
 
-.node-parameter-row.f-jack-owns-frequency {
+.node-parameter-row.f-jack-owns-frequency,
+.node-io-row.f-jack-owns-frequency {
   background:
     repeating-linear-gradient(
       135deg,

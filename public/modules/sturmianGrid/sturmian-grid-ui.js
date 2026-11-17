@@ -184,9 +184,23 @@ function sturmianEnsureGpu(shader) {
   return sturmianSharedGpu;
 }
 
+function sturmianStepPeriodMs(values, measuredMs) {
+  if (Number.isFinite(measuredMs) && measuredMs > 0) return measuredMs;
+  const hz = Number(values?.rate);
+  if (Number.isFinite(hz) && hz > 0) return 1000 / hz;
+  return 125;
+}
+
 function sturmianUpdateFlash(face, values, play, time) {
   if (face._sturmianFlash === undefined) {
-    face._sturmianFlash = { playStep: play.playStep, playBar: play.playBar, step: play.playStep, mask: 0, at: 0 };
+    face._sturmianFlash = {
+      playStep: play.playStep,
+      playBar: play.playBar,
+      step: play.playStep,
+      mask: 0,
+      at: 0,
+      periodMs: sturmianStepPeriodMs(values, 0),
+    };
   } else if (play.playing > 0.5 && (face._sturmianFlash.playStep !== play.playStep || face._sturmianFlash.playBar !== play.playBar)) {
     const mask = Math.round(values.stepPattern);
     const walk = Math.max(0, Math.floor(values.walk + 0.5) || 0);
@@ -198,18 +212,21 @@ function sturmianUpdateFlash(face, values, play, time) {
       const tile = sturmianTileAt(values, play.playStep, n, time);
       if ((mask >> (track * 3 + tile)) & 1) fired |= (1 << track);
     }
+    const now = performance.now();
+    const measured = face._sturmianFlash.at > 0 ? now - face._sturmianFlash.at : 0;
     face._sturmianFlash = {
       playStep: play.playStep,
       playBar: play.playBar,
       step: play.playStep,
       mask: fired,
-      at: performance.now(),
+      at: now,
+      periodMs: sturmianStepPeriodMs(values, measured),
     };
   }
   const flash = face._sturmianFlash;
   if (!flash || !flash.mask) return { step: 0, mask: 0, amt: 0 };
-  const beatMs = 60000 / Math.max(1, Number(values.rate) || 120);
-  const amt = Math.max(0, Math.min(1, 1 - (performance.now() - flash.at) / beatMs));
+  const periodMs = Math.max(1, Number(flash.periodMs) || sturmianStepPeriodMs(values, 0));
+  const amt = Math.max(0, Math.min(1, 1 - (performance.now() - flash.at) / periodMs));
   return { step: flash.step, mask: flash.mask, amt };
 }
 

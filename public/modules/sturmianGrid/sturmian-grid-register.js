@@ -18,8 +18,13 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     // LayoutB side-band labels (jack + short text; not labels-hidden).
     layoutBPortLabels: true,
     digitalInputs: ["Restart", "Adv"],
-    inputLabels: { Restart: "↺", Adv: "▸" },
-    inputs: ["Restart", "Adv"],
+    inputLabels: { Restart: "↺", Adv: "▸", f: "ƒ" },
+    inputAliases: { "ƒ": "f", Frequency: "f" },
+    inputs: ["Restart", "Adv", "f"],
+    // Wired ƒ replaces Rate (Rate row striped). Wired Adv owns Rate and ƒ.
+    fJackParam: "rate",
+    advJackParam: "rate",
+    advJackOwnsInputs: ["f"],
     digitalOutputs: ["Kick", "Snare", "Hat", "Melody"],
     outputLabels: {
       Kick: "K",
@@ -36,7 +41,7 @@ registerNodeGraphChromelessModule("sturmianGrid", {
       { key: "beta", label: "β", defaultValue: "0.1607132448", min: "0.001", max: "0.999", mid: "0.2", step: "0.0001", nonlinearSlider: false, linearSmoothing: false },
       { key: "rho", label: "ρ", defaultValue: "0", min: "0", max: "1", mid: "0.5", step: "0.0001", nonlinearSlider: false, linearSmoothing: false, wraparound: true },
       { key: "drift", label: "ρ drift", defaultValue: "0", min: "-0.2", max: "0.2", mid: "0", step: "0.0005", nonlinearSlider: false, linearSmoothing: false },
-      { key: "rate", label: "Rate", defaultValue: "120", min: "40", max: "300000", mid: "120", step: "any", nonlinearSlider: true, linearSmoothing: false, unit: "BPM" },
+      { key: "rate", label: "Rate", defaultValue: "8", min: "0", max: "20000", mid: "8", step: "any", nonlinearSlider: true, linearSmoothing: false, kind: "frequency", unit: "Hz" },
       { key: "steps", label: "Steps", defaultValue: "16", min: "2", max: "32", mid: "16", step: "1", nonlinearSlider: false, linearSmoothing: false },
       { key: "reset", label: "Reset after", defaultValue: "16", min: "0", max: "65536", mid: "16", step: "1", nonlinearSlider: false, linearSmoothing: false },
       { key: "spread", label: "Track spread", defaultValue: "1", min: "1", max: "16", mid: "1", step: "1", nonlinearSlider: false, linearSmoothing: false },
