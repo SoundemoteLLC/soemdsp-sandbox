@@ -29,6 +29,7 @@
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/filter/tpt_svf.h>
 #include <soemdsp/drum/drum_parts.h>
+#include <soemdsp/drum/noise_shape.h>
 
 namespace {
 
@@ -60,9 +61,8 @@ struct State {
   double eN, eClick;
   double eMode[kModes];
   Ring2 mode[kModes];
-  double lpT[2];       // per-channel tilt one-pole
   double lpC;          // shared click high-pass state
-  TptSvfState svf[2];
+  NoiseShape ns[2];    // shared wires shaper (Freq / Q / Tilt)
   double envOut;
   double rightOut;
   double strikeOut;    // this sample's strike velocity (Trigger hit or Reset re-strike), else 0
@@ -82,10 +82,9 @@ static void clear_voice(State& s) {
   s.p = 0.0;
   s.eN = s.eClick = 0.0;
   for (int k = 0; k < kModes; k++) { s.eMode[k] = 0.0; s.mode[k].y1 = s.mode[k].y2 = 0.0; }
-  s.lpT[0] = s.lpT[1] = 0.0;
   s.lpC = 0.0;
-  tpt_svf_reset(s.svf[0]);
-  tpt_svf_reset(s.svf[1]);
+  noise_shape_reset(s.ns[0]);
+  noise_shape_reset(s.ns[1]);
   hash_noise_reset(s.white);
   s.envOut = 0.0;
   s.rightOut = 0.0;
@@ -216,18 +215,12 @@ extern "C" double soemdsp_modal_snare_sample(
   body /= wSum;
   bodyR /= wSum;
   eSum /= wSum;
-  TptSvfCoeffs k;
-  tpt_svf_setup_bandpass_const_peak(k, (2.0 * kPi) * nf / sr, nq);
   const double n0 = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 0));
   const double clickV = clk * (n0 - one_pole_lp_tick(s.lpC, n0, 3000.0, sr)) * s.eClick;  // shared L/R
   double wires[2];
   for (int c = 0; c < 2; c++) {
-    const double bp = tpt_svf_tick(s.svf[c], k, (c == 0 ? n0 : hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 1))));
-    s.svf[c].z1 = planck_snap(s.svf[c].z1);
-    s.svf[c].z2 = planck_snap(s.svf[c].z2);
-    // Tilt: one-pole split at noiseFreq; +1 doubles the highs, -1 keeps only the lows; 0 = plain band-pass.
-    const double hpT = bp - one_pole_lp_tick(s.lpT[c], bp, nf, sr);
-    const double bpT = (tilt != 0.0) ? bp + tilt * hpT : bp;
+    // Shared shaper: band-pass at noiseFreq/Q, then one-pole tilt split at noiseFreq.
+    const double bpT = noise_shape_tick(s.ns[c], (c == 0 ? n0 : hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 1))), nf, nq, tilt, sr);
     wires[c] = kWires * bpT * s.eN * sn + clickV;
   }
   const double env = (eSum + sn * s.eN) / (1.0 + sn);

@@ -12936,10 +12936,11 @@ const nodeGraphModuleDefinitions = (
   // Electro Hat (docs/DRUM_PACK_PLAN.md): one hi-hat voice, Closed / Open / choke,
   // Algorithm choice, one fixed shared param set. Native only: native_modules/electro_hat/electro_hat.cpp.
   electroHat: {
-    // Hand-written face (node-graph-module-face.js): model, Tune | Tone | Metal, Closed | Open decays | Amp, recalc.
+    // Hand-written face (node-graph-module-face.js): model, Tune | Tone | Metal, Noise | Q | Tilt, Closed | Open decays | Amp, recalc.
     face: [
       { kind: "choices", param: "algorithm", labels: ["808", "606", "FM", "Noise"], h: 26 },
       { kind: "cells", params: [["tune", "Tune"], ["tone", "Tone"], ["metal", "Metal"]], h: 52 },
+      { kind: "cells", params: [["noiseFreq", "Noise"], ["noiseQ", "Q"], ["noiseTilt", "Tilt", "bipolar"]], h: 52 },
       { kind: "cells", params: [["closedDecay", "Closed"], ["openDecay", "Open"], ["amplitude", "Amp"]], h: 52 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
     ],
@@ -13057,6 +13058,34 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         tooltip: "Metallic source <-> white noise; 1 = all metal (stock 808 / 606). Noise algorithm: band-passed (1) <-> raw (0) noise.",
       },
+      {
+        defaultValue: "3000",
+        key: "noiseFreq",
+        kind: "frequency",
+        maxDigits: 5,
+        unit: "Hz",
+        label: "Noise Freq",
+        max: "12000",
+        mid: "3000",
+        min: "500",
+        step: "any" },
+      {
+        defaultValue: "1",
+        key: "noiseQ",
+        label: "Noise Q",
+        max: "10",
+        mid: "2",
+        min: "0.5",
+        step: "any" },
+      {
+        defaultValue: "0",
+        key: "noiseTilt",
+        nonlinearSlider: false,
+        label: "Noise Tilt",
+        max: "1",
+        mid: "0",
+        min: "-1",
+        step: "any" },
       {
         defaultValue: "1",
         key: "amplitude",

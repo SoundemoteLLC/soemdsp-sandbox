@@ -1538,7 +1538,8 @@ extern "C" double soemdsp_electro_hat_right(int handle);
 extern "C" double soemdsp_electro_hat_sample(
   int handle, double closed, double open, double reset, double algorithm, double tune,
   double tone, double closedDecay, double openDecay, double metal,
-  double amplitude, double sampleRate, double recalculateOnTrigger);
+  double amplitude, double sampleRate, double recalculateOnTrigger,
+  double noiseFreq, double noiseQ, double noiseTilt);
 extern "C" int soemdsp_electro_tom_create();
 extern "C" void soemdsp_electro_tom_destroy(int handle);
 extern "C" double soemdsp_electro_tom_env(int handle);
@@ -3973,7 +3974,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypePurr) ? 2.5 : // Softness (Purr)
     (typeId == kTypeDsfMorphingOsc) ? 0.0 : // Rotate (DSF Morphing Osc)
     (typeId == kTypeResonantCompressor) ? 0.0 : // Resonance (Resonant Compressor)
-    (typeId == kTypeModalSnare) ? 1.0 : // noiseQ (Modal Snare)
+    (typeId == kTypeModalSnare || typeId == kTypeElectroHat) ? 1.0 : // noiseQ (Modal Snare / Electro Hat)
     (typeId == kTypeElectroSnare) ? 2.0 : // Noise Q (Electro Snare)
     (typeId == kTypeAdditiveBlaster) ? -0.2 // curve bend (PoC)
       : (typeId == kTypeAdditiveGenerator) ? 1.0 // skew
@@ -4606,7 +4607,7 @@ static void init_node_defaults(Node& n, int typeId) {
     n.saturate,
     (typeId == kTypePurr) ? 0.3 : // Rumble (Purr)
     (typeId == kTypeResonantCompressor) ? 1.0 : // Depth (Resonant Compressor)
-    (typeId == kTypeModalSnare) ? 0.0 : // noiseTilt (Modal Snare)
+    (typeId == kTypeModalSnare || typeId == kTypeElectroHat) ? 0.0 : // noiseTilt (Modal Snare / Electro Hat)
     (typeId == kTypeHypersaw2) ? 0.0 // vibratoDistanceTilt
       : 1.0,
     false
@@ -4615,7 +4616,7 @@ static void init_node_defaults(Node& n, int typeId) {
     n.lpfFrequency,
     (typeId == kTypePurr) ? 180.0 : // Tone Hz (Purr)
     (typeId == kTypePitchManager) ? 3520.0 : // 0-1 High Hz (A7)
-    (typeId == kTypeModalSnare) ? 3000.0 : // noiseFreq Hz (Modal Snare)
+    (typeId == kTypeModalSnare || typeId == kTypeElectroHat) ? 3000.0 : // noiseFreq Hz (Modal Snare / Electro Hat)
     (typeId == kTypePll) ? 10.0 // Smoothing Hz
       : (typeId == kTypeAdditiveOsc) ? 20000.0 // dampingFilterFrequency
       : (typeId == kTypeBradley2a) ? 2600.0 // interfFreq
@@ -12440,7 +12441,8 @@ static void process_modal_snare(Circuit& g, Node& node, int frames) {
 // (Mono live bus) strike, height = velocity; Reset re-strikes the last hit.
 // Controls: waveform=algorithm (0 tr808 / 1 tr606 / 2 fm / 3 noise),
 // frequency=tune x, shape=tone, timeNumerator=closedDecay s, timeDenominator=
-// openDecay s, width=metal, amplitude.
+// openDecay s, width=metal, lpfFrequency=noiseFreq, resonance=noiseQ,
+// saturate=noiseTilt, amplitude.
 // Out: Hat L -> Left, Hat R -> Right, Env -> Mono.
 static void process_electro_hat(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
@@ -12463,7 +12465,10 @@ static void process_electro_hat(Circuit& g, Node& node, int frames) {
       control_audio(g, node.width, f),
       control_audio(g, node.amplitude, f),
       sr,
-      control_effective(node.timingMode)  // Recalculate On Trigger (0 Off / 1 On)
+      control_effective(node.timingMode),  // Recalculate On Trigger (0 Off / 1 On)
+      control_audio(g, node.lpfFrequency, f),
+      control_audio(g, node.resonance, f),
+      control_audio(g, node.saturate, f)
     );
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = soemdsp_electro_hat_right(node.nativeHandle);
