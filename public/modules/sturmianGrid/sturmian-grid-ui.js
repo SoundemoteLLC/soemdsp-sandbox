@@ -10,7 +10,7 @@
 // track-color insets on sounding cells, drawn on top of gutters. The shared
 // 2.5x threshold is unchanged; this plate pins nearest and opts into
 // compositor pixel-snap.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_UI_DEFAULT_MASK = 3170;
 let sturmianShaderPromise = null;

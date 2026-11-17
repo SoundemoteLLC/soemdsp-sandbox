@@ -136,12 +136,6 @@ if (inGrid) {
   float gridEndY = floor(gridSpanH * pr + 1e-4);
   bool gutter = devX < colStartDev + 1.0 || devY < rowStartDev + 1.0
     || devX >= gridEndX - 1.0 || devY >= gridEndY - 1.0;
-  float barX0 = padLeft * cellDev;
-  float barX1 = (padLeft + playCols) * cellDev;
-  if (!gutter && ((devX >= barX0 + 1.0 && devX < barX0 + 2.0)
-      || (devX >= barX1 - 2.0 && devX < barX1 - 1.0))
-      && mod(devY, 8.0) < 4.0)
-    base = mix(base, vec3(1.0), 0.35);
   if (!gutter && flashAmt > 0.0 && abs(m - flashStep) < 0.5 && trackHit >= 0
       && mod(floor(flashMask / exp2(float(trackHit))), 2.0) > 0.5
       && fx >= 2.0 && fx < cell - 2.0 && fy >= 2.0 && fy < cell - 2.0) {
