@@ -138,6 +138,10 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     if (typeof applyNodeGraphPulseTrainDisplaySettingsToFace === "function") {
       applyNodeGraphPulseTrainDisplaySettingsToFace(node);
     }
+    // Dark Velvet Reverb's tap face shares the Pulse Train face look.
+    if (typeof applyNodeGraphVelvetTapsDisplaySettingsToFace === "function") {
+      applyNodeGraphVelvetTapsDisplaySettingsToFace(node);
+    }
     return node.traceDisplaySettings;
   }
   if (displayType === "robinSinepulseFace" && typeof normalizeNodeGraphRobinSinepulseFaceSettings === "function") {

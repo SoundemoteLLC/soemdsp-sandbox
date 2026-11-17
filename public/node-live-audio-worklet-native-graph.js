@@ -590,7 +590,6 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   }
   if (t === "velvetReverb") {
     if (k === "density") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
-    if (k === "tapCount") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "darkness") return P.NATIVE_GRAPH_PARAM_WIDTH;
     if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
@@ -6051,7 +6050,6 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "velvetReverb") {
       push("density", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("density", 2500));
-      push("tapCount", P.NATIVE_GRAPH_PARAM_STAGES, disc("tapCount", 64));
       push("darkness", P.NATIVE_GRAPH_PARAM_WIDTH, cont("darkness", 1)); // continuous pulse width
       push("stereoSpread", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("stereoSpread", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
