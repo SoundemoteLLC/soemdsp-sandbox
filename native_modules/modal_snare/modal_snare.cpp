@@ -24,6 +24,7 @@
 // Stereo: noise per channel (own seed; L keeps Electro Snare's seed); odd
 // angular modes (11, 31, 12) flip polarity on R; the click is shared L/R.
 // Env = mix-weighted mode + wires envelope (peaks at v, excludes Amplitude).
+// Strike (face tap) = v on each struck sample, else 0: the display's hit stream.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/filter/tpt_svf.h>
@@ -64,6 +65,7 @@ struct State {
   TptSvfState svf[2];
   double envOut;
   double rightOut;
+  double strikeOut;    // this sample's strike velocity (Trigger hit or Reset re-strike), else 0
 };
 
 static State gPool[kMaxInstances];
@@ -93,6 +95,7 @@ static void init_state(State& s) {
   s.lastTrigger = 0.0;
   s.lastReset = 0.0;
   s.v = 0.0;
+  s.strikeOut = 0.0;
   clear_voice(s);
 }
 
@@ -166,6 +169,8 @@ extern "C" double soemdsp_modal_snare_sample(
     strike(s);
     ping = true;
   }
+  // Hit stream for the display (Cycles = N hits): the strike's velocity on the struck sample, else 0.
+  s.strikeOut = ping ? s.v : 0.0;
   // Recalculate On Trigger: On latches bodyDecay, snapDecay, bodyNoise, tune, tone and snappy on each hit, so a ringing
   // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
   if (ping) { s.latchA = bodyDecay; s.latchB = snapDecay; s.latchC = bodyNoise; s.latchTune = tune; s.latchTone = tone; s.latchSnappy = snappy; s.latchHas = true; }
@@ -261,6 +266,13 @@ extern "C" double soemdsp_modal_snare_f(int handle) {
   return gPool[handle - 1].fOut;
 }
 
-extern "C" int soemdsp_modal_snare_version() { return 7; } // 7: f out (soemdsp_modal_snare_f, Hz: fundamental mode pitch in Hz (Tune x Bend sweep, as played)). // 6: Recalculate On Trigger also latches Tune / Tone / Snappy. 5: Recalculate On Trigger also latches Body / Noise. 4: Body / Noise balance (bodyNoise, last arg). 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
+// Strike (face tap, not a jack): velocity on each struck sample (Trigger hit or Reset re-strike), else 0.
+// The display counts these as its cycles, so Cycles = N shows N hits.
+extern "C" double soemdsp_modal_snare_strike(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
+  return gPool[handle - 1].strikeOut;
+}
+
+extern "C" int soemdsp_modal_snare_version() { return 8; } // 8: strike tap (soemdsp_modal_snare_strike: velocity on each struck sample; the display's hit stream). // 7: f out (soemdsp_modal_snare_f, Hz: fundamental mode pitch in Hz (Tune x Bend sweep, as played)). // 6: Recalculate On Trigger also latches Tune / Tone / Snappy. 5: Recalculate On Trigger also latches Body / Noise. 4: Body / Noise balance (bodyNoise, last arg). 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
 extern "C" const char* soemdsp_modal_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_modal_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
