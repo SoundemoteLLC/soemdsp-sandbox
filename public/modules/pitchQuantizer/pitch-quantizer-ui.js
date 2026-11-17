@@ -523,41 +523,6 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
   });
 }
 
-/**
- * The workspace GL overlay pointer router starts a module drag on any plate
- * hit unless nodeGraphGlHitKeepsNativeTarget(event.target) is true. That
- * list lives in node-graph-gl-graph.js (a lighting file we do not edit).
- * Arp / Keyboard / Step Graph / Vactrol stay native because their face
- * classes or data attributes are in the list; .node-pitch-quantizer-face
- * is not. Wrap the hook at runtime so key clicks reach this face instead
- * of selecting / dragging the module. Also listen in the capture phase
- * and stopImmediatePropagation, same as the Vactrol legend hit layer.
- */
-function nodeGraphPitchQuantizerArmNativeHits() {
-  const g = typeof globalThis !== "undefined" ? globalThis : undefined;
-  const fn = g && typeof g.nodeGraphGlHitKeepsNativeTarget === "function"
-    ? g.nodeGraphGlHitKeepsNativeTarget
-    : (typeof nodeGraphGlHitKeepsNativeTarget === "function"
-      ? nodeGraphGlHitKeepsNativeTarget
-      : null);
-  if (!fn || fn._pqFaceNative) return fn;
-  const wrapped = function nodeGraphGlHitKeepsNativeTarget(target) {
-    if (target && typeof target.closest === "function"
-      && target.closest(".node-pitch-quantizer-face")) {
-      return true;
-    }
-    return fn(target);
-  };
-  wrapped._pqFaceNative = true;
-  if (g) g.nodeGraphGlHitKeepsNativeTarget = wrapped;
-  return wrapped;
-}
-
-if (typeof globalThis !== "undefined") {
-  globalThis.nodeGraphPitchQuantizerArmNativeHits = nodeGraphPitchQuantizerArmNativeHits;
-}
-nodeGraphPitchQuantizerArmNativeHits();
-
 function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
   const nodeId = nodeIdOrEl && typeof nodeIdOrEl === "object"
     ? String(nodeIdOrEl.dataset?.node || nodeIdOrEl.id || "")
@@ -613,7 +578,6 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     if (!key) return;
     event.preventDefault();
     event.stopPropagation();
-    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
     const { jacked, shift } = faceState();
     if (jacked) return;
     const sourceClass = (((key.pc - shift) % 12) + 12) % 12;
@@ -622,8 +586,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     }
   }
 
-  nodeGraphPitchQuantizerArmNativeHits();
-  section.addEventListener("pointerdown", onPointerDown, true);
+  section.addEventListener("pointerdown", onPointerDown);
 
   function paint() {
     const { mask, jacked, livePc, display } = faceState();

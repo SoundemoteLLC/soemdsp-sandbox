@@ -69,15 +69,20 @@ assert(
   "pointer path must stopPropagation so module drag does not swallow key hits",
 );
 assert(
-  /stopImmediatePropagation/.test(ui)
-    && /addEventListener\(\s*"pointerdown"\s*,\s*onPointerDown\s*,\s*true\s*\)/.test(ui),
-  "key pointerdown must capture-phase swallow like the Vactrol legend hit layer",
+  /addEventListener\(\s*"pointerdown"\s*,\s*onPointerDown\s*\)/.test(ui)
+    && !/addEventListener\(\s*"pointerdown"\s*,\s*onPointerDown\s*,\s*true\s*\)/.test(ui)
+    && !/stopImmediatePropagation/.test(ui)
+    && !/function nodeGraphPitchQuantizerArmNativeHits/.test(ui),
+  "key pointerdown is the bubble-phase Arp path; the runtime keep-native wrap is gone",
 );
 assert(
-  /function nodeGraphPitchQuantizerArmNativeHits/.test(ui)
-    && /nodeGraphGlHitKeepsNativeTarget/.test(ui)
-    && /closest\(\s*["']\.node-pitch-quantizer-face["']\s*\)/.test(ui),
-  "must wrap the GL keep-native hook so plate clicks on this face are not module drags",
+  /node-pitch-quantizer-face/.test(ui),
+  "the face still uses the keep-native class",
+);
+const glHit = read("public/node-graph-gl-graph.js");
+assert(
+  /function nodeGraphGlHitKeepsNativeTarget[\s\S]*?\.node-pitch-quantizer-face/.test(glHit),
+  "workspace keep-native list must include .node-pitch-quantizer-face so key clicks do not select the module",
 );
 
 const ops = [];
@@ -499,18 +504,6 @@ const kBlack = ctx.nodeGraphPianoKeysLabelPx({ black: true, label: "C#" }, { w: 
 assert(Math.abs(kWhite - cqiWhite) < 1e-9, "Keyboard natural label size stays on the CQI path");
 assert(Math.abs(kBlack - cqiBlack) < 1e-9, "Keyboard sharp label size stays on the CQI path");
 
-// Runtime wrap: PQ face targets stay native so the overlay does not begin a drag.
-const prevKeep = (target) => target && target.id === "keep-me";
-ctx.nodeGraphGlHitKeepsNativeTarget = prevKeep;
-ctx.nodeGraphPitchQuantizerArmNativeHits();
-const pqTarget = { id: "pq", closest: (sel) => (sel === ".node-pitch-quantizer-face" ? pqTarget : null) };
-const other = { id: "other", closest: () => null };
-const keep = { id: "keep-me", closest: () => null };
-assert(ctx.nodeGraphGlHitKeepsNativeTarget(pqTarget) === true, "PQ face target is treated as a native interactive hit");
-assert(ctx.nodeGraphGlHitKeepsNativeTarget(other) === false, "unrelated targets still go through the previous hook");
-assert(ctx.nodeGraphGlHitKeepsNativeTarget(keep) === true, "existing keep-native targets still match");
-ctx.nodeGraphPitchQuantizerArmNativeHits();
-assert(ctx.nodeGraphGlHitKeepsNativeTarget._pqFaceNative, "the keep-native wrap is idempotent");
 assert(/toggleNodeGraphPitchQuantizerKey/.test(ui), "a key click still toggles the scale mask");
 
 const form = read("public/node-graph-module-scope-settings-form.js");
