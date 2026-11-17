@@ -1,7 +1,8 @@
 // Dark Velvet Reverb display levels: peak-hold of |width-filtered pulse
 // x gain x table norm| per tap, L and R, taken by soemdsp_velvet_reverb_take_levels.
 // The face treats a peak above NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB)
-// as a binary trigger and latches it until one bright frame is drawn.
+// as a binary trigger: it pops on the next paint, holds for the snapshot
+// period, and goes dark promptly after a later quiet snapshot has been seen.
 //   node scripts/test_velvet_reverb_tap_levels.mjs
 import fs from "node:fs";
 import path from "node:path";
@@ -21,9 +22,7 @@ vm.runInNewContext(
   faceSrc.slice(armStart, armEnd) + `
     this.NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL = NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL;
     this.nodeGraphVelvetTapsTriggerState = nodeGraphVelvetTapsTriggerState;
-    this.nodeGraphVelvetTapsEnsureTriggers = nodeGraphVelvetTapsEnsureTriggers;
-    this.nodeGraphVelvetTapsArmTriggers = nodeGraphVelvetTapsArmTriggers;
-    this.nodeGraphVelvetTapsConsumeTriggers = nodeGraphVelvetTapsConsumeTriggers;
+    this.nodeGraphVelvetTapsApplySnapshot = nodeGraphVelvetTapsApplySnapshot;
     this.nodeGraphVelvetTapsTakeLit = nodeGraphVelvetTapsTakeLit;
   `,
   latch,
@@ -163,49 +162,81 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
   x.soemdsp_velvet_reverb_destroy(h);
 }
 
-// ---- One-frame latch (face helpers): at least one bright consume per trigger
+// ---- Snapshot-period latch (face helpers): pop, hold, then prompt off
 {
-  const state = latch.nodeGraphVelvetTapsTriggerState("latch-test");
-  const n = 3;
-  const tL = latch.nodeGraphVelvetTapsEnsureTriggers(state, "triggeredL", n);
-  const tR = latch.nodeGraphVelvetTapsEnsureTriggers(state, "triggeredR", n);
+  const apply = (id, side, levels) => latch.nodeGraphVelvetTapsApplySnapshot(
+    latch.nodeGraphVelvetTapsTriggerState(id),
+    side,
+    levels,
+  );
+  const take = (id, rawL, rawR, nL, nR, armFromBus) => latch.nodeGraphVelvetTapsTakeLit(
+    id, rawL, rawR, nL, nR, armFromBus,
+  );
 
-  latch.nodeGraphVelvetTapsArmTriggers(tL, [0, TRIGGER * 2, TRIGGER * 0.5]);
-  check(tL[0] === 0 && tL[1] === 1 && tL[2] === 0, "arm: only peaks above -90 dB set the latch");
+  const idArm = "hold-threshold";
+  apply(idArm, "L", [0, TRIGGER * 2, TRIGGER * 0.5]);
+  const armed = take(idArm, null, null, 3, 0, false);
+  check(armed.onL[0] === 0 && armed.onL[1] === 1 && armed.onL[2] === 0, "apply: only peaks above -90 dB light the latch");
 
-  const first = latch.nodeGraphVelvetTapsConsumeTriggers(tL);
-  check(first[1] === 1 && first[0] === 0, "consume: triggered tap is on for this frame");
-  check(tL[0] === 0 && tL[1] === 0 && tL[2] === 0, "consume: latch clears after the bright frame");
-  const second = latch.nodeGraphVelvetTapsConsumeTriggers(tL);
-  check(second[1] === 0, "second consume without a new snapshot stays off");
-
-  // Snapshots faster than draws: two arms, then one consume still bright once
-  latch.nodeGraphVelvetTapsArmTriggers(tL, [TRIGGER * 2, 0, 0]);
-  latch.nodeGraphVelvetTapsArmTriggers(tL, [0, 0, 0]); // later silent snapshot must not clear the latch
-  const held = latch.nodeGraphVelvetTapsConsumeTriggers(tL);
-  check(held[0] === 1, "latch holds across a later empty snapshot until it is drawn");
-  const after = latch.nodeGraphVelvetTapsConsumeTriggers(tL);
-  check(after[0] === 0, "after the guaranteed bright frame the tap goes idle");
-
-  // Draws faster than snapshots: TakeLit fallback arms once per new array identity
+  // Paints faster than snapshots: stay bright for the whole snapshot period
+  const idHold = "hold-same-snap";
   const snap = new Float32Array([0, TRIGGER * 2, 0]);
-  const litA = latch.nodeGraphVelvetTapsTakeLit("bus-fallback", snap, null, 3, 0, true);
-  const litB = latch.nodeGraphVelvetTapsTakeLit("bus-fallback", snap, null, 3, 0, true);
-  check(litA.onL[1] === 1, "draw-time fallback: first paint of a new snapshot is bright");
-  check(litB.onL[1] === 0, "draw-time fallback: the same snapshot does not retrigger the next paint");
+  apply(idHold, "L", snap);
+  const first = take(idHold, snap, null, 3, 0, false);
+  const second = take(idHold, snap, null, 3, 0, false);
+  check(first.onL[1] === 1 && second.onL[1] === 1, "paints faster than snapshots: hit stays bright (no strobe)");
+
+  const quiet = new Float32Array([0, 0, 0]);
+  apply(idHold, "L", quiet);
+  const afterQuiet = take(idHold, quiet, null, 3, 0, false);
+  check(afterQuiet.onL[1] === 0, "quiet snapshot after a shown hit goes dark promptly");
+
+  // Quiet snapshot arrives before any paint: still one bright paint
+  const idGap = "hold-pre-paint-quiet";
+  apply(idGap, "L", snap);
+  apply(idGap, "L", quiet);
+  const guaranteed = take(idGap, quiet, null, 3, 0, false);
+  check(guaranteed.onL[1] === 1, "quiet snapshot before the first paint still gets one bright paint");
+  const afterGap = take(idGap, quiet, null, 3, 0, false);
+  check(afterGap.onL[1] === 0, "after that guaranteed paint the tap goes idle");
+
+  apply(idGap, "L", snap);
+  const retrigger = take(idGap, snap, null, 3, 0, false);
+  check(retrigger.onL[1] === 1, "a later energy snapshot pops bright again");
+
+  // Draw-time fallback: same array identity must not strobe off
+  const idBus = "bus-fallback-hold";
+  const snapB = new Float32Array([0, TRIGGER * 2, 0]);
+  const litA = take(idBus, snapB, null, 3, 0, true);
+  const litB = take(idBus, snapB, null, 3, 0, true);
+  check(litA.onL[1] === 1 && litB.onL[1] === 1, "draw-time fallback: same snapshot stays bright (no strobe)");
+  const snapQuiet = new Float32Array([0, 0, 0]);
+  const litC = take(idBus, snapQuiet, null, 3, 0, true);
+  check(litC.onL[1] === 0, "draw-time fallback: a later quiet snapshot goes dark after being shown");
   const snap2 = new Float32Array([0, TRIGGER * 2, 0]);
-  const litC = latch.nodeGraphVelvetTapsTakeLit("bus-fallback", snap2, null, 3, 0, true);
-  check(litC.onL[1] === 1, "draw-time fallback: a new snapshot identity can trigger again");
+  const litD = take(idBus, snap2, null, 3, 0, true);
+  check(litD.onL[1] === 1, "draw-time fallback: a new energy snapshot pops bright again");
+
+  // A new quiet snapshot before the first paint of a retrigger still flashes once
+  const idAgain = "hold-retrigger-gap";
+  apply(idAgain, "L", snap);
+  take(idAgain, snap, null, 3, 0, false);
+  apply(idAgain, "L", quiet);
+  take(idAgain, quiet, null, 3, 0, false);
+  apply(idAgain, "L", snap);
+  apply(idAgain, "L", quiet);
+  const gap2 = take(idAgain, quiet, null, 3, 0, false);
+  check(gap2.onL[1] === 1, "retrigger: quiet before the first paint still gets one bright paint");
+  const gap2After = take(idAgain, quiet, null, 3, 0, false);
+  check(gap2After.onL[1] === 0, "retrigger: goes idle after that guaranteed paint");
 
   // L/R independent latch
-  latch.nodeGraphVelvetTapsArmTriggers(tL, [TRIGGER * 2, 0, 0]);
-  latch.nodeGraphVelvetTapsArmTriggers(tR, [0, TRIGGER * 2, 0]);
-  const sides = {
-    L: latch.nodeGraphVelvetTapsConsumeTriggers(tL),
-    R: latch.nodeGraphVelvetTapsConsumeTriggers(tR),
-  };
-  check(sides.L[0] === 1 && sides.L[1] === 0, "latch L is independent of R");
-  check(sides.R[1] === 1 && sides.R[0] === 0, "latch R is independent of L");
+  const idLR = "hold-lr";
+  apply(idLR, "L", [TRIGGER * 2, 0, 0]);
+  apply(idLR, "R", [0, TRIGGER * 2, 0]);
+  const sides = take(idLR, null, null, 3, 3, false);
+  check(sides.onL[0] === 1 && sides.onL[1] === 0, "latch L is independent of R");
+  check(sides.onR[1] === 1 && sides.onR[0] === 0, "latch R is independent of L");
 }
 
 // ---- Device-pixel coverage spans (subpixel AA) and stackable add-alpha
