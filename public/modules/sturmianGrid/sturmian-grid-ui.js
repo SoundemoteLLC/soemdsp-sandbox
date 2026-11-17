@@ -1,7 +1,7 @@
 // Packed sounding-bar grid on the shared face texture; standard parameter
 // rows live in the module body. Zoom samples nearest past the existing 2.5x
-// threshold like other shader faces. Steps sets the square cell size.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6";
+// threshold like other shader faces. Cell size fits Steps and Track Spread.
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_LANE_NAMES = ["Kick", "Snare", "Hat", "Melody"];
 const STURMIAN_LANE_SHORT = ["K", "S", "H", "M"];
@@ -58,11 +58,22 @@ function sturmianPlayhead(nodeId, steps) {
   return { playStep, playBar, playing };
 }
 
-// Same integer-square packing as the shader: Steps columns fill the width,
-// whole rows stack in the leftover height, equal margins, no half cells.
-function sturmianGridLayout(width, height, steps) {
+// Integer-square packing, same as the shader: cell size fits Steps
+// columns and the Track Spread window (play row plus the other tracks
+// spaced `spread` apart). Leftover area keeps whole non-hittable
+// squares and equal margins. Uses module-space size so zoom is stable.
+function sturmianRowsNeeded(spread) {
+  const spreadN = Math.max(1, Math.floor(Number(spread) + 0.5) || 1);
+  return 3 * spreadN + 1;
+}
+
+function sturmianGridLayout(width, height, steps, spread) {
   const cols = Math.max(2, Math.floor(Number(steps) + 0.5) || 2);
-  const cell = Math.max(2, Math.floor(Math.max(1, width) / cols));
+  const rowsNeeded = Math.max(1, sturmianRowsNeeded(spread));
+  const cell = Math.max(2, Math.floor(Math.min(
+    Math.max(1, width) / cols,
+    Math.max(1, height) / rowsNeeded
+  )));
   const rows = Math.max(1, Math.floor(Math.max(1, height) / cell));
   return {
     cols,
@@ -113,7 +124,7 @@ function sturmianHitCell(face, plate, event, values, play, time) {
   if (!(rect.width > 0) || !(rect.height > 0)) return null;
   const x = (event.clientX - rect.left) * (plate._sturmianCssW || rect.width) / rect.width;
   const y = (event.clientY - rect.top) * (plate._sturmianCssH || rect.height) / rect.height;
-  const layout = sturmianGridLayout(plate._sturmianCssW || rect.width, plate._sturmianCssH || rect.height, values.steps);
+  const layout = sturmianGridLayout(plate._sturmianCssW || rect.width, plate._sturmianCssH || rect.height, values.steps, values.spread);
   const gx = x - layout.ox;
   const gy = y - layout.oy;
   if (gx < 0 || gy < 0 || gx >= layout.cols * layout.cell || gy >= layout.rows * layout.cell) return null;

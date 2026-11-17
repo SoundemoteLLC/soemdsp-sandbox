@@ -12,14 +12,16 @@ vec2 px = vec2(uv.x * resolution.x, (1.0 - uv.y) * resolution.y);
 float w = resolution.x;
 float h = resolution.y;
 float cols = max(2.0, floor(steps + 0.5));
-// Integer square cells: Steps columns are the sounding bar. Leftover width
-// and height become equal margins so no half cells are drawn.
-float cell = max(2.0, floor(w / cols));
+float spreadN = max(1.0, floor(spread + 0.5));
+float walkN = max(0.0, floor(walk + 0.5));
+// Integer square cells: fit Steps columns and the Track Spread window
+// (play row plus the other tracks spaced `spread` apart). Leftover
+// width and height become equal margins so no half cells are drawn.
+float rowsNeeded = max(1.0, 3.0 * spreadN + 1.0);
+float cell = max(2.0, floor(min(w / cols, h / rowsNeeded)));
 float rows = max(1.0, floor(h / cell));
 float ox = floor((w - cols * cell) * 0.5);
 float oy = floor((h - rows * cell) * 0.5);
-float spreadN = max(1.0, floor(spread + 0.5));
-float walkN = max(0.0, floor(walk + 0.5));
 float firstN = playBar * walkN;
 float span = 3.0 * spreadN + 1.0;
 float above = max(0.0, floor((rows - span) * 0.5));
