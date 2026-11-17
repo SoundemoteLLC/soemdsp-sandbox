@@ -303,7 +303,8 @@ function nodeGraphClockFaceInstallGateDrag(section) {
   section.style.touchAction = "none";
   section.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    const article = section.closest(".dsp-node");
+    // By id, not closest(): Canvas view moves the face out of its module, whose sliders stay put.
+    const article = nodeGraphNodeElement(section.dataset.node || "");
     const lo = nodeGraphModuleFaceInput(article, "pulseStart");
     const hi = nodeGraphModuleFaceInput(article, "pulseEnd");
     const node = nodeGraphPatchNode(section.dataset.node || "");
