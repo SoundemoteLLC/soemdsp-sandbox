@@ -193,7 +193,7 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
     `Skew +-1, 4096 taps in 50 ms: Min Gap still drops bunched taps (${denseP.count} / ${denseN.count} play, flags ${denseP.flags} / ${denseN.flags})`);
   const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
   const sk = defs.slice(defs.indexOf('key: "densitySkew",'), defs.indexOf('key: "densitySkew",') + 220);
-  check(/max: "1"/.test(sk) && /min: "-1"/.test(sk) && /sliderCurve: "bipolarRational"/.test(sk) && /curveAmount: "-0.99"/.test(defs.slice(defs.indexOf('key: "densitySkew",') - 160, defs.indexOf('key: "densitySkew",'))), "Density Skew: range -1..+1, knob scaled by the bipolar rational slider curve (amount -0.99)");
+  check(/max: "1"/.test(sk) && /min: "-1"/.test(sk) && /sliderCurve: "bipolarRational"/.test(sk) && /curveAmount: "-0.9",/.test(defs.slice(defs.indexOf('key: "densitySkew",') - 160, defs.indexOf('key: "densitySkew",'))), "Density Skew: range -1..+1, knob scaled by the bipolar rational slider curve (amount -0.9)");
 }
 
 // ---- Face height is amplitude only: sign x the Amp Decay envelope at the pulse
