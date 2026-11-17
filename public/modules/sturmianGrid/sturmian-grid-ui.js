@@ -1,7 +1,11 @@
 // Packed sounding-bar grid on the shared face texture; standard parameter
-// rows live in the module body. Zoom samples nearest past the existing 2.5x
-// threshold like other shader faces. Cell size fits Steps and Track Spread.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17";
+// rows live in the module body. Cell size fits Steps and Track Spread in
+// module-space CSS (stable at zoom, no reflow). The face texture is sized to
+// screen resolution so 1-texel gutters, track-span outline, and playhead
+// frame stay 1 screen/device pixel while cells grow. The shared 2.5x
+// nearest threshold is unchanged; this plate pins nearest so cells stay
+// hard-edged if the quad is slightly off 1:1.
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_LANE_NAMES = ["Kick", "Snare", "Hat", "Melody"];
 const STURMIAN_LANE_SHORT = ["K", "S", "H", "M"];
@@ -83,8 +87,9 @@ function sturmianGridLayout(width, height, steps, spread) {
     rows,
     playCols,
     // Sounding-bar selection: columns [padLeft, padLeft+playCols). The shader
-    // draws one 1-device-pixel stroke around that strip on each track row
-    // (same rect as d7cf6bc8 / soundemote-dev), not a per-cell rim.
+    // draws one 1-screen-pixel stroke around that strip on each track row
+    // (same rect as d7cf6bc8 / soundemote-dev), not a per-cell rim. Gutters
+    // and that stroke are 1 texel of a screen-resolution face texture.
     padLeft: Math.max(0, Math.floor((cols - playCols) * 0.5)),
     cell,
     ox: Math.floor((width - cols * cell) * 0.5),
@@ -259,22 +264,80 @@ function sturmianSyncLanes(face, values) {
   });
 }
 
+const STURMIAN_BACKING_CAP = 4096;
+
+function sturmianViewZoom() {
+  const z = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : Number(nodeGraphMvp?.zoom);
+  return Number.isFinite(z) && z > 0 ? z : 1;
+}
+
+function sturmianPlateBox(plate) {
+  const metrics = typeof ensureFaceMetrics === "function"
+    ? ensureFaceMetrics(plate, { observe: true })
+    : null;
+  const cssWidth = Number(metrics?.cssW);
+  const cssHeight = Number(metrics?.cssH);
+  if (cssWidth > 1 && cssHeight > 1) {
+    return {
+      cssWidth,
+      cssHeight,
+      dpr: Math.max(1, Number(metrics.dpr) || window.devicePixelRatio || 1),
+    };
+  }
+  if (plate._sturmianCssW > 1 && plate._sturmianCssH > 1) {
+    return {
+      cssWidth: plate._sturmianCssW,
+      cssHeight: plate._sturmianCssH,
+      dpr: Math.max(1, window.devicePixelRatio || 1),
+    };
+  }
+  const sized = typeof nodeGraphDisplayCanvasSize === "function"
+    ? nodeGraphDisplayCanvasSize(plate, plate)
+    : null;
+  if (!sized) return null;
+  return {
+    cssWidth: Math.max(1, sized.cssWidth),
+    cssHeight: Math.max(1, sized.cssHeight),
+    dpr: Math.max(1, Number(sized.devicePixelRatio) || window.devicePixelRatio || 1),
+  };
+}
+
+function sturmianScreenBacking(cssWidth, cssHeight, dpr, zoom) {
+  const sx = Math.max(1, Math.round(cssWidth * dpr * zoom));
+  const sy = Math.max(1, Math.round(cssHeight * dpr * zoom));
+  if (sx <= STURMIAN_BACKING_CAP && sy <= STURMIAN_BACKING_CAP) {
+    return { width: sx, height: sy };
+  }
+  const scale = STURMIAN_BACKING_CAP / Math.max(sx, sy);
+  return {
+    width: Math.max(1, Math.round(sx * scale)),
+    height: Math.max(1, Math.round(sy * scale)),
+  };
+}
+
 function sturmianPaint(face) {
   if (!face?.isConnected || !face._sturmianShader) return;
   const plate = face._sturmianPlate || face.querySelector(".node-sturmian-grid-canvas");
   if (!plate) return;
-  // Layout CSS box x dpr, never workspace zoom. Size the texture to the plate,
-  // not the whole face (the lane strip below must not stretch the squares).
-  const sized = typeof nodeGraphDisplayCanvasSize === "function"
-    ? nodeGraphDisplayCanvasSize(plate, plate)
-    : null;
-  if (!sized) return;
-  const logicalWidth = Math.max(1, sized.cssWidth);
-  const logicalHeight = Math.max(1, sized.cssHeight);
+  // Layout stays in module-space CSS (the plate, not the lane strip). The
+  // backing is CSS x dpr x workspace zoom so 1 texel = 1 screen pixel; cap
+  // at the shared 4096 present target. Do not go through DisplayCanvasSize
+  // here: that path clamps density to 1 and would shrink the backing first.
+  const box = sturmianPlateBox(plate);
+  if (!box) return;
+  const logicalWidth = box.cssWidth;
+  const logicalHeight = box.cssHeight;
   plate._sturmianCssW = logicalWidth;
   plate._sturmianCssH = logicalHeight;
-  const width = Math.max(1, sized.width);
-  const height = Math.max(1, sized.height);
+  const backing = sturmianScreenBacking(logicalWidth, logicalHeight, box.dpr, sturmianViewZoom());
+  if (typeof nodeGraphDisplayCanvasSetBacking === "function") {
+    nodeGraphDisplayCanvasSetBacking(plate, backing.width, backing.height);
+  } else {
+    plate.width = backing.width;
+    plate.height = backing.height;
+  }
+  const width = Math.max(1, plate.width | 0);
+  const height = Math.max(1, plate.height | 0);
   let gpu;
   try {
     gpu = sturmianEnsureGpu(face._sturmianShader);
@@ -306,7 +369,7 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.playStep, play.playStep);
   gl.uniform1f(gpu.playBar, play.playBar);
   gl.uniform1f(gpu.playing, play.playing);
-  gl.uniform1f(gpu.pixelRatio, Math.max(1, Number(sized.pixelRatio) || 1));
+  gl.uniform1f(gpu.pixelRatio, Math.max(1e-6, width / logicalWidth));
   const flash = sturmianUpdateFlash(face, values, play, time);
   gl.uniform1f(gpu.flashStep, flash.step);
   gl.uniform1f(gpu.flashMask, flash.mask);
@@ -382,6 +445,9 @@ function sturmianCreateBody(node) {
   face._sturmianStarted = performance.now();
   const plate = nodeGraphDisplayCanvasCreate("node-sturmian-grid-canvas");
   plate.setAttribute("aria-hidden", "true");
+  if (typeof nodeGraphDisplayCanvasPixelated === "function") {
+    nodeGraphDisplayCanvasPixelated(plate, true);
+  }
   face._sturmianPlate = plate;
   const side = document.createElement("div");
   side.className = "sturmian-side";

@@ -55,7 +55,7 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
   bool inBar = m >= 0.0 && m < playCols;
   if (!onTrack || !inBar) base *= 0.55;
 
-  float pr = max(1.0, pixelRatio);
+  float pr = max(1e-6, pixelRatio);
   float devX = floor(gridX * pr + 1e-4);
   float devY = floor(gridY * pr + 1e-4);
   float cellDev = cell * pr;
@@ -63,26 +63,34 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
   float fy = mod(gridY, cell);
   float gridW = cols * cell;
   float gridH = rows * cell;
-  // 1 CSS-pixel gutters (left/top of each cell, plus the outer right/bottom).
-  // Solid black so tile red/blue cannot bleed. The track-span frame is
-  // painted after this so it stays one contiguous stroke across those seams.
-  bool gutter = fx < 1.0 || fy < 1.0 || gridX >= gridW - 1.0 || gridY >= gridH - 1.0;
+  // 1-texel gutters (left/top of each cell, plus the outer right/bottom).
+  // The face texture is sized to screen resolution, so one texel is one
+  // screen/device pixel at every zoom and the seams do not grow. Solid black
+  // so tile red/blue cannot bleed. The track-span frame is painted after this
+  // so it stays one contiguous stroke across those seams.
+  float colStartDev = floor(col * cell * pr + 1e-4);
+  float colEndDev = floor((col + 1.0) * cell * pr + 1e-4);
+  float rowStartDev = floor(row * cell * pr + 1e-4);
+  float gridEndX = floor(gridW * pr + 1e-4);
+  float gridEndY = floor(gridH * pr + 1e-4);
+  bool gutter = devX < colStartDev + 1.0 || devY < rowStartDev + 1.0
+    || devX >= gridEndX - 1.0 || devY >= gridEndY - 1.0;
   float barX0 = padLeft * cellDev;
   float barX1 = (padLeft + playCols) * cellDev;
   // Sounding-bar bounds sit just inside the gutter so the dashed line stays visible.
-  if (!gutter && ((devX >= barX0 + pr && devX < barX0 + 2.0 * pr)
-      || (devX >= barX1 - 2.0 * pr && devX < barX1 - pr))
-      && mod(devY, 8.0 * pr) < 4.0 * pr)
+  if (!gutter && ((devX >= barX0 + 1.0 && devX < barX0 + 2.0)
+      || (devX >= barX1 - 2.0 && devX < barX1 - 1.0))
+      && mod(devY, 8.0) < 4.0)
     base = mix(base, vec3(1.0), 0.35);
   // Playhead: sounding-bar column (m = col - padLeft), full face height, inset
-  // so the white frame is inside the cell, not on the gutter.
+  // one texel so the white frame is inside the cell, not on the gutter.
   bool playCol = playing > 0.5 && inBar && abs(m - playStep) < 0.5;
   if (playCol && !gutter) {
     base = mix(base, vec3(1.0), 0.22);
-    bool frame = (fx >= 1.0 && fx < 2.0)
-      || (fx >= cell - 1.0 && fx < cell)
-      || (gridY >= 1.0 && gridY < 2.0)
-      || (gridY >= gridH - 1.0 && gridY < gridH);
+    bool frame = (devX >= colStartDev + 1.0 && devX < colStartDev + 2.0)
+      || (devX >= colEndDev - 1.0 && devX < colEndDev)
+      || (devY >= 1.0 && devY < 2.0)
+      || (devY >= gridEndY - 1.0 && devY < gridEndY);
     if (frame) base = vec3(1.0);
     if (trackHit >= 0) {
       if (mod(floor(mask / exp2(float(12 + trackHit))), 2.0) < 0.5
