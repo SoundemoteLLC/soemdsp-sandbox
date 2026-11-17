@@ -12,8 +12,7 @@ changes.
 
 Category proposal: **object**, next to Formant Voice (`formantFilter`),
 with store search notes covering vocoder, convolution, robot, crunch,
-resonator, and voice. Open question if it should sit with the comb family
-under `scientificFilter` or with Dark Velvet Reverb under `space`.
+resonator, and voice. Category: `space`, with Dark Velvet Reverb (decided).
 
 ## Goal
 
@@ -839,37 +838,21 @@ plus a live listen.
 - **Audio-rate mod.** Crunch, Mix, Formant Shift, and ƒ change
   every sample when modulated, not once per block.
 
-## Open questions for Argi
+## Decisions (Argi, 2026-11-17)
 
-1. **Body control:** continuous morph (recommended) or a 3-way
-   switch (Buzz / String / Tube)?
-2. **Body Decay / Size:** add a fine knob, or keep each type's
-   length as a hidden, physically motivated default?
-3. **Does Body also tint the carrier** (recommended, so one knob
-   keeps the family together), or only the voice IR, with a
-   single buzz carrier?
-4. **Tube series:** closed–open only (odd harmonics, recommended
-   for v1), or an Open / Closed switch?
-5. **Latency vs clean-end resolution:** is a constant ~43 ms
-   (2048 at 48 kHz) acceptable for a talkbox, or should the size
-   set top out at 1024 (~21 ms) or 512 (~11 ms)?
-6. **Response / Bandwidth override:** bipolar trims around Crunch
-   (recommended) or absolute knobs plus an Unlink switch?
-7. **Defaults:** Crunch 0.25, Mix 1 (fully wet), Frequency 110 Hz.
-   Prefer 220 Hz, or a Mix of 0.5?
-8. **Category / name:** label "Convolution Resonator", key
-   `convolutionResonator`, store category `object` (next to
-   Formant Voice). Or sit it with the combs (`scientificFilter`)
-   or the reverbs (`space`)? Any other name?
-9. **Time-domain band path:** agree to defer it until the short
-   STFT has been heard, or require it in v1 for the crunchy end?
-10. **Sandy's FFT:** may we factor `fft_radix2` into
-    `library/include/soemdsp/fft/fft_radix2.h` once her Noise
-    Convolution Reverb lands, and share it? If this module is
-    built first, we will put the header in and leave her the
-    option to switch over.
+All open questions are settled; build on these.
 
-That is all the later agent should need to build it. No code until
-these questions that actually change the architecture (especially
-1, 3, 5, 6, and 9) are settled, or until Argi says to go ahead on
-the recommendations as written.
+1. **Body** is a continuous morph: Buzz to String to Tube.
+2. **Body Decay / Size** gets a fine knob.
+3. **Body also tints the carrier**, so one knob keeps the family together.
+4. **Tube series** is closed–open only (odd harmonics) for v1.
+5. **Latency:** as recommended, a constant ~43 ms (2048 at 48 kHz), with the dry
+   path delayed to match.
+6. **Response / Bandwidth** are bipolar trims around the Crunch law (recommended).
+7. **Defaults** as recommended: Crunch 0.25, Mix 1 (fully wet), Frequency 110 Hz.
+8. **Category:** `space` (with the reverbs). Label "Convolution Resonator",
+   key `convolutionResonator`.
+9. **Time-domain band path** is deferred until the short STFT has been heard.
+10. **Sandy's FFT:** yes, factor `fft_radix2` into
+    `library/include/soemdsp/fft/fft_radix2.h` and share it, coordinating
+    with Sandy.
