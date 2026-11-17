@@ -607,6 +607,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "minGap") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
     if (k === "tailRandom") return P.NATIVE_GRAPH_PARAM_CENTER;
     if (k === "tailCurve") return P.NATIVE_GRAPH_PARAM_SATURATE;
+    if (k === "precision") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
   }
   if (t === "robinLeakyEnvelope") {
     if (k === "startDecay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
@@ -6084,6 +6085,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("minGap", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("minGap", 1)); // Min Gap ms
       push("tailRandom", P.NATIVE_GRAPH_PARAM_CENTER, cont("tailRandom", 1));
       push("tailCurve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("tailCurve", 0));
+      push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 0));
       continue;
     }
     if (type === "softpopOscillator") {

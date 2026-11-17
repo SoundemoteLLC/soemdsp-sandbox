@@ -820,6 +820,7 @@ extern "C" void soemdsp_velvet_reverb_process_block(
   double tailRandom,
   double tailCurve
 );
+extern "C" void soemdsp_velvet_reverb_set_precision(int handle, double mode);
 extern "C" double soemdsp_velvet_reverb_right(int handle);
 extern "C" int soemdsp_velvet_reverb_version();
 
@@ -4342,6 +4343,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeEllipsoid) ? 0.0 // robin dither Off
       : (typeId == kTypeHypersaw2) ? 0.0 // jitterDistanceSource Wavelength
       : (typeId == kTypeXyPad) ? 0.0 // pauseOnLift Off
+      : (typeId == kTypeVelvetReverb) ? 0.0 // Precision: Double (float delay is a listening A/B)
       : 2.0, // legacy oversample slot (unused by Soft Clipper redesign)
     true
   );
@@ -15829,6 +15831,7 @@ static void process_velvet_reverb(Circuit& g, Node& node, int frames) {
   double gapA[kMaxBlockFrames];
   double randA[kMaxBlockFrames];
   double curveA[kMaxBlockFrames];
+  double precA[kMaxBlockFrames];
   const int n = frames < kMaxBlockFrames ? frames : kMaxBlockFrames;
   for (int f = 0; f < n; f++) {
     control_frame(g, node, f);
@@ -15850,6 +15853,7 @@ static void process_velvet_reverb(Circuit& g, Node& node, int frames) {
     gapA[f] = control_audio(g, node.offsetMs, f);
     randA[f] = control_audio(g, node.center, f);
     curveA[f] = control_audio(g, node.saturate, f);
+    precA[f] = control_audio(g, node.oversample, f);
   }
 
   int i = 0;
@@ -15866,9 +15870,11 @@ static void process_velvet_reverb(Circuit& g, Node& node, int frames) {
       && gapA[i + run] == gapA[i]
       && randA[i + run] == randA[i]
       && curveA[i + run] == curveA[i]
+      && precA[i + run] == precA[i]
     ) {
       run += 1;
     }
+    soemdsp_velvet_reverb_set_precision(node.nativeHandle, precA[i]);
     soemdsp_velvet_reverb_process_block(
       node.nativeHandle,
       inL + i, inR + i,
