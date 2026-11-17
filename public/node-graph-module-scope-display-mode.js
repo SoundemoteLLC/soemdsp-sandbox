@@ -309,6 +309,8 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "gradientVectorscopeFace",
     "graphFace",
     "phaserFace",
+    // Sturmian Grid: Track Stroke Alpha and Playhead Stroke Alpha.
+    "sturmianGridFace",
   ].includes(displayType);
 }
 

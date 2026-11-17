@@ -98,6 +98,7 @@ float fx = 0.0;
 float fy = 0.0;
 int trackHit = -1;
 bool inBar = false;
+bool gutter = false;
 float mask = floor(stepPattern + 0.5);
 if (inGrid) {
   col = floor(gridX / cell);
@@ -134,14 +135,8 @@ if (inGrid) {
   float rowStartDev = floor(row * cell * pr + 1e-4);
   float gridEndX = floor(gridW * pr + 1e-4);
   float gridEndY = floor(gridSpanH * pr + 1e-4);
-  bool gutter = devX < colStartDev + 1.0 || devY < rowStartDev + 1.0
+  gutter = devX < colStartDev + 1.0 || devY < rowStartDev + 1.0
     || devX >= gridEndX - 1.0 || devY >= gridEndY - 1.0;
-  if (!gutter && flashAmt > 0.0 && abs(m - flashStep) < 0.5 && trackHit >= 0
-      && mod(floor(flashMask / exp2(float(trackHit))), 2.0) > 0.5
-      && fx >= 2.0 && fx < cell - 2.0 && fy >= 2.0 && fy < cell - 2.0) {
-    base = mix(base, vec3(1.0), 0.55 * flashAmt);
-    base = mix(base, laneColor(trackHit), 0.35 * flashAmt);
-  }
   if (gutter) base = vec3(0.0);
   for (int track = 0; track < 4; track++) {
     float trackN = firstN + float(track) * spreadN;
@@ -156,7 +151,7 @@ if (inGrid) {
     bool inside = devX >= spanLeft && devX < spanRight && devY >= spanTop && devY < spanBot;
     bool frame = inside && (devX < spanLeft + 1.0 || devX >= spanRight - 1.0
       || devY < spanTop + 1.0 || devY >= spanBot - 1.0);
-    if (frame) base = tc;
+    if (frame) base = mix(base, tc, clamp(trackStrokeAlpha, 0.0, 1.0));
   }
 } else if (px.y >= gridLimit && px.y < faceH && px.x >= 0.0 && px.x < w) {
   base = BG;
@@ -196,23 +191,27 @@ if (inGrid) {
   }
 }
 
-// Playhead last, matching soundemote-dev page.js: fillRect(x,0,cs,H) at
-// rgba(255,255,255,0.16), strokeRect 1px #fff around the column, then
-// sounding cells fillRect(x+2,y+2,cs-4,cs-4) in TRACK_COLORS at alpha 0.85.
+// Playhead wash stays (16% white column). Hit flash fills the triggered
+// square with its track color (no inset / inner stroke); black gutters stay.
+// 1px track-span and playhead strokes use Display Settings alphas (default 1).
 if (playing > 0.5 && px.y >= 0.0 && px.y < gridLimit) {
   float stepCol = padLeft + floor(playStep + 0.5);
   float x0 = ox + stepCol * cell;
   if (px.x >= x0 && px.x < x0 + cell) {
     base = mix(base, vec3(1.0), 0.16);
+  }
+}
+if (inGrid && !gutter && flashAmt > 0.0 && abs(m - flashStep) < 0.5 && trackHit >= 0
+    && mod(floor(flashMask / exp2(float(trackHit))), 2.0) > 0.5) {
+  base = mix(base, laneColor(trackHit), flashAmt);
+}
+if (playing > 0.5 && px.y >= 0.0 && px.y < gridLimit) {
+  float stepCol = padLeft + floor(playStep + 0.5);
+  float x0 = ox + stepCol * cell;
+  if (px.x >= x0 && px.x < x0 + cell) {
     bool frame = px.x < x0 + 1.0 || px.x >= x0 + cell - 1.0
       || px.y < 1.0 || px.y >= gridLimit - 1.0;
-    if (frame) base = vec3(1.0);
-    if (inGrid && inBar && trackHit >= 0
-        && mod(floor(mask / exp2(float(12 + trackHit))), 2.0) < 0.5
-        && mod(floor(mask / exp2(float(trackHit * 3) + tile)), 2.0) > 0.5
-        && fx >= 2.0 && fx < cell - 2.0 && fy >= 2.0 && fy < cell - 2.0) {
-      base = mix(base, laneColor(trackHit), 0.85);
-    }
+    if (frame) base = mix(base, vec3(1.0), clamp(playheadStrokeAlpha, 0.0, 1.0));
   }
 }
 out_color = vec4(base, 1.0);

@@ -14,6 +14,13 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     // Face reads hidden __Phase / __Bar taps every paint. customDisplayArea
     // modules are layoutOwned and would otherwise be omitted from scope capture.
     planScopeCapture: true,
+    // Display Settings (not the param band): track-span and playhead stroke alphas.
+    displayModes: [{
+      key: "sturmianGridFace",
+      label: "Sturmian Grid",
+      renderer: "layoutOwned",
+      settingsSchema: "sturmianGridFace",
+    }],
     defaultWidthGu: 16,
     displayHeightGu: 8,
     chrome: "LayoutA",

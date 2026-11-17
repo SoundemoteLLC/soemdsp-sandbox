@@ -180,6 +180,19 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
       );
     }
   }
+  if (type === "sturmianGridFace") {
+    if (typeof bindNodeGraphSturmianGridDisplaySettingsBody === "function") {
+      bindNodeGraphSturmianGridDisplaySettingsBody(host);
+    }
+    if (typeof syncNodeGraphSturmianGridDisplaySettingsControls === "function") {
+      syncNodeGraphSturmianGridDisplaySettingsControls(
+        host,
+        typeof nodeGraphSturmianGridDisplaySettingsForNode === "function"
+          ? nodeGraphSturmianGridDisplaySettingsForNode(node)
+          : (node?.traceDisplaySettings || {}),
+      );
+    }
+  }
   // RGB Picture: load / clear image.
   if (type === "rgbPictureFace") {
     if (typeof bindNodeGraphRgbPictureDisplaySettingsEvents === "function") {
@@ -661,6 +674,11 @@ if (type === "portalFace") {
       ? normalizeNodeGraphPitchQuantizerFaceSettings()
       : { ...(typeof NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS !== "undefined" ? NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS : {}) };
   }
+  if (type === "sturmianGridFace") {
+    return typeof normalizeNodeGraphSturmianGridFaceSettings === "function"
+      ? normalizeNodeGraphSturmianGridFaceSettings()
+      : { ...(typeof NODE_GRAPH_STURMIAN_GRID_DISPLAY_DEFAULTS !== "undefined" ? NODE_GRAPH_STURMIAN_GRID_DISPLAY_DEFAULTS : { trackStrokeAlpha: 1, playheadStrokeAlpha: 1 }) };
+  }
   if (type === "torchFace") {
     return normalizeNodeGraphTorchFaceSettings();
   }
@@ -931,6 +949,11 @@ if (type === "portalFace") {
       ? normalizeNodeGraphPitchQuantizerFaceSettings(settings)
       : (settings && typeof settings === "object" ? settings : {});
   }
+  if (type === "sturmianGridFace") {
+    return typeof normalizeNodeGraphSturmianGridFaceSettings === "function"
+      ? normalizeNodeGraphSturmianGridFaceSettings(settings)
+      : (settings && typeof settings === "object" ? settings : {});
+  }
   if (type === "torchFace") {
     return normalizeNodeGraphTorchFaceSettings(settings);
   }
@@ -1090,6 +1113,13 @@ if (settingsSchema === "portalFace") {
       ? nodeGraphPitchQuantizerDisplaySettingsForNode(node)
       : (typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
         ? normalizeNodeGraphPitchQuantizerFaceSettings(node?.traceDisplaySettings)
+        : (node?.traceDisplaySettings || {}));
+  }
+  if (settingsSchema === "sturmianGridFace") {
+    return typeof nodeGraphSturmianGridDisplaySettingsForNode === "function"
+      ? nodeGraphSturmianGridDisplaySettingsForNode(node)
+      : (typeof normalizeNodeGraphSturmianGridFaceSettings === "function"
+        ? normalizeNodeGraphSturmianGridFaceSettings(node?.traceDisplaySettings)
         : (node?.traceDisplaySettings || {}));
   }
   if (settingsSchema === "transportBpm") {
@@ -1369,6 +1399,13 @@ function readNodeGraphTraceDisplaySettingsForm() {
     );
     return;
   }
+  if (formType === "sturmianGridFace") {
+    const panel = root?.querySelector?.("[data-sturmian-grid-display-settings-panel]") || root;
+    if (typeof syncNodeGraphSturmianGridDisplaySettingsControls === "function") {
+      syncNodeGraphSturmianGridDisplaySettingsControls(panel, normalized);
+    }
+    return;
+  }
   if (formType === "keypadFace") {
     const panel = root?.querySelector?.("[data-keypad-display-settings-panel]") || root;
     const next = { ...current };
@@ -1459,6 +1496,12 @@ function readNodeGraphTraceDisplaySettingsForm() {
   if (formType === "pitchQuantizerFace") {
     if (typeof readNodeGraphPitchQuantizerDisplaySettingsForm === "function") {
       return readNodeGraphPitchQuantizerDisplaySettingsForm(root, current);
+    }
+    return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
+  }
+  if (formType === "sturmianGridFace") {
+    if (typeof readNodeGraphSturmianGridDisplaySettingsForm === "function") {
+      return readNodeGraphSturmianGridDisplaySettingsForm(root, current);
     }
     return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
   }

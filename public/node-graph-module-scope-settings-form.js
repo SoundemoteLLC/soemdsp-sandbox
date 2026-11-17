@@ -2275,6 +2275,9 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
   if (type === "pitchQuantizerFace" && typeof buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml === "function") {
     return buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml();
   }
+  if (type === "sturmianGridFace" && typeof buildNodeGraphSturmianGridDisplaySettingsBodyHtml === "function") {
+    return buildNodeGraphSturmianGridDisplaySettingsBodyHtml();
+  }
   const activeFields = nodeGraphTraceDisplayActiveControlSet("fields", type);
   const activeColors = nodeGraphTraceDisplayActiveControlSet("colors", type);
   const activeToggles = nodeGraphTraceDisplayActiveControlSet("toggles", type);

@@ -6,11 +6,11 @@
 // face texture is snapped to the integer framebuffer size of the on-screen
 // quad (CSS x workspace zoom; 4096 cap) so every texel is 1:1. Gutters, track
 // outline, playhead and lane toggles are integer device pixels. The playhead
-// matches soundemote-dev: a 16% white column, a 1px white frame, and 85%
-// track-color insets on sounding cells, drawn on top of gutters. The shared
-// 2.5x threshold is unchanged; this plate pins nearest and opts into
-// compositor pixel-snap.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21";
+// is a 16% white column plus a 1px white frame; a triggered step fills its
+// square with the track color (no inset). Track-span and playhead stroke
+// alphas live in Display Settings (default 1). The shared 2.5x threshold is
+// unchanged; this plate pins nearest and opts into compositor pixel-snap.
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_UI_DEFAULT_MASK = 3170;
 let sturmianShaderPromise = null;
@@ -216,7 +216,8 @@ function sturmianEnsureGpu(shader) {
     + " uniform float stripGapX; uniform float stripGapY; uniform float btnSize;"
     + " uniform float labelW; uniform float innerGap;"
     + " uniform float layoutCell; uniform float layoutCols; uniform float layoutRows;"
-    + " uniform float layoutOx; uniform float layoutOy; uniform float layoutPadLeft;";
+    + " uniform float layoutOx; uniform float layoutOy; uniform float layoutPadLeft;"
+    + " uniform float trackStrokeAlpha; uniform float playheadStrokeAlpha;";
   const vertex = compile(gl.VERTEX_SHADER, "#version 300 es\nin vec2 aPos; out vec2 vUv; void main(){vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);}");
   const fragment = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\nin vec2 vUv; out vec4 out_color; uniform vec2 resolution; uniform float time;\n${uniforms}\n${shader.functions}\nvoid main(){ vec2 uv=vUv; ${shader.body}\n}`);
   const program = gl.createProgram();
@@ -257,6 +258,8 @@ function sturmianEnsureGpu(shader) {
     layoutOx: gl.getUniformLocation(program, "layoutOx"),
     layoutOy: gl.getUniformLocation(program, "layoutOy"),
     layoutPadLeft: gl.getUniformLocation(program, "layoutPadLeft"),
+    trackStrokeAlpha: gl.getUniformLocation(program, "trackStrokeAlpha"),
+    playheadStrokeAlpha: gl.getUniformLocation(program, "playheadStrokeAlpha"),
     floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])),
   };
   return sturmianSharedGpu;
@@ -513,6 +516,11 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.layoutOx, layout.ox);
   gl.uniform1f(gpu.layoutOy, layout.oy);
   gl.uniform1f(gpu.layoutPadLeft, layout.padLeft);
+  const look = typeof nodeGraphSturmianGridDisplaySettingsForNode === "function"
+    ? nodeGraphSturmianGridDisplaySettingsForNode(sturmianReadNode(nodeId))
+    : { trackStrokeAlpha: 1, playheadStrokeAlpha: 1 };
+  gl.uniform1f(gpu.trackStrokeAlpha, look.trackStrokeAlpha);
+  gl.uniform1f(gpu.playheadStrokeAlpha, look.playheadStrokeAlpha);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   if (typeof nodeGraphSharedGlEndPresent === "function") nodeGraphSharedGlEndPresent(gl);
   const ctx = typeof nodeGraphSharedGlPresentTarget === "function"

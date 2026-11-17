@@ -480,6 +480,15 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "sturmianGridFace") {
+    node.traceDisplaySettings = typeof normalizeNodeGraphSturmianGridFaceSettings === "function"
+      ? normalizeNodeGraphSturmianGridFaceSettings(settings)
+      : (settings && typeof settings === "object" ? { ...settings } : {});
+    if (typeof applyNodeGraphSturmianGridDisplaySettingsToFace === "function") {
+      applyNodeGraphSturmianGridDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (displayType === "torchFace") {
     node.traceDisplaySettings = normalizeNodeGraphTorchFaceSettings(settings);
     return node.traceDisplaySettings;
