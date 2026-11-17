@@ -36,8 +36,10 @@
 // pixels (partial edge coverage; a width < 1 device px is a 1 px bar with
 // alpha = width). Taps go in a GL layer with quadBlend "add" (SRC_ALPHA, ONE)
 // so overlaps accumulate: sparse taps stay distinct thin lines, dense clusters
-// stack into a bright burst, and L red + R blue add to the R+B=White look.
-// Per-tap alpha is below 1 so a single tap does not already saturate.
+// stack into a bright burst (additive may clip toward white), and L red + R
+// blue add to the R+B=White look. Idle alpha is near 1 so an isolated tap
+// matches the pre-animation static look (ink x 1/width, floor 0.2). A
+// triggered tap is full channel ink lifted toward white.
 // GPU only (gl-line-renderer); the face does not edit that shared renderer.
 
 const nodeGraphVelvetTapsWasm = { promise: null, exports: null, failed: false };
@@ -247,10 +249,34 @@ function nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, countL, countR, armFromB
 nodeGraphVelvetTapsInstallIngestArm();
 
 
-// Idle / triggered fill alpha on the additive layer. Below 1 so overlaps can
-// still stack into a burst; high enough that an isolated thin tap reads.
-const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = 0.5;
-const NODE_GRAPH_VELVET_TAP_ON_ALPHA = 0.68;
+// Idle fill is near the pre-animation static look (ink x 1/width at almost
+// solid alpha). Triggered is opaque and lifted toward white so the one-frame
+// flash reads clearly. Overlaps still add and may clip to white (a burst).
+const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = 0.92;
+const NODE_GRAPH_VELVET_TAP_ON_ALPHA = 1;
+const NODE_GRAPH_VELVET_TAP_ON_LIFT = 0.4;
+
+// Darkness dim: 1 / pulse width in samples, floored at 0.2. Wider is always
+// dimmer until the floor. Used only for idle taps.
+function nodeGraphVelvetTapsDarknessShade(widthSeconds, sampleRate) {
+  return Math.max(0.2, Math.min(1, 1 / Math.max(1, widthSeconds * sampleRate)));
+}
+
+// ink is the lamp colour. Idle keeps its darkness shade; triggered uses full
+// ink lifted toward white.
+function nodeGraphVelvetTapsShade(ink, g, on) {
+  if (on) {
+    const lift = NODE_GRAPH_VELVET_TAP_ON_LIFT;
+    return [
+      ink[0] + (1 - ink[0]) * lift,
+      ink[1] + (1 - ink[1]) * lift,
+      ink[2] + (1 - ink[2]) * lift,
+      NODE_GRAPH_VELVET_TAP_ON_ALPHA,
+    ];
+  }
+  const s = Math.max(0, Math.min(1, g));
+  return [ink[0] * s, ink[1] * s, ink[2] * s, NODE_GRAPH_VELVET_TAP_IDLE_ALPHA];
+}
 
 // Coverage spans along one axis in device pixels: each { p, c, w } is a run
 // of `w` pixels starting at `p` with per-pixel coverage `c` in (0, 1].
@@ -363,11 +389,10 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     const span = x1 - x0;
     const at = (t) => x0 + span * Math.max(0, Math.min(1, t / layout.length));
     // Darker taps draw dimmer: the audio gain of a pulse is 1 / width (in
-    // samples), so the ink is scaled by 1 / w, floored at kDimFloor so the
+    // samples), so the ink is scaled by 1 / w, floored at 0.2 so the
     // darkest pulses stay visible. A triggered tap is binary: full channel
     // ink for this one frame, otherwise that static shade. Width stays the
     // real pulse (no whole-pixel snap); thin pulses AA via coverage alpha.
-    const kDimFloor = 0.2;
     const sr = layout.sampleRate || 48000;
     const nodeId = String(node?.id || section?.dataset?.node || "");
     const rawL = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
@@ -378,11 +403,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
       : null;
     const ingest = nodeGraphVelvetTapsInstallIngestArm();
     const lit = nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, layout.count, layout.countR, !ingest);
-    const shade = (ink, r) => {
-      const g = r.g;
-      const a = r.on ? NODE_GRAPH_VELVET_TAP_ON_ALPHA : NODE_GRAPH_VELVET_TAP_IDLE_ALPHA;
-      return [ink[0] * g, ink[1] * g, ink[2] * g, a];
-    };
+    const shade = (ink, r) => nodeGraphVelvetTapsShade(ink, r.g, r.on);
     // One sharp rectangle per tap: x range = the real pulse, y = zero line to
     // the mirrored dB height (lvl <= 1 of the peak, so it stays in the face).
     const rect = (p, wd, signed, on) => {
@@ -391,7 +412,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
       const hNorm = Math.max(0, 1 + db / 60);
       const xa = at(p);
       const xb = at(p + wd);
-      const g = Math.max(kDimFloor, Math.min(1, 1 / Math.max(1, wd * sr)));
+      const g = nodeGraphVelvetTapsDarknessShade(wd, sr);
       return { xa, xb, s: Math.sign(signed), hh: hNorm * reach, hNorm, g: on ? 1 : g, on: !!on };
     };
     const rl = [];
