@@ -4351,6 +4351,16 @@ const nodeGraphModuleDefinitions = (
     planFreeRun: true,
     // Face: one-octave pitch-class keyboard (toggle keys → 12-bit mask).
     // Scale jack = noteMask128 (Play/Arp/Chord Keys family); fold n%12 in DSP.
+    displayType: "pitchQuantizerFace",
+    displayModes: [
+      {
+        key: "face",
+        label: "Scale",
+        renderer: "pitchQuantizerFace",
+        source: { value: "pitch" },
+      },
+    ],
+    defaultDisplayMode: "face",
     customDisplayArea: true,
     defaultWidthGu: 10,
     displayHeightGu: 5,
