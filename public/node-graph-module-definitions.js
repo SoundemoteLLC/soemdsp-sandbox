@@ -140,6 +140,7 @@ const nodeGraphNodeLabels = Object.freeze({
   velvetNoise: "Dark Velvet Noise",
   velvetReverb: "Dark Velvet Reverb",
   noiseConvReverb: "Noise Convolution Reverb",
+  convolutionResonator: "Convolution Resonator",
   randomWalk: "Random Walk",
   cheapWalk: "Cheap Walk",
   piNoise: "Pi Noise",
@@ -7336,6 +7337,18 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Dry/wet mix (0% = dry input, 100% = wet)."
       },
     ],
+  },
+  convolutionResonator: {
+    planRole: "processor",
+    planFreeRun: true,
+    inputs: ["In", "Left", "Right"],
+    inputLabels: { In: "Mono" },
+    inputAliases: { Mono: "In" },
+    outputs: ["Mono", "Left", "Right"],
+    outputAliases: { Out: "Mono" },
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "lineBurn",
+    parameters: [],
   },
   noiseConvReverb: {
     face: [

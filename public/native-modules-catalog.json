@@ -632,6 +632,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "convolution_resonator",
+      "label": "Convolution Resonator",
+      "targetType": "convolutionResonator",
+      "kind": "effect",
+      "source": "native_modules/convolution_resonator/convolution_resonator.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/convolution_resonator/convolution_resonator.cpp",
+      "localSourceUrl": "/native_modules/convolution_resonator/convolution_resonator.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/convolution_resonator/convolution_resonator.wasm",
+      "wasmUrl": "native_modules/convolution_resonator/convolution_resonator.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "cookbook_filter",
       "label": "Cookbook Filter",
       "targetType": "cookbookFilter",

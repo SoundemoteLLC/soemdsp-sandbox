@@ -824,6 +824,10 @@ extern "C" void soemdsp_velvet_reverb_set_precision(int handle, double mode);
 extern "C" double soemdsp_velvet_reverb_right(int handle);
 extern "C" int soemdsp_velvet_reverb_version();
 extern "C" int soemdsp_noise_conv_reverb_create(double sampleRate);
+extern "C" int soemdsp_convolution_resonator_create();
+extern "C" void soemdsp_convolution_resonator_destroy(int handle);
+extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right);
+extern "C" double soemdsp_convolution_resonator_right(int handle);
 extern "C" void soemdsp_noise_conv_reverb_destroy(int handle);
 extern "C" void soemdsp_noise_conv_reverb_reset(int handle);
 extern "C" void soemdsp_noise_conv_reverb_set_seed(int handle, double seed);
@@ -2574,6 +2578,7 @@ static const int kTypeVelvetNoise = 263; // Velvet Noise: random-event generator
 static const int kTypeVelvetReverb = 265; // Velvet Reverb: Dark Velvet Noise diffuser (split out of Velvet Noise)
 static const int kTypeCombPluck = 266; // Comb Pluck: strict Trigger + built-in exciter into the Comb Resonator loop (docs/COMB_PLUCK_PLAN.md)
 static const int kTypeNoiseConvReverb = 267; // Noise Convolution Reverb: shaped noise IR, zero-latency partitioned convolution
+static const int kTypeConvolutionResonator = 268;
 
 static const int kPortMono = 0;
 static const int kPortLeft = 1;
@@ -3245,6 +3250,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_velvet_reverb_destroy(handle);
   } else if (kind == kTypeNoiseConvReverb) {
     soemdsp_noise_conv_reverb_destroy(handle);
+  } else if (kind == kTypeConvolutionResonator) {
+    soemdsp_convolution_resonator_destroy(handle);
   } else if (kind == kTypeVelvetNoise) {
     soemdsp_velvet_noise_destroy(handle);
   } else if (kind == kTypeSoftpopOscillator) {
@@ -5751,6 +5758,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeVelvetNoise) return soemdsp_velvet_noise_create();
   if (typeId == kTypeVelvetReverb) return soemdsp_velvet_reverb_create((double)sampleRate);
   if (typeId == kTypeNoiseConvReverb) return soemdsp_noise_conv_reverb_create((double)sampleRate);
+  if (typeId == kTypeConvolutionResonator) return soemdsp_convolution_resonator_create();
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
   if (typeId == kTypeSoftpopFilter) return soemdsp_softpop_filter_create();
   if (typeId == kTypeSoftpop2) return soemdsp_softpop2_create();
@@ -15837,6 +15845,26 @@ static void process_velvet_noise(Circuit& g, Node& node, int frames) {
 //   node.seed: Seed
 //   node.mix: Dry / Wet (0 .. 1)
 //   node.timeNumerator: Decay (dB/s); node.timeDenominator: Tail Darkness (0 = off)
+// Stage 1: exact latency-aligned dry path; Body and vocoder follow separately.
+static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  using namespace soemdsp::routing;
+  const StereoRoute route = stereo_route(probe_stereo_route_wiring(g, node));
+  mix_node_inputs(g, node, frames);
+  for (int f = 0; f < frames; ++f) {
+    control_frame(g, node, f);
+    const double m = g.mixMono[f], l = g.mixLeft[f], r = g.mixRight[f];
+    const double a = stereo_route_feed(route.runMono ? route.feedMono : route.feedL, m, l, r);
+    const double b = stereo_route_feed(route.feedR, m, l, r);
+    const double y = soemdsp_convolution_resonator_sample(node.nativeHandle,
+      route.runMono || route.runL ? a : 0.0, route.runR ? b : 0.0);
+    const double yr = soemdsp_convolution_resonator_right(node.nativeHandle);
+    node.buf[kPortMono][f] = stereo_route_out(route.outMono, y, y, yr);
+    node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, y, y, yr);
+    node.buf[kPortRight][f] = stereo_route_out(route.outRight, y, y, yr);
+  }
+}
+
 static void process_noise_conv_reverb(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   {
@@ -17328,6 +17356,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeVelvetNoise
     || typeId == kTypeVelvetReverb
     || typeId == kTypeNoiseConvReverb
+    || typeId == kTypeConvolutionResonator
     || typeId == kTypeSampleHold
     || typeId == kTypeMinMax
     || typeId == kTypeClock
@@ -17491,6 +17520,7 @@ static bool type_needs_native(int typeId) {
 // Adding or removing one makes the host rebuild the engine, and their capacity is the node count
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
+  if (typeId == kTypeConvolutionResonator) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
     || typeId == kTypeSampleDelay || typeId == kTypeExponentialDelay || typeId == kTypeDelayEffect
@@ -18943,6 +18973,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeNoiseConvReverb) {
       process_noise_conv_reverb(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeConvolutionResonator) {
+      process_convolution_resonator(g, node, frames);
       return;
     }
     if (node.typeId == kTypeSampleHold) {

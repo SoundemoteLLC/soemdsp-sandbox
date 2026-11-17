@@ -1097,6 +1097,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
+  convolutionResonator: {
+    category: "space",
+    description: "Development timing proof: stereo dry signal delayed by 2048 samples. Resonant body and spectral processing are not implemented yet.",
+    label: "Convolution Resonator",
+    notes: ["vocoder", "convolution", "robot", "crunch", "resonator", "voice", "native"],
+  },
   noiseConvReverb: {
     category: "space",
     description: "Reverb from a generated, shaped noise impulse response and zero-latency partitioned convolution. Length and Amp Shape set the decay, Spectral Shape / Darkness / Brightness colour the tail, and Decorrelate spreads L/R.",
@@ -3901,6 +3907,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   noiseConvReverb: {
     source: "native_modules/noise_conv_reverb/noise_conv_reverb.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/noise_conv_reverb/noise_conv_reverb.cpp",
+  },
+  convolutionResonator: {
+    source: "native_modules/convolution_resonator/convolution_resonator.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/convolution_resonator/convolution_resonator.cpp",
   },
   pumpCurve: {
     source: "native_modules/pump_curve/pump_curve.cpp",

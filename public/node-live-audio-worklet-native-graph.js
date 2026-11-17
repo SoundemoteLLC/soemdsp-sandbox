@@ -291,6 +291,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   velvetNoise: 263,
   velvetReverb: 265,
   noiseConvReverb: 267,
+  convolutionResonator: 268,
 });
 
 // Param IDs — keep in sync with graph_engine.cpp kParam*.

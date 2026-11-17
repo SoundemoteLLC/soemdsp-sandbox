@@ -282,6 +282,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   velvetNoise: "silence",
   velvetReverb: "pass",
   noiseConvReverb: "pass",
+  convolutionResonator: "pass",
   output: "pass",
   // Nested graph: silence for now (passthrough later)
 
