@@ -28,9 +28,10 @@
 // idle (the static darkness shade) or fully bright (full channel ink). The
 // worklet posts per-tap peak-hold levels (TapLevelsL / TapLevelsR) at the
 // display-telemetry rate. A tap is triggered when that peak is above
-// NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB). The trigger is latched until
-// one bright frame has been drawn, so a snapshot that arrives between paints
-// still gets a frame, and a stale bus value cannot retrigger the next paints.
+// NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL (-90 dB). A hit pops bright on the next
+// paint and stays bright for the rest of that snapshot period (no fade, no
+// strobe if paints run faster than snapshots). After a quiet snapshot, and
+// once the hit has been painted at least once, the tap goes dark promptly.
 // Height stays the static amplitude layout. A tap narrower than 1 device px
 // is drawn as a 1 px bar at full coverage (brightness follows darkness and
 // the trigger flash only, never Length or zoom). Wider taps keep exact
@@ -162,6 +163,10 @@ function nodeGraphVelvetTapsTriggerState(nodeId) {
     state = {
       triggeredL: new Uint8Array(0),
       triggeredR: new Uint8Array(0),
+      shownL: new Uint8Array(0),
+      shownR: new Uint8Array(0),
+      energyL: new Uint8Array(0),
+      energyR: new Uint8Array(0),
       snapL: undefined,
       snapR: undefined,
     };
@@ -180,30 +185,38 @@ function nodeGraphVelvetTapsEnsureTriggers(state, key, n) {
   return state[key];
 }
 
-// OR any peak above the threshold into the latch. Used by ingest (every
-// snapshot write) and as a draw-time fallback when ingest is not armed.
-function nodeGraphVelvetTapsArmTriggers(triggered, levels, threshold) {
-  const th = threshold == null ? NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL : threshold;
-  const n = triggered.length;
-  for (let i = 0; i < n; i += 1) {
-    const v = levels && i < levels.length ? Number(levels[i]) : 0;
-    if (v > th) triggered[i] = 1;
-  }
-  return triggered;
+function nodeGraphVelvetTapsEnsureSide(state, side, n) {
+  const s = side === "R" ? "R" : "L";
+  return {
+    trig: nodeGraphVelvetTapsEnsureTriggers(state, "triggered" + s, n),
+    shown: nodeGraphVelvetTapsEnsureTriggers(state, "shown" + s, n),
+    energy: nodeGraphVelvetTapsEnsureTriggers(state, "energy" + s, n),
+  };
 }
 
-// Copy the latch and clear it: each trigger is consumed by exactly one draw.
-function nodeGraphVelvetTapsConsumeTriggers(triggered) {
-  const on = new Uint8Array(triggered);
-  triggered.fill(0);
-  return on;
+// Apply one peak-hold snapshot to a side. Energy lights the tap; a quiet
+// snapshot turns it off only after it has already been painted (so a hit
+// that is replaced before the first paint still gets one bright paint).
+// Ingest and the draw-time fallback both use this so they cannot fight.
+function nodeGraphVelvetTapsApplySnapshot(state, side, levels, threshold) {
+  const n = levels && typeof levels.length === "number" ? levels.length : 0;
+  const { trig, shown, energy } = nodeGraphVelvetTapsEnsureSide(state, side, n);
+  const th = threshold == null ? NODE_GRAPH_VELVET_TAP_TRIGGER_LEVEL : threshold;
+  for (let i = 0; i < n; i += 1) {
+    const hit = levels && i < levels.length && Number(levels[i]) > th;
+    energy[i] = hit ? 1 : 0;
+    if (hit) trig[i] = 1;
+    else if (shown[i]) {
+      trig[i] = 0;
+      shown[i] = 0;
+    }
+  }
+  return trig;
 }
 
 function nodeGraphVelvetTapsArmSnapshot(nodeId, port, levels) {
   const state = nodeGraphVelvetTapsTriggerState(nodeId);
-  const key = port === "TapLevelsR" ? "triggeredR" : "triggeredL";
-  const n = levels && typeof levels.length === "number" ? levels.length : 0;
-  nodeGraphVelvetTapsArmTriggers(nodeGraphVelvetTapsEnsureTriggers(state, key, n), levels);
+  nodeGraphVelvetTapsApplySnapshot(state, port === "TapLevelsR" ? "R" : "L", levels);
 }
 
 // Main-thread ingest wrap: arm the latch when a snapshot is written to the
@@ -223,36 +236,46 @@ function nodeGraphVelvetTapsInstallIngestArm() {
   return true;
 }
 
-// One draw: optionally arm from a new bus identity (fallback), then consume
-// the latch so this frame is the guaranteed bright frame.
+// One paint: optionally apply a new bus snapshot (fallback when ingest is
+// not wrapped), then return the lit flags. Lit stays on for the whole
+// snapshot period; after this paint, a quiet snapshot can go dark.
 function nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, countL, countR, armFromBus) {
   const state = nodeGraphVelvetTapsTriggerState(nodeId);
   const nL = Math.max(0, countL | 0);
   const nR = Math.max(0, countR | 0);
-  const tL = nodeGraphVelvetTapsEnsureTriggers(state, "triggeredL", nL);
-  const tR = nodeGraphVelvetTapsEnsureTriggers(state, "triggeredR", nR);
   if (armFromBus) {
     if (state.snapL !== rawL) {
       state.snapL = rawL;
-      nodeGraphVelvetTapsArmTriggers(tL, rawL);
+      nodeGraphVelvetTapsApplySnapshot(state, "L", rawL);
     }
     if (state.snapR !== rawR) {
       state.snapR = rawR;
-      nodeGraphVelvetTapsArmTriggers(tR, rawR);
+      nodeGraphVelvetTapsApplySnapshot(state, "R", rawR);
     }
   }
-  return {
-    onL: nodeGraphVelvetTapsConsumeTriggers(tL),
-    onR: nodeGraphVelvetTapsConsumeTriggers(tR),
+  const side = (s, n) => {
+    const { trig, shown, energy } = nodeGraphVelvetTapsEnsureSide(state, s, n);
+    const on = new Uint8Array(trig);
+    for (let i = 0; i < n; i += 1) {
+      if (trig[i]) {
+        shown[i] = 1;
+        if (!energy[i]) {
+          trig[i] = 0;
+          shown[i] = 0;
+        }
+      }
+    }
+    return on;
   };
+  return { onL: side("L", nL), onR: side("R", nR) };
 }
 
 nodeGraphVelvetTapsInstallIngestArm();
 
 
 // Idle fill is near the pre-animation static look (ink x 1/width at almost
-// solid alpha). Triggered is opaque and lifted toward white so the one-frame
-// flash reads clearly. Overlaps still add and may clip to white (a burst).
+// solid alpha). Triggered is opaque and lifted toward white so the flash
+// pops clearly. Overlaps still add and may clip to white (a burst).
 const NODE_GRAPH_VELVET_TAP_IDLE_ALPHA = 0.92;
 const NODE_GRAPH_VELVET_TAP_ON_ALPHA = 1;
 const NODE_GRAPH_VELVET_TAP_ON_LIFT = 0.4;
@@ -400,10 +423,19 @@ function drawNodeGraphVelvetTapsDisplay(section) {
     // Darker taps draw dimmer: the audio gain of a pulse is 1 / width (in
     // samples), so the ink is scaled by 1 / w, floored at 0.2 so the
     // darkest pulses stay visible. A triggered tap is binary: full channel
-    // ink for this one frame, otherwise that static shade. Width stays the
+    // ink while the hit is held, otherwise that static shade. Width stays the
     // real pulse; a sub-pixel pulse is a 1 device-px bar at full coverage.
     const sr = layout.sampleRate || 48000;
     const nodeId = String(node?.id || section?.dataset?.node || "");
+    // Empty ids would otherwise share one Map slot. Keep the bus lookup on
+    // the real id; only the latch state uses a per-face fallback key.
+    let stateId = nodeId;
+    if (!stateId) {
+      if (!section._velvetTapStateId) {
+        section._velvetTapStateId = `anon:${Math.random().toString(36).slice(2)}`;
+      }
+      stateId = section._velvetTapStateId;
+    }
     const rawL = (typeof nodeGraphDataBus !== "undefined" && typeof nodeGraphDataBusKey === "function")
       ? nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, "TapLevelsL"))
       : null;
@@ -411,7 +443,7 @@ function drawNodeGraphVelvetTapsDisplay(section) {
       ? nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, "TapLevelsR"))
       : null;
     const ingest = nodeGraphVelvetTapsInstallIngestArm();
-    const lit = nodeGraphVelvetTapsTakeLit(nodeId, rawL, rawR, layout.count, layout.countR, !ingest);
+    const lit = nodeGraphVelvetTapsTakeLit(stateId, rawL, rawR, layout.count, layout.countR, !ingest);
     const shade = (ink, r) => nodeGraphVelvetTapsShade(ink, r.g, r.on);
     // One sharp rectangle per tap: x range = the real pulse, y = zero line to
     // the mirrored dB height (lvl <= 1 of the peak, so it stays in the face).
