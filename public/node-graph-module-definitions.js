@@ -7305,10 +7305,11 @@ const nodeGraphModuleDefinitions = (
         unit: "ms",
       },
       // Temporary listening A/B for a float delay line. Hidden; turn it on
-      // from the parameter visibility menu. Default Double keeps existing sound.
+      // from the parameter visibility menu. Default Float; patches without this
+      // param also get Float.
       {
         choices: ["Double", "Float"],
-        defaultValue: "0",
+        defaultValue: "1",
         displayChoices: true,
         hidden: true,
         key: "precision",

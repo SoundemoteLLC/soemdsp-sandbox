@@ -24,11 +24,12 @@ check(x.soemdsp_velvet_reverb_version() >= 9, `velvet_reverb version ${x.soemdsp
 
 // Wet impulse response (Mix 1): impulse on both channels at sample 0.
 const tapsOf = ({ taps, density, decay = 0.025 }) => taps ?? (density ?? 2500) * decay;
-function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, tailRand = 1, tailCurve = 0, n } = {}) { // gap: a dense test Min Gap (~4 samples); the default is 1 ms. tailRand 1 = previous random widths. tailCurve 0 = geometric width sweep
+function ir({ taps, density, dark = 1, spread = 1, decay = 0.025, tail = 0, seed = 1, amp = -60, skew = 0, gap = 0.083, tailRand = 1, tailCurve = 0, precision, n } = {}) { // gap: a dense test Min Gap (~4 samples); the default is 1 ms. tailRand 1 = previous random widths. tailCurve 0 = geometric width sweep
   const T = tapsOf({ taps, density, decay });
   const h = x.soemdsp_velvet_reverb_create(FS);
   if (!h) throw new Error("create failed");
   x.soemdsp_velvet_reverb_set_seed(h, seed);
+  if (precision != null) x.soemdsp_velvet_reverb_set_precision(h, precision);
   const len = n ?? Math.ceil(decay * FS) + 2048;
   const L = new Float64Array(len), R = new Float64Array(len);
   for (let i = 0; i < len; i += 1) {
@@ -535,11 +536,20 @@ const nonzeroStarts = (a, to = a.length) => { let c = 0, prev = 0; for (let i = 
   const defOpts = { taps: 64, dark: 1, spread: 1, decay: 0.025, tail: 0, seed: 1, amp: -60, skew: 0, gap: 1, tailRand: 1, tailCurve: 0 };
   const defLay = layout(defOpts);
   check(defLay.count === 25 && defLay.countR === 25 && endGap(defLay.pos, defLay.width) === 0 && endGap(defLay.posR, defLay.widthR) === 0, "default layout still 25 / 64 taps with no overlap");
+  const defSrc = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+  const precAt = defSrc.indexOf("Temporary listening A/B");
+  const precDef = precAt >= 0 ? defSrc.slice(precAt, precAt + 800) : "";
+  check(precDef.includes('defaultValue: "1"') && precDef.includes('hidden: true') && precDef.includes('key: "precision"') && precDef.includes('label: "Precision"'), "Precision definition: default Float, stays hidden");
+  const workletSrc = fs.readFileSync(path.join(root, "public", "node-live-audio-worklet-native-graph.js"), "utf8");
+  check(workletSrc.includes("disc(" + JSON.stringify("precision") + ", 1)"), "worklet uses Float when a saved node has no Precision param");
   const defIr = ir({ ...defOpts, n: Math.ceil(0.025 * FS) + 2048 });
-  const digest = crypto.createHash("sha256");
-  digest.update(Buffer.from(defIr.L.buffer));
-  digest.update(Buffer.from(defIr.R.buffer));
-  check(digest.digest("hex") === "7c6e4285d7a6afa86ea75903f9f527d949d5cc513d80ec7d4b96896e0dd10376", "default settings (Darkness 1) stay bit-identical");
+  const defIrF = ir({ ...defOpts, n: Math.ceil(0.025 * FS) + 2048, precision: 1 });
+  const defIrD = ir({ ...defOpts, n: Math.ceil(0.025 * FS) + 2048, precision: 0 });
+  const sha = (ir) => { const d = crypto.createHash("sha256"); d.update(Buffer.from(ir.L.buffer)); d.update(Buffer.from(ir.R.buffer)); return d.digest("hex"); };
+  check(sha(defIr) === sha(defIrF), "default Precision is Float (create matches set_precision(1))");
+  check(sha(defIrD) === "7c6e4285d7a6afa86ea75903f9f527d949d5cc513d80ec7d4b96896e0dd10376", "explicit Double still matches the previous default IR");
+  check(sha(defIr) !== sha(defIrD), "default Float IR differs from explicit Double");
+  check(sha(defIr) === "c883cc78652aeb862d9a2a27b73f038edf9b99cad4128e19182020961e29332d", "default settings (Float) stay bit-identical");
 }
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
