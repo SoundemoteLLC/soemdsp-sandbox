@@ -1043,7 +1043,7 @@ function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, b
       && nodeGraphNodeElement(plate.id)?.classList.contains("selected");
     const base = selected ? borderOn : borderIdle;
     const round = look
-      ? [look.topRadius * (camera ? 1 : zoom), look.topShape, look.bottomRadius * (camera ? 1 : zoom), look.bottomShape]
+      ? [look.topRadius * (camera ? 1 : zoom), look.topShape, look.bottomRadius * (camera ? 1 : zoom), look.bottomShape, (look.strokeTopRadius ?? look.topRadius) * (camera ? 1 : zoom)]
       : null;
     // One smooth glow shape per module (mode 4): exponential falloff outside the plate.
     nodeGraphGlLinesModuleOutline(layer, x, y, w, h, reach, base, [], [0, 0, 0, 0], null, round, plate.id, selected === true, 4, NODE_STROKE_GLOW_ALPHA);
@@ -1100,7 +1100,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     const cuts = typeof nodeGraphModuleRailBorderCuts === "function" ? nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) : null;
     const look = typeof nodeGraphModulePlateLook === "function" ? nodeGraphModulePlateLook() : null;
     const round = look
-      ? [look.topRadius * zoom, look.topShape, look.bottomRadius * zoom, look.bottomShape]
+      ? [look.topRadius * zoom, look.topShape, look.bottomRadius * zoom, look.bottomShape, (look.strokeTopRadius ?? look.topRadius) * zoom]
       : null;
     const fill = mode === "dim" ? [0, 0, 0, dark]
       : (mode === "emit" ? [0, 0, 0, 0]

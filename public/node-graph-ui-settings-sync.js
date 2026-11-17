@@ -422,7 +422,7 @@ function nodeGraphModuleStrokeFollowTick() {
   nodeGraphModuleStrokeFollowFrame = requestAnimationFrame(nodeGraphModuleStrokeFollowTick);
 }
 
-let nodeGraphModulePlateLookState = { topShape: 1, topRadius: 6, bottomShape: 1, bottomRadius: 6 };
+let nodeGraphModulePlateLookState = { topShape: 1, topRadius: 6, strokeTopRadius: 6, bottomShape: 1, bottomRadius: 6 };
 
 function nodeGraphModulePlateLook() {
   return nodeGraphModulePlateLookState;
@@ -440,6 +440,15 @@ function syncNodeUiDevModuleCorners() {
     bottomShape: read("nodeUiDevModuleBottomShape", 1, 0, 2),
     bottomRadius: read("nodeUiDevModuleBottomRadius", 6, 0, 60),
   };
+  // Stroke top radius: range and default from its definition.
+  {
+    const def = typeof nodeUiDevSettingControls !== "undefined" ? nodeUiDevSettingControls.find((d) => d.id === "nodeUiDevModuleStrokeTopRadius") : null;
+    const n = Number(document.getElementById("nodeUiDevModuleStrokeTopRadius")?.value);
+    const lo = Number(def?.min);
+    const hi = Number(def?.max);
+    const v = Number.isFinite(n) ? n : Number(def?.defaultValue ?? look.topRadius);
+    look.strokeTopRadius = Math.min(Number.isFinite(hi) ? hi : v, Math.max(Number.isFinite(lo) ? lo : v, v));
+  }
   nodeGraphModulePlateLookState = look;
   const follow = read("nodeUiDevStrokeAnimate", 92, 0, 100);
   nodeGraphModuleStrokeFollowAmount = follow / 100;
@@ -461,6 +470,7 @@ function syncNodeUiDevModuleCorners() {
   };
   show("nodeUiDevModuleTopShapeValue", NODE_MODULE_CORNER_SHAPE_NAMES[look.topShape]);
   show("nodeUiDevModuleTopRadiusValue", look.topShape === 2 ? "full" : `${look.topRadius}px`);
+  show("nodeUiDevModuleStrokeTopRadiusValue", look.topShape === 2 ? "full" : `${look.strokeTopRadius}px`);
   show("nodeUiDevModuleBottomShapeValue", NODE_MODULE_CORNER_SHAPE_NAMES[look.bottomShape]);
   show("nodeUiDevModuleBottomRadiusValue", look.bottomShape === 2 ? "full" : `${look.bottomRadius}px`);
   if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
@@ -630,7 +640,7 @@ function bindNodeUiDevModuleIdleStroke() {
       done();
     });
   }
-  for (const id of ["nodeUiDevModuleTopShape", "nodeUiDevModuleTopRadius", "nodeUiDevModuleBottomShape", "nodeUiDevModuleBottomRadius", "nodeUiDevStrokeAnimate", "nodeUiDevStrokeLoudBrightness", "nodeUiDevStrokeLoudAlpha"]) {
+  for (const id of ["nodeUiDevModuleTopShape", "nodeUiDevModuleTopRadius", "nodeUiDevModuleStrokeTopRadius", "nodeUiDevModuleBottomShape", "nodeUiDevModuleBottomRadius", "nodeUiDevStrokeAnimate", "nodeUiDevStrokeLoudBrightness", "nodeUiDevStrokeLoudAlpha"]) {
     const input = document.getElementById(id);
     if (!input || input.dataset.moduleCornerBound === "true") continue;
     input.dataset.moduleCornerBound = "true";

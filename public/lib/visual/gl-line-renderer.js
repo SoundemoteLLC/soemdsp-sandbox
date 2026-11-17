@@ -534,6 +534,10 @@ uniform float uStroke;
 // Plate corners: (top radius, top shape, bottom radius, bottom shape). Radius in
 // plate units, shape 0 round, 1 squircle, 2 pill (full end). All zero = square.
 uniform vec4 uRound;
+// The stroke's own top corner radius (plate units). The stroke band follows this shape on the top
+// half; where it runs inside the plate (a rounder stroke behind sharper plate corners) it is drawn
+// under the plate fill. Equal to uRound.x: the stroke hugs the plate as before.
+uniform float uStrokeTop;
 uniform int uCount;
 uniform vec4 uJack[24];
 uniform vec4 uJackColor[24];
@@ -589,6 +593,23 @@ void main() {
     cornerLen = length(qm);
   }
   float sdRect = cornerLen + min(max(q.x, q.y), 0.0) - cornerR;
+  // The stroke's shape: the same rectangle, top corners at uStrokeTop.
+  float sdStroke = sdRect;
+  if (topHalf) {
+    float sR = uStrokeTop;
+    if (uPixel > 0.5) sR *= z * devScale;
+    sR = cornerShape > 1.5 ? maxR : min(max(sR, 0.0), maxR);
+    vec2 sq = abs(pc) - halfSize + vec2(sR);
+    vec2 sqm = max(sq, 0.0);
+    float sLen;
+    if (cornerShape > 0.5 && cornerShape < 1.5) {
+      vec2 sq2 = sqm * sqm;
+      sLen = sqrt(sqrt(sq2.x * sq2.x + sq2.y * sq2.y));
+    } else {
+      sLen = length(sqm);
+    }
+    sdStroke = sLen + min(max(sq.x, sq.y), 0.0) - sR;
+  }
   // The plate is the rectangle minus the inside half of every jack (a disk,
   // or a square for param jacks, centred on the wall). sd > 0 is outside it.
   // Param and signal jacks take this one path.
@@ -612,6 +633,7 @@ void main() {
     float d = square > 0.5
       ? max(abs(px.x - jack.x), abs(px.y - jack.y)) - radius
       : length(px - jack) - radius;
+    sdStroke = max(sdStroke, -d);
     if (-d > sd) {
       sd = -d;
       strokeCol = vec4(uJackColor[i].rgb, uJackColor[i].a); // the plate passes each jack stroke its own alpha (lit jacks: 1)
@@ -623,7 +645,7 @@ void main() {
   // the plate colour. The stroke is a light source: this does not depend on the mouse lamp.
   if (uDimShape > 3.5) {
     float glowR = max(uPixel > 0.5 ? uStroke * z * devScale : uStroke, 1.0);
-    float g = sd > 0.0 ? exp(-sd / glowR) : 0.0;
+    float g = sdStroke > 0.0 ? exp(-sdStroke / glowR) : 0.0;
     float ga = uPlateColor.a * g;
     if (ga < 0.004) discard;
     gl_FragColor = vec4(uPlateColor.rgb, min(ga, 1.0));
@@ -641,6 +663,9 @@ void main() {
   float aa = max(fwidth(sd), uPixel > 0.5 ? 1.0 : 1e-4);
   float inner = clamp(sd / aa + 0.5, 0.0, 1.0);
   float band = inner - clamp((sd - strokePx) / aa + 0.5, 0.0, 1.0);
+  // Stroke offset from the plate edge (0 except where the stroke's top corners differ).
+  float sdOff = sdStroke - sd;
+  float bandS = clamp(sdStroke / aa + 0.5, 0.0, 1.0) - clamp((sdStroke - strokePx) / aa + 0.5, 0.0, 1.0);
   if (jackEdge > 0.5) {
     // Round jacks (inlet / outlet half circles): the chrome edge, smootherstep
     // over one pixel, supersampled 4x4 from the distance gradient (APP_POLICY
@@ -652,6 +677,7 @@ void main() {
     float jw = aa;
     float accIn = 0.0;
     float accBand = 0.0;
+    float accBandS = 0.0;
     for (int j = 0; j < 4; j += 1) {
       for (int i = 0; i < 4; i += 1) {
         vec2 o = (vec2(float(i), float(j)) + 0.5) * 0.25 - 0.5;
@@ -662,11 +688,23 @@ void main() {
         float eOut = tOut * tOut * tOut * (tOut * (tOut * 6.0 - 15.0) + 10.0);
         accIn += eIn;
         accBand += eIn - eOut;
+        float s2 = s + sdOff;
+        float tIn2 = clamp(s2 / jw + 0.5, 0.0, 1.0);
+        float tOut2 = clamp((s2 - strokePx) / jw + 0.5, 0.0, 1.0);
+        float eIn2 = tIn2 * tIn2 * tIn2 * (tIn2 * (tIn2 * 6.0 - 15.0) + 10.0);
+        float eOut2 = tOut2 * tOut2 * tOut2 * (tOut2 * (tOut2 * 6.0 - 15.0) + 10.0);
+        accBandS += eIn2 - eOut2;
       }
     }
     inner = accIn * 0.0625;
     band = accBand * 0.0625;
+    bandS = accBandS * 0.0625;
   }
+  // With the stroke on the plate edge bandS == band, all outside the plate. A rounder stroke top
+  // puts part of the band inside the plate: that part sits behind the fill.
+  if (abs(sdOff) < 1e-5) bandS = band;
+  float bandOut = min(max(bandS, 0.0), inner);
+  float bandIn = max(bandS - inner, 0.0);
   for (int i = 0; i < 16; i++) {
     if (i >= uCutCount) break;
     highp vec4 cut = uCut[i];
@@ -677,11 +715,14 @@ void main() {
       cy1 = (cut.y - uCam.y) * z * devScale;
     }
     bool wall = cut.z < 0.0 ? px.x < plateMin.x : px.x >= plateMax.x;
-    if (wall && px.y >= cy0 && px.y < cy1) band = 0.0;
+    if (wall && px.y >= cy0 && px.y < cy1) { band = 0.0; bandOut = 0.0; bandIn = 0.0; }
   }
   // Stroke and fill cover disjoint parts of the pixel, so they add.
-  float strokeA = band * strokeCol.a;
+  float strokeA = bandOut * strokeCol.a;
   float plateA = (1.0 - inner) * uFill.a;
+  // Behind the fill: what the fill lets through (fill alpha is per covered area, so the hidden band
+  // is weighted by 1 - fill alpha).
+  float behindA = bandIn * strokeCol.a * (1.0 - uFill.a);
   if (uDimShape > 0.5 && uLight.w > 0.0) {
     float ld = length(vPx - uLight.xy) / max(uLight.z, 1.0);
     float near = uLight.w * exp(-2.0 * ld * ld);
@@ -690,17 +731,20 @@ void main() {
     float scale = uDimShape > 2.5 ? 1.0 + 2.5 * near : (uDimShape > 1.5 ? near : 1.0 - near);
     strokeA *= scale;
     plateA *= scale;
+    behindA *= scale;
   } else if (uDimShape > 1.5 && uDimShape < 2.5) {
     strokeA = 0.0;
     plateA = 0.0;
+    behindA = 0.0;
   }
   // A flagged jack's hole inside the plate rectangle: the workspace background under its ring, opaque,
   // so the module's stroke light (it follows loudness) does not show through the jack.
   float holeA = 0.0;
   if (jackHole > 0.5 && uDimShape < 0.5) {
     float inRect = clamp(-sdRect / aa + 0.5, 0.0, 1.0);
-    holeA = max(0.0, inRect - strokeA - plateA);
+    holeA = max(0.0, inRect - strokeA - plateA - behindA);
   }
+  strokeA += behindA;
   float a = strokeA + plateA + holeA;
   if (a < 0.004) discard;
   vec3 rgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA + uJackBackdrop.rgb * holeA) / a;
@@ -764,6 +808,7 @@ void main() {
         outFill: gl.getUniformLocation(outProgram, "uFill"),
         outStroke: gl.getUniformLocation(outProgram, "uStroke"),
         outRound: gl.getUniformLocation(outProgram, "uRound"),
+        outStrokeTop: gl.getUniformLocation(outProgram, "uStrokeTop"),
         outLight: gl.getUniformLocation(outProgram, "uLight"),
         outDimShape: gl.getUniformLocation(outProgram, "uDimShape"),
         outCount: gl.getUniformLocation(outProgram, "uCount"),
@@ -3602,9 +3647,11 @@ void main() {
       fill: fill || [0.09, 0.1, 0.12, 1],
       jacks: list,
       cuts: (Array.isArray(cuts) ? cuts : []).slice(0, CUT_MAX).map((c) => [c.y0 * k, c.y1 * k, c.side < 0 ? -1 : 1, 0]),
-      // [top radius, top shape, bottom radius, bottom shape]; radius in the same units as x / y.
+      // [top radius, top shape, bottom radius, bottom shape, stroke top radius]; radius in the same
+      // units as x / y. No stroke top radius: the stroke follows the plate's top radius.
       round: Array.isArray(round) && round.length >= 4
-        ? [Math.max(0, Number(round[0]) || 0) * k, Number(round[1]) || 0, Math.max(0, Number(round[2]) || 0) * k, Number(round[3]) || 0]
+        ? [Math.max(0, Number(round[0]) || 0) * k, Number(round[1]) || 0, Math.max(0, Number(round[2]) || 0) * k, Number(round[3]) || 0,
+          (round.length > 4 && Number.isFinite(Number(round[4])) ? Math.max(0, Number(round[4])) : Math.max(0, Number(round[0]) || 0)) * k]
         : null,
     });
   }
@@ -3692,6 +3739,7 @@ void main() {
       if (s.outRound) {
         const rd = shape.round || [0, 0, 0, 0];
         gl.uniform4f(s.outRound, rd[0], rd[1], rd[2], rd[3]);
+        if (s.outStrokeTop) gl.uniform1f(s.outStrokeTop, rd.length > 4 ? rd[4] : rd[0]);
       }
       jackData.fill(0);
       colorData.fill(0);
