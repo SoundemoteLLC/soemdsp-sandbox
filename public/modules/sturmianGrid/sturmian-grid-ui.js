@@ -1,5 +1,7 @@
-// GLSL draws every visible pixel. Transparent standard control surfaces use
-// the sandbox's shared slider gestures and modifier rules.
+// GLSL draws every visible pixel onto the shared face texture, so zoom
+// samples nearest past the existing 2.5x threshold like other shader faces.
+// Transparent standard control surfaces use the sandbox's shared slider
+// gestures and modifier rules.
 const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "cell", "stepPattern"];
 const STURMIAN_PARAMS = [
@@ -86,53 +88,95 @@ function sturmianPlayhead(nodeId, steps) {
   return { playStep, playBar, playing };
 }
 
-function sturmianPaint(face) {
-  if (!face?.isConnected) return;
-  const canvas = face.querySelector("canvas");
-  if (!canvas || !face._sturmianShader) return;
-  // Layout CSS box x dpr, never workspace zoom. getBoundingClientRect grows
-  // with the camera and made cell count / control packing re-flow at extreme
-  // zooms. Do not mark this canvas as a display-face: the module still paints
-  // through its own WebGL2 context, and the face-texture path would swallow it.
-  const metrics = typeof ensureFaceMetrics === "function"
-    ? ensureFaceMetrics(face, { observe: true })
-    : null;
-  const logicalWidth = Math.max(1, metrics?.cssW || face.clientWidth || face.offsetWidth || 1);
-  const logicalHeight = Math.max(1, metrics?.cssH || face.clientHeight || face.offsetHeight || 1);
-  const pixelRatio = Math.max(1, Math.min(2, Number(metrics?.dpr || window.devicePixelRatio) || 1));
-  const width = Math.max(1, Math.round(logicalWidth * pixelRatio));
-  const height = Math.max(1, Math.round(logicalHeight * pixelRatio));
-  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
-  let gpu = face._sturmianGpu;
-  if (!gpu) {
-    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
-    if (!gl) { face.dataset.shaderError = "WebGL2 unavailable"; return; }
-    const compile = (kind, source) => {
-      const shader = gl.createShader(kind);
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
-      return shader;
-    };
-    try {
-      const uniforms = STURMIAN_FLOATS.map((key) => `uniform float ${key};`).join("\n")
-        + "\nuniform float playStep; uniform float playBar; uniform float playing;";
-      const vertex = compile(gl.VERTEX_SHADER, "#version 300 es\nin vec2 aPos; out vec2 vUv; void main(){vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);}");
-      const fragment = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\nin vec2 vUv; out vec4 out_color; uniform vec2 resolution; uniform float time;\n${sturmianGlslConstants()}\n${uniforms}\n${face._sturmianShader.functions}\nvoid main(){ vec2 uv=vUv; ${face._sturmianShader.body}\n}`);
-      const program = gl.createProgram();
-      gl.attachShader(program, vertex); gl.attachShader(program, fragment); gl.linkProgram(program);
-      gl.deleteShader(vertex); gl.deleteShader(fragment);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
-      const quad = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
-      gpu = face._sturmianGpu = { gl, program, quad, position: gl.getAttribLocation(program, "aPos"), resolution: gl.getUniformLocation(program, "resolution"), time: gl.getUniformLocation(program, "time"), playStep: gl.getUniformLocation(program, "playStep"), playBar: gl.getUniformLocation(program, "playBar"), playing: gl.getUniformLocation(program, "playing"), floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])) };
-    } catch (error) { face.dataset.shaderError = String(error.message || error); console.error("[Sturmian Grid] GLSL", error); return; }
+function sturmianSharedGl() {
+  const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+  return pic?.gl || null;
+}
+
+// One program on the shared WebGL2 device. The picture lives in the face
+// texture, so the graph / Canvas / Mini Canvas sample it nearest past 2.5x
+// like every other shader face. No private <canvas> context.
+let sturmianSharedGpu = null;
+
+function sturmianEnsureGpu(shader) {
+  const gl = sturmianSharedGl();
+  if (!gl || gl.isContextLost?.()) {
+    sturmianSharedGpu = null;
+    return null;
   }
-  const nodeId = face.dataset.node;
+  if (sturmianSharedGpu?.gl === gl && sturmianSharedGpu.program) return sturmianSharedGpu;
+  const compile = (kind, source) => {
+    const shaderObj = gl.createShader(kind);
+    gl.shaderSource(shaderObj, source);
+    gl.compileShader(shaderObj);
+    if (!gl.getShaderParameter(shaderObj, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shaderObj));
+    return shaderObj;
+  };
+  const uniforms = STURMIAN_FLOATS.map((key) => `uniform float ${key};`).join("\n")
+    + "\nuniform float playStep; uniform float playBar; uniform float playing;";
+  const vertex = compile(gl.VERTEX_SHADER, "#version 300 es\nin vec2 aPos; out vec2 vUv; void main(){vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);}");
+  const fragment = compile(gl.FRAGMENT_SHADER, `#version 300 es\nprecision highp float;\nin vec2 vUv; out vec4 out_color; uniform vec2 resolution; uniform float time;\n${sturmianGlslConstants()}\n${uniforms}\n${shader.functions}\nvoid main(){ vec2 uv=vUv; ${shader.body}\n}`);
+  const program = gl.createProgram();
+  gl.attachShader(program, vertex);
+  gl.attachShader(program, fragment);
+  gl.linkProgram(program);
+  gl.deleteShader(vertex);
+  gl.deleteShader(fragment);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+  sturmianSharedGpu = {
+    gl,
+    program,
+    quad,
+    position: gl.getAttribLocation(program, "aPos"),
+    resolution: gl.getUniformLocation(program, "resolution"),
+    time: gl.getUniformLocation(program, "time"),
+    playStep: gl.getUniformLocation(program, "playStep"),
+    playBar: gl.getUniformLocation(program, "playBar"),
+    playing: gl.getUniformLocation(program, "playing"),
+    floats: Object.fromEntries(STURMIAN_FLOATS.map((key) => [key, gl.getUniformLocation(program, key)])),
+  };
+  return sturmianSharedGpu;
+}
+
+function sturmianPaint(face) {
+  if (!face?.isConnected || !face._sturmianShader) return;
+  const plate = face._sturmianPlate || face.querySelector(".node-sturmian-grid-canvas");
+  if (!plate) return;
+  // Layout CSS box x dpr, never workspace zoom. The shared face-texture path
+  // then samples that zoom-1 picture nearest past the existing 2.5x threshold.
+  const sized = typeof nodeGraphDisplayCanvasSize === "function"
+    ? nodeGraphDisplayCanvasSize(face, plate)
+    : null;
+  if (!sized) return;
+  const logicalWidth = Math.max(1, sized.cssWidth);
+  const logicalHeight = Math.max(1, sized.cssHeight);
+  const width = Math.max(1, sized.width);
+  const height = Math.max(1, sized.height);
+  let gpu;
+  try {
+    gpu = sturmianEnsureGpu(face._sturmianShader);
+  } catch (error) {
+    face.dataset.shaderError = String(error.message || error);
+    console.error("[Sturmian Grid] GLSL", error);
+    return;
+  }
+  if (!gpu) {
+    face.dataset.shaderError = "WebGL2 unavailable";
+    return;
+  }
   const { gl, program, quad } = gpu;
-  gl.viewport(0, 0, width, height); gl.useProgram(program); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-  gl.enableVertexAttribArray(gpu.position); gl.vertexAttribPointer(gpu.position, 2, gl.FLOAT, false, 0, 0);
+  const nodeId = face.dataset.node;
+  if (typeof nodeGraphSharedGlBindPresent === "function") nodeGraphSharedGlBindPresent(gl, width, height);
+  else gl.viewport(0, 0, width, height);
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.BLEND);
+  gl.useProgram(program);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.enableVertexAttribArray(gpu.position);
+  gl.vertexAttribPointer(gpu.position, 2, gl.FLOAT, false, 0, 0);
   gl.uniform2f(gpu.resolution, logicalWidth, logicalHeight);
   gl.uniform1f(gpu.time, (performance.now() - face._sturmianStarted) / 1000);
   const values = sturmianValues(nodeId, face._sturmianPreview);
@@ -142,6 +186,13 @@ function sturmianPaint(face) {
   gl.uniform1f(gpu.playBar, play.playBar);
   gl.uniform1f(gpu.playing, play.playing);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
+  if (typeof nodeGraphSharedGlEndPresent === "function") nodeGraphSharedGlEndPresent(gl);
+  const ctx = typeof nodeGraphSharedGlPresentTarget === "function"
+    ? nodeGraphSharedGlPresentTarget(plate)
+    : null;
+  if (ctx && typeof nodeGraphSharedGlPresent === "function") {
+    nodeGraphSharedGlPresent(ctx, width, height);
+  }
   face.dataset.shaderError = "";
 }
 
@@ -166,9 +217,10 @@ function sturmianCreateBody(node) {
   face.dataset.nodeType = "sturmianGrid";
   face.dataset.lightSource = "screen";
   face._sturmianStarted = performance.now();
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-sturmian-grid-canvas";
-  face.append(canvas);
+  const plate = nodeGraphDisplayCanvasCreate("node-sturmian-grid-canvas");
+  plate.setAttribute("aria-hidden", "true");
+  face._sturmianPlate = plate;
+  face.append(plate);
   sturmianLoadShader().then((shader) => {
     face._sturmianShader = shader;
     if (!face.isConnected) return;
