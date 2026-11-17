@@ -253,8 +253,10 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
 
   const spans = cov.nodeGraphVelvetTapsAxisSpans;
   const compact = (s) => s.map((x) => `${x.p}:${x.c.toFixed(4)}x${x.w}`).join(",");
-  let s = spans(0.25, 0.75);
-  check(s.length === 1 && s[0].p === 0 && s[0].w === 1 && Math.abs(s[0].c - 0.5) < 1e-12, `sub-pixel width 0.5 is a 1 px bar with alpha 0.5 (${compact(s)})`);
+  let s = spans(0.25, 0.75, 1);
+  check(s.length === 1 && s[0].p === 0 && s[0].w === 1 && s[0].c === 1, `sub-pixel width 0.5 is a 1 px bar at full coverage (${compact(s)})`);
+  s = spans(10.1, 10.3, 1);
+  check(s.length === 1 && s[0].p === 10 && s[0].c === 1 && s[0].w === 1, `sub-pixel bar is centred on the exact position (${compact(s)})`);
   s = spans(0, 2);
   check(s.length === 2 && s[0].c === 1 && s[1].c === 1 && s[0].p === 0 && s[1].p === 1, `exact 2 px span is two full pixels (${compact(s)})`);
   s = spans(0.25, 2.25);
@@ -266,6 +268,38 @@ const starts = (pos) => Array.from(pos, (p) => Math.round(p * FS));
   const rev = compact(spans(4.6, 1.2));
   check(fwd === rev && fwd.length > 0, "coverage spans are independent of endpoint order");
   check(spans(1, 1).length === 0, "a zero-width span is empty");
+
+  // Without minFull, a sub-pixel span still reports fractional coverage (height AA).
+  const rawH = spans(0.25, 0.75);
+  check(rawH.length === 1 && Math.abs(rawH[0].c - 0.5) < 1e-12, "height axis still uses coverage-weighted alpha");
+
+  // Same 1-sample pulse at Length 25 ms vs 6 s: on-screen width shrinks, coverage stays 1.
+  const pulse = 1 / 48000;
+  const spanPx = 300 * 2; // CSS width x dpr, in device pixels
+  const deviceSpan = (length, pos, width) => {
+    const xa = (pos / length) * spanPx;
+    const xb = ((pos + width) / length) * spanPx;
+    return spans(xa, xb, 1);
+  };
+  const w25 = pulse / 0.025 * spanPx;
+  const w6 = pulse / 6 * spanPx;
+  check(w25 < 1 && w6 < 1 && w6 < w25, `1-sample tap is sub-pixel at 25 ms (${w25.toFixed(4)} px) and dimmer-narrow at 6 s (${w6.toFixed(4)} px)`);
+  const a25 = deviceSpan(0.025, 0.01, pulse);
+  const a6 = deviceSpan(6, 0.01, pulse);
+  const shade = cov.nodeGraphVelvetTapsDarknessShade(pulse, 48000);
+  check(shade === 1, "darkness shade of a 1-sample pulse does not depend on Length");
+  check(a25.length === 1 && a25[0].c === 1 && a25[0].w === 1, `25 ms isolated tap is a 1 px bar at full coverage (${compact(a25)})`);
+  check(a6.length === 1 && a6[0].c === 1 && a6[0].w === 1, `6 s isolated tap is a 1 px bar at full coverage (${compact(a6)})`);
+  const idle25 = cov.nodeGraphVelvetTapsShade(ink, shade, false);
+  const idle6 = cov.nodeGraphVelvetTapsShade(ink, shade, false);
+  check(
+    idle25[0] === idle6[0] && idle25[3] * a25[0].c === idle6[3] * a6[0].c,
+    "same isolated tap is equally bright at Length 25 ms and 6 s",
+  );
+  // Two sub-pixel taps in one pixel still both contribute full coverage (additive burst).
+  const pA = spans(10.1, 10.2, 1);
+  const pB = spans(10.6, 10.8, 1);
+  check(pA[0].p === pB[0].p && pA[0].c === 1 && pB[0].c === 1, "two sub-pixel taps in the same pixel both have full coverage to add");
 }
 
 if (failed) {
