@@ -1,7 +1,7 @@
 // Packed sounding-bar grid on the shared face texture; standard parameter
 // rows live in the module body. Zoom samples nearest past the existing 2.5x
 // threshold like other shader faces. Cell size fits Steps and Track Spread.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_LANE_NAMES = ["Kick", "Snare", "Hat", "Melody"];
 const STURMIAN_LANE_SHORT = ["K", "S", "H", "M"];
@@ -82,6 +82,9 @@ function sturmianGridLayout(width, height, steps, spread) {
     cols,
     rows,
     playCols,
+    // Sounding-bar selection: columns [padLeft, padLeft+playCols). The shader
+    // draws one 1-device-pixel stroke around that strip on each track row
+    // (same rect as d7cf6bc8 / soundemote-dev), not a per-cell rim.
     padLeft: Math.max(0, Math.floor((cols - playCols) * 0.5)),
     cell,
     ox: Math.floor((width - cols * cell) * 0.5),

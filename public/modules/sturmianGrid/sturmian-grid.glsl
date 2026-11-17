@@ -64,7 +64,8 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
   float gridW = cols * cell;
   float gridH = rows * cell;
   // 1 CSS-pixel gutters (left/top of each cell, plus the outer right/bottom).
-  // Painted last as solid black so tile red/blue and lane edges cannot bleed.
+  // Solid black so tile red/blue cannot bleed. The track-span frame is
+  // painted after this so it stays one contiguous stroke across those seams.
   bool gutter = fx < 1.0 || fy < 1.0 || gridX >= gridW - 1.0 || gridY >= gridH - 1.0;
   float barX0 = padLeft * cellDev;
   float barX1 = (padLeft + playCols) * cellDev;
@@ -73,19 +74,6 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
       || (devX >= barX1 - 2.0 * pr && devX < barX1 - pr))
       && mod(devY, 8.0 * pr) < 4.0 * pr)
     base = mix(base, vec3(1.0), 0.35);
-  for (int track = 0; track < 4; track++) {
-    float trackN = firstN + float(track) * spreadN;
-    if (abs(n - trackN) > 0.5) continue;
-    if (!inBar) continue;
-    bool muted = mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5;
-    vec3 tc = muted ? vec3(0.55) : laneColor(track);
-    // Inset 1 CSS px so lane rims stay off the black gutter.
-    bool edge = (fx >= 1.0 && fx < 2.0)
-      || (fx >= cell - 1.0 && fx < cell)
-      || (fy >= 1.0 && fy < 2.0)
-      || (fy >= cell - 1.0 && fy < cell);
-    if (!gutter && edge) base = mix(base, tc, 0.85);
-  }
   // Playhead: sounding-bar column (m = col - padLeft), full face height, inset
   // so the white frame is inside the cell, not on the gutter.
   bool playCol = playing > 0.5 && inBar && abs(m - playStep) < 0.5;
@@ -111,5 +99,23 @@ if (gridX < 0.0 || gridY < 0.0 || gridX >= cols * cell || gridY >= rows * cell) 
     base = mix(base, laneColor(trackHit), 0.35 * flashAmt);
   }
   if (gutter) base = vec3(0.0);
+  // One 1-device-pixel stroke around the whole sounding-bar track row
+  // (d7cf6bc8 / soundemote-dev strokeRect around the selection). Continuous
+  // across gutters; 1 device pixel thick at any zoom (devX/devY, pixelRatio).
+  for (int track = 0; track < 4; track++) {
+    float trackN = firstN + float(track) * spreadN;
+    if (abs(n - trackN) > 0.5) continue;
+    if (!inBar) continue;
+    bool muted = mod(floor(mask / exp2(float(12 + track))), 2.0) > 0.5;
+    vec3 tc = muted ? vec3(0.55) : laneColor(track);
+    float spanLeft = floor(padLeft * cellDev);
+    float spanRight = floor((padLeft + playCols) * cellDev);
+    float spanTop = floor(row * cellDev);
+    float spanBot = floor((row + 1.0) * cellDev);
+    bool inside = devX >= spanLeft && devX < spanRight && devY >= spanTop && devY < spanBot;
+    bool frame = inside && (devX < spanLeft + 1.0 || devX >= spanRight - 1.0
+      || devY < spanTop + 1.0 || devY >= spanBot - 1.0);
+    if (frame) base = tc;
+  }
   out_color = vec4(base, 1.0);
 }
