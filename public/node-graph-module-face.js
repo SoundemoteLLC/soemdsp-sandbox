@@ -19,6 +19,8 @@
 //     its key): click the strip to switch, drag below it for the value. The
 //     Off/On param gets no rail jack of its own (Formant Voice band On + Gain).
 //     Per-cell "horizontal" overrides the row flag.
+//     Continuous horizontal sliders always use NODE_GRAPH_HORIZONTAL_SLIDER_HEIGHT_PX
+//     (styles.css --node-slider-readout-height), not a per-row h.
 //     Choice switch (app-wide): { kind: "cells", params: [[key, label]], horizontal: true }
 //     Label left, value right, selected-slot rectangle, no divider strokes.
 //     Never use a DOM slider row for a face choice. leftover kind: "slider" is upgraded to this.
@@ -30,6 +32,16 @@
 //   seed      { param }                         [code][die][+][-]
 
 const NODE_GRAPH_FACE_JACK_SLOT_PX = 17;
+// Shared height for every continuous horizontal slider (face cells and the
+// generic DOM readout). Must stay equal to styles.css
+// --node-slider-readout-height: the Attenuverter Amplitude and PolyBLEP
+// Frequency sliders. Vertical fill sliders, knobs, and choice switches
+// keep their own sizes.
+const NODE_GRAPH_HORIZONTAL_SLIDER_HEIGHT_PX = 30;
+if (typeof globalThis !== "undefined") {
+  globalThis.NODE_GRAPH_FACE_JACK_SLOT_PX = NODE_GRAPH_FACE_JACK_SLOT_PX;
+  globalThis.NODE_GRAPH_HORIZONTAL_SLIDER_HEIGHT_PX = NODE_GRAPH_HORIZONTAL_SLIDER_HEIGHT_PX;
+}
 const NODE_GRAPH_FACE_CELL_DRAG_PX = 220;
 const NODE_GRAPH_FACE_STEP_DRAG_PX = 6;
 const NODE_GRAPH_FACE_FILTER_HZ = Object.freeze({ min: 20, max: 20000 });
@@ -131,7 +143,7 @@ function nodeGraphModuleFaceRowHasUnitColumn(row, defs) {
   const n = row.params.length;
   return row.params.some((cell) => {
     const mode = cell[2] || "";
-    const horizontal = mode === "horizontal" || (mode !== "stack" && mode !== "button" && n === 1) || (!mode && !!row.horizontal);
+    const horizontal = nodeGraphModuleFaceCellIsHorizontal(row, cell);
     if (horizontal || mode === "stack" || mode === "button") return false;
     const p = defs.find((item) => item.key === cell[0]);
     if (!p || (Array.isArray(p.choices) && p.choices.length)) return false;
@@ -153,6 +165,9 @@ function nodeGraphModuleFaceSpec(type, node = null) {
     if (NODE_GRAPH_FACE_SWITCH_STACKED && up.kind === "cells" && up.params?.length === 1 && up.params[0][2] !== "stack") {
       const p = defsAll.find((item) => item.key === up.params[0][0]);
       if (Array.isArray(p?.choices) && p.choices.length > 1) return { ...up, h: Math.max(up.h, NODE_GRAPH_FACE_SWITCH_STACKED_H) };
+    }
+    if (nodeGraphModuleFaceRowIsContinuousHorizontalSlider(up, defsAll)) {
+      up = { ...up, h: NODE_GRAPH_HORIZONTAL_SLIDER_HEIGHT_PX };
     }
     return up;
   });
@@ -188,9 +203,38 @@ function nodeGraphModuleFaceRowParams(row) {
   }
 }
 
+/** True when this cells entry is a horizontal (left-to-right) control. */
+function nodeGraphModuleFaceCellIsHorizontal(row, cell) {
+  const n = Array.isArray(row?.params) ? row.params.length : 0;
+  const mode = (cell && cell[2]) || "";
+  return mode === "horizontal" || (mode !== "stack" && mode !== "button" && n === 1) || (!mode && !!row.horizontal);
+}
+
+/**
+ * A face row of continuous horizontal sliders (not choice switches, stack
+ * buttons, or vertical fill cells). These all share one height: the generic
+ * Attenuverter / PolyBLEP readout.
+ */
+function nodeGraphModuleFaceRowIsContinuousHorizontalSlider(row, defs) {
+  if (!row || row.kind !== "cells" || !Array.isArray(row.params) || !row.params.length) return false;
+  const list = Array.isArray(defs) ? defs : [];
+  return row.params.every((cell) => {
+    const mode = (cell && cell[2]) || "";
+    if (mode === "stack" || mode === "button" || mode === "toggle") return false;
+    if (!nodeGraphModuleFaceCellIsHorizontal(row, cell)) return false;
+    const p = list.find((item) => item && item.key === cell[0]);
+    if (p && Array.isArray(p.choices) && p.choices.length > 1) return false;
+    return true;
+  });
+}
+
 /** Row height: the drawn height, grown so stacked 16 px rail tags never overlap. */
-function nodeGraphModuleFaceRowHeight(row) {
-  return Math.max(row.h, nodeGraphModuleFaceRowParams(row).length * NODE_GRAPH_FACE_JACK_SLOT_PX);
+function nodeGraphModuleFaceRowHeight(row, defs) {
+  const jackMin = nodeGraphModuleFaceRowParams(row).length * NODE_GRAPH_FACE_JACK_SLOT_PX;
+  const declared = nodeGraphModuleFaceRowIsContinuousHorizontalSlider(row, defs)
+    ? NODE_GRAPH_HORIZONTAL_SLIDER_HEIGHT_PX
+    : (Number(row && row.h) || 0);
+  return Math.max(declared, jackMin);
 }
 
 function nodeGraphModuleFaceHeightPx(type, node = null) {
