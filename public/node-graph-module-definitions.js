@@ -7119,7 +7119,7 @@ const nodeGraphModuleDefinitions = (
       // Taps (velvet_reverb v4): how many taps; Length only spreads them. Key stays
       // "density" (engine slot). Continuous: the last tap fades in by its fraction.
       // 0 pauses (the reverb keeps the taps it has). max = the spawn slider max
-      // (user-editable, like Clock Rate's 999); hardMax = the engine's tap table,
+      // (user-editable, like Clock Rate's hardMax 999); hardMax = the engine's tap table,
       // the absolute limit a typed value or an edited range can reach.
       {
         defaultValue: "64",
@@ -7791,10 +7791,13 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       {
         defaultValue: "2",
+        // max = the spawn slider max (user-editable); hardMax keeps the previous
+        // typed ceiling (999 Hz).
+        hardMax: "999",
         key: "rate",
         kind: "frequency",
         label: "Rate",
-        max: "999",
+        max: "68",
         maxDigits: 5,
         mid: "2",
         min: "0",
