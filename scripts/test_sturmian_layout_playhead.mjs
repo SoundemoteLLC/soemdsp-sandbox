@@ -86,6 +86,7 @@ assert(playStepFromPhase(Number.NaN, 16).playing === 0, "missing phase is not pl
 const ui = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid-ui.js"), "utf8");
 assert(ui.includes("largest whole-device-pixel"), "UI auto-fits the playable area");
 assert(!ui.includes("floor(base * z)"), "UI no longer starts from baseCell * zoom");
+assert(!ui.includes("baseCell: base"), "no leftover baseCell: base from removed baseCell");
 assert(ui.includes("layoutCell"), "shader gets JS layout uniforms");
 assert(ui.includes("planScopeCapture"), "comments mention planScopeCapture");
 const glsl = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid.glsl"), "utf8");

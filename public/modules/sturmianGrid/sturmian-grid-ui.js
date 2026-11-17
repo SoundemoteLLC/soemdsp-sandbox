@@ -17,7 +17,7 @@
 // cell sits to the right of the K/S/H/M toggles and stays in sync with the
 // param-band slider. The shared 2.5x threshold is unchanged; this plate
 // pins nearest and opts into compositor pixel-snap.
-const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23-stg24-stg25-stg26-stg27";
+const STURMIAN_SHADER_URL = "./public/modules/sturmianGrid/sturmian-grid.glsl?v=shader-ui-15-stg1-stg3-stg4-stg5-stg6-stg12-stg13-stg16-stg17-stg18-stg19-stg20-stg21-stg23-stg24-stg25-stg26-stg27-stg28";
 const STURMIAN_FLOATS = ["alpha", "beta", "rho", "drift", "rate", "steps", "reset", "spread", "walk", "snap", "view", "stepPattern"];
 const STURMIAN_UI_DEFAULT_MASK = 3170;
 let sturmianShaderPromise = null;
@@ -119,7 +119,6 @@ function sturmianGridLayout(width, height, steps, spread, _zoom, _baseCell) {
     cell,
     ox: Math.floor((width - cols * cell) * 0.5),
     oy: Math.floor((height - rows * cell) * 0.5),
-    baseCell: base,
   };
 }
 
