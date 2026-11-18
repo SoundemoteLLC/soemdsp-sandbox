@@ -7,11 +7,11 @@
 #include <soemdsp/oscillator/blit_saw.h>
 #include <soemdsp/math/exp_log.h>
 #include <soemdsp/filter/comb_core.h>
-#include "vocoder_stft.h"
+#include "vocoder_oversampling.h"
 
 namespace {
 constexpr int kInstances = 64;
-constexpr int kLatency = convolution_resonator::kMaxFrame + 8;
+constexpr int kLatency = convolution_resonator::kMaxFrame + 8 + convolution_resonator::OversampledVocoder::filterLatency;
 constexpr int kHalfKernel = 8;
 struct Tap { int delay; double coefficients[16]; double weight; };
 struct TubeMode {
@@ -37,7 +37,7 @@ struct State {
   int tubeCapacity, tubeCount;
   double tubeFrequency, tubeDecay, tubeRate;
   double tubeInput[3][2];
-  convolution_resonator::CrunchVocoder* vocoder;
+  convolution_resonator::OversampledVocoder* vocoder;
   double crunch, response, bandwidth;
   soemdsp_blit::BlitSaw oscillator;
   double carrier;
@@ -382,8 +382,8 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
   if (active && tube > 0) s->carrier = tube_tick(*s, 2, s->carrier, tube);
   if (!finite(s->carrier)) { clear(*s); return 0; }
   if (vocoderMix != 0 && !s->vocoder) {
-    s->vocoder = static_cast<convolution_resonator::CrunchVocoder*>(
-      soemdsp::memory_pool::alloc(sizeof(convolution_resonator::CrunchVocoder)));
+    s->vocoder = static_cast<convolution_resonator::OversampledVocoder*>(
+      soemdsp::memory_pool::alloc(sizeof(convolution_resonator::OversampledVocoder)));
     if (!s->vocoder) { s->right = 0; return 0; }
     s->vocoder->reset();
   }
@@ -415,7 +415,7 @@ extern "C" double soemdsp_convolution_resonator_carrier(int handle) {
   auto* s = state(handle);
   return s ? s->carrier : 0;
 }
-extern "C" int soemdsp_convolution_resonator_version() { return 7; }
+extern "C" int soemdsp_convolution_resonator_version() { return 8; }
 extern "C" void soemdsp_convolution_resonator_set_crunch(int handle, double crunch, double response, double bandwidth) {
   if (auto* s = state(handle)) {
     if (!finite(crunch) || !finite(response) || !finite(bandwidth)) { clear(*s); return; }

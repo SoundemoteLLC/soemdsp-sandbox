@@ -1099,7 +1099,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   convolutionResonator: {
     category: "space",
-    description: "Buzz/String/Tube resonator and Crunch STFT vocoder: aligned 32-2048 sample frames, log-frequency bandwidth, body-tinted carrier, Formant Shift and stereo envelopes. Oversampled fast-AM finish remains in development.",
+    description: "Buzz/String/Tube resonator and 2x-oversampled Crunch STFT vocoder: aligned 32-2048 base-rate sample windows, active-pair history reconstruction, log-frequency bandwidth, body-tinted carrier, Formant Shift and stereo envelopes.",
     label: "Convolution Resonator",
     notes: ["vocoder", "convolution", "robot", "crunch", "resonator", "voice", "native"],
   },

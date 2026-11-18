@@ -11,7 +11,7 @@ const sample = (h, l, r, frequency = 110, periods = 4, mix = 0, sr = 48000) =>
 const right = x.soemdsp_convolution_resonator_right;
 const reset = x.soemdsp_convolution_resonator_reset;
 const latency = x.soemdsp_convolution_resonator_latency();
-assert.equal(latency, 2056);
+assert.equal(latency, 2184);
 const a = create();
 const b = create();
 assert.ok(a && b && a !== b);

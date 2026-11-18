@@ -606,7 +606,7 @@ foreach ($module in $modules) {
   # the 48MB default; live audio still loads only the combined binary (512MB).
   if ($module.Name -eq "graph_engine") {
     $clangArgs += "-Wl,--max-memory=134217728"
-  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb")) {
+  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb", "convolution_resonator")) {
     $clangArgs += "-Wl,--max-memory=268435456"
   } else {
     $clangArgs += "-Wl,--max-memory=50331648"
