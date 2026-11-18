@@ -158,6 +158,14 @@ function nodeGraphVectorRgbAnalog01(value) {
   return Math.max(0, Math.min(1, n));
 }
 
+// Level of a stream (R, G, B, Bright) as a drive amount: 0..1 as-is, a bipolar -1..0 maps through 0.5 + 0.5x, and ABOVE 1 it is an
+// overdrive (10 = ten times full), so a signal can push past the Brightness slider's ceiling.
+function nodeGraphVectorRgbDrive(value) {
+  const n = Number(value);
+  if (Number.isFinite(n) && n > 1) return n;
+  return nodeGraphVectorRgbAnalog01(value);
+}
+
 function nodeGraphVectorRgbNodePoweredOff(nodeId) {
   const id = String(nodeId || "");
   if (!id) return false;
@@ -376,7 +384,7 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
       pts.set([last.x, last.y, last.r, last.g, last.b, 1], 0);
       np = 1;
     }
-    const chan = (arr, i) => (rgbWired ? nodeGraphVectorRgbAnalog01(arr?.[i]) : 1);
+    const chan = (arr, i) => (rgbWired ? nodeGraphVectorRgbDrive(arr?.[i]) : 1);
     for (let i = 0; i < nCap; i += 1) {
       let sx = captured.X[i];
       let sy = captured.Y[i];
@@ -389,7 +397,7 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
       }
       const x = nodeGraphVectorRgbUnitToPx(sx, ox, side, scale);
       const y = nodeGraphVectorRgbUnitToPx(-sy, oy, side, scale);
-      const bright = brightWired ? nodeGraphVectorRgbAnalog01(captured.Bright?.[i] ?? captured.Blank?.[i]) : 1;
+      const bright = brightWired ? nodeGraphVectorRgbDrive(captured.Bright?.[i] ?? captured.Blank?.[i]) : 1;
       const ink = gain * bright;
       const o = np * 6;
       if (x == null || y == null) {
@@ -444,7 +452,9 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
         if (joined(i - 1, i)) pathLen += Math.hypot(pts[i * 6] - pts[(i - 1) * 6], pts[i * 6 + 1] - pts[(i - 1) * 6 + 1]);
       }
       const spacing = Math.max(radius * 0.5, pathLen / budget, 0.25);
-      const weight = Math.min(1, spacing / (radius * 1.2));
+      // Build up off takes the brightest stamp (MAX), so a stamp must carry the full level: scaling it down by the spacing would cap
+      // the line below what you dialled. Build up on adds the stamps, so there each is scaled to keep the sum at the level.
+      const weight = settings.buildUp === false ? 1 : Math.min(1, spacing / (radius * 1.2));
       let acc = canvas._vectorRgbAcc || 0;
       for (let i = 1; i < np; i += 1) {
         const a = (i - 1) * 6;
