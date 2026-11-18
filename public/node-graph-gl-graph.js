@@ -3462,7 +3462,8 @@ function nodeGraphGlGraphBindRoomLight() {
     nodeGraphRoomLight.mouse = { x: event.clientX, y: event.clientY };
     // The lamp moves the text light in a dark room, and the grid lines light up under it in any room.
     if ((typeof nodeGraphRoomAmbientDark === "function" && nodeGraphRoomAmbientDark() > 0)
-      || (typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid())) nodeGraphGlGraphRoomLampSoon();
+      || (typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid()
+        && typeof nodeGraphRoomDim === "function" && nodeGraphRoomDim() > 0.0005)) nodeGraphGlGraphRoomLampSoon();
   }, { passive: true });
   host.addEventListener("pointerleave", () => {
     nodeGraphRoomLight.mouse = null;

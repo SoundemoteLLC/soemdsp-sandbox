@@ -818,9 +818,6 @@ function nodeGraphModuleLightGradient(radiusX, radiusY, cx, cy, colorAt, peak) {
 
 // How much of the grid reveal / module light stays in a fully dark room (0..1).
 var NODE_GRID_DARK_FLOOR = 0.75;
-// The mouse is a light like a module: it reveals the grid with the same falloff a module does, wherever it is, in a lit room or a
-// dark one. 1 = exactly as bright around the mouse as around a module (dial it here: lower is fainter, above 1 reaches further).
-var NODE_GRID_LAMP_REVEAL = 1;
 // Grid for the GPU lights pass, or null when the grid is off. World-space cell (the grid is anchored at
 // the world origin), line colour + alpha, how far modules reveal it, and the mouse reveal.
 var nodeGridParamsCache = { at: 0, base: null };
@@ -841,6 +838,7 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
         spread: Math.max(0.4, Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78))),
         mouseSpread: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread"))),
         mouseBase: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount"))),
+        reflection: Math.max(0, Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reflection", 0.35))),
       },
     };
   }
@@ -859,8 +857,9 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
     spread: b.spread,
     moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
     mouse: active ? mouse : null,
-    // The mouse is a light like a module (see NODE_GRID_LAMP_REVEAL).
-    reflect: NODE_GRID_LAMP_REVEAL,
+    // How bright the lines reflect the mouse lamp: the Grid reflection setting times how far the room is dimmed (none with the room
+    // fully lit, the full setting when it is fully dark).
+    reflect: b.reflection * roomDim,
     mouseRadius: Math.max(nodeGraphGridWidth(), nodeGraphGridHeight()) * (3 + 10.5 * b.mouseSpread),
     mouseAmount: 0.92 * mouseAmount,
   };
