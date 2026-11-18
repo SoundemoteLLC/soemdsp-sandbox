@@ -48,6 +48,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "stftContrast",
   "spectralBlur",
   "spectralFreeze",
+  "spectralDelay",
   "earlyReflectionConvolution",
   "stftGate",
   "robinSinusoid",

@@ -112,13 +112,18 @@ them simultaneously. Proposed order follows musical value and implementation ris
 
 ### 2. Spectral Delay
 
-- [ ] Base Delay, frequency-dependent Delay Spread/Curve, Feedback, Mix.
-- [ ] Clearly bounded preallocated delay memory; report capacity in seconds.
+- [x] Native stereo Spectral Delay: Base Delay, signed Delay Spread, Pivot,
+  Curve, Feedback, Mix and FFT sizes 512..16384. See [SPECTRAL_DELAY.md](SPECTRAL_DELAY.md).
+- [x] Bounded preallocated spectral histories; native capacity getter reports
+  milliseconds, roughly 10.8 seconds at 48 kHz. Invalid requests raise Error.
+- [ ] Listening acceptance, long-tail FFT handoff and worst-case host CPU proof.
 - [ ] Later: band-pattern editing, feedback tilt, stereo crossfeed, tempo sync.
 - Proof: known impulses arrive at specified band delays; modulation behavior is
   intentional; feedback decay and memory/CPU limits are measured.
 - Decision: shifting read heads versus crossfading delay taps changes the sound;
   select deliberately rather than hide it as generic smoothing.
+  V1 uses moving, phase-aware fractional spectral reads. Time edits can bend pitch;
+  FFT-size edits separately warm and crossfade two engines.
 
 ### 3. Spectral Blur
 

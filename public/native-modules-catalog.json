@@ -3134,6 +3134,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "spectral_delay",
+      "label": "Spectral Delay",
+      "targetType": "spectralDelay",
+      "kind": "effect",
+      "source": "native_modules/spectral_delay/spectral_delay.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_delay/spectral_delay.cpp",
+      "localSourceUrl": "/native_modules/spectral_delay/spectral_delay.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/spectral_delay/spectral_delay.wasm",
+      "wasmUrl": "native_modules/spectral_delay/spectral_delay.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "spectral_freeze",
       "label": "Spectral Freeze",
       "targetType": "spectralFreeze",

@@ -1107,6 +1107,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Capture and sustain a stereo spectrum with evolving phase. Freeze gate, Recapture trigger, infinite or decaying hold and optional stereo diffusion.",
     notes: ["spectral", "STFT", "freeze", "capture", "ambient", "native"],
   },
+  spectralDelay: {
+    category: "space", label: "Spectral Delay",
+    description: "Native stereo STFT delay with frequency-dependent timing, signed spread, pivot, curve and feedback. FFT Size sets the time/frequency resolution and processing latency.",
+    notes: ["spectral", "STFT", "delay", "echo", "feedback", "dispersion", "native"],
+  },
   spectralBlur: {
     category: "space", label: "Spectral Blur",
     description: "Native STFT ambient wash with 512-16384 sample windows, time/frequency blur and stereo phase diffusion. Processing delay follows FFT Size; larger settings cost more peak CPU and memory.",
@@ -3954,6 +3959,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   spectralFreeze: {
     source: "native_modules/spectral_freeze/spectral_freeze.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_freeze/spectral_freeze.cpp",
+  },
+  spectralDelay: {
+    source: "native_modules/spectral_delay/spectral_delay.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_delay/spectral_delay.cpp",
   },
   spectralBlur: {
     source: "native_modules/spectral_blur/spectral_blur.cpp",

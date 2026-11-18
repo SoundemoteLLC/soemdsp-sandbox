@@ -210,6 +210,7 @@ const nodeGraphNodeLabels = Object.freeze({
   stftContrast: "STFT Contrast",
   spectralBlur: "Spectral Blur",
   spectralFreeze: "Spectral Freeze",
+  spectralDelay: "Spectral Delay",
   earlyReflectionConvolution: "Early Reflection Convolution",
   stftGate: "STFT Gate",
   flanger: "Flanger",
@@ -7540,6 +7541,131 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "%",
         "tooltip": "Delayed dry stereo versus reflected sound. Direct path is excluded from the IR; dry and wet share 256 samples of convolution buffering latency. Ready becomes high after the first kernel is built; Error reports an invalid or over-capacity request."
+      }
+    ],
+  },
+  spectralDelay: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
+    outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["baseDelayMs", "Base Delay"], ["spreadMs", "Delay Spread"]], h: 40 },
+      { kind: "cells", params: [["pivotHz", "Frequency Pivot"], ["curve", "Delay Curve"]], h: 40 },
+      { kind: "cells", params: [["feedback", "Feedback"], ["mix", "Mix"]], h: 40 },
+    ],
+    parameters:
+    [
+      {
+        "key": "fftSize",
+        "label": "FFT Size",
+        "kind": "choice",
+        "choices": [
+          "512",
+          "1024",
+          "2048",
+          "4096",
+          "8192",
+          "16384"
+        ],
+        "choiceKeys": [
+          "512",
+          "1024",
+          "2048",
+          "4096",
+          "8192",
+          "16384"
+        ],
+        "choiceIds": [
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384
+        ],
+        "defaultValue": "4096",
+        "min": "0",
+        "mid": "2.5",
+        "max": "5",
+        "step": "1",
+        "unit": "samples",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "STFT window and dry-path latency in samples. Smaller windows give tighter timing; larger windows separate nearby frequencies. Size changes run a new delay engine alongside the old one until its window and requested delays are filled, then crossfade over 50 ms. Old feedback history is not translated between resolutions. Plugin-host latency compensation is unverified."
+      },
+      {
+        "key": "baseDelayMs",
+        "label": "Base Delay",
+        "kind": "time",
+        "defaultValue": "120",
+        "min": "0",
+        "mid": "200",
+        "max": "2000",
+        "step": "any",
+        "unit": "ms",
+        "nonlinearSlider": true,
+        "tooltip": "Minimum added spectral delay in milliseconds, beyond FFT Size latency. Continuous read-head movement can change pitch while delay is edited. Zero Spread and zero Feedback make all bands share this delay; integer-hop delays reconstruct exactly within FFT rounding."
+      },
+      {
+        "key": "spreadMs",
+        "label": "Delay Spread",
+        "kind": "time",
+        "defaultValue": "180",
+        "min": "-2000",
+        "mid": "0",
+        "max": "2000",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Additional delay range in milliseconds. Positive puts highs later; negative puts lows later. Base Delay is always the minimum. Base plus absolute Spread must fit the reported native capacity: roughly 10.8 seconds at 48 kHz or 2.7 seconds at 192 kHz. Invalid requests retain the previous valid settings and raise Error."
+      },
+      {
+        "key": "pivotHz",
+        "label": "Frequency Pivot",
+        "kind": "frequency",
+        "defaultValue": "1000",
+        "min": "20",
+        "mid": "1000",
+        "max": "16000",
+        "step": "any",
+        "unit": "Hz",
+        "nonlinearSlider": true,
+        "tooltip": "Frequency at the midpoint of the uncurved delay distribution. Must be above zero and below Nyquist. Curve warps that distribution; DC and Nyquist remain its endpoints."
+      },
+      {
+        "key": "curve",
+        "label": "Delay Curve",
+        "defaultValue": "0",
+        "min": "-1",
+        "mid": "0",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Rational delay-distribution contour. Zero follows the Pivot mapping; positive moves more frequencies toward the high endpoint, negative toward the low endpoint. This changes timing, not spectral amplitude."
+      },
+      {
+        "key": "feedback",
+        "label": "Feedback",
+        "defaultValue": "0.35",
+        "min": "-1",
+        "mid": "0",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Spectral delay feedback coefficient; negative reverses feedback polarity. Absolute values below 100% decay; 100% can sustain and larger user-defined values can grow. No hidden limiter or clipping. The feedback loop has at least one STFT hop of delay even when a band's requested delay is shorter."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Dry/wet mix. Dry is aligned to FFT Size latency, not to the additional band delays. Left and Right spectral histories remain independent; no mono downmix or stereo crossfeed."
       }
     ],
   },

@@ -12,6 +12,13 @@ if (!(Test-Path -LiteralPath $clang)) {
 # instead of one repeated clang++ invocation per module. Add a new module by
 # adding one entry here (Name, Exports, and Simd only if it uses <wasm_simd128.h>).
 $modules = @(
+  @{ Name = "spectral_delay"; Simd = $false; Exports = @(
+    "soemdsp_spectral_delay_create", "soemdsp_spectral_delay_destroy", "soemdsp_spectral_delay_reset",
+    "soemdsp_spectral_delay_configure", "soemdsp_spectral_delay_sample", "soemdsp_spectral_delay_right", "soemdsp_spectral_delay_error",
+    "soemdsp_spectral_delay_fft_size", "soemdsp_spectral_delay_busy", "soemdsp_spectral_delay_latency", "soemdsp_spectral_delay_latency_for_handle",
+    "soemdsp_spectral_delay_max_delay_ms", "soemdsp_spectral_delay_state_bytes", "soemdsp_spectral_delay_bin_delay_ms",
+    "soemdsp_spectral_delay_version", "soemdsp_spectral_delay_metadata_json", "soemdsp_spectral_delay_metadata_json_size"
+  ) }
   @{ Name = "early_reflection_convolution"; Simd = $false; Exports = @(
     "soemdsp_early_reflection_convolution_create", "soemdsp_early_reflection_convolution_destroy", "soemdsp_early_reflection_convolution_reset",
     "soemdsp_early_reflection_convolution_configure", "soemdsp_early_reflection_convolution_sample", "soemdsp_early_reflection_convolution_right",
@@ -637,7 +644,7 @@ foreach ($module in $modules) {
   # the 48MB default; live audio still loads only the combined binary (512MB).
   if ($module.Name -eq "graph_engine") {
     $clangArgs += "-Wl,--max-memory=134217728"
-  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb", "convolution_resonator", "vocoder", "stft_contrast", "stft_gate")) {
+  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb", "convolution_resonator", "vocoder", "stft_contrast", "stft_gate", "spectral_delay")) {
     $clangArgs += "-Wl,--max-memory=268435456"
   } else {
     $clangArgs += "-Wl,--max-memory=50331648"
