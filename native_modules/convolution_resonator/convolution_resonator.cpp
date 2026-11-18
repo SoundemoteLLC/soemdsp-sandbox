@@ -8,7 +8,7 @@
 #include <soemdsp/math/exp_log.h>
 #include <soemdsp/filter/comb_core.h>
 #include "vocoder_oversampling.h"
-#include "filter_bank_vocoder.h"
+#include "../vocoder/filter_bank_vocoder.h"
 
 namespace {
 constexpr int kInstances = 64;
@@ -40,7 +40,7 @@ struct State {
   double tubeInput[3][2];
   convolution_resonator::OversampledVocoder* vocoder;
   convolution_resonator::OversampledVocoder* rawVocoder;
-  convolution_resonator::FilterBankVocoder* filterBank;
+  soemdsp_vocoder::FilterBankVocoder* filterBank;
   int desiredModel, currentModel, targetModel, modelWarm, rawPosition;
   double modelFade, bankWidth, bankResponse, rawDelay[2][8];
   double crunch, response, bandwidth;
@@ -313,7 +313,7 @@ bool process_model(State& s, int model, const double wet[2], double left, double
   double rawCarrier, double sr, double shift, double out[2]) {
   if (model == 2) {
     if (!s.filterBank) {
-      s.filterBank = static_cast<convolution_resonator::FilterBankVocoder*>(soemdsp::memory_pool::alloc(sizeof(convolution_resonator::FilterBankVocoder)));
+      s.filterBank = static_cast<soemdsp_vocoder::FilterBankVocoder*>(soemdsp::memory_pool::alloc(sizeof(soemdsp_vocoder::FilterBankVocoder)));
       if (!s.filterBank) return false;
       s.filterBank->reset();
     }

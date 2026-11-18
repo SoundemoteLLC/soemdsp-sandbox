@@ -3476,6 +3476,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "vocoder",
+      "label": "Vocoder",
+      "targetType": "vocoder",
+      "kind": "effect",
+      "source": "native_modules/vocoder/vocoder.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/vocoder/vocoder.cpp",
+      "localSourceUrl": "/native_modules/vocoder/vocoder.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/vocoder/vocoder.wasm",
+      "wasmUrl": "native_modules/vocoder/vocoder.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "voice_manager",
       "label": "VoiceManager",
       "targetType": "voice_manager",

@@ -110,7 +110,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "image",
   "rgbaHsla",
   "waveguide",
-  "vocoder",
   "flexGrid",
   "gravity",
   "drummer",
@@ -191,6 +190,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   "softpop2",
   "acidSequencer",
   "tiltFilter",
+  "vocoder",
 ]);
 
 /** Short shop-card reminder for under-construction modules (title tooltip). */
@@ -213,8 +213,6 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
   besselThomson: "Maximally flat group-delay filter. Parked until that filter lands.",
   massSpringDamper: "2-pole mechanical resonator. Parked until that analog lands.",
   waveguide: "Full waveguide. Use Comb/Mode resonators for now.",
-
-  vocoder: "Filter-bank vocoder. Parked until the analog-filter / bandpass-bank pass.",
 
   wallDelay: "Geometric room/wall delay. Parked until ray-room DSP lands.",
   doppler: "parked Doppler (pitch only while delay time is moving)",
@@ -1096,6 +1094,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser: a sparse-tap reverb: Density spaces the taps, Decay is the tail length (RT60), Tail Darkness darkens the tail. The face shows where the taps land.",
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
+  },
+  vocoder: {
+    category: "analogFilter",
+    description: "32-band native IIR vocoder: external modulator and carrier, narrow ringing bands through broad crunchy overlap, fast followers, and 2x oversampling. A single cable into either side of each input pair feeds both channels.",
+    label: "Vocoder",
+    notes: ["vocoder", "filter bank", "voice", "carrier", "ringing", "native"],
   },
   convolutionResonator: {
     category: "space",
@@ -2084,12 +2088,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Up to 8 ZDF stages: Bandpass (parallel) or Allpass (series, classic notches). Slope 12–48, LFO, mix, feedback.",
     label: "Phaser",
     notes: ["phaser", "bandpass", "ZDF", "SVF", "space", "Robin Schmidt"],
-  },
-  vocoder: {
-    category: "analogFilter",
-    description: "Placeholder analog vocoder — parallel bandpass bank, envelopes, carrier.",
-    label: "Vocoder",
-    notes: ["under construction", "vocoder", "filter bank", "bandpass", "envelope", "analog"],
   },
   flanger: {
     category: "space",
@@ -3911,6 +3909,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   convolutionResonator: {
     source: "native_modules/convolution_resonator/convolution_resonator.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/convolution_resonator/convolution_resonator.cpp",
+  },
+  vocoder: {
+    source: "native_modules/vocoder/vocoder.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/vocoder/vocoder.cpp",
   },
   pumpCurve: {
     source: "native_modules/pump_curve/pump_curve.cpp",

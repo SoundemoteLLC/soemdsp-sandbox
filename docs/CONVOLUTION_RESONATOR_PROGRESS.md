@@ -7,8 +7,47 @@ reported latency. Earlier sections below record the successive proof stages.
 Current face: native, parameter-pinned body IR and vocoder band kernels,
 evaluated off-thread and presented through the shared WebGL picture device.
 Current listening gate: the STFT implementation works but did not meet Argi's
-Vocodex-like sound target. A 32-band raw comparison is now awaiting listening;
-no Vocodex-match or completed-sonic-goal claim is made.
+Vocodex-like sound target. Argi confirmed that the IIR filter-bank comparison
+has the desired family of character, especially very narrow, ringing bands.
+It is now also available as a standalone Vocoder; no exact Vocodex-match claim
+is made. Order, flatness, and variable band count remain future work.
+
+## Standalone Vocoder Extraction
+
+- Native type 269, `native_modules/vocoder/vocoder.cpp`, category Analog Filter.
+- Replaces the old parked Vocoder placeholder; no duplicate module or JS DSP.
+- Mod L/R and Car L/R inputs. One connected side of either pair feeds both
+  channels; two connected sides are independent stereo. Mono averages L/R.
+- Band Width (spawn range 0.001..4 oct), Follower (0..20 ms), Formant Shift,
+  and Mix. Width remains editable near zero for narrow ringing bands.
+- 32 bands, rectified one-pole envelopes, independent stereo carrier filters.
+  Mix blends the dry modulator, not a hidden oscillator or carrier passthrough.
+- The bank and 2x resampler now live beside Vocoder. The resonator comparison
+  uses that same implementation; existing mono-carrier results match exactly.
+- No STFT or body processing in the standalone path. Its resampling reference
+  delay is 128 samples, not the resonator's 2184. IIR group delay/ringing still
+  vary with frequency and bandwidth. Dry is delayed by the same 128 samples.
+- State is allocated once at create through the shared pool, released on
+  destroy; no audio-loop allocations, limiter, or automatic level correction.
+- C++ metadata contains ports, parameter ranges and tooltips; a test enforces
+  agreement with the existing UI definition path.
+- Standard 1D Trace face uses the existing shared WebGL renderer/settings.
+
+Verification: full 200-module standalone/combined build; `test_vocoder.mjs`
+covers exact extracted DSP, latency, input absence, independent stereo,
+graph/native parity, controls, 0.001-octave endpoints, non-finite recovery and
+pool reuse. Existing resonator bank, STFT/AA and graph tests remain green.
+`test_vocoder_browser.mjs` confirms creation in the default efficient build,
+real AudioWorklet output, and a visible standard trace/controls on desktop
+and mobile. The resonator browser display regression test also passes.
+Warm WASM graph processing measured about 9..10% of one realtime budget at
+48 kHz for one stereo 32-band instance on this machine. This includes graph
+and resampling work, excludes UI, and is not a DAW CPU or 100-band estimate.
+
+Listening: wire music/voice to Mod L/R and a bright oscillator to Car L/R;
+use Mix 1. Try Band Width 0.01 with Follower 0 for narrow ringing, then widen
+the bands for overlap/crunch. There is no internal carrier in this module.
+Keep the resonator comparison until the standalone sound is confirmed.
 
 ## Native Timing Proof
 

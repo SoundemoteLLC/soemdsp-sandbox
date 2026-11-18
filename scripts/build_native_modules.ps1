@@ -12,6 +12,11 @@ if (!(Test-Path -LiteralPath $clang)) {
 # instead of one repeated clang++ invocation per module. Add a new module by
 # adding one entry here (Name, Exports, and Simd only if it uses <wasm_simd128.h>).
 $modules = @(
+  @{ Name = "vocoder"; Simd = $false; Exports = @(
+    "soemdsp_vocoder_create", "soemdsp_vocoder_destroy", "soemdsp_vocoder_reset",
+    "soemdsp_vocoder_sample", "soemdsp_vocoder_right", "soemdsp_vocoder_latency",
+    "soemdsp_vocoder_version", "soemdsp_vocoder_metadata_json", "soemdsp_vocoder_metadata_json_size"
+  ) }
   @{ Name = "convolution_resonator"; Simd = $false; Exports = @(
     "soemdsp_convolution_resonator_create", "soemdsp_convolution_resonator_destroy",
     "soemdsp_convolution_resonator_reset", "soemdsp_convolution_resonator_sample",
@@ -608,7 +613,7 @@ foreach ($module in $modules) {
   # the 48MB default; live audio still loads only the combined binary (512MB).
   if ($module.Name -eq "graph_engine") {
     $clangArgs += "-Wl,--max-memory=134217728"
-  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb", "convolution_resonator")) {
+  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb", "convolution_resonator", "vocoder")) {
     $clangArgs += "-Wl,--max-memory=268435456"
   } else {
     $clangArgs += "-Wl,--max-memory=50331648"

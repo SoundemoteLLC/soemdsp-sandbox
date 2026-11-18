@@ -1,12 +1,12 @@
 #include "../../native_modules/convolution_resonator/vocoder_stft.h"
 #include "../../native_modules/convolution_resonator/vocoder_oversampling.h"
-#include "../../native_modules/convolution_resonator/filter_bank_vocoder.h"
+#include "../../native_modules/vocoder/filter_bank_vocoder.h"
 namespace {
 convolution_resonator::VocoderStft core{};
 convolution_resonator::CrunchVocoder crunch{};
 convolution_resonator::CrunchVocoder reference{};
 convolution_resonator::OversampledVocoder oversampled{};
-convolution_resonator::FilterBankVocoder bank{};
+soemdsp_vocoder::FilterBankVocoder bank{};
 float re[512], im[512];
 }
 extern "C" void test_reset() { core.reset(); }

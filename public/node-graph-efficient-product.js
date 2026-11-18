@@ -44,6 +44,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "velvetReverb",
   "noiseConvReverb",
   "convolutionResonator",
+  "vocoder",
   "robinSinusoid",
   "robinOscillator",
   "robinSupersaw",

@@ -292,6 +292,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   velvetReverb: 265,
   noiseConvReverb: 267,
   convolutionResonator: 268,
+  vocoder: 269,
 });
 
 // Param IDs — keep in sync with graph_engine.cpp kParam*.
@@ -610,6 +611,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "tailRandom") return P.NATIVE_GRAPH_PARAM_CENTER;
     if (k === "tailCurve") return P.NATIVE_GRAPH_PARAM_SATURATE;
     if (k === "precision") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
+  }
+  if (t === "vocoder") {
+    if (k === "bandWidth") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
+    if (k === "followerMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "formantShift") return P.NATIVE_GRAPH_PARAM_PHASE;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if (t === "noiseConvReverb") {
     if (k === "decay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
@@ -1573,6 +1580,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const tDst = String(type || "").trim();
+  if (tDst === "vocoder") {
+    if (p === "mod l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "mod r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "car l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_L;
+    if (p === "car r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_R;
+  }
   if (tDst === "sturmianGrid") {
     if (p === "restart") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
     if (p === "adv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
@@ -6098,6 +6111,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("tailRandom", P.NATIVE_GRAPH_PARAM_CENTER, cont("tailRandom", 1));
       push("tailCurve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("tailCurve", 0));
       push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 1));
+      continue;
+    }
+    if (type === "vocoder") {
+      push("bandWidth", P.NATIVE_GRAPH_PARAM_FEEDBACK, cont("bandWidth", 0.75));
+      push("followerMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("followerMs", 0.25));
+      push("formantShift", P.NATIVE_GRAPH_PARAM_PHASE, cont("formantShift", 0));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;
     }
     if (type === "convolutionResonator") {
