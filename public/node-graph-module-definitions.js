@@ -7752,7 +7752,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Initial IR lowpass cutoff: 50 Hz at zero, 16 kHz at one, limited by sample rate. Two lowpass stages color the generated noise; this is not an output gain control.",
+        tooltip: "Initial IR lowpass cutoff: 5 Hz at zero, 16 kHz at one, limited by sample rate. Two lowpass stages color the generated noise. Tiny IR length also limits spectral selectivity; increase Length for deeper muffling. This is not an output gain control.",
       },
       {
         defaultValue: "1",

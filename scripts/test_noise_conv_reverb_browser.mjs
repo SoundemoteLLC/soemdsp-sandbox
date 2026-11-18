@@ -14,6 +14,7 @@ try {
     { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForFunction(() => typeof showNodeGraphModule === 'function'
     && document.body.dataset.nodeBootFinished === 'interface-ready', null, { timeout: 60000 });
+  await page.waitForTimeout(500);
   const report = await page.evaluate(async () => {
     const id = showNodeGraphModule('noiseConvReverb', { x: 40, y: 40 },
       { record: false, autosaveWorkingPatch: false, skipLivePlan: true });
@@ -23,19 +24,20 @@ try {
     node.params.decay = 0.001;
     node.params.brightness = 0;
     commitNodeGraphPatch(patch, { record: false, autosaveWorkingPatch: false, skipLivePlan: true });
+    const controls = { min: Number(slider.min), mid: Number(node.paramMeta.decay.mid),
+      value: Number(nodeGraphPatchNode(id).params.decay),
+      brightness: Number(nodeGraphPatchNode(id).params.brightness) };
     const response = await fetch(nodeGraphLiveCombinedNativeModuleUrl);
     const { instance } = await WebAssembly.instantiate(await response.arrayBuffer(),
       { env: { emo_process_block() {} } });
-    return { min: Number(slider.min), mid: Number(node.paramMeta.decay.mid),
-      value: Number(nodeGraphPatchNode(id).params.decay),
-      brightness: Number(nodeGraphPatchNode(id).params.brightness),
+    return { ...controls,
       nativeVersion: instance.exports.soemdsp_noise_conv_reverb_version() };
   });
   assert.equal(report.min, 0.001);
   assert.equal(report.mid, 0.1);
   assert.equal(report.value, 0.001);
   assert.equal(report.brightness, 0);
-  assert.equal(report.nativeVersion, 2);
+  assert.equal(report.nativeVersion, 3);
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ...report, errors }));
 } finally { await browser.close(); }

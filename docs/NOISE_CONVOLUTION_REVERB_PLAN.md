@@ -161,8 +161,23 @@ Listening queue (settings are suggestions, not claimed finished presets):
 1. Set Mix fully wet, Length 25 ms, Amp/Spectral Shape high, Brightness 0;
    sweep Decorrelate from 0 to 100%. Brightness 0 is now much darker than before.
 2. Compare Length 1, 2, 5, 10, 25 and 50 ms with a pulse oscillator or percussion.
-3. Raise Brightness slowly. Around 0.59 now gives roughly the old 1.5 kHz floor;
+3. Raise Brightness slowly. Around 0.707 now gives roughly the old 1.5 kHz floor;
    the new lower portion explores deeper low-frequency coloration.
-4. Try Darkness 0 versus 1 with Brightness above 0.2; below approximately 0.15,
+4. Try Darkness 0 versus 1 with Brightness above 0.4; below approximately 0.394,
    the starting cutoff is already below 120 Hz and Darkness intentionally has
    no further effect. Sweep shapes independently to distinguish envelope from tone.
+
+### Deeper Brightness Follow-Up
+
+On user listening request, the cutoff range is extended again to 5 Hz..16 kHz
+(native version 3). The old 0.999 coefficient cap is removed: the positive,
+sample-rate-limited cutoff already produces a stable one-pole coefficient,
+and that cap otherwise imposes an unintended sample-rate-dependent cutoff floor.
+Brightness around 0.285 reproduces a 50 Hz starting cutoff. IR energy
+normalization remains unchanged. No added distortion, wobble or output filter.
+
+Very short finite kernels cannot realize an arbitrarily narrow lowpass response;
+at extreme settings the integrated noise shape and endpoint taper dominate.
+Try 25..100 ms as well as 1..10 ms for different kinds of muffling. The 5 Hz
+control value describes the noise-generation filter, not a promise that the final
+truncated IR has a 5 Hz measured -3 dB corner or tracks a voice's fundamental.

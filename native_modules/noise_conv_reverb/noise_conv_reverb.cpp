@@ -18,7 +18,7 @@
 // to Darkness (late), same curve. Decorrelate (0 = identical L/R, 1 =
 // independent seeds) is cheap.
 // The filtered IR ends with a quarter-length cosine taper, capped at 20 ms.
-// Brightness spans 50 Hz to 16 kHz; tiny kernels may fit entirely in the head.
+// Brightness spans 5 Hz to 16 kHz; tiny kernels may fit entirely in the head.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
@@ -377,7 +377,7 @@ static unsigned char* wire_block(State& s, unsigned char* raw, int maxLen) {
 
 static double cutoff_hz(const CleanParams& p, double u) {
   const double ny = 0.45 * p.sampleRate;
-  const double fBright = 50.0 * soemdsp::math::pow_pos(16000.0 / 50.0, p.brightness);
+  const double fBright = 5.0 * soemdsp::math::pow_pos(16000.0 / 5.0, p.brightness);
   const double fStart = fBright > ny ? ny : fBright;
   const double fMin = fStart < 120.0 ? fStart : 120.0;
   const double fEnd = fStart * soemdsp::math::pow_pos(fMin / fStart, p.darkness);
@@ -424,7 +424,6 @@ static void build_samples(State& s, int count) {
     const double fc = cutoff_hz(p, u);
     double a = soemdsp_maths::dsp_exp(-twoPi * fc / p.sampleRate);
     if (!(a == a) || a < 0.0) a = 0.0;
-    if (a > 0.999) a = 0.999;
     const float af = (float)a;
     const float g = 1.0f - af;
     const float xL = rng_gauss(s.rngL) * (float)env;
@@ -907,7 +906,7 @@ double soemdsp_noise_conv_reverb_right(int handle) {
   return gOutR[0];
 }
 
-int soemdsp_noise_conv_reverb_version() { return 2; }
+int soemdsp_noise_conv_reverb_version() { return 3; }
 
 double soemdsp_noise_conv_reverb_max_length() { return kMaxLengthSeconds; }
 

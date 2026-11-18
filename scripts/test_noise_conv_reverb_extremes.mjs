@@ -79,6 +79,10 @@ for (const sr of [44100, 48000, 96000]) {
     assert.deepEqual(dark, darker, 'Darkness must not brighten an already sub-120 Hz cutoff');
     const bright = kernel(h, sr, 0.05, { ...defaults, bright: 1, dark: 0 });
     assert.ok(roughness(dark[0]) < roughness(bright[0]) * 0.05, 'extended dark range is spectrally darker');
+    const fifty = kernel(h, sr, 0.05, { ...defaults, bright: Math.log(50 / 5) / Math.log(16000 / 5), dark: 0 });
+    let cutoffDifference = 0;
+    for (let i = 0; i < dark[0].length; ++i) cutoffDifference += (dark[0][i] - fifty[0][i]) ** 2;
+    assert.ok(cutoffDifference > 1e-4, '5 Hz is not flattened into the old 50 Hz response');
     const mono = kernel(h, sr, 0.025, { ...defaults, decor: 0 });
     assert.deepEqual(mono[0], mono[1], 'zero decorrelation gives identical kernels');
     for (let i = 0; i < 12; ++i) process(h, sr, i % 2 ? 0.001 : 0.05,
