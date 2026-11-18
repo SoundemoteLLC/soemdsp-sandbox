@@ -22,7 +22,7 @@ Signal correctness, stability and performance tests are still required.
 - No broad convolution-engine rewrite, JavaScript DSP fallback, or private
   Canvas2D display path.
 
-## Current Code Findings
+## Original Code Findings (Before Extreme-Settings Work)
 
 Source: `native_modules/noise_conv_reverb/noise_conv_reverb.cpp`.
 UI metadata: `public/node-graph-module-definitions.js`, `noiseConvReverb`.
@@ -158,18 +158,16 @@ required for this work. Do not relax audio correctness checks as a consequence.
 
 Listening queue (settings are suggestions, not claimed finished presets):
 
-1. Set Mix fully wet, Length 25 ms, Amp/Spectral Shape high, Brightness 0;
-   sweep Decorrelate from 0 to 100%. Brightness 0 is now much darker than before.
+1. Set Mix fully wet, Length 25 ms, Amp/Spectral Shape high, both cutoffs 5 Hz;
+   sweep Decorrelate from 0 to 100%.
 2. Compare Length 1, 2, 5, 10, 25 and 50 ms with a pulse oscillator or percussion.
-3. Raise Brightness slowly. Around 0.707 now gives roughly the old 1.5 kHz floor;
-   the new lower portion explores deeper low-frequency coloration.
-4. Try Darkness 0 versus 1 with Brightness above 0.4; below approximately 0.394,
-   the starting cutoff is already below 120 Hz and Darkness intentionally has
-   no further effect. Sweep shapes independently to distinguish envelope from tone.
+3. Raise both cutoffs through 50, 120, 500 and 1500 Hz to explore coloration.
+4. Try Start 1500 / End 120 Hz, then Start 5 / End 500 Hz. Sweep Spectral Shape
+   to curve the darkening or brightening trajectory; Amp Shape controls decay.
 
 ### Deeper Brightness Follow-Up
 
-On user listening request, the cutoff range is extended again to 5 Hz..16 kHz
+Historical intermediate mapping: on user listening request, the cutoff range was extended to 5 Hz..16 kHz
 (native version 3). The old 0.999 coefficient cap is removed: the positive,
 sample-rate-limited cutoff already produces a stable one-pole coefficient,
 and that cap otherwise imposes an unintended sample-rate-dependent cutoff floor.
@@ -181,3 +179,22 @@ at extreme settings the integrated noise shape and endpoint taper dominate.
 Try 25..100 ms as well as 1..10 ms for different kinds of muffling. The 5 Hz
 control value describes the noise-generation filter, not a promise that the final
 truncated IR has a 5 Hz measured -3 dB corner or tracks a voice's fundamental.
+
+### Physical-Unit Parameter Correction (Current)
+
+Architect policy: when a parameter controls a quantity with a real physical
+unit, expose and store that quantity in its real unit. A nonlinear slider is
+allowed; a hidden normalized-to-Hz DSP mapping is not.
+
+Start Cutoff (`startCutoffHz`) and End Cutoff (`endCutoffHz`) now store Hz
+throughout UI metadata, patches, worklet, native graph and native sample/block
+APIs. Defaults are 1500 / 120 Hz; both spawn ranges are 5..16000 Hz with midpoint
+1000 Hz, frequency kind and Hz unit. Native version 5 removes both normalized
+endpoint mappings. Brightness/Darkness keys and controls are removed, not kept
+as aliases or a legacy conversion layer.
+
+Native cutoffs are bounded only to nonnegative frequencies and 45% of sample
+rate. Positive endpoints interpolate logarithmically using Spectral Shape;
+either direction is allowed. A zero endpoint uses linear interpolation to avoid
+logarithms of zero; two zero endpoints generate a silent IR. Old instances
+should be respawned for the new parameters. No compatibility work is required.

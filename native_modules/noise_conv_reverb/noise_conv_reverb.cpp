@@ -7,18 +7,18 @@
 // generated, shaped noise impulse response. A short time-domain head covers
 // the first 128 samples of the IR; the rest is non-uniform overlap-save with
 // growing FFT partitions, then uniform partitions at the largest hop, so a
-// long tail stays cheap. Length, Amp Shape, Spectral Shape, Darkness,
-// Brightness, Decorrelate and Seed rebuild the IR (fully in create, or
+// long tail stays cheap. Length, Amp Shape, Spectral Shape, Start/End Cutoff,
+// Decorrelate and Seed rebuild the IR (fully in create, or
 // incrementally across audio blocks when a parameter changes) and the wet
 // signal crossfades, so a knob move does not click or zipper.
 //
 // Amp Shape warps a linear-in-dB decay over Length with the Step Graph
 // rational curve (segment_rational01, same sign: + reaches the end sooner).
-// Spectral Shape warps how the lowpass cutoff travels from Brightness (early)
-// to Darkness (late), same curve. Decorrelate (0 = identical L/R, 1 =
+// Spectral Shape warps how the lowpass cutoff travels from Start Cutoff
+// to End Cutoff in Hz, same curve. Decorrelate (0 = identical L/R, 1 =
 // independent seeds) is cheap.
 // The filtered IR ends with a quarter-length cosine taper, capped at 20 ms.
-// Brightness spans 5 Hz to 16 kHz; tiny kernels may fit entirely in the head.
+// Tiny kernels may fit entirely in the head.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
@@ -125,8 +125,8 @@ struct CleanParams {
   double length;
   double ampShape;
   double spectralShape;
-  double darkness;
-  double brightness;
+  double endCutoffHz;
+  double startCutoffHz;
   double decorrelate;
   double sampleRate;
   unsigned int seed;
@@ -261,7 +261,7 @@ static unsigned long long block_bytes_for(int maxLen) {
 
 static CleanParams sanitize(
   double length, double ampShape, double spectralShape,
-  double darkness, double brightness, double decorrelate,
+  double endCutoffHz, double startCutoffHz, double decorrelate,
   double sampleRate, unsigned int seed
 ) {
   CleanParams p;
@@ -269,8 +269,8 @@ static CleanParams sanitize(
   p.length = clampf(length, 1.0 / p.sampleRate, kMaxLengthSeconds);
   p.ampShape = soemdsp::math::segment_contour_soft_cap(ampShape);
   p.spectralShape = soemdsp::math::segment_contour_soft_cap(spectralShape);
-  p.darkness = clampf(darkness, 0.0, 1.0);
-  p.brightness = clampf(brightness, 0.0, 1.0);
+  p.endCutoffHz = clampf(endCutoffHz, 0.0, 0.45 * p.sampleRate);
+  p.startCutoffHz = clampf(startCutoffHz, 0.0, 0.45 * p.sampleRate);
   p.decorrelate = clampf(decorrelate, 0.0, 1.0);
   p.seed = seed;
   return p;
@@ -280,8 +280,8 @@ static bool params_equal(const CleanParams& a, const CleanParams& b) {
   return a.length == b.length
     && a.ampShape == b.ampShape
     && a.spectralShape == b.spectralShape
-    && a.darkness == b.darkness
-    && a.brightness == b.brightness
+    && a.endCutoffHz == b.endCutoffHz
+    && a.startCutoffHz == b.startCutoffHz
     && a.decorrelate == b.decorrelate
     && a.sampleRate == b.sampleRate
     && a.seed == b.seed;
@@ -376,12 +376,10 @@ static unsigned char* wire_block(State& s, unsigned char* raw, int maxLen) {
 }
 
 static double cutoff_hz(const CleanParams& p, double u) {
-  const double ny = 0.45 * p.sampleRate;
-  const double fBright = 5.0 * soemdsp::math::pow_pos(16000.0 / 5.0, p.brightness);
-  const double fStart = fBright > ny ? ny : fBright;
-  const double fMin = fStart < 120.0 ? fStart : 120.0;
-  const double fEnd = fStart * soemdsp::math::pow_pos(fMin / fStart, p.darkness);
+  const double fStart = p.startCutoffHz;
+  const double fEnd = p.endCutoffHz;
   const double w = soemdsp::math::segment_rational01(u, p.spectralShape);
+  if (fStart == 0.0 || fEnd == 0.0) return fStart + (fEnd - fStart) * w;
   return fStart * soemdsp::math::pow_pos(fEnd / fStart, w);
 }
 
@@ -425,7 +423,7 @@ static void build_samples(State& s, int count) {
     double a = soemdsp_maths::dsp_exp(-twoPi * fc / p.sampleRate);
     if (!(a == a) || a < 0.0) a = 0.0;
     const float af = (float)a;
-    const float g = 1.0f - af;
+    const float g = (float)(1.0 - a);
     const float xL = rng_gauss(s.rngL) * (float)env;
     const float xR = rng_gauss(s.rngR) * (float)env;
     s.lpL1 = flush_f(af * s.lpL1 + g * xL);
@@ -829,7 +827,7 @@ int soemdsp_noise_conv_reverb_create(double sampleRate) {
     s.active = true;
     wire_block(s, (unsigned char*)block, maxLen);
     clear_conv_state(s);
-    const CleanParams p = sanitize(1.5, 0.0, 0.0, 0.25, 0.7, 1.0, sampleRate, 1u);
+    const CleanParams p = sanitize(1.5, 0.0, 0.0, 120.0, 1500.0, 1.0, sampleRate, 1u);
     build_all(s, p, 0);
     return i + 1;
   }
@@ -868,13 +866,13 @@ double soemdsp_noise_conv_reverb_sample(
   int handle,
   double inL, double inR,
   double length, double ampShape, double spectralShape,
-  double darkness, double brightness, double decorrelate,
+  double endCutoffHz, double startCutoffHz, double decorrelate,
   double mix, double sampleRate
 ) {
   if (handle <= 0 || handle > kMaxInstances) return 0.0;
   State& s = gPool[handle - 1];
   if (!s.active) return 0.0;
-  const CleanParams p = sanitize(length, ampShape, spectralShape, darkness, brightness, decorrelate, sampleRate, s.seed);
+  const CleanParams p = sanitize(length, ampShape, spectralShape, endCutoffHz, startCutoffHz, decorrelate, sampleRate, s.seed);
   double oL = 0.0, oR = 0.0;
   process_run(s, &inL, &inR, nullptr, &oL, &oR, 1, p, true, mix);
   gOutR[0] = oR;
@@ -888,7 +886,7 @@ void soemdsp_noise_conv_reverb_process_block(
   int frames,
   const double* mix,
   double length, double ampShape, double spectralShape,
-  double darkness, double brightness, double decorrelate,
+  double endCutoffHz, double startCutoffHz, double decorrelate,
   double sampleRate
 ) {
   if (handle <= 0 || handle > kMaxInstances || !inL || !inR || !outL || !outR || frames <= 0) return;
@@ -897,7 +895,7 @@ void soemdsp_noise_conv_reverb_process_block(
     for (int i = 0; i < frames; ++i) { outL[i] = inL[i]; outR[i] = inR[i]; }
     return;
   }
-  const CleanParams p = sanitize(length, ampShape, spectralShape, darkness, brightness, decorrelate, sampleRate, s.seed);
+  const CleanParams p = sanitize(length, ampShape, spectralShape, endCutoffHz, startCutoffHz, decorrelate, sampleRate, s.seed);
   process_run(s, inL, inR, mix, outL, outR, frames, p, false, 0.0);
 }
 
@@ -906,7 +904,7 @@ double soemdsp_noise_conv_reverb_right(int handle) {
   return gOutR[0];
 }
 
-int soemdsp_noise_conv_reverb_version() { return 3; }
+int soemdsp_noise_conv_reverb_version() { return 5; }
 
 double soemdsp_noise_conv_reverb_max_length() { return kMaxLengthSeconds; }
 

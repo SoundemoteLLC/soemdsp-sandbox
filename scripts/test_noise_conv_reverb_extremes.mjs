@@ -4,7 +4,7 @@ import fs from 'node:fs';
 const compiled = await WebAssembly.compile(fs.readFileSync(
   new URL('../native_modules/noise_conv_reverb/noise_conv_reverb.wasm', import.meta.url)));
 let x, block, pointers;
-const defaults = { amp: 0, spectral: 0, dark: 0.25, bright: 0.7, decor: 1 };
+const defaults = { amp: 0, spectral: 0, endCutoffHz: 120, startCutoffHz: 1500, decor: 1 };
 
 function process(h, sr, length, p, inputL, inputR = inputL) {
   const out = [new Float64Array(inputL.length), new Float64Array(inputL.length)];
@@ -17,7 +17,7 @@ function process(h, sr, length, p, inputL, inputR = inputL) {
       memory[pointers[4] + i] = 1;
     }
     x.soemdsp_noise_conv_reverb_process_block(h, ...pointers.slice(0, 4).map(v => v * 8),
-      n, pointers[4] * 8, length, p.amp, p.spectral, p.dark, p.bright, p.decor, sr);
+      n, pointers[4] * 8, length, p.amp, p.spectral, p.endCutoffHz, p.startCutoffHz, p.decor, sr);
     memory = new Float64Array(x.memory.buffer);
     for (let ch = 0; ch < 2; ++ch) for (let i = 0; i < n; ++i) {
       const value = memory[pointers[ch + 2] + i];
@@ -54,7 +54,7 @@ for (const sr of [44100, 48000, 96000]) {
   assert.ok(h > 0);
   try {
     for (const length of [1 / sr, 0.001, 0.002, 0.005, 0.01, 0.025, 0.05]) {
-      const p = { ...defaults, bright: 0, amp: 0.9, spectral: 0.9 };
+      const p = { ...defaults, startCutoffHz: 5, endCutoffHz: 5, amp: 0.9, spectral: 0.9 };
       const ir = kernel(h, sr, length, p);
       let energy = 0;
       for (const channel of ir) for (const value of channel) energy += value * value;
@@ -74,19 +74,21 @@ for (const sr of [44100, 48000, 96000]) {
       }
       assert.ok(maxError < 2e-6, `direct convolution ${sr}/${length}: ${maxError}`);
     }
-    const dark = kernel(h, sr, 0.05, { ...defaults, bright: 0, dark: 0 });
-    const darker = kernel(h, sr, 0.05, { ...defaults, bright: 0, dark: 1 });
-    assert.deepEqual(dark, darker, 'Darkness must not brighten an already sub-120 Hz cutoff');
-    const bright = kernel(h, sr, 0.05, { ...defaults, bright: 1, dark: 0 });
+    const dark = kernel(h, sr, 0.05, { ...defaults, startCutoffHz: 5, endCutoffHz: 5 });
+    const darker = kernel(h, sr, 0.05, { ...defaults, startCutoffHz: 5, endCutoffHz: 120 });
+    assert.notDeepEqual(dark, darker, 'independent end cutoff can brighten the tail');
+    const bright = kernel(h, sr, 0.05, { ...defaults, startCutoffHz: 16000, endCutoffHz: 16000 });
     assert.ok(roughness(dark[0]) < roughness(bright[0]) * 0.05, 'extended dark range is spectrally darker');
-    const fifty = kernel(h, sr, 0.05, { ...defaults, bright: Math.log(50 / 5) / Math.log(16000 / 5), dark: 0 });
+    const fifty = kernel(h, sr, 0.05, { ...defaults, startCutoffHz: 50, endCutoffHz: 50 });
     let cutoffDifference = 0;
     for (let i = 0; i < dark[0].length; ++i) cutoffDifference += (dark[0][i] - fifty[0][i]) ** 2;
     assert.ok(cutoffDifference > 1e-4, '5 Hz is not flattened into the old 50 Hz response');
     const mono = kernel(h, sr, 0.025, { ...defaults, decor: 0 });
     assert.deepEqual(mono[0], mono[1], 'zero decorrelation gives identical kernels');
     for (let i = 0; i < 12; ++i) process(h, sr, i % 2 ? 0.001 : 0.05,
-      { ...defaults, bright: (i % 3) / 2 }, new Float64Array(256).fill(0.1));
+      { ...defaults, startCutoffHz: [5, 1500, 16000][i % 3] }, new Float64Array(256).fill(0.1));
+    const zero = kernel(h, sr, 0.025, { ...defaults, startCutoffHz: 0, endCutoffHz: 0 });
+    for (const channel of zero) assert.ok(channel.every(value => value === 0), '0 Hz means zero cutoff, not a normalized minimum');
     console.log(`${sr} Hz: 1-sample/1..50 ms energy, endpoints, direct convolution, dark range, stereo and rapid edits pass.`);
   } finally { x.soemdsp_noise_conv_reverb_destroy(h); }
 }

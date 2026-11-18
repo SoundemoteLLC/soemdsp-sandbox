@@ -862,7 +862,7 @@ extern "C" void soemdsp_noise_conv_reverb_process_block(
   int frames,
   const double* mix,
   double length, double ampShape, double spectralShape,
-  double darkness, double brightness, double decorrelate,
+  double endCutoffHz, double startCutoffHz, double decorrelate,
   double sampleRate
 );
 extern "C" int soemdsp_noise_conv_reverb_version();
@@ -4268,7 +4268,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeModeResonator) ? 0.5 : // exciter Soft (Mode Ping)
     (typeId == kTypePurr) ? 0.35 : // Body (Purr)
     (typeId == kTypeVelvetReverb) ? 1.0 : // Tail Random (1 = previous per-tap width randomness)
-    (typeId == kTypeNoiseConvReverb) ? 0.7 : // Brightness
+    (typeId == kTypeNoiseConvReverb) ? 1500.0 : // Start Cutoff Hz
     (typeId == kTypePulseTrain) ? 0.0 : // Spacing Expo
     (typeId == kTypePumpCurve) ? 12.0 : // Depth dB
     (typeId == kTypeDsfMorphingOsc) ? 0.0 : // Slice (DSF Morphing Osc)
@@ -4399,7 +4399,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeExponentialMix) ? 15.0 // Fast Rate
       : (typeId == kTypeVelvetNoise) ? 2000.0 // Sinc Cutoff Hz
       : (typeId == kTypeVelvetReverb) ? 1.0 // Darkness / pulse width
-      : (typeId == kTypeNoiseConvReverb) ? 0.25 // Darkness
+      : (typeId == kTypeNoiseConvReverb) ? 120.0 // End Cutoff Hz
       : 2.0,
     false
   );
@@ -16025,8 +16025,8 @@ static void process_noise_conv_reverb(Circuit& g, Node& node, int frames) {
   const double length = control_audio(g, node.timeNumerator, 0);
   const double ampShape = control_audio(g, node.shape, 0);
   const double spectralShape = control_audio(g, node.saturate, 0);
-  const double darkness = control_audio(g, node.width, 0);
-  const double brightness = control_audio(g, node.center, 0);
+  const double endCutoffHz = control_audio(g, node.width, 0);
+  const double startCutoffHz = control_audio(g, node.center, 0);
   const double decorrelate = control_audio(g, node.diffusionAmount, 0);
   soemdsp_noise_conv_reverb_process_block(
     node.nativeHandle,
@@ -16034,7 +16034,7 @@ static void process_noise_conv_reverb(Circuit& g, Node& node, int frames) {
     node.buf[kPortLeft], node.buf[kPortRight],
     n, mixA,
     length, ampShape, spectralShape,
-    darkness, brightness, decorrelate, sr
+    endCutoffHz, startCutoffHz, decorrelate, sr
   );
   for (int f = 0; f < n; f++) {
     node.buf[kPortMono][f] = 0.5 * (node.buf[kPortLeft][f] + node.buf[kPortRight][f]);

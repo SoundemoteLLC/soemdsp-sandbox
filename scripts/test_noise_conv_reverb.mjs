@@ -29,7 +29,7 @@ const defMax = (() => {
   }
 })();
 
-ok("version 3", x.soemdsp_noise_conv_reverb_version() === 3, String(x.soemdsp_noise_conv_reverb_version()));
+ok("version 5", x.soemdsp_noise_conv_reverb_version() === 5, String(x.soemdsp_noise_conv_reverb_version()));
 ok("max length 6 s", Math.abs(x.soemdsp_noise_conv_reverb_max_length() - 6) < 1e-12, String(x.soemdsp_noise_conv_reverb_max_length()));
 if (defMax != null) {
   ok("definition Length max matches native max", defMax === x.soemdsp_noise_conv_reverb_max_length(), `def ${defMax}`);
@@ -57,7 +57,7 @@ function run(h, n, params, input) {
     x.soemdsp_noise_conv_reverb_process_block(
       h, inL, inR, outL, outR, m, mixP,
       params.length, params.ampShape, params.spectralShape,
-      params.darkness, params.brightness, params.decorrelate, FS
+      params.endCutoffHz, params.startCutoffHz, params.decorrelate, FS
     );
     const H2 = new Float64Array(x.memory.buffer);
     for (let k = 0; k < m; k += 1) {
@@ -77,7 +77,7 @@ function run(h, n, params, input) {
 
 const defaults = {
   length: 1.5, ampShape: 0, spectralShape: 0,
-  darkness: 0.25, brightness: 0.7, decorrelate: 1, mix: 1,
+  endCutoffHz: 120, startCutoffHz: 1500, decorrelate: 1, mix: 1,
 };
 
 function settle(h, params, extra = 0) {

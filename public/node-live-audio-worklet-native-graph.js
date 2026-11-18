@@ -648,8 +648,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "decay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
     if (k === "ampShape") return P.NATIVE_GRAPH_PARAM_SHAPE;
     if (k === "spectralShape") return P.NATIVE_GRAPH_PARAM_SATURATE;
-    if (k === "darkness") return P.NATIVE_GRAPH_PARAM_WIDTH;
-    if (k === "brightness") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "endCutoffHz") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "startCutoffHz") return P.NATIVE_GRAPH_PARAM_CENTER;
     if (k === "decorrelate") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
@@ -6191,8 +6191,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1.5));
       push("ampShape", P.NATIVE_GRAPH_PARAM_SHAPE, cont("ampShape", 0));
       push("spectralShape", P.NATIVE_GRAPH_PARAM_SATURATE, cont("spectralShape", 0));
-      push("darkness", P.NATIVE_GRAPH_PARAM_WIDTH, cont("darkness", 0.25));
-      push("brightness", P.NATIVE_GRAPH_PARAM_CENTER, cont("brightness", 0.7));
+      push("endCutoffHz", P.NATIVE_GRAPH_PARAM_WIDTH, cont("endCutoffHz", 120));
+      push("startCutoffHz", P.NATIVE_GRAPH_PARAM_CENTER, cont("startCutoffHz", 1500));
       push("decorrelate", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("decorrelate", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 0.5));

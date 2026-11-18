@@ -22,11 +22,14 @@ try {
     const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
     const node = patch.nodes.find(n => n.id === id);
     node.params.decay = 0.001;
-    node.params.brightness = 0;
+    node.params.startCutoffHz = 5;
+    node.params.endCutoffHz = 50;
     commitNodeGraphPatch(patch, { record: false, autosaveWorkingPatch: false, skipLivePlan: true });
     const controls = { min: Number(slider.min), mid: Number(node.paramMeta.decay.mid),
       value: Number(nodeGraphPatchNode(id).params.decay),
-      brightness: Number(nodeGraphPatchNode(id).params.brightness) };
+      startCutoffHz: Number(nodeGraphPatchNode(id).params.startCutoffHz),
+      endCutoffHz: Number(nodeGraphPatchNode(id).params.endCutoffHz),
+      startUnit: node.paramMeta.startCutoffHz.unit, endUnit: node.paramMeta.endCutoffHz.unit };
     const response = await fetch(nodeGraphLiveCombinedNativeModuleUrl);
     const { instance } = await WebAssembly.instantiate(await response.arrayBuffer(),
       { env: { emo_process_block() {} } });
@@ -36,8 +39,11 @@ try {
   assert.equal(report.min, 0.001);
   assert.equal(report.mid, 0.1);
   assert.equal(report.value, 0.001);
-  assert.equal(report.brightness, 0);
-  assert.equal(report.nativeVersion, 3);
+  assert.equal(report.startCutoffHz, 5);
+  assert.equal(report.endCutoffHz, 50);
+  assert.equal(report.startUnit, 'Hz');
+  assert.equal(report.endUnit, 'Hz');
+  assert.equal(report.nativeVersion, 5);
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ...report, errors }));
 } finally { await browser.close(); }
