@@ -1100,36 +1100,43 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
   earlyReflectionConvolution: {
+    browserEmoji: "🌊",
     category: "space", label: "Early Reflection Convolution",
     description: "Design a rectangular room impulse response from image-source reflections. Native FFT convolution, stereo receivers, wall absorption and damping, with crossfaded room edits.",
     notes: ["room", "early reflections", "convolution", "FFT", "image source", "tiny room", "native"],
   },
   spectralFreeze: {
+    browserEmoji: "🌊",
     category: "space", label: "Spectral Freeze",
     description: "Capture and sustain a stereo spectrum with evolving phase. Freeze gate, Recapture trigger, infinite or decaying hold and optional stereo diffusion.",
     notes: ["spectral", "STFT", "freeze", "capture", "ambient", "native"],
   },
   spectralSmear: {
+    browserEmoji: "🌊",
     category: "space", label: "Spectral Smear",
     description: "Under construction: pre and post ringing smear.",
     notes: ["under construction", "spectral", "smear", "pre and post ringing smear", "pre-ringing", "post-ringing"],
   },
   spectralDelay: {
+    browserEmoji: "🌊",
     category: "space", label: "Spectral Delay",
     description: "Native stereo STFT delay with frequency-dependent timing, signed spread, pivot, curve and feedback. FFT Size sets the time/frequency resolution and processing latency.",
     notes: ["spectral", "STFT", "delay", "echo", "feedback", "dispersion", "native"],
   },
   spectralBlur: {
+    browserEmoji: "🌊",
     category: "space", label: "Spectral Blur",
     description: "Native STFT ambient wash with 512-16384 sample windows, time/frequency blur and stereo phase diffusion. Processing delay follows FFT Size; larger settings cost more peak CPU and memory.",
     notes: ["spectral", "STFT", "blur", "ambient", "smear", "native"],
   },
   stftContrast: {
+    browserEmoji: "🌊",
     category: "dynamics", label: "STFT Contrast",
     description: "Stereo-linked spectral contrast and compression across overlapping logarithmic regions. Reveal quiet detail or emphasize spectral peaks, with explicit boost limits and no hidden limiter.",
     notes: ["STFT", "spectral", "contrast", "compressor", "native"],
   },
   stftGate: {
+    browserEmoji: "🌊",
     category: "dynamics", label: "STFT Gate",
     description: "Stereo-linked spectral gate with manual thresholds or an engine-session learned noise profile. Learn a noise-only passage, then Use Profile; Ready reports profile availability.",
     notes: ["STFT", "spectral", "gate", "denoise", "native"],
@@ -1141,12 +1148,14 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     notes: ["vocoder", "filter bank", "voice", "carrier", "ringing", "native"],
   },
   convolutionResonator: {
+    browserEmoji: "🌊",
     category: "space",
     description: "Buzz/String/Tube resonator with a body-colored BLIT carrier and 2x-oversampled Crunch STFT vocoder. Filter-bank vocoding lives in the separate Vocoder module.",
     label: "Convolution Resonator",
     notes: ["vocoder", "convolution", "robot", "crunch", "resonator", "voice", "native"],
   },
   noiseConvReverb: {
+    browserEmoji: "🌊",
     category: "space",
     description: "Reverb from a generated, shaped noise impulse response and zero-latency partitioned convolution. Length and Amp Shape set the decay, Spectral Shape / Darkness / Brightness colour the tail, and Decorrelate spreads L/R.",
     label: "Noise Convolution Reverb",
@@ -1551,6 +1560,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     notes: ["wavetable", "oscillator", "rectified sine", "warp", "phase"],
   },
   fftReconstruction: {
+    browserEmoji: "🌊",
     category: "sample",
     label: "FFT Reconstruction",
     description: "Under construction: general buffered-audio FFT resynthesis, with live/sample sources and independent source-time playback. Time stretching is the first planned use case.",
@@ -2159,6 +2169,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     notes: ["bode", "frequency shifter", "SSB", "Hilbert", "space"],
   },
   stftBlur: {
+    browserEmoji: "🌊",
     category: "space",
     description: "Spectral blur wash—clouds and smears in time/frequency.",
     label: "STFT Blur",
@@ -2854,18 +2865,21 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     notes: ["under construction", "xy", "glyph ramp", "phosphor decay", "character trail", "oscilloscope"],
   },
   spectrogram: {
+    browserEmoji: "🌊",
     category: "multimeter",
     description: "See frequency content over time (STFT) while passing audio through.",
     label: "Spectrogram",
     notes: ["fft", "spectrum", "frequency waterfall", "spectral display", "thru"],
   },
   circularSpectrogram: {
+    browserEmoji: "🌊",
     category: "multimeter",
     description: "See frequency content over time as a mirrored circle while passing audio through. Kicks throw arms that travel round the ring.",
     label: "Circular Spectrogram",
     notes: ["fft", "spectrum", "circular spectrogram", "polar", "radial", "mirrored", "spectral display", "thru"],
   },
   spectrum1d: {
+    browserEmoji: "🌊",
     category: "multimeter",
     description: "See the frequency spectrum right now (magnitude vs frequency) while passing audio through.",
     label: "1D Spectrum",
@@ -5152,7 +5166,7 @@ function createNodeGraphModuleStoreButton(entry) {
   const categoryId = typeof normalizeNodeGraphModuleStoreDepartment === "function"
     ? normalizeNodeGraphModuleStoreDepartment(entry.category || "")
     : String(entry.category || "");
-  const emoji = nodeGraphModuleStoreDepartmentById[categoryId]?.emoji || "";
+  const emoji = entry.browserEmoji || nodeGraphModuleStoreDepartmentById[categoryId]?.emoji || "";
   const main = document.createElement("span");
   main.className = "scene-context-store-card-main";
   const mark = document.createElement("span");
