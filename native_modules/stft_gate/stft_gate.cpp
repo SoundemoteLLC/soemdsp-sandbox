@@ -109,6 +109,18 @@ const char metadata[] = R"json({
       "nonlinearSlider": true
     },
     {
+      "key": "holdMs",
+      "label": "Hold",
+      "defaultValue": "0",
+      "min": "0",
+      "mid": "100",
+      "max": "1000",
+      "step": "any",
+      "unit": "ms",
+      "tooltip": "Retriggerable peak-hold duration after a bin falls below threshold, before Release closes it. Zero preserves the original behavior. Timed in milliseconds at the STFT hop rate; no DSP maximum. This holds the gain open, not the audio itself.",
+      "nonlinearSlider": true
+    },
+    {
       "key": "releaseMs",
       "label": "Release",
       "defaultValue": "100",
@@ -147,6 +159,7 @@ extern "C" int soemdsp_stft_gate_create() { return Pool::create(); }
 extern "C" void soemdsp_stft_gate_destroy(int h) { Pool::destroy(h); }
 extern "C" void soemdsp_stft_gate_reset(int h) { if (auto* s = Pool::get(h)) s->reset(false); }
 extern "C" void soemdsp_stft_gate_set_knee(int h, double knee) { if (auto* s = Pool::get(h)) s->gateKnee = knee; }
+extern "C" void soemdsp_stft_gate_set_hold(int h, double milliseconds) { if (auto* s = Pool::get(h)) s->gateHold = milliseconds; }
 extern "C" double soemdsp_stft_gate_sample(int h, double left, double right,
 int profileMode, double threshold, double margin, double depth, double attack,
   double release, double smooth, double mix, double rate) {
@@ -155,11 +168,12 @@ int profileMode, double threshold, double margin, double depth, double attack,
   p.profile = profileMode; p.threshold = threshold; p.margin = margin; p.depth = depth;
   p.attack = attack; p.release = release; p.smooth = smooth; p.mix = mix;
   p.knee = s->gateKnee;
+  p.hold = s->gateHold;
   return s->tick(left, right, p, rate);
 }
 extern "C" double soemdsp_stft_gate_right(int h) { auto* s = Pool::get(h); return s ? s->right : 0; }
 extern "C" int soemdsp_stft_gate_latency() { return soemdsp_spectral::size; }
-extern "C" int soemdsp_stft_gate_version() { return 2; }
+extern "C" int soemdsp_stft_gate_version() { return 3; }
 extern "C" const char* soemdsp_stft_gate_metadata_json() { return metadata; }
 extern "C" int soemdsp_stft_gate_metadata_json_size() { return sizeof(metadata) - 1; }
 extern "C" double soemdsp_stft_gate_ready(int h) { auto* s = Pool::get(h); return s && s->learnedFrames ? 1 : 0; }

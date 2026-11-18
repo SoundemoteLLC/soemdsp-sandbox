@@ -23,7 +23,10 @@ for (const [snake, type, next, order] of cases) {
     create: x[prefix + "create"], destroy: x[prefix + "destroy"], reset: x[prefix + "reset"],
     tick(h, l, r, p = {}, rate = sr) {
       const params = { ...defaults, ...p };
-      if (type === "stftGate") x[prefix + "set_knee"](h, params.kneeDb);
+      if (type === "stftGate") {
+        x[prefix + "set_knee"](h, params.kneeDb);
+        x[prefix + "set_hold"](h, params.holdMs);
+      }
       return x[prefix + "sample"](h, l, r, ...order.map(k => params[k]), rate);
     }, right: x[prefix + "right"] };
   assert.equal(x[prefix + "latency"](), 1024);
@@ -101,6 +104,38 @@ for (const kneeDb of [0, 6, 24]) {
 assert.ok(kneeRatios[0] > 500, `zero-knee harmonic pop-in must be abrupt: ${kneeRatios}`);
 assert.ok(kneeRatios[1] < 2 && kneeRatios[2] < kneeRatios[1], "wide knees retain progressive opening");
 console.log(`Gate Knee: 0/6/24 dB near-threshold amplitude ratios ${kneeRatios.map(v => v.toFixed(2))} pass.`);
+function heldTone(holdMs, rate = sr, retrigger = false) {
+  const id = g.create(), n = holdMs > 1000 ? rate * 6 : Math.ceil(8192 + rate * 0.45 + 4096);
+  const out = new Float64Array(n);
+  const memory = g.x.memory.buffer.byteLength;
+  for (let i = 0; i < n; ++i) {
+    const loud = i < 8192 || (retrigger && i >= 16384 && i < 17408);
+    const v = (loud ? 1 : 0.01) * Math.sin(2 * Math.PI * 750 * i / rate);
+    out[i] = g.tick(id, v, v, { holdMs, kneeDb: 0, thresholdDb: -20, attackMs: 0, releaseMs: 0, smooth: 0 }, rate);
+  }
+  assert.equal(g.x.memory.buffer.byteLength, memory, "Hold does not allocate audio history");
+  g.destroy(id); return out;
+}
+for (const rate of [44100, 48000, 96000]) {
+  const none = heldTone(0, rate), held = heldTone(200, rate);
+  const early = Math.ceil(8192 + rate * 0.08 + 2048), late = Math.ceil(8192 + rate * 0.35 + 2048);
+  assert.ok(rms(held.slice(early, early + 1024)) > 0.006, "hold keeps the quieter, below-threshold harmonic audible");
+  assert.ok(rms(none.slice(early, early + 1024)) < 0.00002, "zero hold retains immediate closing");
+  assert.ok(rms(held.slice(late, late + 1024)) < 0.00002, "hold expires in physical time at every sample rate");
+}
+const retriggered = heldTone(200, sr, true), single = heldTone(200);
+assert.ok(rms(retriggered.slice(24000, 25024)) > 0.006 && rms(single.slice(24000, 25024)) < 0.00002, "new openings retrigger Hold");
+const longHold = heldTone(5000);
+assert.ok(rms(longHold.slice(96000, 97024)) > 0.006, "5000 ms exceeds the spawn range without a DSP cap");
+assert.ok(rms(longHold.slice(273600, 274624)) < 0.00002, "long hold still expires");
+const silenceId = g.create();
+for (let i = 0; i < 12288; ++i) {
+  const v = i < 8192 ? tone(750, i) : 0;
+  const y = g.tick(silenceId, v, v, { holdMs: 5000, kneeDb: 0, thresholdDb: -20, attackMs: 0, releaseMs: 0, smooth: 0 });
+  if (i >= 11264) assert.equal(y, 0, "Hold does not invent or freeze missing audio");
+}
+g.destroy(silenceId);
+console.log("Gate Hold: zero default, timed opening/expiry at 44.1/48/96 kHz, retrigger, 5000 ms and allocation-free operation pass.");
 let seed = 1;
 function noise() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed / 0x100000000 - 0.5) * 0.01; }
 const gh = g.create();

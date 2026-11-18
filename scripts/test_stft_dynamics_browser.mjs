@@ -35,6 +35,8 @@ try {
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(true));
   await page.waitForFunction(() => nodeGraphMvp.live.node && nodeGraphMvp.live.outputLevelSmooth > 0.00001, null, { timeout: 60000 });
   assert.equal(await page.evaluate(id => Number(nodeGraphSliderForParameter(id, "kneeDb").value), ids.gate), 6);
+  assert.equal(await page.evaluate(id => Number(nodeGraphSliderForParameter(id, "holdMs").value), ids.gate), 0);
+  await page.evaluate(id => updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, "holdMs"), "5000"), ids.gate);
   await page.evaluate(id => {
     const slider = nodeGraphSliderForParameter(id, "kneeDb");
     slider.value = "0"; slider.dispatchEvent(new Event("input", { bubbles: true })); slider.dispatchEvent(new Event("change", { bubbles: true }));
@@ -62,13 +64,15 @@ try {
         const node = nodeGraphPatchNode(id), slider = nodeGraphSliderForParameter(id, "mix");
         const box = slider.closest("article").getBoundingClientRect();
         return { type: node.type, width: box.width, height: box.height, renderer: nodeGraphModuleDisplayRendererForNode(node),
-          profile: node.params.profileMode, knee: node.params.kneeDb, peak: nodeGraphMvp.live.outputLevelSmooth };
+          profile: node.params.profileMode, knee: node.params.kneeDb, hold: node.params.holdMs,
+          holdMax: node.paramMeta?.holdMs?.max, peak: nodeGraphMvp.live.outputLevelSmooth };
       }, id));
       await page.screenshot({ path: path.join(os.tmpdir(), "stft-" + key + "-" + viewport.width + ".png"), timeout: 15000 });
     }
   }
   assert.ok(reports.every(r => r.width > 0 && r.height > 0 && r.renderer === "scope1dTrace"));
   assert.ok(reports.filter(r => r.type === "stftGate").every(r => Number(r.knee) === 0), "hard knee persists through the normal control path");
+  assert.ok(reports.filter(r => r.type === "stftGate").every(r => Number(r.hold) === 5000 && Number(r.holdMax) === 5000), "Hold accepts 5000 ms and expands its UI range");
   assert.deepEqual(errors, []); console.log(JSON.stringify({ reports, errors }));
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(false));
 } finally { await browser.close(); }

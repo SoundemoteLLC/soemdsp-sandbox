@@ -53,8 +53,21 @@ use a smooth transition across the specified dB width. Depth sets the closed
 attenuation. Smooth blends gain decisions with a five-bin triangular average
 in linear gain; Attack opens and Release closes the stereo-linked gains.
 
+Hold is a retriggerable per-bin peak hold, default 0 ms (original behavior).
+While the bin is above threshold its most-open gain is retained and the timer
+restarts. Once below threshold, that gain is held until Hold expires; then
+Release closes it. Hold duration is measured in physical milliseconds with
+one-hop timing resolution. Shortening Hold takes effect on the next hop;
+raising it does not resurrect an expired opening. Profile mode changes and
+signal resets clear held gains. Learn/bypass does not prime the hold state.
+
+The spawn range ends at 1000 ms, but there is no DSP maximum or time-sized
+buffer. Typing 5000 extends the parameter maximum and holds for five seconds.
+This holds gain, not spectral samples: a vanished harmonic is not synthesized.
+
 For extreme harmonic pop-in, use Manual, Knee 0, Attack 0, Release 0, Smooth 0,
-Depth 100..120 dB and Mix 1; sweep Threshold through the harmonics. Learn and
+Depth 100..120 dB and Mix 1; sweep Threshold through the harmonics. Add Hold
+to make openings linger before Release begins. Learn and
 Use Profile also honor Knee. STFT overlap still blends frame transitions;
 hard bin decisions are intentionally not a promise of sample-domain clicks.
 
@@ -86,6 +99,9 @@ musical-noise artifacts and removal of wanted low-level content remain possible.
   contrast polarity, 4:1 compression slope, level independence, manual gating,
   Learn/Use/fresh-window/profile invalidation, retained wanted tone, non-finite
   recovery, pool capacity and released storage.
+- Hold tests check zero-default compatibility, below-threshold audibility,
+  expiry at 44.1/48/96 kHz, retriggers, 5000 ms without a time cap, no audio-loop
+  allocation, and silence after the source disappears.
 - Synthetic learned-noise test measured roughly 50 dB attenuation at Margin
   9 dB; that is a test signal result, not a general denoising promise.
 - `node scripts/test_stft_dynamics_graph.mjs`: default/custom controls,

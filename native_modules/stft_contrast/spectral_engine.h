@@ -14,7 +14,7 @@ inline double unit(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 struct Params {
   double contrast = 0, scale = 1, threshold = -24, ratio = 1;
   double attack = 10, release = 100, boost = 18, gain = 0, mix = 1;
-  double margin = 3, depth = 60, smooth = 0.5, knee = 6;
+  double margin = 3, depth = 60, smooth = 0.5, knee = 6, hold = 0;
   int profile = 0;
 };
 
@@ -23,10 +23,11 @@ struct Params {
 template<bool Gate> struct Engine {
   float input[2][size], ola[2][size], re[2][size], im[2][size], window[size];
   double power[bins], noise[Gate ? bins : 1], binGain[bins], target[Gate ? bins : 1];
+  double heldGain[Gate ? bins : 1], holdAge[Gate ? bins : 1];
   double bandPower[Gate ? 1 : regions], bandGain[Gate ? 1 : regions];
   double weights[Gate ? 1 : regions][Gate ? 1 : regions];
   int bandIndex[Gate ? 1 : bins];
-  double bandFraction[Gate ? 1 : bins], lastRate, lastScale, lastGain, outputGain, right, profileRate, gateKnee;
+  double bandFraction[Gate ? 1 : bins], lastRate, lastScale, lastGain, outputGain, right, profileRate, gateKnee, gateHold;
   unsigned long long learnedFrames, samples, learnStart;
   int position, hop, previousProfile;
 
@@ -37,6 +38,8 @@ template<bool Gate> struct Engine {
       for (int c = 0; c < 2; ++c) input[c][i] = ola[c][i] = 0;
     }
     for (auto& g : binGain) g = 0;
+    for (auto& g : heldGain) g = 0;
+    for (auto& age : holdAge) age = 0;
     for (auto& g : bandGain) g = 0;
     if (forgetProfile) { for (auto& p : noise) p = 0; learnedFrames = 0; profileRate = 0; }
     position = hop = samples = learnStart = 0; right = 0;
@@ -95,7 +98,21 @@ template<bool Gate> struct Engine {
         const double opening = p.knee > 0 ? unit((delta + 0.5 * p.knee) / p.knee)
           : (delta >= 0 ? 1 : 0);
         target[k] = amp(-p.depth * (1 - opening * opening * (3 - 2 * opening)));
-        if (p.profile == 1 || (p.profile == 2 && !learnedFrames)) target[k] = 1;
+        const bool bypass = p.profile == 1 || (p.profile == 2 && !learnedFrames);
+        if (bypass || p.hold <= 0) { heldGain[k] = 0; holdAge[k] = 0; }
+        else {
+          // Peak hold is retriggered while above threshold; Release starts only
+          // after the below-threshold age reaches the live Hold duration.
+          if (delta >= 0) {
+            if (target[k] > heldGain[k]) heldGain[k] = target[k];
+            holdAge[k] = 0;
+          } else {
+            holdAge[k] += hopSize / rate;
+            if (holdAge[k] >= p.hold * 0.001) heldGain[k] = 0;
+          }
+          if (heldGain[k] > target[k]) target[k] = heldGain[k];
+        }
+        if (bypass) target[k] = 1;
       }
       for (int k = 0; k < bins; ++k) {
         double sum = 0, norm = 0;
@@ -149,7 +166,7 @@ template<bool Gate> struct Engine {
   }
   double tick(double left, double r, const Params& p, double rate) {
     const double values[] = {left, r, p.contrast, p.scale, p.threshold, p.ratio,
-      p.attack, p.release, p.boost, p.gain, p.mix, p.margin, p.depth, p.smooth, p.knee, rate};
+      p.attack, p.release, p.boost, p.gain, p.mix, p.margin, p.depth, p.smooth, p.knee, p.hold, rate};
     for (double v : values) if (!__builtin_isfinite(v)) { reset(false); return 0; }
     if (!__builtin_isfinite((float)left) || !__builtin_isfinite((float)r)) { reset(false); return 0; }
     if (rate <= 100 || p.ratio <= 0) { reset(false); return 0; }
@@ -157,6 +174,10 @@ template<bool Gate> struct Engine {
     if constexpr (Gate) {
       lastRate = rate;
       if (learnedFrames && profileRate != rate) { for (auto& n : noise) n = 0; learnedFrames = 0; profileRate = 0; }
+      if (p.profile != previousProfile) {
+        for (auto& g : heldGain) g = 0;
+        for (auto& age : holdAge) age = 0;
+      }
       if (p.profile == 1 && previousProfile != 1) {
         for (auto& n : noise) n = 0;
         learnedFrames = 0; learnStart = samples;
@@ -184,7 +205,7 @@ template<bool Gate> struct Pool {
     for (int i = 0; i < capacity; ++i) if (!items[i]) {
       auto* s = static_cast<Engine<Gate>*>(soemdsp::memory_pool::alloc(sizeof(Engine<Gate>)));
       if (!s) return 0;
-      s->gateKnee = 6; s->reset(); items[i] = s; return i + 1;
+      s->gateKnee = 6; s->gateHold = 0; s->reset(); items[i] = s; return i + 1;
     }
     return 0;
   }

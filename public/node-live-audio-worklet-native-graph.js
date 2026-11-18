@@ -626,6 +626,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if (t === "stftGate") {
+    if (k === "holdMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
     if (k === "kneeDb") return P.NATIVE_GRAPH_PARAM_RESONANCE;
     if (k === "profileMode") return P.NATIVE_GRAPH_PARAM_MODE;
     if (k === "thresholdDb") return P.NATIVE_GRAPH_PARAM_CENTER;
@@ -6152,6 +6153,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "stftGate") {
+      push("holdMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("holdMs", 0));
       push("kneeDb", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("kneeDb", 6));
       push("profileMode", P.NATIVE_GRAPH_PARAM_MODE, disc("profileMode", 0));
       push("thresholdDb", P.NATIVE_GRAPH_PARAM_CENTER, cont("thresholdDb", -60));

@@ -847,6 +847,7 @@ extern "C" double soemdsp_stft_contrast_right(int handle);
 extern "C" int soemdsp_stft_gate_create();
 extern "C" void soemdsp_stft_gate_destroy(int handle);
 extern "C" void soemdsp_stft_gate_set_knee(int handle, double knee);
+extern "C" void soemdsp_stft_gate_set_hold(int handle, double milliseconds);
 extern "C" double soemdsp_stft_gate_sample(int h, double l, double r, int profile,
   double threshold, double margin, double depth, double attack, double release,
   double smooth, double mix, double rate);
@@ -5000,6 +5001,7 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.width, gate ? 3 : 1, false);
     init_control(n.center, gate ? -60 : -24, false);
     init_control(n.resonance, gate ? 6 : 2, false);
+    if (gate) init_control(n.diffusionSize, 0, false);
     init_control(n.offsetMs, gate ? 5 : 10, false);
     init_control(n.diffusionAmount, 100, false);
     init_control(n.feedback, gate ? 60 : 18, false);
@@ -15953,6 +15955,7 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
     double y, yr;
     if (gate) {
       soemdsp_stft_gate_set_knee(node.nativeHandle, control_audio(g, node.resonance, f));
+      soemdsp_stft_gate_set_hold(node.nativeHandle, control_audio(g, node.diffusionSize, f));
       y = soemdsp_stft_gate_sample(node.nativeHandle, left, right,
         (int)control_audio(g, node.mode, f), control_audio(g, node.center, f),
         control_audio(g, node.width, f), control_audio(g, node.feedback, f),

@@ -6,9 +6,9 @@ const x = (await WebAssembly.instantiate(fs.readFileSync(new URL("../native_modu
 const N = 128, rate = 48000;
 const specs = [
   [270, "stft_contrast", [[13, -0.35], [31, 1], [30, -24], [20, 2], [55, 10], [42, 100], [50, 18], [51, 0], [40, 1]]],
-  [271, "stft_gate", [[21, 0], [30, -60], [31, 3], [50, 60], [55, 5], [42, 100], [13, 0.5], [40, 1], [20, 6]]],
+  [271, "stft_gate", [[21, 0], [30, -60], [31, 3], [50, 60], [55, 5], [42, 100], [13, 0.5], [40, 1], [20, 6], [41, 0]]],
   [270, "stft_contrast", [[13, 0.6], [31, 0.2], [30, -40], [20, 4], [55, 0], [42, 0], [50, 24], [51, 3], [40, 0.75]], true],
-  [271, "stft_gate", [[21, 0], [30, -20], [31, 9], [50, 24], [55, 0], [42, 0], [13, 1], [40, 0.75], [20, 0]], true],
+  [271, "stft_gate", [[21, 0], [30, -45], [31, 9], [50, 24], [55, 0], [42, 0], [13, 1], [40, 0.75], [20, 0], [41, 200]], true],
 ];
 for (const [type, name, params, configure = false] of specs) {
   for (const sides of [[0], [1], [2], [1, 2], [0, 1, 2]]) {
@@ -27,7 +27,7 @@ for (const [type, name, params, configure = false] of specs) {
       const src = [];
       for (const p of [0, 1, 2]) {
         const a = buffer(1, p);
-        for (let i = 0; i < N; ++i) a[i] = 0.1 * Math.sin((b * N + i) * (0.07 + p * 0.03));
+        for (let i = 0; i < N; ++i) a[i] = (b < 60 ? 0.1 : 0.001) * Math.sin((b * N + i) * (0.07 + p * 0.03));
         src.push(a.slice());
       }
       x.soemdsp_graph_process_block(g, N);
@@ -36,8 +36,11 @@ for (const [type, name, params, configure = false] of specs) {
         const m = sides.includes(0) ? src[0][i] : 0, l = sides.includes(1) ? src[1][i] : 0, r = sides.includes(2) ? src[2][i] : 0;
         const stereo = sides.includes(1) && sides.includes(2);
         const a = stereo ? l + m : m + l + r, z = stereo ? r + m : a;
-        if (type === 271) x.soemdsp_stft_gate_set_knee(ref, params.find(([id]) => id === 20)[1]);
-        const args = params.filter(([id]) => type !== 271 || id !== 20).map(p => p[1]);
+        if (type === 271) {
+          x.soemdsp_stft_gate_set_knee(ref, params.find(([id]) => id === 20)[1]);
+          x.soemdsp_stft_gate_set_hold(ref, params.find(([id]) => id === 41)[1]);
+        }
+        const args = params.filter(([id]) => type !== 271 || (id !== 20 && id !== 41)).map(p => p[1]);
         const expected = x[prefix + "sample"](ref, a, z, ...args, rate);
         const expectedR = x[prefix + "right"](ref);
         assert.ok(Math.abs(out[1][i] - expected) < 1e-10 && Math.abs(out[2][i] - expectedR) < 1e-10, `${name} graph/native routing and params`);

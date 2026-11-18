@@ -7465,7 +7465,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["profileMode","Noise Profile","horizontal"]], h: 26 },
       { kind: "cells", params: [["thresholdDb","Threshold"],["marginDb","Margin"]], h: 40 },
       { kind: "cells", params: [["depthDb","Depth"],["kneeDb","Knee"]], h: 40 },
-      { kind: "cells", params: [["attackMs","Attack"],["releaseMs","Release"]], h: 40 },
+      { kind: "cells", params: [["attackMs","Attack"],["holdMs","Hold"],["releaseMs","Release"]], h: 40 },
       { kind: "cells", params: [["smooth","Smooth"],["mix","Mix"]], h: 40 },
     ],
     parameters: [
@@ -7552,6 +7552,18 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "ms",
         "tooltip": "Opening time constant when a bin exceeds its threshold. Decisions update every 256 samples.",
+        "nonlinearSlider": true
+      },
+      {
+        "key": "holdMs",
+        "label": "Hold",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "100",
+        "max": "1000",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Retriggerable peak-hold duration after a bin falls below threshold, before Release closes it. Zero preserves the original behavior. Timed in milliseconds at the STFT hop rate; no DSP maximum. This holds the gain open, not the audio itself.",
         "nonlinearSlider": true
       },
       {
