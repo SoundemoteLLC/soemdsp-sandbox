@@ -16,7 +16,8 @@ inharmonicity and virtual strike/pickup positions on live audio.
 
 Recursive modal synthesis is used rather than generating a long FIR: long tails
 do not require long convolution kernels, and retuning needs no kernel rebuild or
-FFT buffering. Consequently it is not marked with the FFT/STFT wave badge.
+FFT buffering. Its browser entry uses the wave badge as part of the material/
+spectral family; that badge does not imply an FFT implementation.
 General modal-bank background: [STK ModalBar reference](https://chuck.stanford.edu/doc/reference/ugens-stk.html).
 This implementation does not copy STK's code, preset tables or sampled exciter.
 

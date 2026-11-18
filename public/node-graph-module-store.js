@@ -1112,6 +1112,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     notes: ["spectral", "STFT", "freeze", "capture", "ambient", "native"],
   },
   materialResonator: {
+    browserEmoji: "🌊",
     category: "space", label: "Material Resonator",
     description: "Procedural Wood, Metal and Glass modal bodies excited by live audio. Zero buffering latency, no IR files; decay, damping, inharmonicity, strike position and stereo pickups.",
     notes: ["material", "modal", "resonator", "wood", "metal", "glass", "body", "native"],
