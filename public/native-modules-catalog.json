@@ -3116,6 +3116,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "spectral_freeze",
+      "label": "Spectral Freeze",
+      "targetType": "spectralFreeze",
+      "kind": "effect",
+      "source": "native_modules/spectral_freeze/spectral_freeze.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_freeze/spectral_freeze.cpp",
+      "localSourceUrl": "/native_modules/spectral_freeze/spectral_freeze.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/spectral_freeze/spectral_freeze.wasm",
+      "wasmUrl": "native_modules/spectral_freeze/spectral_freeze.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "step_graph",
       "label": "Step Graph",
       "targetType": "stepGraph",

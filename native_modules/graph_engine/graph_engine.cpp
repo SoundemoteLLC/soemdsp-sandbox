@@ -838,6 +838,12 @@ extern "C" double soemdsp_vocoder_sample(int handle, double modL, double modR,
   double carL, double carR, double width, double followerSeconds, double shift, double mix, double rate);
 extern "C" double soemdsp_vocoder_right(int handle);
 extern "C" int soemdsp_spectral_blur_create();
+extern "C" int soemdsp_spectral_freeze_create();
+extern "C" void soemdsp_spectral_freeze_destroy(int h);
+extern "C" double soemdsp_spectral_freeze_sample(int h, double l, double r, double gate, double recapture,
+  double decay, double diffusion, double spread, double mix, double rate);
+extern "C" double soemdsp_spectral_freeze_right(int h);
+extern "C" double soemdsp_spectral_freeze_held(int h);
 extern "C" void soemdsp_spectral_blur_destroy(int h);
 extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double seconds,
   double hz, double diffusion, double mix, double rate);
@@ -2613,6 +2619,7 @@ static const int kTypeNoiseConvReverb = 267; // Noise Convolution Reverb: shaped
 static const int kTypeConvolutionResonator = 268;
 static const int kTypeVocoder = 269;
 static const int kTypeSpectralBlur = 272;
+static const int kTypeSpectralFreeze = 273;
 static const int kTypeStftContrast = 270;
 static const int kTypeStftGate = 271;
 
@@ -3292,6 +3299,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_vocoder_destroy(handle);
   } else if (kind == kTypeSpectralBlur) {
     soemdsp_spectral_blur_destroy(handle);
+  } else if (kind == kTypeSpectralFreeze) {
+    soemdsp_spectral_freeze_destroy(handle);
   } else if (kind == kTypeStftContrast) {
     soemdsp_stft_contrast_destroy(handle);
   } else if (kind == kTypeStftGate) {
@@ -5014,6 +5023,11 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.offsetMs, 10, false);
     init_control(n.diffusionSize, 0, false);
   }
+  if (typeId == kTypeSpectralFreeze) {
+    init_control(n.mode, 0, true); init_control(n.timeNumerator, 0, false);
+    init_control(n.diffusionAmount, 0, false); init_control(n.pan, 1, false);
+    init_control(n.mix, 1, false);
+  }
   if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
     const bool gate = typeId == kTypeStftGate;
     init_control(n.shape, gate ? 0.5 : -0.35, false);
@@ -5840,6 +5854,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeConvolutionResonator) return soemdsp_convolution_resonator_create();
   if (typeId == kTypeVocoder) return soemdsp_vocoder_create();
   if (typeId == kTypeSpectralBlur) return soemdsp_spectral_blur_create();
+  if (typeId == kTypeSpectralFreeze) return soemdsp_spectral_freeze_create();
   if (typeId == kTypeStftContrast) return soemdsp_stft_contrast_create();
   if (typeId == kTypeStftGate) return soemdsp_stft_gate_create();
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
@@ -15957,6 +15972,31 @@ static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
   }
 }
 
+static void process_spectral_freeze(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  using namespace soemdsp::routing;
+  const StereoRoute route = stereo_route(probe_stereo_route_wiring(g, node));
+  const bool liveGate = mix_live_port(g, node, kPortPhaseCv, frames, g.mixPhaseCv);
+  const bool liveCapture = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  mix_node_inputs(g, node, frames);
+  for (int f = 0; f < frames; ++f) {
+    control_frame(g, node, f);
+    const double m = g.mixMono[f], l = g.mixLeft[f], r = g.mixRight[f];
+    const double a = stereo_route_feed(route.runMono ? route.feedMono : route.feedL, m, l, r);
+    const double b = stereo_route_feed(route.feedR, m, l, r);
+    const double y = soemdsp_spectral_freeze_sample(node.nativeHandle, a, b,
+      liveGate ? g.mixPhaseCv[f] : control_audio(g, node.mode, f),
+      liveCapture ? g.mixReset[f] : 0, control_audio(g, node.timeNumerator, f),
+      control_audio(g, node.diffusionAmount, f), control_audio(g, node.pan, f),
+      control_audio(g, node.mix, f), g.sampleRate);
+    const double yr = soemdsp_spectral_freeze_right(node.nativeHandle);
+    node.buf[kPortMono][f] = stereo_route_out(route.outMono, y, y, yr);
+    node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, y, y, yr);
+    node.buf[kPortRight][f] = stereo_route_out(route.outRight, y, y, yr);
+    node.buf[kPortPhase01][f] = soemdsp_spectral_freeze_held(node.nativeHandle);
+  }
+}
+
 static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   using namespace soemdsp::routing;
@@ -17521,7 +17561,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeNoiseConvReverb
     || typeId == kTypeConvolutionResonator
     || typeId == kTypeVocoder
-    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur
+    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralFreeze
     || typeId == kTypeSampleHold
     || typeId == kTypeMinMax
     || typeId == kTypeClock
@@ -17686,7 +17726,7 @@ static bool type_needs_native(int typeId) {
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
   if (typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
-    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur) return true;
+    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralFreeze) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
     || typeId == kTypeSampleDelay || typeId == kTypeExponentialDelay || typeId == kTypeDelayEffect
@@ -19144,6 +19184,9 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     if (node.typeId == kTypeVocoder) {
       process_vocoder(g, node, frames);
       return;
+    }
+    if (node.typeId == kTypeSpectralFreeze) {
+      process_spectral_freeze(g, node, frames); return;
     }
     if (node.typeId == kTypeStftContrast || node.typeId == kTypeStftGate || node.typeId == kTypeSpectralBlur) {
       process_stft_dynamics(g, node, frames);

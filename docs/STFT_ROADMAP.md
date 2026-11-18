@@ -95,10 +95,11 @@ them simultaneously. Proposed order follows musical value and implementation ris
 
 ### 1. Spectral Freeze
 
-- [ ] Capture trigger and Freeze gate with explicit edge/held behavior.
-- [ ] Sustain a captured spectrum using evolving synthesis phase, not repeated
-  stale complex frames. Compare phase-coherent and intentionally diffuse sound.
-- [ ] Refresh/Blend, Decay (including explicit infinite hold), Mix.
+- [x] Native v1 Freeze switch/gate and Recapture trigger; capture at a complete
+  analysis frame. See [SPECTRAL_FREEZE.md](SPECTRAL_FREEZE.md).
+- [x] Sustain with captured phase advance, optional diffusion and stereo spread.
+- [x] Decay including explicit infinite hold, Mix and Held output.
+- [ ] Refresh/Blend and user listening acceptance.
 - [ ] Later: frequency diffusion, pitch/formant controls, stereo spread.
 - Proof: silence remains silent; a captured transient sustains without periodic
   frame buzz; capture/release is click-controlled; repeated triggers work.

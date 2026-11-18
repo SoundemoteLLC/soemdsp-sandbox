@@ -1095,9 +1095,14 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
+  spectralFreeze: {
+    category: "space", label: "Spectral Freeze",
+    description: "Capture and sustain a stereo spectrum with evolving phase. Freeze gate, Recapture trigger, infinite or decaying hold and optional stereo diffusion.",
+    notes: ["spectral", "STFT", "freeze", "capture", "ambient", "native"],
+  },
   spectralBlur: {
     category: "space", label: "Spectral Blur",
-    description: "Native STFT ambient wash: smear spectral power over time, spread harmonics across frequency and blend in phase diffusion. Fixed 4096-sample latency.",
+    description: "Native STFT ambient wash with 512-16384 sample windows, time/frequency blur and stereo phase diffusion. Processing delay follows FFT Size; larger settings cost more peak CPU and memory.",
     notes: ["spectral", "STFT", "blur", "ambient", "smear", "native"],
   },
   stftContrast: {
@@ -3928,6 +3933,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   vocoder: {
     source: "native_modules/vocoder/vocoder.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/vocoder/vocoder.cpp",
+  },
+  spectralFreeze: {
+    source: "native_modules/spectral_freeze/spectral_freeze.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_freeze/spectral_freeze.cpp",
   },
   spectralBlur: {
     source: "native_modules/spectral_blur/spectral_blur.cpp",

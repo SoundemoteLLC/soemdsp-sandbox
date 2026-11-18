@@ -8,17 +8,21 @@
 #include <soemdsp/utility/memory_pool.h>
 
 namespace {
-constexpr int size = 4096, hopSize = 1024, bins = size / 2 + 1, capacity = 64;
+constexpr int size = 16384, bins = size / 2 + 1, capacity = 64;
 constexpr double twoPi = 6.283185307179586;
 soemdsp::fft::Radix2<size> fft{};
 soemdsp::fft::Radix2<512> fft512{};
 soemdsp::fft::Radix2<1024> fft1024{};
 soemdsp::fft::Radix2<2048> fft2048{};
+soemdsp::fft::Radix2<4096> fft4096{};
+soemdsp::fft::Radix2<8192> fft8192{};
 void transform(int length, float* re, float* im, bool inverse) {
   switch (length) {
     case 512: fft512.transform(re, im, inverse); break;
     case 1024: fft1024.transform(re, im, inverse); break;
     case 2048: fft2048.transform(re, im, inverse); break;
+    case 4096: fft4096.transform(re, im, inverse); break;
+    case 8192: fft8192.transform(re, im, inverse); break;
     default: fft.transform(re, im, inverse); break;
   }
 }
@@ -29,9 +33,8 @@ struct Core {
   double prevR[2][bins], prevI[2][bins], velocityR[2][bins], velocityI[2][bins];
   double prefix[bins + 1], blurred[bins], offset[bins], smoothOffset[bins], magnitudeState[2][bins];
   double sideOffset[bins], smoothSideOffset[bins];
-  float padding[2][size];
   unsigned int rng, sideRng;
-  int position, hop, windowSize, padPosition;
+  int position, hop, windowSize;
   double right, lastRate, phaseSmoothMs, amplitudeSmoothMs, stereoSpread;
 
   void reset(int length = 0) {
@@ -40,7 +43,7 @@ struct Core {
     for (int i = 0; i < size; ++i) {
       const int index = i < windowSize ? (i < windowSize / 2 ? i : windowSize - i) * (size / windowSize) : 0;
       window[i] = i >= windowSize ? 0 : i == windowSize / 2 ? 1 : 0.5f - 0.5f * fft.twRe[index];
-      for (int c = 0; c < 2; ++c) input[c][i] = ola[c][i] = padding[c][i] = 0;
+      for (int c = 0; c < 2; ++c) input[c][i] = ola[c][i] = 0;
     }
     for (int k = 0; k < bins; ++k) {
       offset[k] = smoothOffset[k] = 0;
@@ -55,7 +58,7 @@ struct Core {
         velocityI[c][k] = q == 1 ? 1 : q == 3 ? -1 : 0;
       }
     }
-    position = hop = padPosition = 0; right = lastRate = 0; rng = 0x9e3779b9u; sideRng = 0xC2B2AE35u;
+    position = hop = 0; right = lastRate = 0; rng = 0x9e3779b9u; sideRng = 0xC2B2AE35u;
   }
   double random() {
     rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
@@ -166,13 +169,6 @@ struct Core {
     position = (position + 1) % size;
     right = dryR + unit(mix) * (wetR - dryR);
     double out = dryL + unit(mix) * (wetL - dryL);
-    const int delay = 4096 - size;
-    if (delay > 0) {
-      const double a = padding[0][padPosition], b = padding[1][padPosition];
-      padding[0][padPosition] = (float)out; padding[1][padPosition] = (float)right;
-      out = a; right = b;
-      if (++padPosition == delay) padPosition = 0;
-    }
     if (!__builtin_isfinite(out) || !__builtin_isfinite(right)) { reset(); return 0; }
     return out;
   }
@@ -204,7 +200,7 @@ struct State {
         if (a + 1 <= to.windowSize / 2) to.power[c][a + 1] += v * f;
       }
     }
-    warm = 4096; fade = 0; changing = true;
+    warm = to.windowSize; fade = 0; changing = true;
   }
   double tick(double l, double r, double seconds, double hz, double diffusion, double mix, double sr) {
     if (rate != 0 && rate != sr) reset();
@@ -227,20 +223,20 @@ struct State {
 State* pool[capacity]{};
 State* get(int h) { return h > 0 && h <= capacity ? pool[h - 1] : nullptr; }
 const char metadata[] = R"json({"module":"spectral_blur","targetType":"spectralBlur","label":"Spectral Blur","kind":"effect","inputs":["In","Left","Right"],"outputs":["Mono","Left","Right"],"parameters":[
-{"key":"fftSize","label":"FFT Size","kind":"choice","choices":["512","1024","2048","4096"],"choiceKeys":["512","1024","2048","4096"],"choiceIds":[512,1024,2048,4096],"defaultValue":"4096","min":"0","mid":"1.5","max":"3","step":"1","unit":"samples","linearSmoothing":false,"displayChoices":true,"divideChoicesVisibly":false,"tooltip":"Analysis window length in samples. At 48 kHz: 512 = 10.67 ms, 1024 = 21.33 ms, 2048 = 42.67 ms, 4096 = 85.33 ms. Smaller windows tighten processed attacks with coarser frequency resolution. Changes warm and crossfade; total dry/wet latency stays 4096 samples."},
+{"key":"fftSize","label":"FFT Size","kind":"choice","choices":["512","1024","2048","4096","8192","16384"],"choiceKeys":["512","1024","2048","4096","8192","16384"],"choiceIds":[512,1024,2048,4096,8192,16384],"defaultValue":"4096","min":"0","mid":"2.5","max":"5","step":"1","unit":"samples","linearSmoothing":false,"displayChoices":true,"divideChoicesVisibly":false,"tooltip":"Analysis window and processing delay in samples. At 48 kHz: 512 = 10.67 ms, 4096 = 85.33 ms, 8192 = 170.67 ms, 16384 = 341.33 ms. Smaller is tighter; larger resolves lower frequencies and costs more memory and peak CPU. Edits warm and crossfade, but intentionally change delay. Plugin-host compensation is not yet verified."},
 {"key":"smearSeconds","label":"Time Smear","kind":"time","defaultValue":"2","min":"0","mid":"1","max":"10","unit":"s","step":"any","nonlinearSlider":true,"tooltip":"Spectral power averaging time constant in seconds. Zero follows each frame; longer values soften attacks and leave slowly decaying spectral clouds. Not a delay or freeze."},
 {"key":"blurHz","label":"Frequency Blur","kind":"frequency","defaultValue":"100","min":"0","mid":"200","max":"4000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"Power-spreading neighborhood half-width in Hz. Zero leaves bins separate. Higher values spread harmonics into surrounding frequencies. FFT Size sets the frequency resolution."},
 {"key":"diffusion","label":"Diffusion","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Phase excursion amount, from coherent phase to full diffusion. Rotates each bin without complex-spectrum crossfade cancellations. Stereo Spread controls channel decorrelation; no makeup gain."},
 {"key":"stereoSpread","label":"Stereo Spread","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Opposite-channel phase diffusion spread. Zero links the phase motion; higher values give mono input a stereo wash. Does not crossfeed audio. Requires Diffusion above zero; mono summing can change tone through phase cancellation."},
 {"key":"phaseSmoothMs","label":"Phase Smooth","kind":"time","defaultValue":"10","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Time constant for smoothing the unwrapped phase-diffusion trajectory. Zero keeps raw phase motion. Does not smooth spectral magnitudes or reduce their contrast. Updates at the STFT hop rate."},
 {"key":"amplitudeSmoothMs","label":"Amplitude Smooth","kind":"time","defaultValue":"0","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Additional symmetric per-bin magnitude smoothing after frequency spreading. Zero preserves the sharp amplitude texture. Increase gently to soften chatter; this is not compression, saturation or limiting. Updates at the STFT hop rate."},
-{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to 4096 samples of latency. Turn off Time Smear, Frequency Blur, Diffusion and Amplitude Smooth for neutral reconstruction."}]})json";
+{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion and Amplitude Smooth for neutral reconstruction."}]})json";
 }
 extern "C" int soemdsp_spectral_blur_create() {
   for (int i = 0; i < capacity; ++i) if (!pool[i]) {
     auto* s = static_cast<State*>(soemdsp::memory_pool::alloc(sizeof(State)));
     if (!s) return 0;
-    fft.ensure(); fft512.ensure(); fft1024.ensure(); fft2048.ensure();
+    fft.ensure(); fft512.ensure(); fft1024.ensure(); fft2048.ensure(); fft4096.ensure(); fft8192.ensure();
     s->initialize(); pool[i] = s; return i + 1;
   }
   return 0;
@@ -261,7 +257,7 @@ extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount) {
   if (auto* s = get(h)) for (auto& core : s->cores) core.stereoSpread = __builtin_isfinite(amount) ? unit(amount) : 0;
 }
 extern "C" int soemdsp_spectral_blur_set_fft_size(int h, int length) {
-  auto* s = get(h); if (!s || (length != 512 && length != 1024 && length != 2048 && length != 4096)) return -1;
+  auto* s = get(h); if (!s || (length != 512 && length != 1024 && length != 2048 && length != 4096 && length != 8192 && length != 16384)) return -1;
   s->desired = length; return 0;
 }
 extern "C" int soemdsp_spectral_blur_fft_size(int h) { auto* s = get(h); return s ? s->cores[s->current].windowSize : 0; }
@@ -269,7 +265,8 @@ extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double
   auto* s = get(h); return s ? s->tick(l, r, seconds, hz, diffusion, mix, rate) : 0;
 }
 extern "C" double soemdsp_spectral_blur_right(int h) { auto* s = get(h); return s ? s->right : 0; }
-extern "C" int soemdsp_spectral_blur_latency() { return size; }
-extern "C" int soemdsp_spectral_blur_version() { return 3; }
+extern "C" int soemdsp_spectral_blur_latency() { return 4096; }
+extern "C" int soemdsp_spectral_blur_latency_for_handle(int h) { return soemdsp_spectral_blur_fft_size(h); }
+extern "C" int soemdsp_spectral_blur_version() { return 4; }
 extern "C" const char* soemdsp_spectral_blur_metadata_json() { return metadata; }
 extern "C" int soemdsp_spectral_blur_metadata_json_size() { return sizeof(metadata) - 1; }

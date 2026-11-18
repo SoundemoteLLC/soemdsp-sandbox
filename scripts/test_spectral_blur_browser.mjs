@@ -65,14 +65,14 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     });
     nodeGraphMvp.live.node.port.start();
   });
-  for (const size of [512, 2048, 4096, 1024]) {
+  for (const size of [512, 2048, 4096, 8192, 16384, 1024]) {
     await page.evaluate(({ id, size }) => updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'fftSize'), String(size)), { id, size });
     await page.waitForFunction(size => window.testBlurSizes.includes(size), size, { timeout: 15000 });
     const position = await page.evaluate(id => {
       const s = nodeGraphSliderForParameter(id, 'fftSize');
       return (Number(s.value) - Number(s.min)) / (Number(s.max) - Number(s.min));
     }, id);
-    assert.ok(Math.abs(position - [512, 1024, 2048, 4096].indexOf(size) / 3) < 1e-6, 'choice handle uses evenly spaced indices');
+    assert.ok(Math.abs(position - [512, 1024, 2048, 4096, 8192, 16384].indexOf(size) / 5) < 1e-6, 'choice handle uses evenly spaced indices');
   }
   await page.evaluate(id => {
     updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'fftSize'), '1024');

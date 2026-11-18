@@ -90,25 +90,26 @@ for (const sr of [44100, 48000, 96000]) {
   x.soemdsp_spectral_blur_destroy(h);
   console.log(`${sr} Hz: neutral ${error.toExponential(2)}, stereo ${stereoError.toExponential(2)}, dry latency, silence, sustained wash, stereo, modulation and recovery pass.`);
 }
-for (const sr of [44100, 48000, 96000]) for (const length of [512, 1024, 2048, 4096]) {
+for (const sr of [44100, 48000, 96000]) for (const length of [512, 1024, 2048, 4096, 8192, 16384]) {
   const h = x.soemdsp_spectral_blur_create();
   assert.equal(x.soemdsp_spectral_blur_set_fft_size(h, length), 0);
   const input = i => [Math.sin(i * 0.13) * 0.1, Math.cos(i * 0.07) * 0.02];
-  const out = render(h, 16000, sr, [0, 0, 0, 1], input);
+  const out = render(h, length + 16000, sr, [0, 0, 0, 1], input);
   let error = 0;
-  for (let i = latency; i < out[0].length; ++i) for (let c = 0; c < 2; ++c)
-    error = Math.max(error, Math.abs(out[c][i] - input(i - latency)[c]));
-  assert.ok(error < 2e-5, `${sr}/${length} neutral and fixed latency: ${error}`);
+  for (let i = length; i < out[0].length; ++i) for (let c = 0; c < 2; ++c)
+    error = Math.max(error, Math.abs(out[c][i] - input(i - length)[c]));
+  assert.ok(error < 2e-5, `${sr}/${length} neutral and selected latency: ${error}`);
   assert.equal(x.soemdsp_spectral_blur_fft_size(h), length);
+  assert.equal(x.soemdsp_spectral_blur_latency_for_handle(h), length);
   x.soemdsp_spectral_blur_destroy(h);
 }
 {
   const h = x.soemdsp_spectral_blur_create();
   render(h, 12000, 48000, [0, 0, 0, 1], () => [0.1, 0.1]);
   const memory = x.memory.buffer.byteLength;
-  for (const length of [512, 2048, 1024, 4096, 512]) {
+  for (const length of [512, 2048, 8192, 16384, 1024, 4096, 512]) {
     x.soemdsp_spectral_blur_set_fft_size(h, length);
-    const out = render(h, 12000, 48000, [0, 0, 0, 1], () => [0.1, 0.1]);
+    const out = render(h, 24000, 48000, [0, 0, 0, 1], () => [0.1, 0.1]);
     assert.ok(out[0].every(v => Math.abs(v - 0.1) < 2e-6), 'warm aligned switch stays neutral without gaps');
     assert.equal(x.soemdsp_spectral_blur_fft_size(h), length);
   }

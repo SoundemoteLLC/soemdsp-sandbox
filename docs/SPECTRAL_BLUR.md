@@ -1,13 +1,14 @@
 # Spectral Blur
 
 Native listening proof on `codex/convolution-resonator`, 2026-11-18.
-Module Browser: Space. Native type 272, `spectral_blur` version 3.
+Module Browser: Space. Native type 272, `spectral_blur` version 4.
 
 ## Controls
 
-- FFT Size: 512 / 1024 / 2048 / 4096 samples, default 4096. The UI uses four
+- FFT Size: 512 / 1024 / 2048 / 4096 / 8192 / 16384 samples, default 4096. The UI uses six
   evenly spaced choice indices; persisted keys and DSP IDs are actual sample
-  counts. At 48 kHz these windows span 10.67 / 21.33 / 42.67 / 85.33 ms.
+  counts. At 48 kHz these windows/delays span 10.67 / 21.33 / 42.67 / 85.33 /
+  170.67 / 341.33 ms. Large sizes are intentionally expensive options.
 - Time Smear: spectral power averaging time constant in seconds, default 2 s.
   Zero follows each frame. This softens attacks and extends spectral energy;
   amplitude tails decay more slowly than the power time constant. It is not
@@ -28,17 +29,22 @@ Module Browser: Space. Native type 272, `spectral_blur` version 3.
 - Amplitude Smooth: default 0 ms (off), additional symmetric magnitude smoothing
   after frequency spreading. Try 5..20 ms to soften chatter without changing the
   Time Smear or Frequency Blur settings. It is not compression or a limiter.
-- Mix: aligned dry/wet, default fully wet. No limiter or saturation.
+- Mix: dry/wet aligned to the selected FFT size, default fully wet. No limiter or saturation.
 
 ## DSP And State
 
 Selectable FFT with quarter-window hop, periodic Hann analysis/synthesis and
-normalized four-way overlap-add. Fixed 4096-sample reference latency (85.33 ms at 48 kHz).
-Shorter engines pad their output delay to that reference: tighter processing
-does not mean lower host latency in this version. Size edits reset an inactive
-preallocated core, conservatively remap spectral power, warm for 4096 samples,
-then smoothstep-crossfade for 50 ms. Latest requested edits queue while switching.
+normalized four-way overlap-add. Architect chose size-dependent processing
+latency rather than forcing small windows to inherit the maximum delay.
+Size edits reset an inactive
+preallocated core, conservatively remap spectral power, warm for the new window
+length, then smoothstep-crossfade for 50 ms. Latest requested edits queue while switching.
 No allocation, global plan rebuild or active-core reset is needed for a size edit.
+The transition can change timing/phase because its two cores have different
+delays. This is not a promise of transparent delay-changing automation.
+`latency_for_handle` reports the current core's size; the no-handle latency
+function reports the 4096-sample default. Plugin-host compensation is not yet
+verified and must be audited before a plugin release.
 The processing window duration and bin resolution change with sample rate;
 Time Smear and Frequency Blur remain expressed in real seconds and Hz.
 
@@ -57,7 +63,7 @@ produce small proportional-channel tail errors; test tolerance is 5e-5 absolute.
 
 Zero smear, zero width, zero diffusion and zero Amplitude Smooth reconstruct
 the delayed input. Mix 0
-uses the same reference delay. Turning off a parameter changes that process at
+uses the selected window's delay. Turning off a parameter changes that process at
 the next analysis hop; this is not a sample-domain zero-latency processor.
 
 All buffers are instance-owned, preallocated from the existing native pool;
@@ -93,9 +99,11 @@ display are not in v1. Do not mistake a long power decay for infinite sustain.
   (max error about 4e-8), dry latency, silence, sustained tail, stereo scaling,
   channel isolation, mono-to-stereo spread, smoothing, retained steady level,
   rapid edits, finite recovery and no memory growth.
-- All four sizes reconstruct with the same 4096-sample delay at each sample
+- All six sizes reconstruct with their selected sample delay at each sample
   rate. Switching stays neutral on DC, preserves output continuity and accepts
   the latest queued size; invalid sizes return an error.
+- The browser test observes the actual running native size after the UI changes,
+  not merely the patch value, and checks evenly spaced choice-handle positions.
 - `node scripts/test_spectral_blur_graph.mjs`: native defaults and edited controls,
   mono/left/right/stereo/summed routing versus direct native sample processing.
 - `node scripts/test_spectral_blur_browser.mjs`: actual worklet audio, plan,

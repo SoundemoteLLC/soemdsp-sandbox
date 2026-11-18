@@ -294,6 +294,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   convolutionResonator: 268,
   vocoder: 269,
   spectralBlur: 272,
+  spectralFreeze: 273,
   stftContrast: 270,
   stftGate: 271,
 });
@@ -636,6 +637,13 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
+  if (t === "spectralFreeze") {
+    if (k === "freeze") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "decaySeconds") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_PAN;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+  }
   if (t === "stftGate") {
     if (k === "holdMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
     if (k === "kneeDb") return P.NATIVE_GRAPH_PARAM_RESONANCE;
@@ -937,6 +945,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   const p = raw.toLowerCase();
   const t = String(type || "").trim();
   if (t === "stftGate" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
+  if (t === "spectralFreeze" && p === "held") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "sturmianGrid") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "snare") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -1618,6 +1627,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const tDst = String(type || "").trim();
+  if (tDst === "spectralFreeze") {
+    if (p === "freeze") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE_CV;
+    if (p === "recapture") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
+  }
   if (tDst === "vocoder") {
     if (p === "voice l" || p === "mod l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "voice r" || p === "mod r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
@@ -3700,6 +3713,7 @@ NodeLiveAudioProcessor.prototype.postNativeGraphStatus = function postNativeGrap
 
 // Discrete Controls: push snapped targets (avoid fractional enum while ramping).
 NodeLiveAudioProcessor.NATIVE_GRAPH_DISCRETE_PARAMS = Object.freeze({
+  freeze: true,
   fftSize: true,
   waveform: true,
   mode: true,
@@ -6150,6 +6164,14 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("tailRandom", P.NATIVE_GRAPH_PARAM_CENTER, cont("tailRandom", 1));
       push("tailCurve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("tailCurve", 0));
       push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 1));
+      continue;
+    }
+    if (type === "spectralFreeze") {
+      push("freeze", P.NATIVE_GRAPH_PARAM_MODE, disc("freeze", 0));
+      push("decaySeconds", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decaySeconds", 0));
+      push("diffusion", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusion", 0));
+      push("stereoSpread", P.NATIVE_GRAPH_PARAM_PAN, cont("stereoSpread", 1));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;
     }
     if (type === "spectralBlur") {

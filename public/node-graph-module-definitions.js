@@ -209,6 +209,7 @@ const nodeGraphNodeLabels = Object.freeze({
   vocoder: "Vocoder",
   stftContrast: "STFT Contrast",
   spectralBlur: "Spectral Blur",
+  spectralFreeze: "Spectral Freeze",
   stftGate: "STFT Gate",
   flanger: "Flanger",
   chorus: "Chorus",
@@ -7341,6 +7342,92 @@ const nodeGraphModuleDefinitions = (
       },
     ],
   },
+  spectralFreeze: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    inputs: ["In", "Left", "Right", "Freeze", "Recapture"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
+    outputs: ["Mono", "Left", "Right", "Held"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Held"],
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["freeze", "Freeze", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["decaySeconds", "Decay"], ["diffusion", "Diffusion"]], h: 40 },
+      { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["mix", "Mix"]], h: 40 },
+    ],
+    parameters: [
+      {
+        "key": "freeze",
+        "label": "Freeze",
+        "kind": "choice",
+        "choices": [
+          "Live",
+          "Frozen"
+        ],
+        "choiceKeys": [
+          "live",
+          "frozen"
+        ],
+        "choiceIds": [
+          0,
+          1
+        ],
+        "defaultValue": "live",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "1",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "Frozen captures a complete analysis window and sustains its spectrum with evolving phase. Live releases to delayed input. A wired Freeze gate overrides this switch; rising high captures, low releases. Held reports a completed active capture."
+      },
+      {
+        "key": "decaySeconds",
+        "label": "Decay",
+        "kind": "time",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "5",
+        "max": "60",
+        "unit": "s",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Held magnitude decay time constant in seconds. Zero means infinite sustain. Positive values decay after capture; Recapture restarts from the current input."
+      },
+      {
+        "key": "diffusion",
+        "label": "Diffusion",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "%",
+        "step": "any",
+        "tooltip": "Phase excursion amount added to the evolving held spectrum. Zero retains captured phase advance; higher values create a more diffuse texture without magnitude crossfade cancellations."
+      },
+      {
+        "key": "stereoSpread",
+        "label": "Stereo Spread",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "%",
+        "step": "any",
+        "tooltip": "Opposite-channel phase diffusion for stereo width, including from mono input. Zero links diffusion motion; requires Diffusion above zero. Input channels remain separate."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "%",
+        "step": "any",
+        "tooltip": "Live/held blend, aligned to 4096 samples. Capture/release uses a separate 20 ms handoff. Recapture takes effect at the next analysis hop while Frozen. This is not a looper or a repeated frozen FFT frame."
+      }
+    ],
+  },
   spectralBlur: {
     planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
@@ -7363,30 +7450,36 @@ const nodeGraphModuleDefinitions = (
           "512",
           "1024",
           "2048",
-          "4096"
+          "4096",
+          "8192",
+          "16384"
         ],
         "choiceKeys": [
           "512",
           "1024",
           "2048",
-          "4096"
+          "4096",
+          "8192",
+          "16384"
         ],
         "choiceIds": [
           512,
           1024,
           2048,
-          4096
+          4096,
+          8192,
+          16384
         ],
         "defaultValue": "4096",
         "min": "0",
-        "mid": "1.5",
-        "max": "3",
+        "mid": "2.5",
+        "max": "5",
         "step": "1",
         "unit": "samples",
         "linearSmoothing": false,
         "displayChoices": true,
         "divideChoicesVisibly": false,
-        "tooltip": "Analysis window length in samples. At 48 kHz: 512 = 10.67 ms, 1024 = 21.33 ms, 2048 = 42.67 ms, 4096 = 85.33 ms. Smaller windows tighten processed attacks with coarser frequency resolution. Changes warm and crossfade; total dry/wet latency stays 4096 samples."
+        "tooltip": "Analysis window and processing delay in samples. At 48 kHz: 512 = 10.67 ms, 4096 = 85.33 ms, 8192 = 170.67 ms, 16384 = 341.33 ms. Smaller is tighter; larger resolves lower frequencies and costs more memory and peak CPU. Edits warm and crossfade, but intentionally change delay. Plugin-host compensation is not yet verified."
       },
       {
         "key": "smearSeconds",
@@ -7471,7 +7564,7 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "unit": "%",
         "step": "any",
-        "tooltip": "Dry/wet blend aligned to 4096 samples of latency. Turn off Time Smear, Frequency Blur, Diffusion and Amplitude Smooth for neutral reconstruction."
+        "tooltip": "Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion and Amplitude Smooth for neutral reconstruction."
       }
     ],
   },
