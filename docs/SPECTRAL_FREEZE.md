@@ -6,7 +6,7 @@ Module Browser: Space; native type 273, `spectral_freeze` version 1.
 ## Interaction
 
 1. Feed voice, music or an instrument into Mono or Left/Right.
-2. Change Freeze from Live to Frozen while the wanted sound plays.
+2. Click the Freeze toggle while the wanted sound plays; it lights as Frozen.
 3. Stop the source: the captured spectrum keeps sounding.
 4. Return to Live to release. A wired Freeze gate replaces the switch:
    rising above 0.5 captures; falling below 0.5 releases.
@@ -20,7 +20,8 @@ there is no undocumented noise gate. Held is 1 after an active capture is ready,
 
 ## Controls
 
-- Freeze: Live/Frozen; default Live. The input gate overrides the switch.
+- Freeze: click-only toggle, default Live/off; it lights as Frozen/on. The input
+  gate overrides the button. Uses the existing shared binary-button widget.
 - Decay: magnitude time constant in seconds; 0 means infinite sustain. Positive
   values fade the stored spectrum. Recapture starts again from current input.
 - Diffusion: extra phase excursion, 0..100%, default 0. The captured phase advance
@@ -63,3 +64,16 @@ Listening acceptance is required. Recapture relies on window/OLA blending rather
 than a separate dual-capture engine; listen specifically to abrupt recaptures.
 Refresh, capture persistence, spectrum display, transposition and selectable
 window sizes are future work, not implied features of v1.
+
+## Next Control Candidates
+
+1. FFT Size: strongest next addition. Short windows capture a shorter moment;
+   long windows resolve bass/close harmonics more clearly but require more delay
+   and memory. Start from Blur's proved selector conventions, not its whole engine.
+2. Refresh Rate (Hz): explicit rate for gradually admitting live spectral data,
+   zero preserving the current static capture. Define phase/frequency ownership
+   before treating it as a simple magnitude lerp.
+3. Capture Blend (ms): explicit transition duration for replacing one capture
+   with another, independent of live/held Mix and capture/release handoff.
+
+These remain proposals; only the click-toggle change is implemented here.

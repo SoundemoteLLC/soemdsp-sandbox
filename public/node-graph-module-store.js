@@ -95,6 +95,7 @@ const nodeGraphModuleCatalogShelfIdSet = Object.freeze(new Set(nodeGraphModuleCa
 // Default underconstructionsort shelf. UC = on this list (shop cards disabled,
 // native stub diagnostics silenced). Edit this array; do not keep a second set.
 const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
+  "fftReconstruction",
   "canvas",
   "metallicRatio",
   "shootingStarTail",
@@ -195,6 +196,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
 
 /** Short shop-card reminder for under-construction modules (title tooltip). */
 const nodeGraphModuleConstructionPlans = Object.freeze({
+  fftReconstruction: "General buffered-audio FFT reconstruction: sample/live capture, independently controlled read position and speed, and spectral time stretching. Plan: docs/FFT_RECONSTRUCTION_PLAN.md. No DSP yet.",
   bloomGlow: "Screen bloom/glow/dim from CV. Parked until the shader wash stack is live.",
   gradientVectorscope: "Woscope XY beam with gradient-along-length and dest persist. Parked until that face is finished.",
   canvas: "Composite images, scopes, and shaders. Parked until the shader stack ships.",
@@ -1530,6 +1532,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Morph (RectSine → Sine → inv-RectSine 180° → Sine, wrap) × Warp (13 baked knots). Additive Nyquist.",
     label: "Wavetable 2D",
     notes: ["wavetable", "oscillator", "rectified sine", "warp", "phase"],
+  },
+  fftReconstruction: {
+    category: "sample",
+    label: "FFT Reconstruction",
+    description: "Under construction: general buffered-audio FFT resynthesis, with live/sample sources and independent source-time playback. Time stretching is the first planned use case.",
+    notes: ["under construction", "FFT", "STFT", "reconstruction", "resynthesis", "stretch", "live buffer", "sample"],
   },
   samplePlayer: {
     category: "sample",

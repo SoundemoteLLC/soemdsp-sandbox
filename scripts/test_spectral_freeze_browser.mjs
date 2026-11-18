@@ -34,6 +34,14 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
   await page.waitForFunction(() => typeof showNodeGraphModule === 'function'
     && document.body.dataset.nodeBootFinished === 'interface-ready', null, { timeout: 60000 });
   await page.waitForTimeout(500);
+  const placeholder = await page.evaluate(() => ({
+    listed: nodeGraphModuleStoreTypesList().includes('fftReconstruction'),
+    category: nodeGraphModuleStoreCatalog.fftReconstruction.category,
+    parked: nodeGraphModuleTypeIsUnderConstruction('fftReconstruction'),
+    spawn: showNodeGraphModule('fftReconstruction', { x: 20, y: 20 }),
+  }));
+  assert.equal(placeholder.listed, true); assert.equal(placeholder.category, 'sample');
+  assert.equal(placeholder.parked, true); assert.ok(!placeholder.spawn, 'placeholder cannot spawn fake DSP');
   const ids = await page.evaluate(() => {
     const options = { record: false, autosaveWorkingPatch: false, skipLivePlan: true };
     const source = showNodeGraphModule('polyBlep', { x: 20, y: 40 }, options);
@@ -63,7 +71,19 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     nodeGraphMvp.live.node.port.addEventListener('message', e => { if (e.data?.type === 'test-freeze-held') window.testHeld = e.data.held; });
     nodeGraphMvp.live.node.port.start();
   });
-  await page.evaluate(id => updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'freeze'), 'Frozen'), ids.freeze);
+  const clickFreeze = async () => {
+    const point = await page.evaluate(id => {
+      const article = nodeGraphSliderForParameter(id, 'freeze').closest('article');
+      const face = article.querySelector('.node-face');
+      const widgets = nodeGraphModuleFaceWidgets(nodeGraphModuleFaceSpecForElement(article), face.offsetWidth, article);
+      const wd = widgets.find(w => w.param === 'freeze');
+      if (!wd?.button || wd.horizontal) throw new Error('Freeze must use the shared click-only button');
+      const rect = face.getBoundingClientRect(), z = rect.width / face.offsetWidth;
+      return { x: rect.left + (wd.x + wd.w / 2) * z, y: rect.top + (wd.y + wd.h / 2) * z };
+    }, ids.freeze);
+    await page.mouse.click(point.x, point.y);
+  };
+  await clickFreeze();
   await page.waitForFunction(() => window.testHeld === 1, null, { timeout: 15000 });
   await page.evaluate(id => updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'amplitude'), '0'), ids.source);
   await page.waitForTimeout(500);
@@ -78,7 +98,7 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     }, ids.freeze);
     await page.screenshot({ path: path.join(os.tmpdir(), `spectral-freeze-${width}.png`), timeout: 15000 });
   }
-  await page.evaluate(id => updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'freeze'), 'Live'), ids.freeze);
+  await clickFreeze();
   await page.waitForFunction(() => window.testHeld === 0 && nodeGraphMvp.live.outputLevelSmooth < 0.00001, null, { timeout: 15000 });
   assert.deepEqual(errors, []);
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(false));

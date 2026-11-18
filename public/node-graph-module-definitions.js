@@ -294,6 +294,7 @@ const nodeGraphNodeLabels = Object.freeze({
   keyboard: "Keyboard",
   gridKeyboard: "Grid Keyboard",
   samplePlayer: "Sample Player",
+  fftReconstruction: "FFT Reconstruction",
   wavetable2d: "Wavetable 2D",
   sampleLooper: "Sample Looper",
   audioPlayer: "Music Player",
@@ -7349,7 +7350,7 @@ const nodeGraphModuleDefinitions = (
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
     displayType: "scope1dTrace",
     face: [
-      { kind: "cells", params: [["freeze", "Freeze", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["freeze", "Freeze", "button", { onLabel: "Frozen" }]], h: 26 },
       { kind: "cells", params: [["decaySeconds", "Decay"], ["diffusion", "Diffusion"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["mix", "Mix"]], h: 40 },
     ],
@@ -19938,6 +19939,10 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any" },
     ] },
+  fftReconstruction: {
+    planRole: "processor",
+    inputs: [], outputs: [], parameters: [],
+  },
   samplePlayer: {
     // Hand-written face (node-graph-module-face.js): Mode, start / end span, Speed.
     face: [

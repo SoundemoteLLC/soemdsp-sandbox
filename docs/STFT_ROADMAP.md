@@ -90,6 +90,10 @@ Proposed controls and tools, in priority order:
 
 ## New Modules
 
+General buffered reconstruction/time stretching is parked separately under
+Sample Player: [FFT_RECONSTRUCTION_PLAN.md](FFT_RECONSTRUCTION_PLAN.md).
+Its placeholder is FFT Reconstruction, not Spectral Stretch.
+
 All seven ideas are accepted as roadmap candidates, not an instruction to build
 them simultaneously. Proposed order follows musical value and implementation risk.
 
