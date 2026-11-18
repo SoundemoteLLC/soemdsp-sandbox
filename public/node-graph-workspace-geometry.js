@@ -838,6 +838,7 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
         spread: Math.max(0.4, Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78))),
         mouseSpread: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread"))),
         mouseBase: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount"))),
+        reflection: Math.max(0, Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reflection", 0.35))),
       },
     };
   }
@@ -856,6 +857,9 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
     spread: b.spread,
     moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
     mouse: active ? mouse : null,
+    // How bright the lines reflect the mouse lamp: the Grid reflection setting times how far the room is dimmed (none with the room
+    // fully lit, the full setting when it is fully dark).
+    reflect: b.reflection * roomDim,
     mouseRadius: Math.max(nodeGraphGridWidth(), nodeGraphGridHeight()) * (3 + 10.5 * b.mouseSpread),
     mouseAmount: 0.92 * mouseAmount,
   };

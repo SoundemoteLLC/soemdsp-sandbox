@@ -428,6 +428,13 @@ uniform float uGridOn;
 uniform vec2 uGridCell;
 uniform vec4 uGridRgba;
 uniform float uGridSpread;
+// The grid lines reflect the room light like module text does (see the glyph shader): uGridDark is how much a dark room dims
+// them (0 = not at all), the mouse lamp (x, y, radius, strength) lifts that dimming around the cursor and, past full
+// brightness, lifts the lines toward white.
+uniform float uGridDark;
+uniform highp vec4 uGridLamp;
+// How bright the lines reflect the lamp: the Grid reflection setting x how far the room is dimmed (0 = not at all).
+uniform float uGridReflect;
 uniform float uModuleAmt;
 uniform highp vec4 uMouse;
 uniform float uZoomPx;
@@ -486,8 +493,21 @@ void main() {
       float mr = uMouse.w * (1.0 / (1.0 + (mt / 0.35) * (mt / 0.35))) * (1.0 - smoothstep(0.6, 1.0, mt));
       rv = 1.0 - (1.0 - rv) * (1.0 - clamp(mr, 0.0, 1.0));
     }
-    float gridA = uGridRgba.a * cov * rv;
-    acc.rgb += (1.0 - acc.a) * uGridRgba.rgb * gridA;
+    // Like module text, the lamp lights the grid wherever it is, not only near modules, but only as much as the room is dimmed
+    // (uGridReflect): nothing with the room fully lit, the Grid reflection setting when it is fully dark. A dark room also
+    // dims the lines away from the lamp, like text.
+    float lit = 0.0;
+    if (uGridLamp.w > 0.0) {
+      float ld = length(vPx - uGridLamp.xy) / max(uGridLamp.z, 1.0);
+      lit = clamp(uGridLamp.w * exp(-1.6 * ld * ld), 0.0, 1.0);
+    }
+    float refl = lit * clamp(uGridReflect, 0.0, 1.0);
+    float gridF = 1.0 - uGridDark * (1.0 - lit);
+    vec3 gridRgb = mix(uGridRgba.rgb, vec3(1.0), 0.45 * refl * refl);
+    rv = 1.0 - (1.0 - rv) * (1.0 - refl);
+    // Under the lamp a line rises from its unlit level toward full brightness by the reflection amount.
+    float gridA = cov * mix(uGridRgba.a * rv * gridF, 1.0, refl);
+    acc.rgb += (1.0 - acc.a) * gridRgb * gridA;
     acc.a += (1.0 - acc.a) * gridA;
   }
   if (acc.a < 0.002) discard;
@@ -843,6 +863,9 @@ void main() {
         lightGridCell: gl.getUniformLocation(lightProgram, "uGridCell"),
         lightGridRgba: gl.getUniformLocation(lightProgram, "uGridRgba"),
         lightGridSpread: gl.getUniformLocation(lightProgram, "uGridSpread"),
+        lightGridDark: gl.getUniformLocation(lightProgram, "uGridDark"),
+        lightGridLamp: gl.getUniformLocation(lightProgram, "uGridLamp"),
+        lightGridReflect: gl.getUniformLocation(lightProgram, "uGridReflect"),
         lightModuleAmt: gl.getUniformLocation(lightProgram, "uModuleAmt"),
         lightMouse: gl.getUniformLocation(lightProgram, "uMouse"),
         lightZoomPx: gl.getUniformLocation(lightProgram, "uZoomPx"),
@@ -3550,6 +3573,14 @@ void main() {
       if (mp) gl.uniform4f(s.lightMouse, cam.x + mp.x / cam.zoom, cam.y + mp.y / cam.zoom, grid.mouseRadius, grid.mouseAmount);
       else gl.uniform4f(s.lightMouse, 0, 0, 1, 0);
       gl.uniform1f(s.lightZoomPx, cam.zoom * scalePx);
+      // Like module text: lit (and whitened) by the mouse lamp, anywhere; dimmed by a dark room away from it.
+      const ambient = typeof global.nodeGraphRoomAmbientDark === "function"
+        ? Math.max(0, Math.min(1, Number(global.nodeGraphRoomAmbientDark()) || 0)) : 0;
+      const gridDark = Math.min(ambient, 0.75);
+      const lamp = typeof global.nodeGraphRoomLightUniform === "function" ? global.nodeGraphRoomLightUniform() : null;
+      if (s.lightGridReflect) gl.uniform1f(s.lightGridReflect, Math.max(0, Math.min(1, Number(grid.reflect) || 0)));
+      if (s.lightGridDark) gl.uniform1f(s.lightGridDark, gridDark);
+      if (s.lightGridLamp) gl.uniform4f(s.lightGridLamp, lamp ? lamp[0] : 0, lamp ? lamp[1] : 0, lamp ? lamp[2] : 1, lamp ? lamp[3] : 0);
     }
     if (s.lightPlate) gl.uniform4f(s.lightPlate, 0, 0, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, s.outBuf);
