@@ -827,7 +827,7 @@ extern "C" int soemdsp_noise_conv_reverb_create(double sampleRate);
 extern "C" int soemdsp_convolution_resonator_create();
 extern "C" void soemdsp_convolution_resonator_destroy(int handle);
 extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
-  double frequency, double periods, double mix, double sampleRate, double fadeMs);
+  double frequency, double periods, double mix, double sampleRate, double fadeMs, double body, double decay);
 extern "C" double soemdsp_convolution_resonator_right(int handle);
 extern "C" void soemdsp_noise_conv_reverb_destroy(int handle);
 extern "C" void soemdsp_noise_conv_reverb_reset(int handle);
@@ -3961,6 +3961,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.shape,
+    (typeId == kTypeConvolutionResonator) ? 0.0 : // Body: Buzz
     (typeId == kTypeCombPluck) ? 0.2 : // damping (Comb Pluck)
     (typeId == kTypePurr) ? 1.0 : // Unevenness (Purr)
     (typeId == kTypePulseTrain) ? 3.0 : // curve (Pulse Train)
@@ -4556,6 +4557,7 @@ static void init_node_defaults(Node& n, int typeId) {
   // bradley2a = hitDuration.
   init_control(
     n.timeNumerator,
+    (typeId == kTypeConvolutionResonator) ? 0.08 : // String decay time constant, seconds
     (typeId == kTypePurr) ? 1.6 : // Inhale Time s (Purr)
     (typeId == kTypePulseExplosion) ? 0.0 // startTime
       : (typeId == kTypeSlewLimiter) ? 0.05
@@ -15865,7 +15867,8 @@ static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
       route.runMono || route.runL ? a : 0.0, route.runR ? b : 0.0,
       resolve_osc_hz(g, f, liveF, false, node.frequency, 0.0, sr),
       control_audio(g, node.stages, f), control_audio(g, node.mix, f), sr,
-      control_audio(g, node.offsetMs, f));
+      control_audio(g, node.offsetMs, f), control_audio(g, node.shape, f),
+      control_audio(g, node.timeNumerator, f));
     const double yr = soemdsp_convolution_resonator_right(node.nativeHandle);
     node.buf[kPortMono][f] = stereo_route_out(route.outMono, y, y, yr);
     node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, y, y, yr);

@@ -1099,7 +1099,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   convolutionResonator: {
     category: "space",
-    description: "Development Buzz body: pitch-tuned finite impulse train with fractional delays, stereo routing and delay-aligned Mix. STFT vocoder and Crunch are not implemented yet.",
+    description: "Development Buzz-to-String resonator: finite impulse train morphs into a damped fractional-delay string, with stereo routing and delay-aligned Mix. Tube, STFT vocoder and Crunch are not implemented yet.",
     label: "Convolution Resonator",
     notes: ["vocoder", "convolution", "robot", "crunch", "resonator", "voice", "native"],
   },

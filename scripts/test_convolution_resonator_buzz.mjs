@@ -5,7 +5,7 @@ const { instance } = await WebAssembly.instantiate(fs.readFileSync(new URL(
 const x = instance.exports;
 const sr = 48000;
 const step = (h, input, frequency = 110, size = 4, mix = 1) =>
-  x.soemdsp_convolution_resonator_sample(h, input, -input, frequency, size, mix, sr, 0);
+  x.soemdsp_convolution_resonator_sample(h, input, -input, frequency, size, mix, sr, 0, 0, 0.08);
 
 function response(frequency, amplitude = 1, bodyFrequency = 110, size = 4) {
   const h = x.soemdsp_convolution_resonator_create();

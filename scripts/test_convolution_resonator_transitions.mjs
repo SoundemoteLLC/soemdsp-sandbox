@@ -6,7 +6,7 @@ const x = instance.exports;
 const create = x.soemdsp_convolution_resonator_create;
 const destroy = x.soemdsp_convolution_resonator_destroy;
 const sample = (h, input, hz, size, fade) =>
-  x.soemdsp_convolution_resonator_sample(h, input, -input, hz, size, 1, 48000, fade);
+  x.soemdsp_convolution_resonator_sample(h, input, -input, hz, size, 1, 48000, fade, 0, 0.08);
 const shift = 2048 - 8;
 const change = 12000;
 const duration = 960;

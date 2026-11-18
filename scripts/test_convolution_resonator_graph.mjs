@@ -78,3 +78,32 @@ const jack = wetResponse(220);
 assert.ok(knob > 0.8, `Buzz body must be audible in graph: ${knob}`);
 assert.ok(jack < knob * 0.02, `wired f must replace Frequency: ${jack} vs ${knob}`);
 console.log(`Graph Buzz RMS ${knob.toFixed(4)}, wired-f inter-tooth RMS ${jack.toFixed(6)}.`);
+
+function stringTail(decay) {
+  const h = x.soemdsp_graph_create();
+  x.soemdsp_graph_set_sample_rate(h, 48000);
+  for (const [id, type] of [[1, 132], [2, 268], [3, 6]])
+    assert.equal(x.soemdsp_graph_add_node(h, id, type), 0);
+  assert.equal(x.soemdsp_graph_connect(h, 1, 0, 2, 0), 0);
+  assert.equal(x.soemdsp_graph_connect(h, 2, 0, 3, 1), 0);
+  x.soemdsp_graph_set_param(h, 2, 13, 0.5); // Body
+  x.soemdsp_graph_set_param(h, 2, 52, decay); // Decay
+  x.soemdsp_graph_snap_controls(h);
+  assert.equal(x.soemdsp_graph_compile(h), 0);
+  let energy = 0;
+  for (let b = 0; b < 150; ++b) {
+    const input = new Float64Array(x.memory.buffer, x.soemdsp_graph_node_port_ptr(h, 1, 0), N);
+    input.fill(0);
+    if (b === 0) input[0] = 1;
+    x.soemdsp_graph_process_block(h, N);
+    const out = new Float64Array(x.memory.buffer, x.soemdsp_graph_node_port_ptr(h, 2, 0), N);
+    for (const sample of out) {
+      assert.ok(Number.isFinite(sample));
+      if (b >= 100) energy += sample * sample;
+    }
+  }
+  x.soemdsp_graph_destroy(h);
+  return energy;
+}
+assert.ok(stringTail(0.2) > 100 * stringTail(0.01), "Body and Decay must reach native String DSP through the graph");
+console.log("Graph String Body/Decay controls and ringing tail pass.");

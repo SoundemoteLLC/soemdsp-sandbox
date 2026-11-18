@@ -2,10 +2,11 @@
 // soemdsp-native-label: Convolution Resonator
 // soemdsp-native-target: convolutionResonator
 // soemdsp-native-kind: effect
-// Stage 2: finite Buzz body and BLIT carrier. No STFT/vocoder yet.
+// Finite Buzz / damped String body and BLIT carrier. No STFT/vocoder yet.
 #include <soemdsp/utility/memory_pool.h>
 #include <soemdsp/oscillator/blit_saw.h>
 #include <soemdsp/math/exp_log.h>
+#include <soemdsp/filter/comb_core.h>
 
 namespace {
 constexpr int kInstances = 64;
@@ -25,6 +26,8 @@ struct State {
   double previousPeriod, previousNorm;
   int previousCount;
   double fade, fadeStep;
+  void* stringBlock;
+  soemdsp::comb::CombCore string[3];
   soemdsp_blit::BlitSaw oscillator;
   double carrier;
   int position;
@@ -49,6 +52,57 @@ void clear(State& s) {
   s.previousCount = 0;
   s.tapCount = 0;
   s.frequency = s.periods = s.period = s.norm = 0;
+  for (auto& loop : s.string) if (loop.buffer) soemdsp::comb::comb_clear(&loop);
+}
+
+bool reserve_string(State& s, int needed) {
+  if (s.string[0].capacity >= needed) return true;
+  int capacity = s.string[0].capacity ? s.string[0].capacity : 1024;
+  while (capacity < needed) capacity *= 2;
+  auto* buffer = static_cast<float*>(soemdsp::memory_pool::alloc(3ULL * capacity * sizeof(float)));
+  if (!buffer) return false;
+  for (int c = 0; c < 3; ++c) {
+    auto& loop = s.string[c];
+    float* target = buffer + c * capacity;
+    for (int age = 1; age <= loop.capacity; ++age)
+      target[capacity - age] = loop.buffer[(loop.writeIndex - age + loop.capacity) % loop.capacity];
+    loop.buffer = target;
+    loop.capacity = capacity;
+    loop.writeIndex = 0;
+    loop.dcResum = 0;
+  }
+  soemdsp::memory_pool::release(s.stringBlock);
+  s.stringBlock = buffer;
+  return true;
+}
+
+// Match the fundamental phase of the one-pole damping and Thiran delay.
+// The arctangent argument is bounded by the damping pole (< 0.2 here).
+double string_read_delay(double period, double damping) {
+  using namespace soemdsp_maths;
+  const double omega = kTwoPi / period;
+  const double pole = damping * damping;
+  const double ratio = pole * dsp_sin(omega) / (1 - pole * dsp_cos(omega));
+  const double r2 = ratio * ratio;
+  const double phase = ratio * (1 + r2 * (-1.0/3 + r2 * (1.0/5 + r2 * (-1.0/7 + r2 * (1.0/9 - r2/11)))));
+  const double delay = period - phase / omega;
+  const double integer = __builtin_floor(delay);
+  const double fraction = delay - integer;
+  const double half = omega * 0.5;
+  const double corrected = dsp_sin(half * fraction) * dsp_cos(half)
+    / (dsp_cos(half * fraction) * dsp_sin(half));
+  return integer + corrected;
+}
+double string_tick(soemdsp::comb::CombCore& s, double input, double period,
+  double readDelay, double gain, double damping) {
+  using namespace soemdsp::comb;
+  const double delayed = comb_read_frac(&s, readDelay);
+  const double feedback = comb_loop_filter(&s, delayed, damping);
+  double out = input * __builtin_sqrt(1 - gain * gain) + gain * feedback;
+  if (gain > 0) out -= comb_dc_mean(&s, period);
+  if (comb_nonfinite_reset(&s, out, out)) return 0;
+  comb_write_dc(&s, (float)out);
+  return out;
 }
 
 // Grow only when the requested physical history no longer fits; no pitch floor.
@@ -169,27 +223,41 @@ extern "C" void soemdsp_convolution_resonator_destroy(int handle) {
   if (!s) return;
   soemdsp::memory_pool::release(s->delay);
   soemdsp::memory_pool::release(s->bodyBlock);
+  soemdsp::memory_pool::release(s->stringBlock);
   *s = {};
 }
 extern "C" void soemdsp_convolution_resonator_reset(int handle) {
   if (auto* s = state(handle)) clear(*s);
 }
 extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
-  double frequency, double periods, double mix, double sampleRate, double fadeMs) {
+  double frequency, double periods, double mix, double sampleRate, double fadeMs,
+  double body, double decay) {
   auto* s = state(handle);
   if (!s) return 0.0;
-  if (!finite(left) || !finite(right) || !finite(frequency) || !finite(periods) || !finite(mix)) {
+  if (!finite(left) || !finite(right) || !finite(frequency) || !finite(periods) || !finite(mix)
+      || !finite(body) || !finite(decay)) {
     clear(*s);
     return 0.0;
   }
   const double sr = finite(sampleRate) && sampleRate > 0 ? sampleRate : 48000;
   const bool active = frequency > 0 && frequency < sr * 0.5 && periods > 0;
+  const double morph = 2 * body;
+  const double morph2 = morph * morph;
+  const double stringPeriod = active ? sr / frequency : 0;
+  const double gain = active && morph2 > 0 && decay > 0
+    ? soemdsp::comb::comb_feedback_gain(decay * morph2, stringPeriod, sr, 0) : 0;
+  const double damping = 0.4 * morph2 / (1 + morph2);
+  const double readDelay = active && (morph2 > 0 || s->stringBlock)
+    ? string_read_delay(stringPeriod, damping) : 0;
+  const double carrier = active ? s->oscillator.update(sr / frequency) : 0;
   double wet[2]{};
   if (active) {
     const double fadeTime = finite(fadeMs) && fadeMs > 0 ? fadeMs : 0;
     if (fadeTime == 0) s->fade = 1;
     else if (s->fade < 1) s->fadeStep = 1000 / (fadeTime * sr);
-    if (!configure(*s, frequency, periods, sr, fadeTime)) { s->right = 0; return 0; }
+    const double trainPeriods = 1 + (periods - 1) * (1 - morph) * (1 - morph);
+    if (!configure(*s, frequency, trainPeriods, sr, fadeTime)) { s->right = 0; return 0; }
+    if (morph2 > 0 && !reserve_string(*s, (int)__builtin_ceil(stringPeriod) + 8)) { s->right = 0; return 0; }
     const double pole = soemdsp_maths::dsp_exp(-soemdsp_maths::kTwoPi * 5 / sr);
     const double input[2] = {left, right};
     for (int c = 0; c < 2; ++c) {
@@ -204,6 +272,8 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
         const double blend = s->fade * s->fade * (3 - 2 * s->fade);
         wet[c] = old + blend * (wet[c] - old);
       }
+      if (s->stringBlock)
+        wet[c] = string_tick(s->string[c], wet[c], stringPeriod, readDelay, gain, damping);
       if (!finite(wet[c]) || !finite(s->integral[c])) { clear(*s); return 0; }
     }
     s->write = (s->write + 1) % s->capacity;
@@ -212,7 +282,8 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
       if (s->fade > 1) s->fade = 1;
     }
   }
-  s->carrier = active ? s->oscillator.update(sr / frequency) : 0;
+  s->carrier = active && s->stringBlock
+    ? string_tick(s->string[2], carrier, stringPeriod, readDelay, gain, damping) : carrier;
   const int p = s->position;
   const int wp = (p + kHalfKernel) % kLatency;
   const double out = (1 - mix) * s->delay[p] + mix * s->delay[2 * kLatency + wp];
@@ -233,4 +304,4 @@ extern "C" double soemdsp_convolution_resonator_carrier(int handle) {
   auto* s = state(handle);
   return s ? s->carrier : 0;
 }
-extern "C" int soemdsp_convolution_resonator_version() { return 3; }
+extern "C" int soemdsp_convolution_resonator_version() { return 4; }
