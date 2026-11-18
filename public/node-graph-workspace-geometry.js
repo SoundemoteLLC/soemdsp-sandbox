@@ -819,9 +819,9 @@ function nodeGraphModuleLightGradient(radiusX, radiusY, cx, cy, colorAt, peak) {
 // How much of the grid reveal / module light stays in a fully dark room (0..1).
 var NODE_GRID_DARK_FLOOR = 0.75;
 // The least the mouse lamp reflects off the grid, as a share of the Grid reflection setting, when the room dimmer is fully bright
-// (dial it here: 0 = no reflection with the room fully lit; 0.5 = what half-dimmed gave before, and it stays there until the room is
-// dimmed past half).
-var NODE_GRID_LAMP_REFLECT_FLOOR = 0.5;
+// (dial it here: 0 = no reflection with the room fully lit; 1 = as strong as in the darkest room, so the dimmer no longer changes it;
+// in between it holds that share until the room is dimmed past it, then rises to the full setting).
+var NODE_GRID_LAMP_REFLECT_FLOOR = 0.8;
 // Grid for the GPU lights pass, or null when the grid is off. World-space cell (the grid is anchored at
 // the world origin), line colour + alpha, how far modules reveal it, and the mouse reveal.
 var nodeGridParamsCache = { at: 0, base: null };
