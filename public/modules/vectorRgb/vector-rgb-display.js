@@ -6,8 +6,13 @@ const nodeGraphVectorRgbSettingsDefaults = Object.freeze({
   background: "#000000",
   dot1Brightness: 1,
   dot1Size: 0.08,
-  lineThickness: 0.12,
   dotBudget: 2048,
+  // The Trace settings (Vector RGB takes its colours from the R / G / B streams, so there is no gradient).
+  decayBlur: 0,
+  buildUp: true,
+  drawMode: "budget",
+  rotate90: false,
+  skipDiscontinuities: false,
   // Mid Ghost ≈ DestFade erase 0.008 (sweet hang); see PhosphorResidual.destFadeAmount.
   ghost: 0.35,
   pixelDensity: 1,
@@ -38,12 +43,22 @@ function normalizeNodeGraphVectorRgbSettings(settings = {}) {
   const ghost = Residual?.migrateGhost
     ? Residual.migrateGhost(source, d.ghost)
     : Math.max(0, Math.min(1, num("ghost", d.ghost)));
+  const flag = (key, fallback) => {
+    const raw = source[key];
+    if (raw === undefined || raw === null || raw === "") return fallback;
+    return raw === true || raw === 1 || raw === "true" || raw === "1";
+  };
+  const mode = String(source.drawMode || d.drawMode);
   return {
     background,
     dot1Brightness: Math.max(0, Math.min(1, num("dot1Brightness", d.dot1Brightness))),
     dot1Size: Math.max(0, Math.min(1, num("dot1Size", d.dot1Size))),
-    lineThickness: Math.max(0, Math.min(1, num("lineThickness", d.lineThickness))),
     dotBudget: Math.max(1, Math.min(8192, Math.round(num("dotBudget", d.dotBudget)))),
+    decayBlur: Math.max(0, Math.min(1, num("decayBlur", d.decayBlur))),
+    buildUp: flag("buildUp", d.buildUp),
+    drawMode: mode === "length" || mode === "dots" || mode === "lines" ? mode : "budget",
+    rotate90: flag("rotate90", d.rotate90),
+    skipDiscontinuities: flag("skipDiscontinuities", d.skipDiscontinuities),
     ghost,
     pixelDensity: Math.max(0, Math.min(1, num("pixelDensity", d.pixelDensity))),
     scale: Math.max(0.05, Math.min(8, num("scale", d.scale))),
@@ -295,7 +310,8 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     canvas._vectorRgbPrimed = false;
     return;
   }
-  trails.stepFade(canvas, settings.trail, settings.ghost, bg);
+  // Decay blur 0 (the default) is the plain fade; above 0 the stored picture also diffuses a little every frame (0..0.25 per frame).
+  trails.stepFade(canvas, settings.trail, settings.ghost, bg, settings.decayBlur * 0.25);
 
   try {
     const source = nodeGraphRgbPickPortBuffer(slot, "X");
@@ -334,8 +350,13 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     const oy = (h - side) * 0.5;
     const scale = settings.scale;
     const gain = settings.dot1Brightness;
-    const radius = Math.max(0.6, side * settings.dot1Size * 0.5);
-    const line = Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings.lineThickness, 0)));
+    // Size is the same mapping as Trace: authored px (dotUnitInkPx) -> px on this face (faceInkPx), not a share of the side.
+    const sizePx = typeof dotUnitInkPx === "function" ? dotUnitInkPx(settings.dot1Size) : settings.dot1Size * 96;
+    const diameter = typeof faceInkPx === "function" ? faceInkPx(sizePx, side) : side * settings.dot1Size;
+    const radius = Math.max(0.5, diameter * 0.5);
+    // Draw: dots = the samples only; lines = connect each sample to the next; budget / length = a light fill (the old default).
+    const segs = settings.drawMode === "dots" ? 0 : (settings.drawMode === "lines" ? 6 : 1);
+    const skipJump = side * 0.35;
     const budget = Math.max(1, Math.min(8192, Math.round(nodeGraphFiniteNumber(settings.dotBudget, 2048))));
     const connectionsTo = typeof nodeGraphModuleScopeConnectionsTo === "function"
       ? nodeGraphModuleScopeConnectionsTo
@@ -344,7 +365,6 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     const rgbWired = ["R", "G", "B"].some((port) => connectionsTo(slot.nodeId, port).length > 0);
 
     const floatsPer = typeof TraceRgbPoints !== "undefined" ? TraceRgbPoints.FLOATS : 5;
-    const segs = Math.max(0, Math.round(line * 8));
     const nCap = captured.length;
     const stride = nCap > budget ? nCap / budget : 1;
     const maxStamps = Math.min(8192, Math.ceil(nCap / stride) * (segs + 1) + 2);
@@ -374,8 +394,17 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     const pickStep = pickCount <= 1 ? 1 : (nCap - 1) / Math.max(1, pickCount - 1);
     for (let p = 0; p < pickCount && count < budget; p += 1) {
       const i = stride <= 1 ? p : Math.min(nCap - 1, Math.round(p * pickStep));
-      const x = nodeGraphVectorRgbUnitToPx(captured.X[i], ox, side, scale);
-      const y = nodeGraphVectorRgbUnitToPx(-captured.Y[i], oy, side, scale);
+      let sx = captured.X[i];
+      let sy = captured.Y[i];
+      if (settings.rotate90) {
+        const rot = typeof nodeGraphGradientVectorscopeRotate === "function"
+          ? nodeGraphGradientVectorscopeRotate(sx, sy, true)
+          : { x: (sx - sy) * Math.SQRT1_2, y: (sx + sy) * Math.SQRT1_2 };
+        sx = rot.x;
+        sy = rot.y;
+      }
+      const x = nodeGraphVectorRgbUnitToPx(sx, ox, side, scale);
+      const y = nodeGraphVectorRgbUnitToPx(-sy, oy, side, scale);
       if (x == null || y == null) {
         continue;
       }
@@ -390,7 +419,10 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
         prevX = NaN;
         continue;
       }
-      if (segs > 0 && Number.isFinite(prevX) && Number.isFinite(prevY)) {
+      // Skip Discontinuity: no line across a big jump (a wrap or a cut), the same idea as Trace.
+      const jumped = settings.skipDiscontinuities && Number.isFinite(prevX) && Number.isFinite(prevY)
+        && Math.hypot(x - prevX, y - prevY) > skipJump;
+      if (segs > 0 && !jumped && Number.isFinite(prevX) && Number.isFinite(prevY)) {
         for (let s = 1; s <= segs && count < budget; s += 1) {
           const t = s / (segs + 1);
           pushStamp(
@@ -410,7 +442,8 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
       prevB = b;
     }
     if (count > 0 && typeof trails.stampPoints === "function") {
-      trails.stampPoints(canvas, packed, count, radius * 2);
+      // Build up off: a pixel never gets brighter than one stamp (MAX blend), like Trace.
+      trails.stampPoints(canvas, packed, count, radius * 2, { max: settings.buildUp === false });
     }
   } finally {
     if (typeof trails.presentTo === "function") {

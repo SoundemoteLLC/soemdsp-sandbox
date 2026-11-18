@@ -513,20 +513,22 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze(["skipDiscontinuities", "rotate90", "buildUp"]),
     choices: Object.freeze(["drawMode"]),
   }),
+  // Vector RGB takes the 2D Trace settings (colour comes from the R / G / B streams, so no gradient). Burn is left out: the
+  // RGB trail surface has no separate live layer to burn against.
   vectorRgbFace: Object.freeze({
     fields: Object.freeze(nodeGraphPhosphorDisplayFieldsFor([
       "scale",
       "dot1Size",
-      "lineThickness",
       "dot1Brightness",
       "ghost",
       "trail",
+      "decayBlur",
       "pixelDensity",
       "dotBudget",
     ])),
     colors: Object.freeze(["backgroundColor"]),
-    toggles: Object.freeze([]),
-    choices: Object.freeze([]),
+    toggles: Object.freeze(["skipDiscontinuities", "rotate90", "buildUp"]),
+    choices: Object.freeze(["drawMode"]),
   }),
   rasterRgbFace: Object.freeze({
     fields: Object.freeze(["edgeSpacing", "cornerRadius"]),

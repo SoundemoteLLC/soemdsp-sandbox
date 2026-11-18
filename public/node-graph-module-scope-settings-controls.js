@@ -803,7 +803,6 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
   }),
   vectorRgbFace: Object.freeze({
-    lineThickness: nodeGraphTraceDisplayClampStampBlur,
     dotBudget: nodeGraphTraceDisplayClampDotBudget,
   }),
   toggleButtonFace: Object.freeze({

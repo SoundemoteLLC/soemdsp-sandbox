@@ -556,7 +556,7 @@ function nodeGraphDisplaySettingsColorRowSizes(count) {
   return sizes;
 }
 
-function nodeGraphDisplaySettingsHbsRow(cells) {
+function nodeGraphDisplaySettingsHbsRow(cells, options) {
   const list = (Array.isArray(cells) ? cells : [cells]).filter(Boolean);
   if (!list.length) {
     return "";
@@ -565,11 +565,12 @@ function nodeGraphDisplaySettingsHbsRow(cells) {
   if (n > 4) {
     return nodeGraphDisplaySettingsColorRows(list);
   }
-  const cols = n === 1 ? 2 : n;
+  // One colour is a half-width cell by default; options.fullWidth makes it span the row (Vector RGB's background).
+  const cols = n === 1 && !options?.fullWidth ? 2 : n;
   return `<div class="node-trace-display-hbs-row" style="--color-row-cells:${cols}" data-color-row-cells="${n}">${list.join("")}</div>`;
 }
 
-function nodeGraphDisplaySettingsColorRows(cells, groups) {
+function nodeGraphDisplaySettingsColorRows(cells, groups, options) {
   const list = (Array.isArray(cells) ? cells : [cells]).filter(Boolean);
   if (!list.length) {
     return "";
@@ -602,7 +603,7 @@ function nodeGraphDisplaySettingsColorRows(cells, groups) {
       throw new Error(`color row has ${n} cells; rows are 2 to 4 (or one half-width cell)`);
     }
   }
-  return chunks.map((chunk) => nodeGraphDisplaySettingsHbsRow(chunk)).join("");
+  return chunks.map((chunk) => nodeGraphDisplaySettingsHbsRow(chunk, options)).join("");
 }
 
 
@@ -1650,7 +1651,7 @@ function nodeGraphStageRealRadius(settings, B, kind) {
     ? dotUnitInkPx(Number.isFinite(unit) ? unit : 0)
     : Math.max(0, Math.min(1, unit || 0)) * 96;
   let radius;
-  if (kind === "scope1dTrace" || kind === "scope2dTrace") {
+  if (kind === "scope1dTrace" || kind === "scope2dTrace" || kind === "vectorRgbFace") {
     const diameter = typeof faceInkPx === "function" ? faceInkPx(sizePx, faceMin) : sizePx;
     radius = Math.max(kind === "scope2dTrace" ? 2 : 0.5, diameter * 0.5);
   } else if (typeof PhosphorDrawer !== "undefined" && typeof PhosphorDrawer.radiusFromSize === "function") {
@@ -1767,7 +1768,7 @@ const nodeGraphStageTune = Object.freeze(Object.fromEntries(
 
 /** Which tune set a preview kind uses. */
 function nodeGraphStageTuneGroup(kind) {
-  if (kind === "scope2dTrace") return "trace2d";
+  if (kind === "scope2dTrace" || kind === "vectorRgbFace") return "trace2d";
   if (kind === "scope1dTrace") return "trace1d";
   if (kind === "lineBurn") return "phos1d";
   return "phos2d";
@@ -3180,6 +3181,8 @@ function buildNodeGraphPhosphorDisplaySettingsBodyHtml(type, node, allowKey) {
   if (colorKeys.length) {
     rows.push(nodeGraphDisplaySettingsColorRows(
       colorKeys.map((key) => nodeGraphDisplaySettingsBuildColorRowHtml(key, type)),
+      undefined,
+      { fullWidth: true },
     ));
   }
   if (
