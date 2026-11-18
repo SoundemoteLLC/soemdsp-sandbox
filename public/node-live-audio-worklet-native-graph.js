@@ -6103,6 +6103,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if (type === "convolutionResonator") {
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
       push("bodySize", P.NATIVE_GRAPH_PARAM_STAGES, cont("bodySize", 4));
+      push("transitionMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("transitionMs", 20));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;
     }

@@ -55,15 +55,35 @@ fractional tuning, linearity at 10x input, stereo, DC removal, carrier pitch,
 range endpoints and finite audio-rate parameter modulation.
 The combined-graph test also verifies audible wet output and f-jack replacement.
 
-String, Tube, the Body morph, note-jump crossfading, STFT, Crunch and the final
+## Buzz Transitions
+
+Frequency and Size changes now begin a definition-controlled transition
+(20 ms default, 0..100 ms spawn range). Two valid FIR configurations share
+the same retained input history and are blended with a smoothstep envelope.
+Storage growth copies both configurations before releasing the old block;
+reset clears transition state without discarding allocated capacity.
+
+Transition = 0 selects direct sample-accurate retuning. With a nonzero
+Transition, further edits update the destination filter without restarting
+the active fade. This bounds the work to two filter evaluations per sample,
+but is not a guarantee of click-free arbitrary rapid retargeting: an abrupt
+change to the destination late in a fade can still be audible. The internal
+BLIT carrier follows f directly; its eventual STFT transition is separate.
+
+`node scripts/test_convolution_resonator_transitions.mjs` verifies exact
+agreement with separately evaluated old/new FIR outputs for isolated pitch
+and Size changes, plus finite rapid retargeting and reset during a fade.
+
+String, Tube, the Body morph, STFT, Crunch and the final
 parameter-pinned IR display are not implemented yet. Do not describe this as
-the completed vocoder or as click-free for abrupt pitch jumps.
+the completed vocoder or as click-free for arbitrary modulation.
 
 ## Next
 
 1. Diagnose the browser Render Sample stall, with a bounded test and diagnostics.
 2. Listen to Buzz with voice/music and verify its Mix and f controls.
-3. Add note-jump transitions, then String and Tube with matching IR probes.
+3. Listen to isolated note jumps and rapid retargeting; then implement String
+   and Tube with matching IR probes.
 4. Coordinate shared FFT extraction from Noise Convolution Reverb. Do not
    modify Sandy's worktree. The FFT remains private to her module at this point.
 5. Fixed-size STFT, then Crunch transitions, anti-aliasing and pinned displays.

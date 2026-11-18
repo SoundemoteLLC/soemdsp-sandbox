@@ -17,10 +17,14 @@ struct State {
   double* history;
   double* sums;
   Tap* taps;
+  Tap* previousTaps;
   void* bodyBlock;
   int capacity, tapCapacity, write, tapCount;
   double integral[2], dcX[2], dcY[2];
   double frequency, periods, period, norm;
+  double previousPeriod, previousNorm;
+  int previousCount;
+  double fade, fadeStep;
   soemdsp_blit::BlitSaw oscillator;
   double carrier;
   int position;
@@ -41,6 +45,10 @@ void clear(State& s) {
   s.carrier = 0;
   s.position = 0;
   s.right = 0.0;
+  s.fade = 1;
+  s.previousCount = 0;
+  s.tapCount = 0;
+  s.frequency = s.periods = s.period = s.norm = 0;
 }
 
 // Grow only when the requested physical history no longer fits; no pitch floor.
@@ -49,7 +57,7 @@ bool reserve(State& s, int frames, int taps) {
   int capacity = s.capacity ? s.capacity : 1024;
   while (capacity < frames) capacity *= 2;
   const int tapCapacity = taps > s.tapCapacity ? taps : s.tapCapacity;
-  const auto bytes = 4ULL * capacity * sizeof(double) + (unsigned long long)tapCapacity * sizeof(Tap);
+  const auto bytes = 4ULL * capacity * sizeof(double) + 2ULL * tapCapacity * sizeof(Tap);
   void* block = soemdsp::memory_pool::alloc(bytes);
   if (!block) return false;
   auto* history = static_cast<double*>(block);
@@ -64,28 +72,40 @@ bool reserve(State& s, int frames, int taps) {
       } else sums[dst] = s.capacity ? s.sums[c * s.capacity + s.write] : 0;
     }
   }
+  auto* newTaps = reinterpret_cast<Tap*>(sums + 2 * capacity);
+  auto* previousTaps = newTaps + tapCapacity;
+  for (int i = 0; i < s.tapCount; ++i) newTaps[i] = s.taps[i];
+  for (int i = 0; i < s.previousCount; ++i) previousTaps[i] = s.previousTaps[i];
   soemdsp::memory_pool::release(s.bodyBlock);
   s.bodyBlock = block;
   s.history = history;
   s.sums = sums;
-  s.taps = reinterpret_cast<Tap*>(sums + 2 * capacity);
+  s.taps = newTaps;
+  s.previousTaps = previousTaps;
   s.capacity = capacity;
   s.tapCapacity = tapCapacity;
   s.write = 0;
-  s.frequency = -1;
   return true;
 }
 double sinc(double x) {
   if (__builtin_fabs(x) < 1.e-12) return 1;
   return soemdsp_blit::sinApprox(soemdsp_maths::kPi * x) / (soemdsp_maths::kPi * x);
 }
-bool configure(State& s, double frequency, double periods, double sr) {
+bool configure(State& s, double frequency, double periods, double sr, double fadeMs) {
   const double period = sr / frequency;
   const double frames = (periods + 1) * period + 32;
   if (!finite(frames) || frames > __INT_MAX__ / 4 || periods > __INT_MAX__ / (int)sizeof(Tap)) return false;
   const int count = (int)__builtin_ceil(periods);
   if (!reserve(s, (int)__builtin_ceil(frames), count)) return false;
   if (s.frequency == frequency && s.periods == periods && s.period == period) return true;
+  if (s.tapCount && s.fade >= 1 && fadeMs > 0) {
+    for (int i = 0; i < s.tapCount; ++i) s.previousTaps[i] = s.taps[i];
+    s.previousCount = s.tapCount;
+    s.previousPeriod = s.period;
+    s.previousNorm = s.norm;
+    s.fade = 0;
+    s.fadeStep = 1000 / (fadeMs * sr);
+  }
   s.frequency = frequency;
   s.periods = periods;
   s.period = period;
@@ -118,18 +138,18 @@ double integral_at(const State& s, int c, double age) {
   const double value = history(s, s.sums, c, n);
   return value + fraction * (history(s, s.sums, c, n + 1) - value);
 }
-double buzz(State& s, int c) {
+double buzz(const State& s, int c, const Tap* taps, int count, double period, double norm) {
   double out = 0;
-  for (int k = 0; k < s.tapCount; ++k) {
-    const Tap& t = s.taps[k];
+  for (int k = 0; k < count; ++k) {
+    const Tap& t = taps[k];
     double pulse = 0;
     for (int j = 0; j < 16; ++j)
       pulse += t.coefficients[j] * history(s, s.history, c, t.delay + j - 7);
-    const double start = kHalfKernel + k * s.period;
-    const double mean = (integral_at(s, c, start) - integral_at(s, c, start + s.period)) / s.period;
+    const double start = kHalfKernel + k * period;
+    const double mean = (integral_at(s, c, start) - integral_at(s, c, start + period)) / period;
     out += t.weight * (pulse - mean);
   }
-  return out / s.norm;
+  return out / norm;
 }
 }
 
@@ -155,7 +175,7 @@ extern "C" void soemdsp_convolution_resonator_reset(int handle) {
   if (auto* s = state(handle)) clear(*s);
 }
 extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
-  double frequency, double periods, double mix, double sampleRate) {
+  double frequency, double periods, double mix, double sampleRate, double fadeMs) {
   auto* s = state(handle);
   if (!s) return 0.0;
   if (!finite(left) || !finite(right) || !finite(frequency) || !finite(periods) || !finite(mix)) {
@@ -166,7 +186,10 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
   const bool active = frequency > 0 && frequency < sr * 0.5 && periods > 0;
   double wet[2]{};
   if (active) {
-    if (!configure(*s, frequency, periods, sr)) { s->right = 0; return 0; }
+    const double fadeTime = finite(fadeMs) && fadeMs > 0 ? fadeMs : 0;
+    if (fadeTime == 0) s->fade = 1;
+    else if (s->fade < 1) s->fadeStep = 1000 / (fadeTime * sr);
+    if (!configure(*s, frequency, periods, sr, fadeTime)) { s->right = 0; return 0; }
     const double pole = soemdsp_maths::dsp_exp(-soemdsp_maths::kTwoPi * 5 / sr);
     const double input[2] = {left, right};
     for (int c = 0; c < 2; ++c) {
@@ -175,10 +198,19 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
       s->history[c * s->capacity + s->write] = filtered;
       s->integral[c] += filtered;
       s->sums[c * s->capacity + s->write] = s->integral[c];
-      wet[c] = buzz(*s, c);
+      wet[c] = buzz(*s, c, s->taps, s->tapCount, s->period, s->norm);
+      if (s->fade < 1) {
+        const double old = buzz(*s, c, s->previousTaps, s->previousCount, s->previousPeriod, s->previousNorm);
+        const double blend = s->fade * s->fade * (3 - 2 * s->fade);
+        wet[c] = old + blend * (wet[c] - old);
+      }
       if (!finite(wet[c]) || !finite(s->integral[c])) { clear(*s); return 0; }
     }
     s->write = (s->write + 1) % s->capacity;
+    if (s->fade < 1) {
+      s->fade += s->fadeStep;
+      if (s->fade > 1) s->fade = 1;
+    }
   }
   s->carrier = active ? s->oscillator.update(sr / frequency) : 0;
   const int p = s->position;
@@ -201,4 +233,4 @@ extern "C" double soemdsp_convolution_resonator_carrier(int handle) {
   auto* s = state(handle);
   return s ? s->carrier : 0;
 }
-extern "C" int soemdsp_convolution_resonator_version() { return 2; }
+extern "C" int soemdsp_convolution_resonator_version() { return 3; }

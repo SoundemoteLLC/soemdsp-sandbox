@@ -827,7 +827,7 @@ extern "C" int soemdsp_noise_conv_reverb_create(double sampleRate);
 extern "C" int soemdsp_convolution_resonator_create();
 extern "C" void soemdsp_convolution_resonator_destroy(int handle);
 extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
-  double frequency, double periods, double mix, double sampleRate);
+  double frequency, double periods, double mix, double sampleRate, double fadeMs);
 extern "C" double soemdsp_convolution_resonator_right(int handle);
 extern "C" void soemdsp_noise_conv_reverb_destroy(int handle);
 extern "C" void soemdsp_noise_conv_reverb_reset(int handle);
@@ -4645,6 +4645,7 @@ static void init_node_defaults(Node& n, int typeId) {
     n.offsetMs,
     (typeId == kTypeVelvetReverb) ? 1.0 : // Min Gap ms (Dark Velvet Reverb)
     (typeId == kTypePulseTrain) ? 0.0 : // Stretch -1..+1 (0 = span multiplier 1)
+    (typeId == kTypeConvolutionResonator) ? 20.0 : // Buzz filter transition ms
     (typeId == kTypeModalSnare) ? 2.0 : // clickDecay ms (Modal Snare)
     (typeId == kTypePulseExplosion) ? 0.002 : // hold seconds
     (typeId == kTypeRobinSinepulse) ? 2.0 : // Fade Time ms (Robin Sinepulse)
@@ -15863,7 +15864,8 @@ static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
     const double y = soemdsp_convolution_resonator_sample(node.nativeHandle,
       route.runMono || route.runL ? a : 0.0, route.runR ? b : 0.0,
       resolve_osc_hz(g, f, liveF, false, node.frequency, 0.0, sr),
-      control_audio(g, node.stages, f), control_audio(g, node.mix, f), sr);
+      control_audio(g, node.stages, f), control_audio(g, node.mix, f), sr,
+      control_audio(g, node.offsetMs, f));
     const double yr = soemdsp_convolution_resonator_right(node.nativeHandle);
     node.buf[kPortMono][f] = stereo_route_out(route.outMono, y, y, yr);
     node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, y, y, yr);

@@ -7343,7 +7343,7 @@ const nodeGraphModuleDefinitions = (
     planFreeRun: true,
     face: [
       { kind: "cells", params: [["frequency", "Frequency"], ["bodySize", "Size"]], h: 40 },
-      { kind: "cells", params: [["mix", "Mix"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["transitionMs", "Transition"], ["mix", "Mix"]], h: 40 },
     ],
     inputs: ["In", "Left", "Right", "f"],
     inputLabels: { In: "Mono", f: "\u0192" },
@@ -7358,6 +7358,8 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Buzz body fundamental and BLIT carrier pitch in Hz. A wired f input replaces this value sample by sample." },
       { key: "bodySize", label: "Size", defaultValue: "4", min: "1", mid: "4", max: "8", step: "any", unit: "cycles",
         tooltip: "Length of the finite Buzz pulse train in periods. Fractional values fade the last pulse continuously; more periods make narrower harmonic teeth." },
+      { key: "transitionMs", label: "Transition", defaultValue: "20", min: "0", mid: "20", max: "100", step: "any", unit: "ms",
+        tooltip: "Crossfade time for Frequency and Size changes. Zero retunes directly for audio-rate modulation. While a fade is active, its destination follows new parameter values without restarting the fade." },
       { key: "mix", label: "Mix", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "any",
         tooltip: "Dry/wet balance. Both paths retain the same 2048-sample timing reference. Wet is the Buzz body only at this development stage; no vocoder yet." },
     ],
