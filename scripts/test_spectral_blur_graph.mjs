@@ -5,8 +5,8 @@ const x = (await WebAssembly.instantiate(fs.readFileSync(new URL("../native_modu
   { env: { emo_process_block() {} } })).instance.exports;
 const N = 128, rate = 48000;
 const specs = [
-  [272, "spectral_blur", [[52, 2], [31, 100], [42, 1], [40, 1], [55, 10], [41, 0], [1, 1]]],
-  [272, "spectral_blur", [[52, 0.46], [31, 490.89], [42, 0.402], [40, 1], [55, 10], [41, 20], [1, 0.7]], true],
+  [272, "spectral_blur", [[52, 2], [31, 100], [42, 1], [40, 1], [55, 10], [41, 0], [1, 1], [22, 4096]]],
+  [272, "spectral_blur", [[52, 0.46], [31, 490.89], [42, 0.402], [40, 1], [55, 10], [41, 20], [1, 0.7], [22, 512]], true],
 ];
 for (const [type, name, params, configure = false] of specs) {
   for (const sides of [[0], [1], [2], [1, 2], [0, 1, 2]]) {
@@ -36,7 +36,8 @@ for (const [type, name, params, configure = false] of specs) {
         const a = stereo ? l + m : m + l + r, z = stereo ? r + m : a;
         x.soemdsp_spectral_blur_set_smoothing(ref, params.find(([id]) => id === 55)[1], params.find(([id]) => id === 41)[1]);
         x.soemdsp_spectral_blur_set_stereo_spread(ref, params.find(([id]) => id === 1)[1]);
-        const args = params.filter(([id]) => id !== 55 && id !== 41 && id !== 1).map(p => p[1]);
+        x.soemdsp_spectral_blur_set_fft_size(ref, params.find(([id]) => id === 22)[1]);
+        const args = params.filter(([id]) => id !== 55 && id !== 41 && id !== 1 && id !== 22).map(p => p[1]);
         const expected = x[prefix + "sample"](ref, a, z, ...args, rate);
         const expectedR = x[prefix + "right"](ref);
         assert.ok(Math.abs(out[1][i] - expected) < 1e-10 && Math.abs(out[2][i] - expectedR) < 1e-10, `${name} graph/native routing and params`);

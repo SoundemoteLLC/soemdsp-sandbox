@@ -844,6 +844,7 @@ extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double
 extern "C" double soemdsp_spectral_blur_right(int h);
 extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, double amplitudeMs);
 extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount);
+extern "C" int soemdsp_spectral_blur_set_fft_size(int h, int length);
 extern "C" int soemdsp_stft_contrast_create();
 extern "C" void soemdsp_stft_contrast_destroy(int handle);
 extern "C" double soemdsp_stft_contrast_sample(int h, double l, double r, double contrast,
@@ -5004,6 +5005,7 @@ static void init_node_defaults(Node& n, int typeId) {
     for (int i = 0; i < kMaxBlockFrames; i += 1) n.yellowCutoffStrip[i] = 1.0f;
   }
   if (typeId == kTypeSpectralBlur) {
+    init_control(n.stages, 4096, true);
     init_control(n.pan, 1, false);
     init_control(n.timeNumerator, 2, false);
     init_control(n.width, 100, false);
@@ -15970,6 +15972,7 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
     const double left = a, right = b;
     double y, yr;
     if (node.typeId == kTypeSpectralBlur) {
+      soemdsp_spectral_blur_set_fft_size(node.nativeHandle, (int)control_audio(g, node.stages, f));
       soemdsp_spectral_blur_set_stereo_spread(node.nativeHandle, control_audio(g, node.pan, f));
       soemdsp_spectral_blur_set_smoothing(node.nativeHandle,
         control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionSize, f));

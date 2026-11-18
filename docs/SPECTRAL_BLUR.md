@@ -1,10 +1,13 @@
 # Spectral Blur
 
 Native listening proof on `codex/convolution-resonator`, 2026-11-18.
-Module Browser: Space. Native type 272, `spectral_blur` version 2.
+Module Browser: Space. Native type 272, `spectral_blur` version 3.
 
 ## Controls
 
+- FFT Size: 512 / 1024 / 2048 / 4096 samples, default 4096. The UI uses four
+  evenly spaced choice indices; persisted keys and DSP IDs are actual sample
+  counts. At 48 kHz these windows span 10.67 / 21.33 / 42.67 / 85.33 ms.
 - Time Smear: spectral power averaging time constant in seconds, default 2 s.
   Zero follows each frame. This softens attacks and extends spectral energy;
   amplitude tails decay more slowly than the power time constant. It is not
@@ -29,8 +32,13 @@ Module Browser: Space. Native type 272, `spectral_blur` version 2.
 
 ## DSP And State
 
-4096-point FFT, 1024-sample hop, periodic Hann analysis/synthesis with normalized
-four-way overlap-add. Fixed 4096-sample reference latency (85.33 ms at 48 kHz).
+Selectable FFT with quarter-window hop, periodic Hann analysis/synthesis and
+normalized four-way overlap-add. Fixed 4096-sample reference latency (85.33 ms at 48 kHz).
+Shorter engines pad their output delay to that reference: tighter processing
+does not mean lower host latency in this version. Size edits reset an inactive
+preallocated core, conservatively remap spectral power, warm for 4096 samples,
+then smoothstep-crossfade for 50 ms. Latest requested edits queue while switching.
+No allocation, global plan rebuild or active-core reset is needed for a size edit.
 The processing window duration and bin resolution change with sample rate;
 Time Smear and Frequency Blur remain expressed in real seconds and Hz.
 
@@ -76,7 +84,7 @@ The user's partial-diffusion reference is Time Smear 0.46 s, Frequency Blur
 without suppressing the intentionally sharp spectral dynamics. Removing the
 cancellations can increase audible level; this is not automatic makeup gain.
 
-Freeze, feedback, editable FFT size, pitch shifting and a dedicated spectral
+Freeze, feedback, pitch shifting and a dedicated spectral
 display are not in v1. Do not mistake a long power decay for infinite sustain.
 
 ## Verification
@@ -85,6 +93,9 @@ display are not in v1. Do not mistake a long power decay for infinite sustain.
   (max error about 4e-8), dry latency, silence, sustained tail, stereo scaling,
   channel isolation, mono-to-stereo spread, smoothing, retained steady level,
   rapid edits, finite recovery and no memory growth.
+- All four sizes reconstruct with the same 4096-sample delay at each sample
+  rate. Switching stays neutral on DC, preserves output continuity and accepts
+  the latest queued size; invalid sizes return an error.
 - `node scripts/test_spectral_blur_graph.mjs`: native defaults and edited controls,
   mono/left/right/stereo/summed routing versus direct native sample processing.
 - `node scripts/test_spectral_blur_browser.mjs`: actual worklet audio, plan,

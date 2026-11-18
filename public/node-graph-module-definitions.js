@@ -7348,12 +7348,46 @@ const nodeGraphModuleDefinitions = (
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
     displayType: "scope1dTrace",
     face: [
+      { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["smearSeconds", "Time Smear"], ["blurHz", "Frequency Blur"]], h: 40 },
       { kind: "cells", params: [["diffusion", "Diffusion"], ["stereoSpread", "Stereo Spread"]], h: 40 },
       { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
     ],
     parameters: [
+      {
+        "key": "fftSize",
+        "label": "FFT Size",
+        "kind": "choice",
+        "choices": [
+          "512",
+          "1024",
+          "2048",
+          "4096"
+        ],
+        "choiceKeys": [
+          "512",
+          "1024",
+          "2048",
+          "4096"
+        ],
+        "choiceIds": [
+          512,
+          1024,
+          2048,
+          4096
+        ],
+        "defaultValue": "4096",
+        "min": "0",
+        "mid": "1.5",
+        "max": "3",
+        "step": "1",
+        "unit": "samples",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "Analysis window length in samples. At 48 kHz: 512 = 10.67 ms, 1024 = 21.33 ms, 2048 = 42.67 ms, 4096 = 85.33 ms. Smaller windows tighten processed attacks with coarser frequency resolution. Changes warm and crossfade; total dry/wet latency stays 4096 samples."
+      },
       {
         "key": "smearSeconds",
         "label": "Time Smear",
@@ -7378,7 +7412,7 @@ const nodeGraphModuleDefinitions = (
         "unit": "Hz",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "Power-spreading neighborhood half-width in Hz. Zero leaves bins separate. Higher values spread harmonics into surrounding frequencies. The fixed FFT limits frequency resolution."
+        "tooltip": "Power-spreading neighborhood half-width in Hz. Zero leaves bins separate. Higher values spread harmonics into surrounding frequencies. FFT Size sets the frequency resolution."
       },
       {
         "key": "diffusion",

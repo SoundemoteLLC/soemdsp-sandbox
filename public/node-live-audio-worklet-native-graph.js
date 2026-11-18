@@ -627,6 +627,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if (t === "spectralBlur") {
+    if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_PAN;
     if (k === "phaseSmoothMs") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
     if (k === "amplitudeSmoothMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
@@ -3699,6 +3700,7 @@ NodeLiveAudioProcessor.prototype.postNativeGraphStatus = function postNativeGrap
 
 // Discrete Controls: push snapped targets (avoid fractional enum while ramping).
 NodeLiveAudioProcessor.NATIVE_GRAPH_DISCRETE_PARAMS = Object.freeze({
+  fftSize: true,
   waveform: true,
   mode: true,
   upShape: true,
@@ -6151,6 +6153,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "spectralBlur") {
+      push("fftSize", P.NATIVE_GRAPH_PARAM_STAGES, disc("fftSize", 4096));
       push("stereoSpread", P.NATIVE_GRAPH_PARAM_PAN, cont("stereoSpread", 1));
       push("phaseSmoothMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("phaseSmoothMs", 10));
       push("amplitudeSmoothMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("amplitudeSmoothMs", 0));
