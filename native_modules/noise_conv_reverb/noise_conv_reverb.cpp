@@ -7,16 +7,18 @@
 // generated, shaped noise impulse response. A short time-domain head covers
 // the first 128 samples of the IR; the rest is non-uniform overlap-save with
 // growing FFT partitions, then uniform partitions at the largest hop, so a
-// long tail stays cheap. Length, Amp Shape, Spectral Shape, Darkness,
-// Brightness, Decorrelate and Seed rebuild the IR (fully in create, or
+// long tail stays cheap. Length, Amp Shape, Spectral Shape, Start/End Cutoff,
+// Decorrelate and Seed rebuild the IR (fully in create, or
 // incrementally across audio blocks when a parameter changes) and the wet
 // signal crossfades, so a knob move does not click or zipper.
 //
 // Amp Shape warps a linear-in-dB decay over Length with the Step Graph
 // rational curve (segment_rational01, same sign: + reaches the end sooner).
-// Spectral Shape warps how the lowpass cutoff travels from Brightness (early)
-// to Darkness (late), same curve. Decorrelate (0 = identical L/R, 1 =
+// Spectral Shape warps how the lowpass cutoff travels from Start Cutoff
+// to End Cutoff in Hz, same curve. Decorrelate (0 = identical L/R, 1 =
 // independent seeds) is cheap.
+// The filtered IR ends with a quarter-length cosine taper, capped at 20 ms.
+// Tiny kernels may fit entirely in the head.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
@@ -35,8 +37,9 @@ static const int kMaxParts = 512;
 static const int kSizeCount = 6;
 static const int kBlockMax = 128;
 static const double kFadeSeconds = 0.020;
-static const int kBuildSamplesPerCall = 8192;
-static const int kBuildFftsPerCall = 2;
+static const int kBuildSamplesPerCall = 512;
+static const int kBuildScalePerCall = 4096;
+static const int kBuildFftsPerCall = 1;
 static const float kDenorm = 1.0e-20f;
 static const double kAmpFloorDb = -60.0;
 
@@ -123,8 +126,8 @@ struct CleanParams {
   double length;
   double ampShape;
   double spectralShape;
-  double darkness;
-  double brightness;
+  double endCutoffHz;
+  double startCutoffHz;
   double decorrelate;
   double sampleRate;
   unsigned int seed;
@@ -179,6 +182,7 @@ struct State {
   Bank bank[2];
   int cur;
   bool fading;
+  int warmRemaining;
   double fade;
   bool haveIr;
   SizeClass sizes[kSizeCount];
@@ -194,7 +198,6 @@ struct State {
   int buildT;
   int buildPart;
   CleanParams buildP;
-  bool buildDirty;
   unsigned int rngL;
   unsigned int rngR;
   float lpL1, lpL2, lpR1, lpR2;
@@ -213,7 +216,7 @@ static int ir_len_for(double length, double sr) {
   if (!(length > 0.0) || !(length == length)) length = 0.0;
   if (length > kMaxLengthSeconds) length = kMaxLengthSeconds;
   int n = (int)(length * sr + 0.5);
-  if (n < kHead) n = kHead;
+  if (n < 1) n = 1;
   return n;
 }
 
@@ -242,7 +245,8 @@ static unsigned long long block_bytes_for(int maxLen) {
   const int outCap = out_cap_for(maxLen);
   bytes += (unsigned long long)maxLen * 4u * 4u; // two banks, L/R IR
   bytes += (unsigned long long)outCap * 4u * 4u; // two banks, L/R rings
-  bytes += (unsigned long long)maxLen * 8u * 4u * 2u; // two banks IR spectra (8 floats per IR sample)
+  // The final partial partition still needs one full hop of spectrum storage.
+  bytes += (unsigned long long)(maxLen + kMaxHop) * 8u * 4u * 2u;
   int hop = kHead;
   for (int s = 0; s < kSizeCount; ++s) {
     const int fft = hop * 2;
@@ -259,7 +263,7 @@ static unsigned long long block_bytes_for(int maxLen) {
 
 static CleanParams sanitize(
   double length, double ampShape, double spectralShape,
-  double darkness, double brightness, double decorrelate,
+  double endCutoffHz, double startCutoffHz, double decorrelate,
   double sampleRate, unsigned int seed
 ) {
   CleanParams p;
@@ -267,8 +271,8 @@ static CleanParams sanitize(
   p.length = clampf(length, 1.0 / p.sampleRate, kMaxLengthSeconds);
   p.ampShape = soemdsp::math::segment_contour_soft_cap(ampShape);
   p.spectralShape = soemdsp::math::segment_contour_soft_cap(spectralShape);
-  p.darkness = clampf(darkness, 0.0, 1.0);
-  p.brightness = clampf(brightness, 0.0, 1.0);
+  p.endCutoffHz = clampf(endCutoffHz, 0.0, 0.45 * p.sampleRate);
+  p.startCutoffHz = clampf(startCutoffHz, 0.0, 0.45 * p.sampleRate);
   p.decorrelate = clampf(decorrelate, 0.0, 1.0);
   p.seed = seed;
   return p;
@@ -278,8 +282,8 @@ static bool params_equal(const CleanParams& a, const CleanParams& b) {
   return a.length == b.length
     && a.ampShape == b.ampShape
     && a.spectralShape == b.spectralShape
-    && a.darkness == b.darkness
-    && a.brightness == b.brightness
+    && a.endCutoffHz == b.endCutoffHz
+    && a.startCutoffHz == b.startCutoffHz
     && a.decorrelate == b.decorrelate
     && a.sampleRate == b.sampleRate
     && a.seed == b.seed;
@@ -332,6 +336,7 @@ static void clear_conv_state(State& s) {
   clear_bank_out(s.bank[0]);
   clear_bank_out(s.bank[1]);
   s.silentAge = 0;
+  s.warmRemaining = 0;
 }
 
 static unsigned char* wire_block(State& s, unsigned char* raw, int maxLen) {
@@ -344,7 +349,7 @@ static unsigned char* wire_block(State& s, unsigned char* raw, int maxLen) {
     s.bank[b].irR = (float*)p; p = align16(p + (unsigned long long)maxLen * 4u);
     s.bank[b].outL = (float*)p; p = align16(p + (unsigned long long)outCap * 4u);
     s.bank[b].outR = (float*)p; p = align16(p + (unsigned long long)outCap * 4u);
-    s.bank[b].specArena = (float*)p; p = align16(p + (unsigned long long)maxLen * 8u * 4u);
+    s.bank[b].specArena = (float*)p; p = align16(p + (unsigned long long)(maxLen + kMaxHop) * 8u * 4u);
     s.bank[b].outCap = outCap;
     s.bank[b].outIdx = 0;
     s.bank[b].irLen = 0;
@@ -374,12 +379,10 @@ static unsigned char* wire_block(State& s, unsigned char* raw, int maxLen) {
 }
 
 static double cutoff_hz(const CleanParams& p, double u) {
-  const double ny = 0.45 * p.sampleRate;
-  const double fBright = 1500.0 * soemdsp::math::pow_pos(16000.0 / 1500.0, p.brightness);
-  const double fStart = fBright > ny ? ny : (fBright < 80.0 ? 80.0 : fBright);
-  const double fMin = 120.0;
-  const double fEnd = fStart * soemdsp::math::pow_pos(fMin / fStart, p.darkness);
+  const double fStart = p.startCutoffHz;
+  const double fEnd = p.endCutoffHz;
   const double w = soemdsp::math::segment_rational01(u, p.spectralShape);
+  if (fStart == 0.0 || fEnd == 0.0) return fStart + (fEnd - fStart) * w;
   return fStart * soemdsp::math::pow_pos(fEnd / fStart, w);
 }
 
@@ -397,18 +400,25 @@ static void start_build(State& s, const CleanParams& p, int bank) {
   s.lpL1 = s.lpL2 = s.lpR1 = s.lpR2 = 0.0f;
   s.energy = 0.0;
   Bank& b = s.bank[bank];
+  // Only the scheduled horizon can contain unread output from a prior use.
+  int clearAt = b.outIdx;
+  for (int i = 0; i < kMaxHop + kBlockMax; ++i) {
+    b.outL[clearAt] = b.outR[clearAt] = 0.0f;
+    if (++clearAt >= b.outCap) clearAt = 0;
+  }
   const int n = ir_len_for(p.length, p.sampleRate);
   const int use = n <= s.maxLen ? n : s.maxLen;
   place_partitions(b, use, b.specArena);
-  for (int i = 0; i < use; ++i) { b.irL[i] = 0.0f; b.irR[i] = 0.0f; }
 }
 
 static void build_samples(State& s, int count) {
   Bank& b = s.bank[s.buildBank];
   const CleanParams& p = s.buildP;
   const int n = b.irLen;
-  const int fadeN = (int)(0.020 * p.sampleRate + 0.5);
-  const int fadeStart = n > fadeN ? n - fadeN : 0;
+  const int fadeCap = (int)(0.020 * p.sampleRate + 0.5);
+  const int fadeQuarter = n / 4 > 0 ? n / 4 : 1;
+  const int fadeN = fadeQuarter < fadeCap ? fadeQuarter : fadeCap;
+  const int fadeStart = n - 1 - fadeN;
   const double invNm1 = n > 1 ? 1.0 / (double)(n - 1) : 1.0;
   const double twoPi = 6.283185307179586;
   int t = s.buildT;
@@ -417,30 +427,32 @@ static void build_samples(State& s, int count) {
     const double u = (double)t * invNm1;
     const double w = soemdsp::math::segment_rational01(u, p.ampShape);
     double env = soemdsp::math::pow_pos(10.0, (kAmpFloorDb / 20.0) * w);
-    if (t >= fadeStart && n > fadeStart) {
-      const double x = (double)(t - fadeStart) / (double)(n - fadeStart);
-      env *= 0.5 * (1.0 + soemdsp_maths::dsp_cos(3.141592653589793 * x));
-    }
     const double fc = cutoff_hz(p, u);
     double a = soemdsp_maths::dsp_exp(-twoPi * fc / p.sampleRate);
     if (!(a == a) || a < 0.0) a = 0.0;
-    if (a > 0.999) a = 0.999;
     const float af = (float)a;
-    const float g = 1.0f - af;
+    const float g = (float)(1.0 - a);
     const float xL = rng_gauss(s.rngL) * (float)env;
     const float xR = rng_gauss(s.rngR) * (float)env;
     s.lpL1 = flush_f(af * s.lpL1 + g * xL);
     s.lpL2 = flush_f(af * s.lpL2 + g * s.lpL1);
     s.lpR1 = flush_f(af * s.lpR1 + g * xR);
     s.lpR2 = flush_f(af * s.lpR2 + g * s.lpR1);
-    const float yL = s.lpL2;
-    const float yR = (float)((1.0 - p.decorrelate) * (double)yL + p.decorrelate * (double)s.lpR2);
+    // Taper the filtered IR, not its excitation: filter memory must also end.
+    double taper = 1.0;
+    if (n > 1 && t > fadeStart) {
+      const double x = (double)(t - fadeStart) / (double)fadeN;
+      taper = 0.5 * (1.0 + soemdsp_maths::dsp_cos(3.141592653589793 * x));
+      if (t == n - 1) taper = 0.0;
+    }
+    const float yL = (float)(taper * (double)s.lpL2);
+    const float yR = (float)(taper * ((1.0 - p.decorrelate) * (double)s.lpL2 + p.decorrelate * (double)s.lpR2));
     b.irL[t] = yL;
     b.irR[t] = yR;
     s.energy += (double)yL * (double)yL + (double)yR * (double)yR;
   }
   s.buildT = t;
-  if (s.buildT >= n) s.buildPhase = kBuildScale;
+  if (s.buildT >= n) { s.buildPhase = kBuildScale; s.buildT = 0; }
 }
 
 static void build_scale(State& s) {
@@ -450,9 +462,10 @@ static void build_scale(State& s) {
   double e = s.energy;
   if (!(e > 1.0e-30)) e = 1.0;
   const float g = (float)soemdsp_maths::dsp_exp(-0.5 * soemdsp_maths::dsp_ln(e));
-  for (int i = 0; i < n; ++i) { b.irL[i] *= g; b.irR[i] *= g; }
-  s.buildPhase = kBuildFft;
-  s.buildPart = 0;
+  const int end = s.buildT + kBuildScalePerCall < n ? s.buildT + kBuildScalePerCall : n;
+  for (int i = s.buildT; i < end; ++i) { b.irL[i] *= g; b.irR[i] *= g; }
+  s.buildT = end;
+  if (end == n) { s.buildPhase = kBuildFft; s.buildPart = 0; }
 }
 
 static void fft_ir_partition(State& s, Partition& p, const float* ir, float* spec) {
@@ -485,7 +498,11 @@ static void build_ffts(State& s, int count) {
       s.fading = false;
       s.fade = 0.0;
     } else if (s.buildBank != s.cur) {
-      s.fading = true;
+      b.outIdx = s.bank[s.cur].outIdx;
+      s.warmRemaining = 0;
+      for (int i = 0; i < b.partCount; ++i)
+        if (b.parts[i].hop > s.warmRemaining) s.warmRemaining = b.parts[i].hop;
+      s.fading = s.warmRemaining == 0;
       s.fade = 0.0;
     }
   }
@@ -494,7 +511,7 @@ static void build_ffts(State& s, int count) {
 static void build_all(State& s, const CleanParams& p, int bank) {
   start_build(s, p, bank);
   while (s.buildPhase == kBuildSamples) build_samples(s, kBuildSamplesPerCall);
-  if (s.buildPhase == kBuildScale) build_scale(s);
+  while (s.buildPhase == kBuildScale) build_scale(s);
   while (s.buildPhase == kBuildFft) build_ffts(s, 64);
 }
 
@@ -650,21 +667,9 @@ static void take_ring(Bank& b, float* yL, float* yR, int frames) {
 }
 
 static void request_rebuild(State& s, const CleanParams& p) {
-  if (s.buildPhase != kBuildIdle) {
-    if (!params_equal(s.buildP, p) && !s.fading) {
-      start_build(s, p, s.haveIr ? 1 - s.cur : s.cur);
-    } else if (!params_equal(s.buildP, p)) {
-      s.buildDirty = true;
-      s.buildP = p;
-    }
-    return;
-  }
-  if (s.haveIr && params_equal(s.bank[s.cur].built, p) && !s.buildDirty) return;
-  if (s.fading) {
-    s.buildDirty = true;
-    s.buildP = p;
-    return;
-  }
+  // Complete one immutable kernel/transition, then use the latest block's request.
+  if (s.buildPhase != kBuildIdle || s.fading || s.warmRemaining > 0) return;
+  if (s.haveIr && params_equal(s.bank[s.cur].built, p)) return;
   start_build(s, p, s.haveIr ? 1 - s.cur : s.cur);
 }
 
@@ -702,7 +707,7 @@ static void process_run(
   int settle = 0;
   if (s.haveIr) {
     settle = s.bank[s.cur].irLen;
-    if (s.fading && s.bank[1 - s.cur].irLen > settle) settle = s.bank[1 - s.cur].irLen;
+    if ((s.fading || s.warmRemaining > 0) && s.bank[1 - s.cur].irLen > settle) settle = s.bank[1 - s.cur].irLen;
   }
   const bool skip = s.haveIr && (s.silentAge >= settle) && !any;
   if (!any) {
@@ -720,7 +725,7 @@ static void process_run(
     int banks[2];
     int used = 1;
     banks[0] = s.cur;
-    if (s.fading) { banks[1] = 1 - s.cur; used = 2; }
+    if (s.fading || s.warmRemaining > 0) { banks[1] = 1 - s.cur; used = 2; }
     // Time-domain head for each bank, then shared input FFTs, then take rings.
     // Head writes into the shared head ring once; must only write once.
     // So: write head ring once, convolve against each bank's IR head.
@@ -745,13 +750,13 @@ static void process_run(
         oR += accR;
       };
       fir(s.bank[s.cur], wetAL[f], wetAR[f]);
-      if (s.fading) fir(s.bank[1 - s.cur], wetBL[f], wetBR[f]);
+      if (s.fading || s.warmRemaining > 0) fir(s.bank[1 - s.cur], wetBL[f], wetBR[f]);
     }
     s.headIdx = w;
 
     feed_sizes(s, xL, xR, frames, 0, used, banks);
     take_ring(s.bank[s.cur], wetAL, wetAR, frames);
-    if (s.fading) take_ring(s.bank[1 - s.cur], wetBL, wetBR, frames);
+    if (s.fading || s.warmRemaining > 0) take_ring(s.bank[1 - s.cur], wetBL, wetBR, frames);
   } else if (skip) {
     // Stay skipped: do not feed sizes (they are already flushed). Advance out idx
     // as if we took zeros so a later unsip remains aligned — rings are already 0.
@@ -761,7 +766,7 @@ static void process_run(
       b.outIdx = i;
     };
     if (s.haveIr) adv(s.bank[s.cur]);
-    if (s.fading) adv(s.bank[1 - s.cur]);
+    if (s.fading || s.warmRemaining > 0) adv(s.bank[1 - s.cur]);
   }
 
   const double fadeStep = 1.0 / (kFadeSeconds * (p.sampleRate > 1.0 ? p.sampleRate : 44100.0));
@@ -772,7 +777,7 @@ static void process_run(
     float wetL = wetAL[f];
     float wetR = wetAR[f];
     if (fading) {
-      const float g = (float)fade;
+      const float g = (float)(fade * fade * (3.0 - 2.0 * fade));
       wetL += g * (wetBL[f] - wetL);
       wetR += g * (wetBR[f] - wetR);
       fade += fadeStep;
@@ -792,9 +797,9 @@ static void process_run(
   }
   s.fading = fading;
   s.fade = fade;
-  if (!s.fading && s.buildDirty && s.buildPhase == kBuildIdle) {
-    s.buildDirty = false;
-    start_build(s, s.buildP, 1 - s.cur);
+  if (s.warmRemaining > 0) {
+    s.warmRemaining -= frames;
+    if (s.warmRemaining <= 0) { s.warmRemaining = 0; s.fading = true; s.fade = 0.0; }
   }
 }
 
@@ -816,14 +821,14 @@ int soemdsp_noise_conv_reverb_create(double sampleRate) {
     s.seed = 1u;
     s.cur = 0;
     s.fading = false;
+    s.warmRemaining = 0;
     s.fade = 0.0;
     s.haveIr = false;
     s.buildPhase = kBuildIdle;
-    s.buildDirty = false;
     s.active = true;
     wire_block(s, (unsigned char*)block, maxLen);
     clear_conv_state(s);
-    const CleanParams p = sanitize(1.5, 0.0, 0.0, 0.25, 0.7, 1.0, sampleRate, 1u);
+    const CleanParams p = sanitize(1.5, 0.0, 0.0, 120.0, 1500.0, 1.0, sampleRate, 1u);
     build_all(s, p, 0);
     return i + 1;
   }
@@ -862,13 +867,13 @@ double soemdsp_noise_conv_reverb_sample(
   int handle,
   double inL, double inR,
   double length, double ampShape, double spectralShape,
-  double darkness, double brightness, double decorrelate,
+  double endCutoffHz, double startCutoffHz, double decorrelate,
   double mix, double sampleRate
 ) {
   if (handle <= 0 || handle > kMaxInstances) return 0.0;
   State& s = gPool[handle - 1];
   if (!s.active) return 0.0;
-  const CleanParams p = sanitize(length, ampShape, spectralShape, darkness, brightness, decorrelate, sampleRate, s.seed);
+  const CleanParams p = sanitize(length, ampShape, spectralShape, endCutoffHz, startCutoffHz, decorrelate, sampleRate, s.seed);
   double oL = 0.0, oR = 0.0;
   process_run(s, &inL, &inR, nullptr, &oL, &oR, 1, p, true, mix);
   gOutR[0] = oR;
@@ -882,7 +887,7 @@ void soemdsp_noise_conv_reverb_process_block(
   int frames,
   const double* mix,
   double length, double ampShape, double spectralShape,
-  double darkness, double brightness, double decorrelate,
+  double endCutoffHz, double startCutoffHz, double decorrelate,
   double sampleRate
 ) {
   if (handle <= 0 || handle > kMaxInstances || !inL || !inR || !outL || !outR || frames <= 0) return;
@@ -891,7 +896,7 @@ void soemdsp_noise_conv_reverb_process_block(
     for (int i = 0; i < frames; ++i) { outL[i] = inL[i]; outR[i] = inR[i]; }
     return;
   }
-  const CleanParams p = sanitize(length, ampShape, spectralShape, darkness, brightness, decorrelate, sampleRate, s.seed);
+  const CleanParams p = sanitize(length, ampShape, spectralShape, endCutoffHz, startCutoffHz, decorrelate, sampleRate, s.seed);
   process_run(s, inL, inR, mix, outL, outR, frames, p, false, 0.0);
 }
 
@@ -900,7 +905,7 @@ double soemdsp_noise_conv_reverb_right(int handle) {
   return gOutR[0];
 }
 
-int soemdsp_noise_conv_reverb_version() { return 1; }
+int soemdsp_noise_conv_reverb_version() { return 6; }
 
 double soemdsp_noise_conv_reverb_max_length() { return kMaxLengthSeconds; }
 

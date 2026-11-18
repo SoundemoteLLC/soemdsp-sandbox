@@ -101,6 +101,13 @@ const nodeGraphScopePhosphorLookDefaults = Object.freeze({
   pixelDensity: 1,
   // Amplitude zoom.
   scale: 1,
+  // Glow shape (Blur knob, phosphor beams/dots). Core: fraction of Size the hot core shrinks to at Glow 1.
+  // Reach: halo reach (0..1 = 0..12 x Size). Strength: halo peak. Build up: hits accumulate (off = a pixel never
+  // exceeds one dab's peak, the consistent burn look).
+  glowCore: 0.08,
+  glowReach: 0.5,
+  glowStrength: 0.7,
+  buildUp: true,
   // Retired packing toggles — deposit path always chord-packs (never beads).
   fullDotEconomy: false,
   dotsOnly: false,
@@ -211,7 +218,13 @@ const nodeGraphLineBurnSettingsDefaults = Object.freeze({
   burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: nodeGraphScopePhosphorLookDefaults.residualSchema,
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
+  // How much the stored picture blurs as it decays (0 = none). Separate from the stamp Blur.
+  decayBlur: 0.1,
   trail: nodeGraphScopePhosphorLookDefaults.trail,
+  glowCore: nodeGraphScopePhosphorLookDefaults.glowCore,
+  glowReach: nodeGraphScopePhosphorLookDefaults.glowReach,
+  glowStrength: nodeGraphScopePhosphorLookDefaults.glowStrength,
+  buildUp: nodeGraphScopePhosphorLookDefaults.buildUp,
   scale: nodeGraphScopePhosphorLookDefaults.scale,
   // Line Burn look (PolyBLEP and the other Line Burn displays): Bright / Size / Blur.
   dot1Brightness: 0.7273,
@@ -249,6 +262,10 @@ const nodeGraphZeroDBurnSettingsDefaults = Object.freeze({
   bipolarBrightness: false,
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
   trail: nodeGraphScopePhosphorLookDefaults.trail,
+  glowCore: nodeGraphScopePhosphorLookDefaults.glowCore,
+  glowReach: nodeGraphScopePhosphorLookDefaults.glowReach,
+  glowStrength: nodeGraphScopePhosphorLookDefaults.glowStrength,
+  buildUp: nodeGraphScopePhosphorLookDefaults.buildUp,
   burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: 4,
   dot1Brightness: nodeGraphScopePhosphorLookDefaults.brightness,
@@ -319,6 +336,10 @@ const nodeGraphNumberReadoutSettingsDefaults = Object.freeze({
     : "#ffdd00",
   // Trail / Ghost / Burn Amount -- same phosphor drawer SSOT as 1D/2D scopes.
   trail: nodeGraphScopePhosphorLookDefaults.trail,
+  glowCore: nodeGraphScopePhosphorLookDefaults.glowCore,
+  glowReach: nodeGraphScopePhosphorLookDefaults.glowReach,
+  glowStrength: nodeGraphScopePhosphorLookDefaults.glowStrength,
+  buildUp: nodeGraphScopePhosphorLookDefaults.buildUp,
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
   burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: 4,
@@ -541,6 +562,10 @@ const nodeGraphScope2dSettingsDefaults = Object.freeze({
   backgroundBrightness: 0,
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
   trail: nodeGraphScopePhosphorLookDefaults.trail,
+  glowCore: nodeGraphScopePhosphorLookDefaults.glowCore,
+  glowReach: nodeGraphScopePhosphorLookDefaults.glowReach,
+  glowStrength: nodeGraphScopePhosphorLookDefaults.glowStrength,
+  buildUp: nodeGraphScopePhosphorLookDefaults.buildUp,
   burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: nodeGraphScopePhosphorLookDefaults.residualSchema,
   dot1Brightness: nodeGraphScopePhosphorLookDefaults.brightness,
@@ -575,6 +600,10 @@ const nodeGraphXyPadDisplaySettingsDefaults = Object.freeze({
   // Ghost = super-exp hang; Trail = linear blend.
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
   trail: nodeGraphScopePhosphorLookDefaults.trail,
+  glowCore: nodeGraphScopePhosphorLookDefaults.glowCore,
+  glowReach: nodeGraphScopePhosphorLookDefaults.glowReach,
+  glowStrength: nodeGraphScopePhosphorLookDefaults.glowStrength,
+  buildUp: nodeGraphScopePhosphorLookDefaults.buildUp,
   burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: 4,
   // Phosphor beam brightness 0..1.

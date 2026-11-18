@@ -63,15 +63,14 @@ function nodeGraphNoiseConvRational01(p, contour) {
   return c < 0 ? (u * (1 + c)) / (1 + c * u) : u / (1 - c + c * u);
 }
 
-function nodeGraphNoiseConvCutoffHz(u, brightness, darkness, spectralShape, sampleRate) {
+function nodeGraphNoiseConvCutoffHz(u, startCutoffHz, endCutoffHz, spectralShape, sampleRate) {
+  // Same curve as cutoff_hz in noise_conv_reverb.cpp: Start -> End in Hz.
   const sr = sampleRate > 1 && Number.isFinite(sampleRate) ? sampleRate : 48000;
   const ny = 0.45 * sr;
-  const fBright = 1500 * Math.pow(16000 / 1500, nodeGraphNoiseConvClamp(brightness, 0, 1, 0.7));
-  const fStart = Math.max(80, Math.min(ny, fBright));
-  const fMin = 120;
-  const dark = nodeGraphNoiseConvClamp(darkness, 0, 1, 0.25);
-  const fEnd = fStart * Math.pow(fMin / fStart, dark);
+  const fStart = nodeGraphNoiseConvClamp(startCutoffHz, 0, ny, Math.min(1500, ny));
+  const fEnd = nodeGraphNoiseConvClamp(endCutoffHz, 0, ny, Math.min(120, ny));
   const w = nodeGraphNoiseConvRational01(u, spectralShape);
+  if (fStart === 0 || fEnd === 0) return fStart + (fEnd - fStart) * w;
   return fStart * Math.pow(fEnd / fStart, w);
 }
 
@@ -143,8 +142,8 @@ function nodeGraphNoiseConvPaint(section, width, height, pixelRatio, params) {
   const innerH = Math.max(1, height - padY * 2);
   const feather = Math.max(1.25 * pixelRatio, 0.045 * innerH);
   const blur = Math.max(2 * pixelRatio, 0.07 * innerH);
-  const spread = nodeGraphNoiseConvClamp(params.spread, 0, 1, 1);
-  const offset = spread * 0.22 * innerH;
+  const decorrelate = nodeGraphNoiseConvClamp(params.decorrelate, 0, 1, 1);
+  const offset = decorrelate * 0.22 * innerH;
   const fadeStartU = params.length > NODE_GRAPH_NOISE_CONV_FADE_SECONDS
     ? 1 - NODE_GRAPH_NOISE_CONV_FADE_SECONDS / params.length
     : 0;
@@ -172,7 +171,7 @@ function nodeGraphNoiseConvPaint(section, width, height, pixelRatio, params) {
     const env = nodeGraphNoiseConvEnvelope(u, params.ampShape, fadeStartU);
     const heightNorm = nodeGraphNoiseConvEnvHeight(env);
     if (!(heightNorm > 0)) continue;
-    const fc = nodeGraphNoiseConvCutoffHz(u, params.brightness, params.darkness, params.spectralShape, params.sampleRate);
+    const fc = nodeGraphNoiseConvCutoffHz(u, params.startCutoffHz, params.endCutoffHz, params.spectralShape, params.sampleRate);
     const yEnv = padY + innerH * (1 - heightNorm);
     for (let y = 0; y < height; y += 1) {
       const fy = (y + 0.5 - padY) / innerH;
@@ -230,18 +229,18 @@ function drawNodeGraphNoiseConvDisplay(section) {
   const { cssWidth: w, cssHeight: h, pixelRatio, width, height } = metrics;
   if (!(w > 0) || !(h > 0) || !(width > 0) || !(height > 0)) return;
 
-  const lengthMin = nodeGraphNoiseConvDefNumber(node, "decay", "min", 0.025);
+  const lengthMin = nodeGraphNoiseConvDefNumber(node, "decay", "min", 0.001);
   const lengthMax = nodeGraphNoiseConvDefNumber(node, "decay", "max", 6);
   const params = {
     length: nodeGraphNoiseConvClamp(nodeGraphNoiseConvParam(node, "decay", 1.5), lengthMin, lengthMax, 1.5),
     ampShape: nodeGraphNoiseConvSoftCap(nodeGraphNoiseConvParam(node, "ampShape", 0)),
     spectralShape: nodeGraphNoiseConvSoftCap(nodeGraphNoiseConvParam(node, "spectralShape", 0)),
-    darkness: nodeGraphNoiseConvClamp(nodeGraphNoiseConvParam(node, "darkness", 0.25), 0, 1, 0.25),
-    brightness: nodeGraphNoiseConvClamp(nodeGraphNoiseConvParam(node, "brightness", 0.7), 0, 1, 0.7),
-    spread: nodeGraphNoiseConvClamp(nodeGraphNoiseConvParam(node, "spread", 1), 0, 1, 1),
+    startCutoffHz: Math.max(0, Number(nodeGraphNoiseConvParam(node, "startCutoffHz", 1500)) || 0),
+    endCutoffHz: Math.max(0, Number(nodeGraphNoiseConvParam(node, "endCutoffHz", 120)) || 0),
+    decorrelate: nodeGraphNoiseConvClamp(nodeGraphNoiseConvParam(node, "decorrelate", 1), 0, 1, 1),
     sampleRate: Number(nodeGraphMvp?.live?.context?.sampleRate) || 48000,
   };
-  const key = [params.length, params.ampShape, params.spectralShape, params.darkness, params.brightness, params.spread, params.sampleRate, width, height].join(",");
+  const key = [params.length, params.ampShape, params.spectralShape, params.startCutoffHz, params.endCutoffHz, params.decorrelate, params.sampleRate, width, height].join(",");
   if (section._noiseConvKey !== key || !section._noiseConvPicture) {
     section._noiseConvPicture = nodeGraphNoiseConvPaint(section, width, height, pixelRatio, params);
     section._noiseConvKey = key;

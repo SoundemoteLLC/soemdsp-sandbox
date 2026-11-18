@@ -315,6 +315,55 @@ function syncNodeGraphPatchParameterFromSlider(slider, options = {}) {
   }
 }
 
+function nodeSliderMetadataForTypedMaximum(slider, value) {
+  const metadata = nodeSliderMetadata(slider);
+  if (!Number.isFinite(value) || !Number.isFinite(metadata.max) || value <= metadata.max
+    || metadata.choices?.length || metadata.kind === "seed" || metadata.wraparound) return null;
+  const constraint = String(slider.dataset.constraint || "").toLowerCase();
+  const hard = slider.dataset.hardClamp === "true" || ["cpu", "gpu", "ram", "memory"].includes(constraint);
+  let max = value;
+  if (hard) {
+    const limit = Number(slider.dataset.hardMax);
+    if (!Number.isFinite(limit) || limit <= metadata.max) return null;
+    max = Math.min(max, limit);
+  }
+  return { ...metadata, max };
+}
+
+function nodeGraphApplyTypedSliderMaximum(slider, patchNode, metadata) {
+  const key = slider.dataset.param;
+  const write = (node, paramKey, source) => {
+    const next = normalizeNodeGraphPatchParameterMetadata(node.type, paramKey, { ...source, max: metadata.max });
+    if (!next) return null;
+    node.paramMeta = { ...(node.paramMeta || {}), [paramKey]: next };
+    return next;
+  };
+  const next = write(patchNode, key, patchNode.paramMeta?.[key] || metadata);
+  if (!next) return;
+  // Exposed controls share the child's range, not a separate shell-only maximum.
+  if (typeof nodeGraphIsContainerShellType === "function" && nodeGraphIsContainerShellType(patchNode.type)
+    && typeof nodeGraphMetamoduleResolveExposeTarget === "function") {
+    const target = nodeGraphMetamoduleResolveExposeTarget(patchNode, key, nodeGraphMvp.patch);
+    if (target?.child) {
+      const childMeta = write(target.child, target.paramKey, target.child.paramMeta?.[target.paramKey]);
+      const input = nodeGraphSliderForParameter(target.child.id, target.paramKey);
+      if (input && childMeta) setNodeSliderMetadata(input, childMeta);
+    }
+  } else if (patchNode.ownerMetamoduleId
+    && typeof nodeGraphMetamoduleIsParamExposed === "function"
+    && typeof nodeGraphMetamoduleExposeParamKey === "function") {
+    const owner = nodeGraphMvp.patch.nodes.find(n => n.id === patchNode.ownerMetamoduleId);
+    if (owner && nodeGraphMetamoduleIsParamExposed(owner, patchNode.id, key)) {
+      const shellKey = nodeGraphMetamoduleExposeParamKey(patchNode.id, key);
+      const shellMeta = write(owner, shellKey, owner.paramMeta?.[shellKey] || next);
+      const input = nodeGraphSliderForParameter(owner.id, shellKey);
+      if (input && shellMeta) setNodeSliderMetadata(input, shellMeta);
+    }
+  }
+  // Patch metadata must precede readout repaint, which reads the saved range.
+  setNodeSliderMetadata(slider, next);
+}
+
 function updateNodeSliderCurrentValue(slider, rawValue) {
   if (!slider) {
     return;
@@ -340,7 +389,8 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
     : parsed;
   // Whole-number params (definition wholeNumber: true): typed entry rounds.
   const nodeId = slider.closest?.(".dsp-node")?.dataset?.node;
-  const nodeType = nodeId ? nodeGraphMvp.patch.nodes.find((n) => n.id === nodeId)?.type : "";
+  const patchNode = nodeId ? nodeGraphMvp.patch.nodes.find((n) => n.id === nodeId) : null;
+  const nodeType = patchNode?.type || "";
   const value = nodeType && nodeGraphParameterByKey(nodeType, slider.dataset.param)?.wholeNumber
     ? Math.round(typedValue)
     : typedValue;
@@ -348,6 +398,9 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
     syncNodeSliderReadout(slider);
     return;
   }
+
+  const expanded = patchNode && nodeSliderMetadataForTypedMaximum(slider, value);
+  if (expanded) nodeGraphApplyTypedSliderMaximum(slider, patchNode, expanded);
 
   // Domain may leave slider min/max; HTML range thumb stays in-range for display.
   const domain = normalizeNodeSliderValue(slider, value);

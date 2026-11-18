@@ -110,7 +110,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "image",
   "rgbaHsla",
   "waveguide",
-  "vocoder",
   "flexGrid",
   "gravity",
   "drummer",
@@ -191,6 +190,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   "softpop2",
   "acidSequencer",
   "tiltFilter",
+  "vocoder",
 ]);
 
 /** Short shop-card reminder for under-construction modules (title tooltip). */
@@ -213,8 +213,6 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
   besselThomson: "Maximally flat group-delay filter. Parked until that filter lands.",
   massSpringDamper: "2-pole mechanical resonator. Parked until that analog lands.",
   waveguide: "Full waveguide. Use Comb/Mode resonators for now.",
-
-  vocoder: "Filter-bank vocoder. Parked until the analog-filter / bandpass-bank pass.",
 
   wallDelay: "Geometric room/wall delay. Parked until ray-room DSP lands.",
   doppler: "parked Doppler (pitch only while delay time is moving)",
@@ -1097,9 +1095,31 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
+  stftContrast: {
+    category: "dynamics", label: "STFT Contrast",
+    description: "Stereo-linked spectral contrast and compression across overlapping logarithmic regions. Reveal quiet detail or emphasize spectral peaks, with explicit boost limits and no hidden limiter.",
+    notes: ["STFT", "spectral", "contrast", "compressor", "native"],
+  },
+  stftGate: {
+    category: "dynamics", label: "STFT Gate",
+    description: "Stereo-linked spectral gate with manual thresholds or an engine-session learned noise profile. Learn a noise-only passage, then Use Profile; Ready reports profile availability.",
+    notes: ["STFT", "spectral", "gate", "denoise", "native"],
+  },
+  vocoder: {
+    category: "analogFilter",
+    description: "5-100 band native IIR vocoder: external voice and synth, narrow ringing bands through broad crunchy overlap, fast followers, and 2x oversampling. A single cable into either side of each input pair feeds both channels.",
+    label: "Vocoder",
+    notes: ["vocoder", "filter bank", "voice", "carrier", "ringing", "native"],
+  },
+  convolutionResonator: {
+    category: "space",
+    description: "Buzz/String/Tube resonator with a body-colored BLIT carrier and 2x-oversampled Crunch STFT vocoder. Filter-bank vocoding lives in the separate Vocoder module.",
+    label: "Convolution Resonator",
+    notes: ["vocoder", "convolution", "robot", "crunch", "resonator", "voice", "native"],
+  },
   noiseConvReverb: {
     category: "space",
-    description: "Reverb from a generated, shaped noise impulse response and zero-latency partitioned convolution. Length and Amp Shape set the decay, Spectral Shape / Darkness / Brightness colour the tail, and Spread sets how independent the L/R IRs are.",
+    description: "Reverb from a generated, shaped noise impulse response and zero-latency partitioned convolution. Length and Amp Shape set the decay, Spectral Shape / Darkness / Brightness colour the tail, and Decorrelate spreads L/R.",
     label: "Noise Convolution Reverb",
     notes: ["reverb", "convolution", "noise ir", "partitioned convolution", "space", "native"],
   },
@@ -2078,12 +2098,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Up to 8 ZDF stages: Bandpass (parallel) or Allpass (series, classic notches). Slope 12–48, LFO, mix, feedback.",
     label: "Phaser",
     notes: ["phaser", "bandpass", "ZDF", "SVF", "space", "Robin Schmidt"],
-  },
-  vocoder: {
-    category: "analogFilter",
-    description: "Placeholder analog vocoder — parallel bandpass bank, envelopes, carrier.",
-    label: "Vocoder",
-    notes: ["under construction", "vocoder", "filter bank", "bandpass", "envelope", "analog"],
   },
   flanger: {
     category: "space",
@@ -3901,6 +3915,22 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   noiseConvReverb: {
     source: "native_modules/noise_conv_reverb/noise_conv_reverb.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/noise_conv_reverb/noise_conv_reverb.cpp",
+  },
+  convolutionResonator: {
+    source: "native_modules/convolution_resonator/convolution_resonator.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/convolution_resonator/convolution_resonator.cpp",
+  },
+  vocoder: {
+    source: "native_modules/vocoder/vocoder.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/vocoder/vocoder.cpp",
+  },
+  stftContrast: {
+    source: "native_modules/stft_contrast/stft_contrast.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/stft_contrast/stft_contrast.cpp",
+  },
+  stftGate: {
+    source: "native_modules/stft_gate/stft_gate.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/stft_gate/stft_gate.cpp",
   },
   pumpCurve: {
     source: "native_modules/pump_curve/pump_curve.cpp",

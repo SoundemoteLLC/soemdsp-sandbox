@@ -20136,6 +20136,157 @@ input[data-global-scope-number-drag="true"]:not([readonly]):focus,
   background: #020405;
 }
 
+/* The dot preview area: Draw buttons and the stage on ONE dark surface. */
+.node-trace-display-dot-area {
+  background: #020405;
+  width: 100%;
+}
+
+/* Draw mode: four flat square buttons (max 50 x 50), a word and a tiny graphic each. */
+.node-trace-display-draw-row {
+  display: block;
+  width: 100%;
+  padding: 6px 0;
+}
+
+.node-trace-display-draw-row[hidden] {
+  display: none;
+}
+
+.node-trace-display-draw-buttons {
+  display: grid;
+  /* Four equal squares that use the width but never grow past 50 x 50 px. */
+  grid-template-columns: repeat(5, minmax(0, 50px));
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.node-trace-display-draw-row .node-trace-display-draw-buttons .node-trace-display-draw-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  max-width: 50px;
+  max-height: 50px;
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgba(127, 199, 217, 0.14) !important;
+  color: rgba(243, 241, 236, 0.75);
+  font: 600 11px/1 inherit;
+  letter-spacing: 0.03em;
+}
+
+.node-trace-display-draw-row .node-trace-display-draw-buttons .node-trace-display-draw-button[hidden] {
+  display: none;
+}
+
+/* The build planet: the disc shows only while Build up is on. */
+/* The planet design: flat, no square, a ring with a disc in it when on. */
+.node-trace-display-draw-row .node-trace-display-draw-buttons .node-trace-display-draw-button.node-trace-display-build-button,
+.node-trace-display-draw-row .node-trace-display-draw-buttons .node-trace-display-draw-button.node-trace-display-build-button.is-on {
+  background: transparent !important;
+  color: #7fc7d9;
+}
+
+.node-trace-display-draw-row .node-trace-display-build-button svg {
+  width: 26px;
+  height: 26px;
+}
+
+.node-trace-display-build-button .build-core {
+  opacity: 0;
+}
+
+.node-trace-display-build-button.is-on .build-core {
+  opacity: 1;
+}
+
+.node-trace-display-draw-row .node-trace-display-draw-button svg {
+  display: block;
+  width: 50%;
+  height: auto;
+}
+
+.node-trace-display-draw-row .node-trace-display-draw-buttons .node-trace-display-draw-button.is-on {
+  background: rgba(127, 199, 217, 0.7) !important;
+  color: #020405;
+}
+
+/* Dot stage: light gauges | the dot | time gauges. */
+/* One continuous dark surface: no gap and no stroke between the gauges and the dot preview. */
+.node-trace-display-dot-stage {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  width: 100%;
+  background: #020405;
+}
+
+.node-trace-display-dot-stage .node-trace-display-preview-shell {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 0;
+}
+
+/* Everything on the stage uses the app-wide value-change dot, never the app default plus. */
+.node-trace-display-dot-stage,
+.node-trace-display-dot-stage * {
+  cursor: url("./cursors/slider-drag-dot.svg") 8 8, default;
+}
+
+.node-trace-display-dot-hud {
+  display: block;
+  flex: 0 0 auto;
+  touch-action: none;
+  user-select: none;
+  background: #020405;
+  /* The app-wide value-change dot (every control on the stage changes a value). The fallback is the plain arrow:
+     never the crosshair / plus that --node-slider-dot-cursor falls back to. */
+  cursor: url("./cursors/slider-drag-dot.svg") 8 8, default;
+}
+
+.node-trace-display-dot-hud[data-dot-hud="left"] {
+  width: 32px;
+}
+
+.node-trace-display-dot-hud[data-dot-hud="right"] {
+  width: 112px;
+}
+
+/* Fixed stage height: the sliders never shrink with the preview, the preview is a square that fits it. */
+.node-trace-display-dot-hud {
+  height: 170px;
+}
+
+.node-trace-display-dot-stage {
+  height: 170px;
+  align-items: center;
+}
+
+.node-trace-display-dot-stage .node-trace-display-preview-shell .node-trace-display-dot-preview {
+  max-width: 170px;
+  max-height: 170px;
+}
+
+/* Interactive Glow rings over the dot preview (hover the dot, grab a ring). */
+.node-trace-display-dot-rings {
+  position: absolute;
+  left: 0;
+  top: 0;
+  touch-action: none;
+  /* The app-wide value-change dot over the whole stage; no per-state cursors, never the big plus. */
+  cursor: url("./cursors/slider-drag-dot.svg") 8 8, default;
+}
+
 .node-trace-display-preview-shell.is-stereo {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0;
@@ -20160,11 +20311,12 @@ input[data-global-scope-number-drag="true"]:not([readonly]):focus,
 .node-trace-display-preview-shell .node-trace-display-dot-preview {
   width: 100%;
   height: auto;
-  max-width: 96px;
-  max-height: 96px;
+  max-width: 192px;
+  max-height: 192px;
 }
 
 .node-trace-display-preview-cell {
+  position: relative;
   display: grid;
   grid-template-rows: auto auto;
   gap: 0;
@@ -20189,8 +20341,8 @@ input[data-global-scope-number-drag="true"]:not([readonly]):focus,
   box-sizing: border-box;
   width: 100%;
   height: auto;
-  max-width: 96px;
-  max-height: 96px;
+  max-width: 192px;
+  max-height: 192px;
   aspect-ratio: 1 / 1;
   justify-self: center;
   border: 0;

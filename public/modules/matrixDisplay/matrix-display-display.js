@@ -69,7 +69,14 @@ void main() {
   float e = max(texture(uPrev, vUv).r, 0.0);
   float keepFast = clamp(uKeepFast, 0.0, 1.0);
   float keepSlow = max(keepFast, clamp(uKeepSlow, 0.0, 1.0));
-  e *= pow(mix(keepSlow, keepFast, pow(clamp(e, 0.0, 1.0), 12.0)), max(uFrames, 0.0));
+  // two-component decay (monotone): the first 0.5 of energy is the dim tail (Ghost rate), only the energy above it is hot
+  // (Trail rate). The old per-pixel blend of the two rates made a full-energy pixel decay at the Trail rate alone, so with
+  // Trail below Ghost hot pixels vanished while dimmer neighbours kept a tail: dark holes inside bright areas. With Trail
+  // >= Ghost the two rates are equal and the result is identical to before.
+  float frames = max(uFrames, 0.0);
+  float tailDecay = frames > 0.0 ? pow(keepSlow, frames) : 1.0;
+  float hotDecay = frames > 0.0 ? pow(keepFast, frames) : 1.0;
+  e = min(e, 0.5) * tailDecay + max(e - 0.5, 0.0) * hotDecay;
   e = max(e, texture(uLive, vUv).r * max(uDeposit, 0.0));
   outColor = vec4(e, 0.0, 0.0, 1.0);
 }`;

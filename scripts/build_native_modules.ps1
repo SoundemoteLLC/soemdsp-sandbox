@@ -12,6 +12,26 @@ if (!(Test-Path -LiteralPath $clang)) {
 # instead of one repeated clang++ invocation per module. Add a new module by
 # adding one entry here (Name, Exports, and Simd only if it uses <wasm_simd128.h>).
 $modules = @(
+  @{ Name = "stft_contrast"; Simd = $false; Exports = @(
+    "soemdsp_stft_contrast_create", "soemdsp_stft_contrast_destroy", "soemdsp_stft_contrast_reset", "soemdsp_stft_contrast_sample", "soemdsp_stft_contrast_right", "soemdsp_stft_contrast_latency", "soemdsp_stft_contrast_version", "soemdsp_stft_contrast_metadata_json", "soemdsp_stft_contrast_metadata_json_size"
+  ) }
+  @{ Name = "stft_gate"; Simd = $false; Exports = @(
+    "soemdsp_stft_gate_create", "soemdsp_stft_gate_destroy", "soemdsp_stft_gate_reset", "soemdsp_stft_gate_sample", "soemdsp_stft_gate_right", "soemdsp_stft_gate_latency", "soemdsp_stft_gate_version", "soemdsp_stft_gate_metadata_json", "soemdsp_stft_gate_metadata_json_size", "soemdsp_stft_gate_ready", "soemdsp_stft_gate_profile_frames", "soemdsp_stft_gate_set_knee", "soemdsp_stft_gate_set_hold"
+  ) }
+  @{ Name = "vocoder"; Simd = $false; Exports = @(
+    "soemdsp_vocoder_create", "soemdsp_vocoder_destroy", "soemdsp_vocoder_reset",
+    "soemdsp_vocoder_sample", "soemdsp_vocoder_right", "soemdsp_vocoder_latency",
+    "soemdsp_vocoder_version", "soemdsp_vocoder_metadata_json", "soemdsp_vocoder_metadata_json_size",
+    "soemdsp_vocoder_set_bands", "soemdsp_vocoder_bands"
+  ) }
+  @{ Name = "convolution_resonator"; Simd = $false; Exports = @(
+    "soemdsp_convolution_resonator_create", "soemdsp_convolution_resonator_destroy",
+    "soemdsp_convolution_resonator_reset", "soemdsp_convolution_resonator_sample",
+    "soemdsp_convolution_resonator_right", "soemdsp_convolution_resonator_latency",
+    "soemdsp_convolution_resonator_version", "soemdsp_convolution_resonator_carrier",
+    "soemdsp_convolution_resonator_set_crunch",
+    "soemdsp_convolution_resonator_probe", "soemdsp_convolution_resonator_probe_buffer"
+  ) }
   @{ Name = "wall_delay"; Simd = $false; Exports = @("soemdsp_wall_delay_version") }
   @{ Name = "rapt_elliptic_decimator"; Simd = $false; Exports = @(
     "soemdsp_rapt_elliptic_decimator_create",
@@ -599,7 +619,7 @@ foreach ($module in $modules) {
   # the 48MB default; live audio still loads only the combined binary (512MB).
   if ($module.Name -eq "graph_engine") {
     $clangArgs += "-Wl,--max-memory=134217728"
-  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb")) {
+  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb", "convolution_resonator", "vocoder", "stft_contrast", "stft_gate")) {
     $clangArgs += "-Wl,--max-memory=268435456"
   } else {
     $clangArgs += "-Wl,--max-memory=50331648"

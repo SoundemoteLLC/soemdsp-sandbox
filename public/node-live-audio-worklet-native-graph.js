@@ -291,6 +291,10 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   velvetNoise: 263,
   velvetReverb: 265,
   noiseConvReverb: 267,
+  convolutionResonator: 268,
+  vocoder: 269,
+  stftContrast: 270,
+  stftGate: 271,
 });
 
 // Param IDs — keep in sync with graph_engine.cpp kParam*.
@@ -610,13 +614,43 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "tailCurve") return P.NATIVE_GRAPH_PARAM_SATURATE;
     if (k === "precision") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
   }
+  if (t === "stftContrast") {
+    if (k === "contrast") return P.NATIVE_GRAPH_PARAM_SHAPE;
+    if (k === "scale") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "thresholdDb") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "ratio") return P.NATIVE_GRAPH_PARAM_RESONANCE;
+    if (k === "attackMs") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
+    if (k === "releaseMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "maxBoostDb") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
+    if (k === "gainDb") return P.NATIVE_GRAPH_PARAM_LEVEL;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+  }
+  if (t === "stftGate") {
+    if (k === "holdMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
+    if (k === "kneeDb") return P.NATIVE_GRAPH_PARAM_RESONANCE;
+    if (k === "profileMode") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "thresholdDb") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "marginDb") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "depthDb") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
+    if (k === "attackMs") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
+    if (k === "releaseMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "smooth") return P.NATIVE_GRAPH_PARAM_SHAPE;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+  }
+  if (t === "vocoder") {
+    if (k === "bands") return P.NATIVE_GRAPH_PARAM_STAGES;
+    if (k === "bandWidth") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
+    if (k === "followerMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "formantShift") return P.NATIVE_GRAPH_PARAM_PHASE;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+  }
   if (t === "noiseConvReverb") {
     if (k === "decay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
     if (k === "ampShape") return P.NATIVE_GRAPH_PARAM_SHAPE;
     if (k === "spectralShape") return P.NATIVE_GRAPH_PARAM_SATURATE;
-    if (k === "darkness") return P.NATIVE_GRAPH_PARAM_WIDTH;
-    if (k === "brightness") return P.NATIVE_GRAPH_PARAM_CENTER;
-    if (k === "spread" || k === "decorrelate") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "endCutoffHz") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "startCutoffHz") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "decorrelate") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
@@ -891,6 +925,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const t = String(type || "").trim();
+  if (t === "stftGate" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "sturmianGrid") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "snare") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -1572,6 +1607,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const tDst = String(type || "").trim();
+  if (tDst === "vocoder") {
+    if (p === "voice l" || p === "mod l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "voice r" || p === "mod r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "synth l" || p === "car l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_L;
+    if (p === "synth r" || p === "car r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_R;
+  }
   if (tDst === "sturmianGrid") {
     if (p === "restart") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
     if (p === "adv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
@@ -6099,13 +6140,60 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 1));
       continue;
     }
+    if (type === "stftContrast") {
+      push("contrast", P.NATIVE_GRAPH_PARAM_SHAPE, cont("contrast", -0.35));
+      push("scale", P.NATIVE_GRAPH_PARAM_WIDTH, cont("scale", 1));
+      push("thresholdDb", P.NATIVE_GRAPH_PARAM_CENTER, cont("thresholdDb", -24));
+      push("ratio", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("ratio", 2));
+      push("attackMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("attackMs", 10));
+      push("releaseMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("releaseMs", 100));
+      push("maxBoostDb", P.NATIVE_GRAPH_PARAM_FEEDBACK, cont("maxBoostDb", 18));
+      push("gainDb", P.NATIVE_GRAPH_PARAM_LEVEL, cont("gainDb", 0));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      continue;
+    }
+    if (type === "stftGate") {
+      push("holdMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("holdMs", 0));
+      push("kneeDb", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("kneeDb", 6));
+      push("profileMode", P.NATIVE_GRAPH_PARAM_MODE, disc("profileMode", 0));
+      push("thresholdDb", P.NATIVE_GRAPH_PARAM_CENTER, cont("thresholdDb", -60));
+      push("marginDb", P.NATIVE_GRAPH_PARAM_WIDTH, cont("marginDb", 3));
+      push("depthDb", P.NATIVE_GRAPH_PARAM_FEEDBACK, cont("depthDb", 60));
+      push("attackMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("attackMs", 5));
+      push("releaseMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("releaseMs", 100));
+      push("smooth", P.NATIVE_GRAPH_PARAM_SHAPE, cont("smooth", 0.5));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      continue;
+    }
+    if (type === "vocoder") {
+      push("bands", P.NATIVE_GRAPH_PARAM_STAGES, disc("bands", 32));
+      push("bandWidth", P.NATIVE_GRAPH_PARAM_FEEDBACK, cont("bandWidth", 0.75));
+      push("followerMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("followerMs", 0.25));
+      push("formantShift", P.NATIVE_GRAPH_PARAM_PHASE, cont("formantShift", 0));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      continue;
+    }
+    if (type === "convolutionResonator") {
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
+      push("bodySize", P.NATIVE_GRAPH_PARAM_STAGES, cont("bodySize", 4));
+      push("body", P.NATIVE_GRAPH_PARAM_SHAPE, cont("body", 0));
+      push("bodyDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("bodyDecay", 0.08));
+      push("vocoderMix", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("vocoderMix", 0));
+      push("formantShift", P.NATIVE_GRAPH_PARAM_PHASE, cont("formantShift", 0));
+      push("crunch", P.NATIVE_GRAPH_PARAM_CENTER, cont("crunch", 0.25));
+      push("response", P.NATIVE_GRAPH_PARAM_WIDTH, cont("response", 0));
+      push("bandwidth", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("bandwidth", 0));
+      push("transitionMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("transitionMs", 20));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      continue;
+    }
     if (type === "noiseConvReverb") {
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 1.5));
       push("ampShape", P.NATIVE_GRAPH_PARAM_SHAPE, cont("ampShape", 0));
       push("spectralShape", P.NATIVE_GRAPH_PARAM_SATURATE, cont("spectralShape", 0));
-      push("darkness", P.NATIVE_GRAPH_PARAM_WIDTH, cont("darkness", 0.25));
-      push("brightness", P.NATIVE_GRAPH_PARAM_CENTER, cont("brightness", 0.7));
-      push("spread", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("spread", 1));
+      push("endCutoffHz", P.NATIVE_GRAPH_PARAM_WIDTH, cont("endCutoffHz", 120));
+      push("startCutoffHz", P.NATIVE_GRAPH_PARAM_CENTER, cont("startCutoffHz", 1500));
+      push("decorrelate", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("decorrelate", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 0.5));
       continue;

@@ -185,8 +185,8 @@
   ],
   "nodes": [
     {
-      "gx": 12,
-      "gy": -7,
+      "gx": 9,
+      "gy": -2,
       "id": "output",
       "paramMeta": {
         "volume": {
@@ -259,10 +259,11 @@
         }
       },
       "params": {
-        "volume": -24.56325082855915,
+        "volume": -19.925154795325696,
         "pan": 0
       },
       "type": "output",
+      "alias": "🔊",
       "widthGu": 7,
       "traceDisplaySettings": {
         "backgroundHue": 0,
@@ -345,8 +346,8 @@
       }
     },
     {
-      "gx": -14,
-      "gy": -9,
+      "gx": -16,
+      "gy": -5,
       "id": "robinSinepulse-1",
       "paramMeta": {
         "highFreq": {
@@ -849,7 +850,7 @@
         "waveShape": 0.20857162955548258,
         "phase": 0.013761804544138778,
         "decay": 1.5723120746397912,
-        "amplitude": 3.816097188197718,
+        "amplitude": 4.6869371921278535,
         "recalculateOnTrigger": 0,
         "voices": 1,
         "voiceFade": 1,
@@ -857,7 +858,7 @@
       },
       "type": "robinSinepulse",
       "alias": "Kick",
-      "widthGu": 7,
+      "widthGu": 8,
       "traceDisplaySettings": {
         "lineHue": 187.5,
         "lineBrightness": 0.56,
@@ -916,7 +917,7 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
@@ -927,12 +928,20 @@
         "slidersForceShow": false,
         "titleHidden": false,
         "collapsed": false,
+        "hideUnusedKeep": {
+          "inputs": [
+            "Trigger"
+          ],
+          "outputs": [
+            "Kick"
+          ]
+        },
         "displayHeightGu": 4
       }
     },
     {
-      "gx": -5,
-      "gy": 0,
+      "gx": -7,
+      "gy": 5,
       "id": "noiseConvReverb-1",
       "paramMeta": {
         "decay": {
@@ -1249,8 +1258,8 @@
       }
     },
     {
-      "gx": 4,
-      "gy": -1,
+      "gx": 2,
+      "gy": 4,
       "id": "reverbEffect-1",
       "paramMeta": {
         "mix": {
@@ -1720,8 +1729,8 @@
       }
     },
     {
-      "gx": -5,
-      "gy": -8,
+      "gx": -7,
+      "gy": -3,
       "id": "velvetReverb-1",
       "paramMeta": {
         "density": {
@@ -2229,8 +2238,8 @@
       }
     },
     {
-      "gx": -68,
-      "gy": 3,
+      "gx": -61,
+      "gy": 2,
       "id": "keyboard-1",
       "paramMeta": {},
       "params": {},
@@ -2243,19 +2252,19 @@
           "source": "pointer",
           "gate": 0,
           "gatePulse": 0,
-          "x": 0.4810758082497213,
-          "y": 0.7196898051825231,
+          "x": 0.6051420409458816,
+          "y": 0.7814141414141414,
           "velocity": 1,
-          "keyIndex": 24,
-          "keyQuantized": 0.47058823529411764,
-          "rawMidi": 50,
+          "keyIndex": 31,
+          "keyQuantized": 0.6078431372549019,
+          "rawMidi": 57,
           "octave": 0,
-          "midi": 50,
-          "pitch": "D2",
-          "pitchValue": 50,
-          "midiNormalized": 0.3937007874015748,
-          "tenthVoltPerOctave": 0.4166666666666667,
-          "frequency": 146.8323839587038
+          "midi": 57,
+          "pitch": "A2",
+          "pitchValue": 57,
+          "midiNormalized": 0.44881889763779526,
+          "tenthVoltPerOctave": 0.475,
+          "frequency": 220
         },
         "hideKeyboardInfo": false,
         "blackKeyWidth": 10,
@@ -2269,7 +2278,7 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
@@ -2280,6 +2289,13 @@
         "slidersForceShow": false,
         "titleHidden": false,
         "collapsed": false,
+        "hideUnusedKeep": {
+          "inputs": [],
+          "outputs": [
+            "Gate",
+            "pitch"
+          ]
+        },
         "displayHeightGu": 7
       },
       "chordMemory": {
@@ -2287,8 +2303,8 @@
       }
     },
     {
-      "gx": -19,
-      "gy": 21,
+      "gx": -87,
+      "gy": 27,
       "id": "ampCurve-1",
       "paramMeta": {
         "mode": {
@@ -2342,7 +2358,7 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
@@ -2352,12 +2368,20 @@
         "slidersHidden": false,
         "slidersForceShow": false,
         "titleHidden": false,
-        "collapsed": false
+        "collapsed": true,
+        "hideUnusedKeep": {
+          "inputs": [
+            "Env"
+          ],
+          "outputs": [
+            "Curve"
+          ]
+        }
       }
     },
     {
-      "gx": -21,
-      "gy": 24,
+      "gx": -94,
+      "gy": 39,
       "id": "slewLimiter-1",
       "paramMeta": {
         "upShape": {
@@ -2559,7 +2583,7 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
@@ -2569,13 +2593,21 @@
         "slidersHidden": false,
         "slidersForceShow": false,
         "titleHidden": false,
-        "collapsed": false,
+        "collapsed": true,
+        "hideUnusedKeep": {
+          "inputs": [
+            "In"
+          ],
+          "outputs": [
+            "Out"
+          ]
+        },
         "displayHeightGu": 2
       }
     },
     {
-      "gx": -22,
-      "gy": 1,
+      "gx": -94,
+      "gy": 27,
       "id": "pitchManager-1",
       "paramMeta": {
         "tuning": {
@@ -2869,7 +2901,7 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
@@ -2879,13 +2911,21 @@
         "slidersHidden": false,
         "slidersForceShow": false,
         "titleHidden": false,
-        "collapsed": false,
+        "collapsed": true,
+        "hideUnusedKeep": {
+          "inputs": [
+            "pitch"
+          ],
+          "outputs": [
+            "f"
+          ]
+        },
         "displayHeightGu": 3
       }
     },
     {
-      "gx": -15,
-      "gy": 1,
+      "gx": -16,
+      "gy": 2,
       "id": "stepRegister-1",
       "paramMeta": {
         "source": {
@@ -3624,23 +3664,31 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
         "movementLocked": false,
         "oscilloscopeHidden": false,
         "oscilloscopeForceShow": false,
-        "slidersHidden": false,
+        "slidersHidden": true,
         "slidersForceShow": false,
         "titleHidden": false,
         "collapsed": false,
-        "displayHeightGu": 6
+        "hideUnusedKeep": {
+          "inputs": [
+            "f"
+          ],
+          "outputs": [
+            "Out"
+          ]
+        },
+        "displayHeightGu": 5
       }
     },
     {
-      "gx": -30,
-      "gy": 14,
+      "gx": -101,
+      "gy": 27,
       "id": "vibratoGenerator-1",
       "paramMeta": {
         "frequency": {
@@ -4207,7 +4255,7 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
@@ -4217,13 +4265,21 @@
         "slidersHidden": false,
         "slidersForceShow": false,
         "titleHidden": false,
-        "collapsed": false,
+        "collapsed": true,
+        "hideUnusedKeep": {
+          "inputs": [
+            "Gate"
+          ],
+          "outputs": [
+            "Wave"
+          ]
+        },
         "displayHeightGu": 2
       }
     },
     {
-      "gx": -26,
-      "gy": -7,
+      "gx": -25,
+      "gy": 3,
       "id": "momentaryButton-1",
       "paramMeta": {
         "offset": {
@@ -4308,19 +4364,20 @@
         "displaySource": 0
       },
       "type": "momentaryButton",
-      "widthGu": 5,
+      "pluginId": 0,
+      "widthGu": 7,
       "traceDisplaySettings": {
         "strokeScale": 0.06,
         "rounding": 0.18,
         "buttonShowLabel": true,
         "buttonLabelAlign": "middle",
         "labelText": "",
-        "offText": "",
-        "onText": "On",
+        "offText": "💣",
+        "onText": "💥",
         "backgroundColor": "#000000",
         "strokeColor": "#5c5071",
         "inactiveColor": "#1a2228",
-        "activeColor": "#2f8f86",
+        "activeColor": "#911923",
         "hoverColor": "#89bfc2",
         "textColor": "#f4f7f8"
       },
@@ -4330,7 +4387,7 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
@@ -4341,9 +4398,14 @@
         "slidersForceShow": false,
         "titleHidden": true,
         "collapsed": false,
-        "displayHeightGu": 2
-      },
-      "pluginId": 0
+        "hideUnusedKeep": {
+          "inputs": [],
+          "outputs": [
+            "Bias"
+          ]
+        },
+        "displayHeightGu": 6
+      }
     }
   ],
   "requiredAssets": [],
@@ -8098,7 +8160,7 @@
   "view": {
     "heightGu": 24,
     "widthGu": 48,
-    "zoom": 0.635518078404832,
+    "zoom": 0.7971938775510213,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,

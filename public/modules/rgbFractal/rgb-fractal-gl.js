@@ -198,12 +198,15 @@ vec3 paletteSample(float e, float soft) {
     return c0;
   }
   float w = mix(0.012, 0.055, soft);
-  vec3 cL = texture2D(uPalette, vec2(fract(e - w), 0.5)).rgb;
-  vec3 cR = texture2D(uPalette, vec2(fract(e + w), 0.5)).rgb;
-  vec3 cLL = texture2D(uPalette, vec2(fract(e - w * 2.0), 0.5)).rgb;
-  vec3 cRR = texture2D(uPalette, vec2(fract(e + w * 2.0), 0.5)).rgb;
+  // Clamp (not wrap) so the top stop never blends with the bottom one, and fade the low-pass out
+  // toward both ends so the first and last stops stay pure: Soft can still reach the top of the gradient.
+  vec3 cL = texture2D(uPalette, vec2(clamp(e - w, 0.0, 1.0), 0.5)).rgb;
+  vec3 cR = texture2D(uPalette, vec2(clamp(e + w, 0.0, 1.0), 0.5)).rgb;
+  vec3 cLL = texture2D(uPalette, vec2(clamp(e - w * 2.0, 0.0, 1.0), 0.5)).rgb;
+  vec3 cRR = texture2D(uPalette, vec2(clamp(e + w * 2.0, 0.0, 1.0), 0.5)).rgb;
   vec3 blur = cLL * 0.1 + cL * 0.25 + c0 * 0.3 + cR * 0.25 + cRR * 0.1;
-  return mix(c0, blur, clamp(soft * 1.1, 0.0, 1.0));
+  float ends = smoothstep(0.0, w * 3.0, min(e, 1.0 - e));
+  return mix(c0, blur, clamp(soft * 1.1, 0.0, 1.0) * ends);
 }
 
 void main() {
@@ -257,7 +260,8 @@ void main() {
   eColor = mix(e, eColor, 0.52);
   eColor = clamp(eColor * uBreath, 0.0, 1.0);
   // Soft only: mild mid-palette pull + LUT low-pass (paletteSample) — no phase scrub
-  eColor = mix(eColor, 0.5 + (eColor - 0.5) * mix(1.0, 0.78, soft), soft * 0.35);
+  // The pull is strongest mid-palette and zero at both ends, so the top stop stays reachable.
+  eColor = mix(eColor, 0.5 + (eColor - 0.5) * mix(1.0, 0.78, soft), soft * 0.35 * 4.0 * eColor * (1.0 - eColor));
 
   vec3 col = paletteSample(eColor, soft);
 

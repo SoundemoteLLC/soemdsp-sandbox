@@ -101,7 +101,8 @@
   /**
    * Keep factor (per 60 fps frame) for one stored energy level. Full energy
    * keeps at the Trail rate; dimmer energy eases toward the Ghost tail rate.
-   * GPU steps use the same mix(keepSlow, keepFast, clamp(e, 0, 1)^KNEE).
+   * Legacy per-level blend; the decay steps (CPU applyResidual and the GPU shaders) now use the two-component
+   * law (the first 0.5 of energy decays at the Ghost rate, the rest at the Trail rate), which is monotone.
    */
   function residualKeepAt(energy01, keepFast, keepSlow) {
     const kf = clamp01(keepFast, 0);
@@ -140,9 +141,13 @@
     if (keepFast >= 1) {
       return e; // Trail freeze
     }
-    const keep = residualKeepAt(e, keepFast, ghostKeep(ghost, keepFast));
+    // two-component decay (monotone): the first 0.5 of energy is the dim tail (Ghost rate), only the energy above it is hot
+    // (Trail rate). The old per-pixel blend of the two rates made a full-energy pixel decay at the Trail rate alone, so with
+    // Trail below Ghost hot pixels vanished while dimmer neighbours kept a tail: dark holes inside bright areas. With Trail
+    // >= Ghost the two rates are equal and the result is identical to before.
+    const keepSlow = Math.max(keepFast, ghostKeep(ghost, keepFast));
     const f = Math.max(0, Number.isFinite(Number(frames)) ? Number(frames) : 1);
-    return e * Math.pow(keep, f);
+    return Math.min(e, 0.5) * Math.pow(keepSlow, f) + Math.max(e - 0.5, 0) * Math.pow(keepFast, f);
   }
 
   /**

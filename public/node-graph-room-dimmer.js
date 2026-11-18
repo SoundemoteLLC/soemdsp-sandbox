@@ -885,7 +885,7 @@ void main() {
     state.dim = clampDim(value);
     syncButton();
     // The GL graph reads the ambient level when it builds its layers.
-    if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) {
+    if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState?.canvas) {
       nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
       if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
     }

@@ -567,14 +567,22 @@ function validateNodeGraphPatch(patch) {
         node.paramMeta.skewOffset = node.paramMeta.curveOffset;
         delete node.paramMeta.curveOffset;
       }
-      // Noise Convolution Reverb: Decorrelate renamed Spread.
+      // Noise Convolution Reverb (0.20.0 patches): Spread is Decorrelate again, and
+      // Brightness / Darkness (0..1) become Start / End Cutoff in Hz with the
+      // 0.20.0 curve, so old patches keep their sound.
       if (type === "noiseConvReverb" && node.params) {
-        if (Object.prototype.hasOwnProperty.call(node.params, "decorrelate") && !Object.prototype.hasOwnProperty.call(node.params, "spread")) {
-          node.params.spread = node.params.decorrelate;
+        const has = (k) => Object.prototype.hasOwnProperty.call(node.params, k);
+        if (has("spread") && !has("decorrelate")) node.params.decorrelate = node.params.spread;
+        if ((has("brightness") || has("darkness")) && !has("startCutoffHz") && !has("endCutoffHz")) {
+          const unit = (v, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : d; };
+          const fStart = Math.max(80, Math.min(0.45 * 48000, 1500 * Math.pow(16000 / 1500, unit(node.params.brightness, 0.7))));
+          node.params.startCutoffHz = fStart;
+          node.params.endCutoffHz = fStart * Math.pow(120 / fStart, unit(node.params.darkness, 0.25));
         }
-        delete node.params.decorrelate;
-        if (node.paramMeta?.decorrelate && !node.paramMeta.spread) node.paramMeta.spread = node.paramMeta.decorrelate;
-        if (node.paramMeta) delete node.paramMeta.decorrelate;
+        for (const k of ["spread", "brightness", "darkness"]) {
+          delete node.params[k];
+          if (node.paramMeta) delete node.paramMeta[k];
+        }
       }
       if (type === "smoothGraph" && parameter.key === "smoothingMode") {
         const sourceMax = Number(node.paramMeta?.[parameter.key]?.max);

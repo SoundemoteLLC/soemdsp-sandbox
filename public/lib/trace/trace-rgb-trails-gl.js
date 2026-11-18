@@ -32,9 +32,14 @@
       vec3 hot = max(prev - uPlate, 0.0);
       float keepFast = clamp(uKeepFast, 0.0, 1.0);
       float keepSlow = max(keepFast, clamp(uKeepSlow, 0.0, 0.9998));
-      // PhosphorResidual.residualKeepAt per channel; no floor or cap.
-      vec3 keep = mix(vec3(keepSlow), vec3(keepFast), pow(clamp(hot, 0.0, 1.0), vec3(12.0)));
-      vec3 e = hot * pow(keep, vec3(max(uFrames, 0.0)));
+      // two-component decay (monotone): the first 0.5 of energy is the dim tail (Ghost rate), only the energy above it is hot
+      // (Trail rate). The old per-pixel blend of the two rates made a full-energy pixel decay at the Trail rate alone, so with
+      // Trail below Ghost hot pixels vanished while dimmer neighbours kept a tail: dark holes inside bright areas. With Trail
+      // >= Ghost the two rates are equal and the result is identical to before.
+      float frames = max(uFrames, 0.0);
+      float tailDecay = frames > 0.0 ? pow(keepSlow, frames) : 1.0;
+      float hotDecay = frames > 0.0 ? pow(keepFast, frames) : 1.0;
+      vec3 e = min(hot, vec3(0.5)) * tailDecay + max(hot - vec3(0.5), vec3(0.0)) * hotDecay;
       gl_FragColor = vec4(uPlate + e, 1.0);
     }
   `;

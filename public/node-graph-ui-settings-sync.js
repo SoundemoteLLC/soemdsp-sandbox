@@ -333,6 +333,17 @@ function bindNodeUiDevSliderFillColorControls() {
 // Unselected plate outline. CSS-only — do not fold into the header sync
 // (that rebuilds the patch / heatmap / wires on every input event).
 // Plate corners for the GL plates (read per draw). Top and bottom are set apart.
+// Rebuild the GPU scene after a lighting / stroke setting changed. These controls also run while the
+// app is still starting (the UI Dev binding), before every script the graph needs has loaded, so the
+// rebuild only happens once the GL graph has drawn at least once, and never throws into the binder.
+function nodeGraphUiDevRefreshGlGraph() {
+  try {
+    if (typeof nodeGraphGlGraphState !== "object" || !nodeGraphGlGraphState || !nodeGraphGlGraphState.canvas) return;
+    nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
+    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+  } catch (_error) { /* the next normal present picks the change up */ }
+}
+
 const NODE_MODULE_CORNER_SHAPE_NAMES = ["Round", "Squircle", "Pill"];
 let nodeGraphModuleStrokeFollowAmount = 0.92;
 let nodeGraphModuleStrokeFollowFrame = 0;
@@ -522,9 +533,11 @@ function syncNodeUiDevModuleCorners() {
   show("nodeUiDevModuleStrokeTopRadiusValue", look.topShape === 2 ? "full" : `${look.strokeTopRadius}px`);
   show("nodeUiDevModuleBottomShapeValue", NODE_MODULE_CORNER_SHAPE_NAMES[look.bottomShape]);
   show("nodeUiDevModuleBottomRadiusValue", look.bottomShape === 2 ? "full" : `${look.bottomRadius}px`);
-  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
-  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  nodeGraphUiDevRefreshGlGraph();
 }
+
+// The edge antialiasing feather (px) the phosphor shaders read (a fixed value now: there is no UI Dev setting).
+globalThis.nodeGraphDotCoreAaPx = 1.5;
 
 // UI Dev "lighting: wires" (the light cables and their end dots keep in a fully dark room) and
 // "lighting: jacks" (connected / unconnected jack ring light). Percent controls; the range is the
@@ -554,8 +567,7 @@ function syncNodeUiDevLightingLevels() {
     const out = document.getElementById(`${id}Value`);
     if (out) out.textContent = `${pct}%`;
   }
-  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
-  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  nodeGraphUiDevRefreshGlGraph();
 }
 
 function syncNodeUiDevModuleIdleStroke() {
@@ -605,8 +617,7 @@ function syncNodeUiDevModuleIdleStroke() {
     `rgb(${nodeUiDevHexColorToRgbTriplet(selectedColor)} / ${selectedAlphaPercent / 100})`,
   );
   // The plate stroke vars are read once per rebuild generation; bump it so this change shows now.
-  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
-  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  nodeGraphUiDevRefreshGlGraph();
 }
 
 const NODE_MODULE_PLATE_ROUNDNESS_RATIO = 0.11;
@@ -1071,10 +1082,7 @@ function syncNodeUiDevModuleLightGridControls() {
     updateNodeGraphGridHeatmap({ force: true });
   }
   // The module lights and the grid are drawn on the GPU: rebuild the scene so it picks the values up.
-  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) {
-    nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
-    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
-  }
+  nodeGraphUiDevRefreshGlGraph();
 }
 
 function bindNodeUiDevModuleLightGridControls() {

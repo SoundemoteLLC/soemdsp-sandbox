@@ -111,6 +111,10 @@ function nodeGraphTraceDisplayUnitDragField(key, formType = null) {
     "ghost",
     "ghostBlend",
     "trail",
+    "decayBlur",
+    "glowCore",
+    "glowReach",
+    "glowStrength",
     "burnAmount",
     "unlitSegments",
     "centsBand",
@@ -561,6 +565,10 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
     return clampNodeSliderValue(n, 0, 2);
   },
   ghost: nodeGraphTraceDisplayClampUnit,
+  decayBlur: nodeGraphTraceDisplayClampUnit,
+  glowCore: nodeGraphTraceDisplayClampUnit,
+  glowReach: nodeGraphTraceDisplayClampUnit,
+  glowStrength: nodeGraphTraceDisplayClampUnit,
   ghostBlend: nodeGraphTraceDisplayClampUnit,
   capLength: nodeGraphTraceDisplayClampUnit,
   capPadding: nodeGraphTraceDisplayClampUnit,
@@ -616,6 +624,10 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   dot1Brightness: nodeGraphTraceDisplayClampBrightness,
   dot1Size: nodeGraphTraceDisplayClampInkPx,
   ghost: nodeGraphTraceDisplayClampUnit,
+  decayBlur: nodeGraphTraceDisplayClampUnit,
+  glowCore: nodeGraphTraceDisplayClampUnit,
+  glowReach: nodeGraphTraceDisplayClampUnit,
+  glowStrength: nodeGraphTraceDisplayClampUnit,
   historySeconds: (value) => (typeof nodeGraphWaterfallClampHistorySeconds === "function"
     ? nodeGraphWaterfallClampHistorySeconds(value, 0.25)
     : nodeGraphTraceDisplayClampHistorySeconds(value)),
