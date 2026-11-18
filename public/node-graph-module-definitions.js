@@ -7701,11 +7701,12 @@ const nodeGraphModuleDefinitions = (
         label: "Length",
         max: "6",
         maxDigits: 5,
-        mid: "1",
-        min: "0.025",
+        mid: "0.1",
+        min: "0.001",
         nonlinearSlider: true,
         step: "any",
         unit: "s",
+        tooltip: "Generated impulse length, from tiny colored filters to long reverb tails. The final quarter tapers to zero, capped at 20 ms. Changes rebuild the IR and crossfade; this is not a sample-rate modulation control.",
       },
       {
         curveAmount: "-0.9",
@@ -7740,6 +7741,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
+        tooltip: "How far the IR lowpass darkens over time toward 120 Hz. If Brightness already starts below 120 Hz, the cutoff stays there rather than rising. Spectral Shape controls the trajectory.",
       },
       {
         defaultValue: "0.7",
@@ -7750,6 +7752,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
+        tooltip: "Initial IR lowpass cutoff: 50 Hz at zero, 16 kHz at one, limited by sample rate. Two lowpass stages color the generated noise; this is not an output gain control.",
       },
       {
         defaultValue: "1",

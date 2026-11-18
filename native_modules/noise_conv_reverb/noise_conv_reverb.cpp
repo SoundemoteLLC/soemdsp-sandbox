@@ -17,6 +17,8 @@
 // Spectral Shape warps how the lowpass cutoff travels from Brightness (early)
 // to Darkness (late), same curve. Decorrelate (0 = identical L/R, 1 =
 // independent seeds) is cheap.
+// The filtered IR ends with a quarter-length cosine taper, capped at 20 ms.
+// Brightness spans 50 Hz to 16 kHz; tiny kernels may fit entirely in the head.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
@@ -213,7 +215,7 @@ static int ir_len_for(double length, double sr) {
   if (!(length > 0.0) || !(length == length)) length = 0.0;
   if (length > kMaxLengthSeconds) length = kMaxLengthSeconds;
   int n = (int)(length * sr + 0.5);
-  if (n < kHead) n = kHead;
+  if (n < 1) n = 1;
   return n;
 }
 
@@ -375,9 +377,9 @@ static unsigned char* wire_block(State& s, unsigned char* raw, int maxLen) {
 
 static double cutoff_hz(const CleanParams& p, double u) {
   const double ny = 0.45 * p.sampleRate;
-  const double fBright = 1500.0 * soemdsp::math::pow_pos(16000.0 / 1500.0, p.brightness);
-  const double fStart = fBright > ny ? ny : (fBright < 80.0 ? 80.0 : fBright);
-  const double fMin = 120.0;
+  const double fBright = 50.0 * soemdsp::math::pow_pos(16000.0 / 50.0, p.brightness);
+  const double fStart = fBright > ny ? ny : fBright;
+  const double fMin = fStart < 120.0 ? fStart : 120.0;
   const double fEnd = fStart * soemdsp::math::pow_pos(fMin / fStart, p.darkness);
   const double w = soemdsp::math::segment_rational01(u, p.spectralShape);
   return fStart * soemdsp::math::pow_pos(fEnd / fStart, w);
@@ -407,8 +409,10 @@ static void build_samples(State& s, int count) {
   Bank& b = s.bank[s.buildBank];
   const CleanParams& p = s.buildP;
   const int n = b.irLen;
-  const int fadeN = (int)(0.020 * p.sampleRate + 0.5);
-  const int fadeStart = n > fadeN ? n - fadeN : 0;
+  const int fadeCap = (int)(0.020 * p.sampleRate + 0.5);
+  const int fadeQuarter = n / 4 > 0 ? n / 4 : 1;
+  const int fadeN = fadeQuarter < fadeCap ? fadeQuarter : fadeCap;
+  const int fadeStart = n - 1 - fadeN;
   const double invNm1 = n > 1 ? 1.0 / (double)(n - 1) : 1.0;
   const double twoPi = 6.283185307179586;
   int t = s.buildT;
@@ -417,10 +421,6 @@ static void build_samples(State& s, int count) {
     const double u = (double)t * invNm1;
     const double w = soemdsp::math::segment_rational01(u, p.ampShape);
     double env = soemdsp::math::pow_pos(10.0, (kAmpFloorDb / 20.0) * w);
-    if (t >= fadeStart && n > fadeStart) {
-      const double x = (double)(t - fadeStart) / (double)(n - fadeStart);
-      env *= 0.5 * (1.0 + soemdsp_maths::dsp_cos(3.141592653589793 * x));
-    }
     const double fc = cutoff_hz(p, u);
     double a = soemdsp_maths::dsp_exp(-twoPi * fc / p.sampleRate);
     if (!(a == a) || a < 0.0) a = 0.0;
@@ -433,8 +433,15 @@ static void build_samples(State& s, int count) {
     s.lpL2 = flush_f(af * s.lpL2 + g * s.lpL1);
     s.lpR1 = flush_f(af * s.lpR1 + g * xR);
     s.lpR2 = flush_f(af * s.lpR2 + g * s.lpR1);
-    const float yL = s.lpL2;
-    const float yR = (float)((1.0 - p.decorrelate) * (double)yL + p.decorrelate * (double)s.lpR2);
+    // Taper the filtered IR, not its excitation: filter memory must also end.
+    double taper = 1.0;
+    if (n > 1 && t > fadeStart) {
+      const double x = (double)(t - fadeStart) / (double)fadeN;
+      taper = 0.5 * (1.0 + soemdsp_maths::dsp_cos(3.141592653589793 * x));
+      if (t == n - 1) taper = 0.0;
+    }
+    const float yL = (float)(taper * (double)s.lpL2);
+    const float yR = (float)(taper * ((1.0 - p.decorrelate) * (double)s.lpL2 + p.decorrelate * (double)s.lpR2));
     b.irL[t] = yL;
     b.irR[t] = yR;
     s.energy += (double)yL * (double)yL + (double)yR * (double)yR;
@@ -900,7 +907,7 @@ double soemdsp_noise_conv_reverb_right(int handle) {
   return gOutR[0];
 }
 
-int soemdsp_noise_conv_reverb_version() { return 1; }
+int soemdsp_noise_conv_reverb_version() { return 2; }
 
 double soemdsp_noise_conv_reverb_max_length() { return kMaxLengthSeconds; }
 

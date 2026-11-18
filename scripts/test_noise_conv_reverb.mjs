@@ -29,7 +29,7 @@ const defMax = (() => {
   }
 })();
 
-ok("version 1", x.soemdsp_noise_conv_reverb_version() === 1, String(x.soemdsp_noise_conv_reverb_version()));
+ok("version 2", x.soemdsp_noise_conv_reverb_version() === 2, String(x.soemdsp_noise_conv_reverb_version()));
 ok("max length 6 s", Math.abs(x.soemdsp_noise_conv_reverb_max_length() - 6) < 1e-12, String(x.soemdsp_noise_conv_reverb_max_length()));
 if (defMax != null) {
   ok("definition Length max matches native max", defMax === x.soemdsp_noise_conv_reverb_max_length(), `def ${defMax}`);

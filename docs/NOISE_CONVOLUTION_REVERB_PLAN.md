@@ -1,6 +1,7 @@
 # Noise Convolution Reverb: Extreme Settings
 
-Updated: 2026-11-18. Approved direction; implementation has not started.
+Updated: 2026-11-18. First short-IR/darker-tone milestone implemented locally;
+musical listening acceptance and boom/body experiments remain open.
 
 ## Goal
 
@@ -28,8 +29,9 @@ UI metadata: `public/node-graph-module-definitions.js`, `noiseConvReverb`.
 
 - [x] Existing controls: Length, Amp Shape, Spectral Shape, Darkness,
   Brightness, Decorrelate, Seed and Mix.
-- [x] UI Length starts at 0.025 s; native sanitization accepts one sample up
-  to the allocated capacity, with an overall maximum of six seconds.
+- [x] Original UI Length started at 0.025 s. Native parameter sanitization
+  accepted one sample, but IR generation had a hidden 128-sample floor. The
+  extreme-range implementation removes that floor; the maximum is six seconds.
 - [x] Amp Shape warps a decay from 0 to -60 dB. Positive shape reaches the
   end sooner; it does not add distortion or reverse the envelope.
 - [x] Brightness maps the initial lowpass cutoff from 1500 to 16000 Hz,
@@ -135,3 +137,32 @@ required for this work. Do not relax audio correctness checks as a consequence.
 
 - [STFT roadmap](STFT_ROADMAP.md): separate spectral effects and dynamics.
 - [Vocoder roadmap](VOCODER_ROADMAP.md): separate IIR filter-bank work.
+
+## First Implementation Checkpoint
+
+- [x] Length spawn range is 1 ms..6 s, with midpoint 100 ms for fine low-end
+  control. Removed the hidden 128-sample kernel floor; native supports one sample.
+- [x] Taper the filtered IR's final quarter (integer sample spacing), capped at
+  20 ms, with an exact zero endpoint for kernels longer than one sample.
+- [x] Brightness now spans 50 Hz..16 kHz logarithmically. Darkness never raises
+  an already-sub-120 Hz cutoff. Existing Brightness values have a new mapping;
+  no legacy mode or compatibility work was added.
+- [x] Native version 2; standalone and combined WASM rebuilt. DSP controls,
+  IR rebuilding and crossfades remain the existing mechanism.
+- [x] Native tests verify 1 sample and 1/2/5/10/25/50 ms at 44.1/48/96 kHz,
+  normalized stereo IR energy, zero endpoints, direct-convolution identity,
+  dark/bright spectral difference, decorrelation and rapid edits.
+- [x] Existing tail/dry/seed/range and CPU tests pass.
+- [ ] User listening acceptance: this is not yet a verdict on the best taper sound.
+- [ ] Boom/body shaping and curated presets remain later work.
+
+Listening queue (settings are suggestions, not claimed finished presets):
+
+1. Set Mix fully wet, Length 25 ms, Amp/Spectral Shape high, Brightness 0;
+   sweep Decorrelate from 0 to 100%. Brightness 0 is now much darker than before.
+2. Compare Length 1, 2, 5, 10, 25 and 50 ms with a pulse oscillator or percussion.
+3. Raise Brightness slowly. Around 0.59 now gives roughly the old 1.5 kHz floor;
+   the new lower portion explores deeper low-frequency coloration.
+4. Try Darkness 0 versus 1 with Brightness above 0.2; below approximately 0.15,
+   the starting cutoff is already below 120 Hz and Darkness intentionally has
+   no further effect. Sweep shapes independently to distinguish envelope from tone.
