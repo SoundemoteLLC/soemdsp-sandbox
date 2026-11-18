@@ -838,6 +838,19 @@ extern "C" void soemdsp_vocoder_set_bands(int handle, int count);
 extern "C" double soemdsp_vocoder_sample(int handle, double modL, double modR,
   double carL, double carR, double width, double followerSeconds, double shift, double mix, double rate);
 extern "C" double soemdsp_vocoder_right(int handle);
+extern "C" int soemdsp_stft_contrast_create();
+extern "C" void soemdsp_stft_contrast_destroy(int handle);
+extern "C" double soemdsp_stft_contrast_sample(int h, double l, double r, double contrast,
+  double scale, double threshold, double ratio, double attack, double release,
+  double boost, double gain, double mix, double rate);
+extern "C" double soemdsp_stft_contrast_right(int handle);
+extern "C" int soemdsp_stft_gate_create();
+extern "C" void soemdsp_stft_gate_destroy(int handle);
+extern "C" double soemdsp_stft_gate_sample(int h, double l, double r, int profile,
+  double threshold, double margin, double depth, double attack, double release,
+  double smooth, double mix, double rate);
+extern "C" double soemdsp_stft_gate_right(int handle);
+extern "C" double soemdsp_stft_gate_ready(int handle);
 extern "C" void soemdsp_noise_conv_reverb_destroy(int handle);
 extern "C" void soemdsp_noise_conv_reverb_reset(int handle);
 extern "C" void soemdsp_noise_conv_reverb_set_seed(int handle, double seed);
@@ -2590,6 +2603,8 @@ static const int kTypeCombPluck = 266; // Comb Pluck: strict Trigger + built-in 
 static const int kTypeNoiseConvReverb = 267; // Noise Convolution Reverb: shaped noise IR, zero-latency partitioned convolution
 static const int kTypeConvolutionResonator = 268;
 static const int kTypeVocoder = 269;
+static const int kTypeStftContrast = 270;
+static const int kTypeStftGate = 271;
 
 static const int kPortMono = 0;
 static const int kPortLeft = 1;
@@ -3265,6 +3280,10 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_convolution_resonator_destroy(handle);
   } else if (kind == kTypeVocoder) {
     soemdsp_vocoder_destroy(handle);
+  } else if (kind == kTypeStftContrast) {
+    soemdsp_stft_contrast_destroy(handle);
+  } else if (kind == kTypeStftGate) {
+    soemdsp_stft_gate_destroy(handle);
   } else if (kind == kTypeVelvetNoise) {
     soemdsp_velvet_noise_destroy(handle);
   } else if (kind == kTypeSoftpopOscillator) {
@@ -4974,6 +4993,19 @@ static void init_node_defaults(Node& n, int typeId) {
     }
     for (int i = 0; i < kMaxBlockFrames; i += 1) n.yellowCutoffStrip[i] = 1.0f;
   }
+  if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
+    const bool gate = typeId == kTypeStftGate;
+    init_control(n.shape, gate ? 0.5 : -0.35, false);
+    init_control(n.width, gate ? 3 : 1, false);
+    init_control(n.center, gate ? -60 : -24, false);
+    init_control(n.resonance, 2, false);
+    init_control(n.offsetMs, gate ? 5 : 10, false);
+    init_control(n.diffusionAmount, 100, false);
+    init_control(n.feedback, gate ? 60 : 18, false);
+    init_control(n.level, 0, false);
+    init_control(n.mix, 1, false);
+    init_control(n.mode, 0, true);
+  }
 }
 
 static Control* emo_slot(Node& n, int i) {
@@ -5785,6 +5817,8 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeNoiseConvReverb) return soemdsp_noise_conv_reverb_create((double)sampleRate);
   if (typeId == kTypeConvolutionResonator) return soemdsp_convolution_resonator_create();
   if (typeId == kTypeVocoder) return soemdsp_vocoder_create();
+  if (typeId == kTypeStftContrast) return soemdsp_stft_contrast_create();
+  if (typeId == kTypeStftGate) return soemdsp_stft_gate_create();
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
   if (typeId == kTypeSoftpopFilter) return soemdsp_softpop_filter_create();
   if (typeId == kTypeSoftpop2) return soemdsp_softpop2_create();
@@ -15902,6 +15936,43 @@ static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
   }
 }
 
+static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  using namespace soemdsp::routing;
+  const StereoRoute route = stereo_route(probe_stereo_route_wiring(g, node));
+  mix_node_inputs(g, node, frames);
+  const bool gate = node.typeId == kTypeStftGate;
+  for (int f = 0; f < frames; ++f) {
+    control_frame(g, node, f);
+    const double m = g.mixMono[f], l = g.mixLeft[f], r = g.mixRight[f];
+    const double a = stereo_route_feed(route.runMono ? route.feedMono : route.feedL, m, l, r);
+    const double b = stereo_route_feed(route.feedR, m, l, r);
+    // Linked detection must observe both inputs regardless of output wiring.
+    const double left = a, right = b;
+    double y, yr;
+    if (gate) {
+      y = soemdsp_stft_gate_sample(node.nativeHandle, left, right,
+        (int)control_audio(g, node.mode, f), control_audio(g, node.center, f),
+        control_audio(g, node.width, f), control_audio(g, node.feedback, f),
+        control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionAmount, f),
+        control_audio(g, node.shape, f), control_audio(g, node.mix, f), g.sampleRate);
+      yr = soemdsp_stft_gate_right(node.nativeHandle);
+      node.buf[kPortPhase01][f] = soemdsp_stft_gate_ready(node.nativeHandle);
+    } else {
+      y = soemdsp_stft_contrast_sample(node.nativeHandle, left, right,
+        control_audio(g, node.shape, f), control_audio(g, node.width, f),
+        control_audio(g, node.center, f), control_audio(g, node.resonance, f),
+        control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionAmount, f),
+        control_audio(g, node.feedback, f), control_audio(g, node.level, f),
+        control_audio(g, node.mix, f), g.sampleRate);
+      yr = soemdsp_stft_contrast_right(node.nativeHandle);
+    }
+    node.buf[kPortMono][f] = stereo_route_out(route.outMono, y, y, yr);
+    node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, y, y, yr);
+    node.buf[kPortRight][f] = stereo_route_out(route.outRight, y, y, yr);
+  }
+}
+
 static void process_vocoder(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   double modL[kMaxBlockFrames], modR[kMaxBlockFrames];
@@ -17418,6 +17489,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeNoiseConvReverb
     || typeId == kTypeConvolutionResonator
     || typeId == kTypeVocoder
+    || typeId == kTypeStftContrast || typeId == kTypeStftGate
     || typeId == kTypeSampleHold
     || typeId == kTypeMinMax
     || typeId == kTypeClock
@@ -17581,7 +17653,8 @@ static bool type_needs_native(int typeId) {
 // Adding or removing one makes the host rebuild the engine, and their capacity is the node count
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
-  if (typeId == kTypeConvolutionResonator || typeId == kTypeVocoder) return true;
+  if (typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
+    || typeId == kTypeStftContrast || typeId == kTypeStftGate) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
     || typeId == kTypeSampleDelay || typeId == kTypeExponentialDelay || typeId == kTypeDelayEffect
@@ -19038,6 +19111,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeVocoder) {
       process_vocoder(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeStftContrast || node.typeId == kTypeStftGate) {
+      process_stft_dynamics(g, node, frames);
       return;
     }
     if (node.typeId == kTypeConvolutionResonator) {

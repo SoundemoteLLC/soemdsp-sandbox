@@ -207,6 +207,8 @@ const nodeGraphNodeLabels = Object.freeze({
   waveguide: "Waveguide",
   phaser: "Phaser",
   vocoder: "Vocoder",
+  stftContrast: "STFT Contrast",
+  stftGate: "STFT Gate",
   flanger: "Flanger",
   chorus: "Chorus",
   ensemble: "Ensemble",
@@ -7336,6 +7338,243 @@ const nodeGraphModuleDefinitions = (
         unit: "%",
         tooltip: "Dry/wet mix (0% = dry input, 100% = wet)."
       },
+    ],
+  },
+  stftContrast: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
+    outputs: ["Mono", "Left", "Right"], outputAliases: { Out: "Mono" },
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["contrast","Contrast"],["scale","Scale"]], h: 40 },
+      { kind: "cells", params: [["thresholdDb","Threshold"],["ratio","Ratio"]], h: 40 },
+      { kind: "cells", params: [["attackMs","Attack"],["releaseMs","Release"]], h: 40 },
+      { kind: "cells", params: [["maxBoostDb","Max Boost"],["gainDb","Output Gain"]], h: 40 },
+      { kind: "cells", params: [["mix","Mix","horizontal"]], h: 26 },
+    ],
+    parameters: [
+      {
+        "key": "contrast",
+        "label": "Contrast",
+        "defaultValue": "-0.35",
+        "min": "-1",
+        "mid": "0",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Positive emphasizes stronger spectral regions; negative lifts weaker regions relative to the mean. Relative contrast is independent of input level. Zero disables contrast."
+      },
+      {
+        "key": "scale",
+        "label": "Scale",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "1",
+        "max": "4",
+        "step": "any",
+        "unit": "oct",
+        "tooltip": "Spectral neighborhood width across 32 overlapping logarithmic analysis regions. Zero keeps regions independent; broad values link their dynamics. This is not FFT size."
+      },
+      {
+        "key": "thresholdDb",
+        "label": "Threshold",
+        "defaultValue": "-24",
+        "min": "-72",
+        "mid": "-24",
+        "max": "0",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Downward compression threshold for each stereo-linked analysis region, not whole-signal peak level. Ratio 1 disables threshold compression."
+      },
+      {
+        "key": "ratio",
+        "label": "Ratio",
+        "defaultValue": "2",
+        "min": "1",
+        "mid": "4",
+        "max": "20",
+        "step": "any",
+        "tooltip": "Downward compression ratio above Threshold. One leaves the threshold stage neutral."
+      },
+      {
+        "key": "attackMs",
+        "label": "Attack",
+        "defaultValue": "10",
+        "min": "0",
+        "mid": "10",
+        "max": "200",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Gain-reduction time constant. Spectral gain decisions update every 256 samples; zero means one-hop response.",
+        "nonlinearSlider": true
+      },
+      {
+        "key": "releaseMs",
+        "label": "Release",
+        "defaultValue": "100",
+        "min": "0",
+        "mid": "100",
+        "max": "1000",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Time constant for gain recovery and upward detail enhancement.",
+        "nonlinearSlider": true
+      },
+      {
+        "key": "maxBoostDb",
+        "label": "Max Boost",
+        "defaultValue": "18",
+        "min": "0",
+        "mid": "12",
+        "max": "36",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Explicit maximum positive spectral gain before Output Gain. Prevents upward contrast from giving arbitrarily large boost to near-silent regions. This is a gain limit, not an audio clipper."
+      },
+      {
+        "key": "gainDb",
+        "label": "Output Gain",
+        "defaultValue": "0",
+        "min": "-24",
+        "mid": "0",
+        "max": "24",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Output makeup gain after spectral processing. No hidden loudness normalization, saturation or limiter."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Dry/wet blend with both paths aligned to the fixed 1024-sample delay. Contrast 0, Ratio 1 and Output Gain 0 are neutral."
+      }
+    ],
+  },
+  stftGate: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
+    outputs: ["Mono", "Left", "Right", "Ready"], outputAliases: { Out: "Mono" },
+    digitalOutputs: ["Ready"],
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["profileMode","Noise Profile","horizontal"]], h: 26 },
+      { kind: "cells", params: [["thresholdDb","Threshold"],["marginDb","Margin"]], h: 40 },
+      { kind: "cells", params: [["depthDb","Depth"],["smooth","Smooth"]], h: 40 },
+      { kind: "cells", params: [["attackMs","Attack"],["releaseMs","Release"]], h: 40 },
+      { kind: "cells", params: [["mix","Mix","horizontal"]], h: 26 },
+    ],
+    parameters: [
+      {
+        "key": "profileMode",
+        "label": "Noise Profile",
+        "kind": "choice",
+        "choices": [
+          "Manual",
+          "Learn",
+          "Use Profile"
+        ],
+        "choiceKeys": [
+          "manual",
+          "learn",
+          "use"
+        ],
+        "choiceIds": [
+          0,
+          1,
+          2
+        ],
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0",
+        "max": "2",
+        "step": "1",
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "linearSmoothing": false,
+        "tooltip": "Manual uses Threshold. Learn averages a noise-only passage without gating; then choose Use Profile. Ready is 1 once a complete frame was learned. Use Profile without a learned profile passes audio unchanged. Profiles are engine-session state, not saved in patches; engine rebuild or sample-rate change clears them."
+      },
+      {
+        "key": "thresholdDb",
+        "label": "Threshold",
+        "defaultValue": "-60",
+        "min": "-120",
+        "mid": "-60",
+        "max": "0",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Manual gate threshold per FFT bin, in normalized one-sided bin-power dBFS. Six-dB soft knee. Not a whole-signal peak threshold."
+      },
+      {
+        "key": "marginDb",
+        "label": "Margin",
+        "defaultValue": "3",
+        "min": "-12",
+        "mid": "3",
+        "max": "24",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Use Profile only: threshold offset above each learned noise-bin mean power. More margin rejects more noise and can remove quiet wanted detail."
+      },
+      {
+        "key": "depthDb",
+        "label": "Depth",
+        "defaultValue": "60",
+        "min": "0",
+        "mid": "48",
+        "max": "120",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Maximum attenuation for closed bins. Zero disables attenuation; no hard audio clipping."
+      },
+      {
+        "key": "attackMs",
+        "label": "Attack",
+        "defaultValue": "5",
+        "min": "0",
+        "mid": "5",
+        "max": "200",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Opening time constant when a bin exceeds its threshold. Decisions update every 256 samples.",
+        "nonlinearSlider": true
+      },
+      {
+        "key": "releaseMs",
+        "label": "Release",
+        "defaultValue": "100",
+        "min": "0",
+        "mid": "100",
+        "max": "1000",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Closing time constant. Longer release reduces spectral chatter and preserves tails.",
+        "nonlinearSlider": true
+      },
+      {
+        "key": "smooth",
+        "label": "Smooth",
+        "defaultValue": "0.5",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Links neighboring bin gain decisions with a five-bin triangular average to reduce isolated musical-noise artifacts. Zero keeps decisions independent."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Dry/wet blend aligned to the fixed 1024-sample delay. Stereo channels share gain decisions to preserve their image."
+      }
     ],
   },
   vocoder: {

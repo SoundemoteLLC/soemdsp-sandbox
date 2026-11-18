@@ -1095,6 +1095,16 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
+  stftContrast: {
+    category: "dynamics", label: "STFT Contrast",
+    description: "Stereo-linked spectral contrast and compression across overlapping logarithmic regions. Reveal quiet detail or emphasize spectral peaks, with explicit boost limits and no hidden limiter.",
+    notes: ["STFT", "spectral", "contrast", "compressor", "native"],
+  },
+  stftGate: {
+    category: "dynamics", label: "STFT Gate",
+    description: "Stereo-linked spectral gate with manual thresholds or an engine-session learned noise profile. Learn a noise-only passage, then Use Profile; Ready reports profile availability.",
+    notes: ["STFT", "spectral", "gate", "denoise", "native"],
+  },
   vocoder: {
     category: "analogFilter",
     description: "5-100 band native IIR vocoder: external voice and synth, narrow ringing bands through broad crunchy overlap, fast followers, and 2x oversampling. A single cable into either side of each input pair feeds both channels.",
@@ -3913,6 +3923,14 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   vocoder: {
     source: "native_modules/vocoder/vocoder.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/vocoder/vocoder.cpp",
+  },
+  stftContrast: {
+    source: "native_modules/stft_contrast/stft_contrast.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/stft_contrast/stft_contrast.cpp",
+  },
+  stftGate: {
+    source: "native_modules/stft_gate/stft_gate.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/stft_gate/stft_gate.cpp",
   },
   pumpCurve: {
     source: "native_modules/pump_curve/pump_curve.cpp",
