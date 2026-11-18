@@ -39,6 +39,10 @@ try {
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(true));
   await page.waitForFunction(() => nodeGraphMvp.live.node && nodeGraphMvp.live.outputLevelSmooth > 0.00001,
     null, { timeout: 60000 });
+  await page.evaluate(id => {
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'phaseSmoothMs'), '10');
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'amplitudeSmoothMs'), '20');
+  }, id);
   const reports = [];
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -53,11 +57,13 @@ try {
       const node = nodeGraphPatchNode(id);
       return { renderer: nodeGraphModuleDisplayRendererForNode(node),
         seconds: node.paramMeta.smearSeconds.unit, hz: node.paramMeta.blurHz.unit,
+        phaseMs: node.params.phaseSmoothMs, amplitudeMs: node.params.amplitudeSmoothMs,
         peak: nodeGraphMvp.live.outputLevelSmooth };
     }, id));
     await page.screenshot({ path: path.join(os.tmpdir(), `spectral-blur-${width}.png`), timeout: 15000 });
   }
   assert.ok(reports.every(r => r.renderer === 'scope1dTrace' && r.seconds === 's' && r.hz === 'Hz' && r.peak > 0));
+  assert.ok(reports.every(r => Number(r.phaseMs) === 10 && Number(r.amplitudeMs) === 20));
   assert.deepEqual(errors, []);
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(false));
   console.log(JSON.stringify({ reports, errors }));

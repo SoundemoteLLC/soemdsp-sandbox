@@ -7349,7 +7349,9 @@ const nodeGraphModuleDefinitions = (
     displayType: "scope1dTrace",
     face: [
       { kind: "cells", params: [["smearSeconds", "Time Smear"], ["blurHz", "Frequency Blur"]], h: 40 },
-      { kind: "cells", params: [["diffusion", "Diffusion"], ["mix", "Mix"]], h: 40 },
+      { kind: "cells", params: [["diffusion", "Diffusion"], ["stereoSpread", "Stereo Spread"]], h: 40 },
+      { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
+      { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
     ],
     parameters: [
       {
@@ -7387,7 +7389,44 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "unit": "%",
         "step": "any",
-        "tooltip": "Complex-spectrum blend from coherent phase to a fixed-rate phase diffuser. Shared phase offsets preserve matched stereo channels. Intermediate blends can reduce level through phase cancellation; no hidden makeup gain."
+        "tooltip": "Phase excursion amount, from coherent phase to full diffusion. Rotates each bin without complex-spectrum crossfade cancellations. Stereo Spread controls channel decorrelation; no makeup gain."
+      },
+      {
+        "key": "stereoSpread",
+        "label": "Stereo Spread",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "%",
+        "step": "any",
+        "tooltip": "Opposite-channel phase diffusion spread. Zero links the phase motion; higher values give mono input a stereo wash. Does not crossfeed audio. Requires Diffusion above zero; mono summing can change tone through phase cancellation."
+      },
+      {
+        "key": "phaseSmoothMs",
+        "label": "Phase Smooth",
+        "kind": "time",
+        "defaultValue": "10",
+        "min": "0",
+        "mid": "10",
+        "max": "200",
+        "unit": "ms",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Time constant for smoothing the unwrapped phase-diffusion trajectory. Zero keeps raw phase motion. Does not smooth spectral magnitudes or reduce their contrast. Updates at the STFT hop rate."
+      },
+      {
+        "key": "amplitudeSmoothMs",
+        "label": "Amplitude Smooth",
+        "kind": "time",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "10",
+        "max": "200",
+        "unit": "ms",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Additional symmetric per-bin magnitude smoothing after frequency spreading. Zero preserves the sharp amplitude texture. Increase gently to soften chatter; this is not compression, saturation or limiting. Updates at the STFT hop rate."
       },
       {
         "key": "mix",
@@ -7398,7 +7437,7 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "unit": "%",
         "step": "any",
-        "tooltip": "Dry/wet blend aligned to 4096 samples of latency. Time Smear 0, Frequency Blur 0 and Diffusion 0 are neutral."
+        "tooltip": "Dry/wet blend aligned to 4096 samples of latency. Turn off Time Smear, Frequency Blur, Diffusion and Amplitude Smooth for neutral reconstruction."
       }
     ],
   },

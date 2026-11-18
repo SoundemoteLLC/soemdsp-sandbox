@@ -842,6 +842,8 @@ extern "C" void soemdsp_spectral_blur_destroy(int h);
 extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double seconds,
   double hz, double diffusion, double mix, double rate);
 extern "C" double soemdsp_spectral_blur_right(int h);
+extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, double amplitudeMs);
+extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount);
 extern "C" int soemdsp_stft_contrast_create();
 extern "C" void soemdsp_stft_contrast_destroy(int handle);
 extern "C" double soemdsp_stft_contrast_sample(int h, double l, double r, double contrast,
@@ -5002,10 +5004,13 @@ static void init_node_defaults(Node& n, int typeId) {
     for (int i = 0; i < kMaxBlockFrames; i += 1) n.yellowCutoffStrip[i] = 1.0f;
   }
   if (typeId == kTypeSpectralBlur) {
+    init_control(n.pan, 1, false);
     init_control(n.timeNumerator, 2, false);
     init_control(n.width, 100, false);
     init_control(n.diffusionAmount, 1, false);
     init_control(n.mix, 1, false);
+    init_control(n.offsetMs, 10, false);
+    init_control(n.diffusionSize, 0, false);
   }
   if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
     const bool gate = typeId == kTypeStftGate;
@@ -15965,6 +15970,9 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
     const double left = a, right = b;
     double y, yr;
     if (node.typeId == kTypeSpectralBlur) {
+      soemdsp_spectral_blur_set_stereo_spread(node.nativeHandle, control_audio(g, node.pan, f));
+      soemdsp_spectral_blur_set_smoothing(node.nativeHandle,
+        control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionSize, f));
       y = soemdsp_spectral_blur_sample(node.nativeHandle, left, right,
         control_audio(g, node.timeNumerator, f), control_audio(g, node.width, f),
         control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);

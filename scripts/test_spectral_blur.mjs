@@ -6,7 +6,7 @@ const latency = x.soemdsp_spectral_blur_latency();
 assert.equal(latency, 4096);
 const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,
   x.soemdsp_spectral_blur_metadata_json(), x.soemdsp_spectral_blur_metadata_json_size())));
-assert.deepEqual(meta.parameters.map(p => p.key), ['smearSeconds', 'blurHz', 'diffusion', 'mix']);
+assert.deepEqual(meta.parameters.map(p => p.key), ['smearSeconds', 'blurHz', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'mix']);
 assert.equal(meta.parameters[0].unit, 's'); assert.equal(meta.parameters[1].unit, 'Hz');
 assert.ok(meta.parameters.every(p => p.tooltip));
 function render(h, n, sr, params, input) {
@@ -22,6 +22,7 @@ function render(h, n, sr, params, input) {
 const energy = (a, lo = 0, hi = a.length) => a.slice(lo, hi).reduce((e, v) => e + v * v, 0);
 for (const sr of [44100, 48000, 96000]) {
   const h = x.soemdsp_spectral_blur_create(); assert.ok(h);
+  x.soemdsp_spectral_blur_set_stereo_spread(h, 0);
   const input = i => [0.1 * Math.sin(i * 0.13) + (i % 173 === 0 ? 0.1 : 0), -0.03 * Math.cos(i * 0.07)];
   const neutral = render(h, latency + 20000, sr, [0, 0, 0, 1], input);
   let error = 0;
@@ -45,6 +46,37 @@ for (const sr of [44100, 48000, 96000]) {
   // Float FFT phase estimation in quiet bins accumulates small tail errors.
   assert.ok(stereoError < 5e-5, `matched stereo scaling ${stereoError}`);
   x.soemdsp_spectral_blur_reset(h);
+  x.soemdsp_spectral_blur_set_stereo_spread(h, 1);
+  const wide = render(h, sr, sr, [0.46, 490.89, 0.402, 1], i => {
+    const v = 0.1 * Math.sin(2 * Math.PI * 440 * i / sr); return [v, v];
+  });
+  let sideEnergy = 0;
+  for (let i = 0; i < wide[0].length; ++i) sideEnergy += (wide[0][i] - wide[1][i]) ** 2;
+  assert.ok(sideEnergy > energy(wide[0]) * 0.01, 'mono input can produce a stereo wash');
+  x.soemdsp_spectral_blur_set_stereo_spread(h, 0);
+  x.soemdsp_spectral_blur_reset(h);
+  x.soemdsp_spectral_blur_set_smoothing(h, 30, 50);
+  const soft = render(h, sr, sr, [0.46, 490.89, 0.402, 1], i => [i < sr / 10 ? 0.2 : 0, 0]);
+  assert.ok(energy(soft[0]) > 1e-6);
+  assert.equal(energy(soft[1]), 0);
+  x.soemdsp_spectral_blur_set_smoothing(h, 10, 0);
+  const step = i => [i >= sr / 4 ? 0.1 : 0, 0];
+  const stepSlope = values => {
+    let peak = 0;
+    for (let i = 1; i < values.length; ++i) peak = Math.max(peak, Math.abs(values[i] - values[i - 1]));
+    return peak;
+  };
+  x.soemdsp_spectral_blur_reset(h);
+  x.soemdsp_spectral_blur_set_smoothing(h, 0, 0);
+  const sharpStep = render(h, sr, sr, [0, 0, 0, 1], step);
+  x.soemdsp_spectral_blur_reset(h);
+  x.soemdsp_spectral_blur_set_smoothing(h, 0, 50);
+  const softStep = render(h, sr, sr, [0, 0, 0, 1], step);
+  assert.ok(stepSlope(softStep[0]) < stepSlope(sharpStep[0]) * 0.8,
+    `Amplitude Smooth softens magnitude steps: ${stepSlope(softStep[0])} vs ${stepSlope(sharpStep[0])}`);
+  assert.ok(Math.abs(softStep[0].at(-1) - 0.1) < 1e-4, 'Amplitude Smooth retains steady level');
+  x.soemdsp_spectral_blur_set_smoothing(h, 10, 0);
+  x.soemdsp_spectral_blur_reset(h);
   const isolated = render(h, 20000, sr, [1, 500, 1, 1], i => [i === 0 ? 1 : 0, 0]);
   assert.equal(energy(isolated[1]), 0, 'no cross-channel leakage');
   const memory = x.memory.buffer.byteLength;
@@ -57,8 +89,16 @@ for (const sr of [44100, 48000, 96000]) {
   x.soemdsp_spectral_blur_destroy(h);
   console.log(`${sr} Hz: neutral ${error.toExponential(2)}, stereo ${stereoError.toExponential(2)}, dry latency, silence, sustained wash, stereo, modulation and recovery pass.`);
 }
-const start = performance.now();
 const h = x.soemdsp_spectral_blur_create();
+const referenceInput = i => [0.05 * Math.sin(i * 0.17) * (i % 6000 < 3000 ? 1 : 0.1), 0];
+const original = render(h, 48000, 48000, [0.46, 490.89, 0.402, 1], referenceInput);
+x.soemdsp_spectral_blur_reset(h);
+const louder = render(h, 48000, 48000, [0.46, 490.89, 0.402, 1], i => referenceInput(i).map(v => v * 10));
+let scalingError = 0;
+for (let i = 0; i < louder[0].length; ++i) scalingError += (louder[0][i] - 10 * original[0][i]) ** 2;
+assert.ok(scalingError / energy(louder[0]) < 1e-5, 'no new compression/limiting at the user partial-diffusion settings');
+x.soemdsp_spectral_blur_reset(h);
+const start = performance.now();
 render(h, 48000, 48000, [2, 1000, 1, 1], i => [Math.sin(i * 0.3) * 0.1, 0]);
 console.log(`One audio second: ${(performance.now() - start).toFixed(1)} ms including JS test overhead (not a DAW CPU reading).`);
 x.soemdsp_spectral_blur_destroy(h);

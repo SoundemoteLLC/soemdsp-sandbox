@@ -16,10 +16,11 @@ struct State {
   float input[2][size], ola[2][size], re[2][size], im[2][size], window[size];
   double power[2][bins], phaseR[2][bins], phaseI[2][bins];
   double prevR[2][bins], prevI[2][bins], velocityR[2][bins], velocityI[2][bins];
-  double prefix[bins + 1], blurred[bins], offset[bins];
-  unsigned int rng;
+  double prefix[bins + 1], blurred[bins], offset[bins], smoothOffset[bins], magnitudeState[2][bins];
+  double sideOffset[bins], smoothSideOffset[bins];
+  unsigned int rng, sideRng;
   int position, hop;
-  double right, lastRate;
+  double right, lastRate, phaseSmoothMs, amplitudeSmoothMs, stereoSpread;
 
   void reset() {
     fft.ensure();
@@ -28,9 +29,11 @@ struct State {
       for (int c = 0; c < 2; ++c) input[c][i] = ola[c][i] = 0;
     }
     for (int k = 0; k < bins; ++k) {
-      offset[k] = 0;
+      offset[k] = smoothOffset[k] = 0;
+      sideOffset[k] = smoothSideOffset[k] = 0;
       for (int c = 0; c < 2; ++c) {
         power[c][k] = prevR[c][k] = prevI[c][k] = phaseI[c][k] = 0;
+        magnitudeState[c][k] = 0;
         phaseR[c][k] = 1;
         // The exact bin-centered advance is a multiple of pi/2 at this hop.
         const int q = k % 4;
@@ -38,11 +41,15 @@ struct State {
         velocityI[c][k] = q == 1 ? 1 : q == 3 ? -1 : 0;
       }
     }
-    position = hop = 0; right = lastRate = 0; rng = 0x9e3779b9u;
+    position = hop = 0; right = lastRate = 0; rng = 0x9e3779b9u; sideRng = 0xC2B2AE35u;
   }
   double random() {
     rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
     return (double)rng * (2.0 / 4294967296.0) - 1.0;
+  }
+  double sideRandom() {
+    sideRng ^= sideRng << 13; sideRng ^= sideRng >> 17; sideRng ^= sideRng << 5;
+    return (double)sideRng * (2.0 / 4294967296.0) - 1.0;
   }
   void spread(int channel, int radius, double weight) {
     // Each source bin distributes its power over its valid neighborhood.
@@ -65,13 +72,15 @@ struct State {
     if (radius > bins - 1) radius = bins - 1;
     const int r = (int)radius;
     const double fraction = radius - r;
-    // Full diffusion is a fixed 2 Hz Brownian phase diffuser; the parameter
-    // is explicitly a complex-spectrum blend, not a disguised time/frequency.
+    // Keep the phase walk unwrapped: scaling a wrapped angle would jump at pi.
     const double jitter = __builtin_sqrt(12.0 * twoPi * 2.0 * hopSize / rate);
+    const double phasePole = phaseSmoothMs > 0 ? soemdsp_maths::dsp_exp(-hopSize / (rate * phaseSmoothMs * 0.001)) : 0;
+    const double amplitudePole = amplitudeSmoothMs > 0 ? soemdsp_maths::dsp_exp(-hopSize / (rate * amplitudeSmoothMs * 0.001)) : 0;
     for (int k = 1; k < bins - 1; ++k) {
       offset[k] += random() * jitter;
-      if (offset[k] > twoPi) offset[k] -= twoPi;
-      if (offset[k] < -twoPi) offset[k] += twoPi;
+      smoothOffset[k] = offset[k] + phasePole * (smoothOffset[k] - offset[k]);
+      sideOffset[k] += sideRandom() * jitter;
+      smoothSideOffset[k] = sideOffset[k] + phasePole * (smoothSideOffset[k] - sideOffset[k]);
     }
     for (int c = 0; c < 2; ++c) {
       for (int i = 0; i < size; ++i) {
@@ -103,12 +112,17 @@ struct State {
       if (fraction > 0) spread(c, r + 1, fraction);
       for (int k = 0; k < bins; ++k) {
         const bool edge = k == 0 || k == bins - 1;
-        const double magnitude = __builtin_sqrt((blurred[k] > 0 ? blurred[k] : 0) / (edge ? 1 : 2));
+        const double targetMagnitude = __builtin_sqrt((blurred[k] > 0 ? blurred[k] : 0) / (edge ? 1 : 2));
+        magnitudeState[c][k] = targetMagnitude + amplitudePole * (magnitudeState[c][k] - targetMagnitude);
+        const double magnitude = magnitudeState[c][k];
         double sn = 0, cs = 1;
-        if (!edge && diffusion > 0) soemdsp_maths::dsp_sin_cos(offset[k], &sn, &cs);
+        if (!edge && diffusion > 0) {
+          const double phase = smoothOffset[k] + (c == 0 ? -0.5 : 0.5) * stereoSpread * smoothSideOffset[k];
+          soemdsp_maths::dsp_sin_cos(diffusion * phase, &sn, &cs);
+        }
         const double pr = phaseR[c][k], pi = phaseI[c][k];
-        re[c][k] = (float)(magnitude * (pr + diffusion * (pr * cs - pi * sn - pr)));
-        im[c][k] = edge ? 0 : (float)(magnitude * (pi + diffusion * (pr * sn + pi * cs - pi)));
+        re[c][k] = (float)(magnitude * (pr * cs - pi * sn));
+        im[c][k] = edge ? 0 : (float)(magnitude * (pr * sn + pi * cs));
         if (k > 0 && k < bins - 1) { re[c][size - k] = re[c][k]; im[c][size - k] = -im[c][k]; }
       }
       fft.transform(re[c], im[c], true);
@@ -144,13 +158,17 @@ State* get(int h) { return h > 0 && h <= capacity ? pool[h - 1] : nullptr; }
 const char metadata[] = R"json({"module":"spectral_blur","targetType":"spectralBlur","label":"Spectral Blur","kind":"effect","inputs":["In","Left","Right"],"outputs":["Mono","Left","Right"],"parameters":[
 {"key":"smearSeconds","label":"Time Smear","kind":"time","defaultValue":"2","min":"0","mid":"1","max":"10","unit":"s","step":"any","nonlinearSlider":true,"tooltip":"Spectral power averaging time constant in seconds. Zero follows each frame; longer values soften attacks and leave slowly decaying spectral clouds. Not a delay or freeze."},
 {"key":"blurHz","label":"Frequency Blur","kind":"frequency","defaultValue":"100","min":"0","mid":"200","max":"4000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"Power-spreading neighborhood half-width in Hz. Zero leaves bins separate. Higher values spread harmonics into surrounding frequencies. The fixed FFT limits frequency resolution."},
-{"key":"diffusion","label":"Diffusion","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Complex-spectrum blend from coherent phase to a fixed-rate phase diffuser. Shared phase offsets preserve matched stereo channels. Intermediate blends can reduce level through phase cancellation; no hidden makeup gain."},
-{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to 4096 samples of latency. Time Smear 0, Frequency Blur 0 and Diffusion 0 are neutral."}]})json";
+{"key":"diffusion","label":"Diffusion","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Phase excursion amount, from coherent phase to full diffusion. Rotates each bin without complex-spectrum crossfade cancellations. Stereo Spread controls channel decorrelation; no makeup gain."},
+{"key":"stereoSpread","label":"Stereo Spread","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Opposite-channel phase diffusion spread. Zero links the phase motion; higher values give mono input a stereo wash. Does not crossfeed audio. Requires Diffusion above zero; mono summing can change tone through phase cancellation."},
+{"key":"phaseSmoothMs","label":"Phase Smooth","kind":"time","defaultValue":"10","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Time constant for smoothing the unwrapped phase-diffusion trajectory. Zero keeps raw phase motion. Does not smooth spectral magnitudes or reduce their contrast. Updates at the STFT hop rate."},
+{"key":"amplitudeSmoothMs","label":"Amplitude Smooth","kind":"time","defaultValue":"0","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Additional symmetric per-bin magnitude smoothing after frequency spreading. Zero preserves the sharp amplitude texture. Increase gently to soften chatter; this is not compression, saturation or limiting. Updates at the STFT hop rate."},
+{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to 4096 samples of latency. Turn off Time Smear, Frequency Blur, Diffusion and Amplitude Smooth for neutral reconstruction."}]})json";
 }
 extern "C" int soemdsp_spectral_blur_create() {
   for (int i = 0; i < capacity; ++i) if (!pool[i]) {
     auto* s = static_cast<State*>(soemdsp::memory_pool::alloc(sizeof(State)));
     if (!s) return 0;
+    s->phaseSmoothMs = 10; s->amplitudeSmoothMs = 0; s->stereoSpread = 1;
     s->reset(); pool[i] = s; return i + 1;
   }
   return 0;
@@ -159,11 +177,20 @@ extern "C" void soemdsp_spectral_blur_destroy(int h) {
   if (auto* s = get(h)) { soemdsp::memory_pool::release(s); pool[h - 1] = nullptr; }
 }
 extern "C" void soemdsp_spectral_blur_reset(int h) { if (auto* s = get(h)) s->reset(); }
+extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, double amplitudeMs) {
+  if (auto* s = get(h)) {
+    s->phaseSmoothMs = __builtin_isfinite(phaseMs) && phaseMs > 0 ? phaseMs : 0;
+    s->amplitudeSmoothMs = __builtin_isfinite(amplitudeMs) && amplitudeMs > 0 ? amplitudeMs : 0;
+  }
+}
+extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount) {
+  if (auto* s = get(h)) s->stereoSpread = __builtin_isfinite(amount) ? unit(amount) : 0;
+}
 extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double seconds, double hz, double diffusion, double mix, double rate) {
   auto* s = get(h); return s ? s->tick(l, r, seconds, hz, diffusion, mix, rate) : 0;
 }
 extern "C" double soemdsp_spectral_blur_right(int h) { auto* s = get(h); return s ? s->right : 0; }
 extern "C" int soemdsp_spectral_blur_latency() { return size; }
-extern "C" int soemdsp_spectral_blur_version() { return 1; }
+extern "C" int soemdsp_spectral_blur_version() { return 2; }
 extern "C" const char* soemdsp_spectral_blur_metadata_json() { return metadata; }
 extern "C" int soemdsp_spectral_blur_metadata_json_size() { return sizeof(metadata) - 1; }
