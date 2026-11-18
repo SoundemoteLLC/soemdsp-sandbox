@@ -1052,9 +1052,6 @@ function syncNodeUiDevModuleLightGridControls() {
   const lightSpreadEl = document.getElementById("nodeUiDevModuleLightSpread");
   const gridBrightEl = document.getElementById("nodeUiDevMinimumGridBrightness");
   const gridSpreadEl = document.getElementById("nodeUiDevGridSpread");
-  const gridMouseLightEl = document.getElementById("nodeUiDevGridMouseLight");
-  const gridMouseBrightEl = document.getElementById("nodeUiDevGridMouseBright");
-  const gridMouseReachEl = document.getElementById("nodeUiDevGridMouseReach");
   const lightBrightOut = document.getElementById("nodeUiDevModuleLightBrightnessValue");
   const lightSpreadOut = document.getElementById("nodeUiDevModuleLightSpreadValue");
   const gridBrightOut = document.getElementById("nodeUiDevMinimumGridBrightnessValue");
@@ -1066,13 +1063,6 @@ function syncNodeUiDevModuleLightGridControls() {
   const lightSpread = Math.max(10, Math.min(220, nodeGraphFiniteNumber(lightSpreadEl?.value, 10)));
   const gridBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridBrightEl?.value, 43)));
   const gridSpread = Math.max(40, Math.min(220, nodeGraphFiniteNumber(gridSpreadEl?.value, 220)));
-  const gridMouseLight = Math.max(0, Math.min(400, nodeGraphFiniteNumber(gridMouseLightEl?.value, 100)));
-  const gridMouseBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridMouseBrightEl?.value, 0)));
-  const gridMouseReach = Math.max(25, Math.min(400, nodeGraphFiniteNumber(gridMouseReachEl?.value, 100)));
-  for (const [id, v] of [["nodeUiDevGridMouseLightValue", gridMouseLight], ["nodeUiDevGridMouseBrightValue", gridMouseBright], ["nodeUiDevGridMouseReachValue", gridMouseReach]]) {
-    const out = document.getElementById(id);
-    if (out) out.textContent = `${v}%`;
-  }
 
   if (lightBrightOut) lightBrightOut.textContent = `${lightBright}%`;
   if (lightSpreadOut) lightSpreadOut.textContent = `${lightSpread}%`;
@@ -1083,9 +1073,6 @@ function syncNodeUiDevModuleLightGridControls() {
   ws?.style.setProperty("--node-module-light-brightness", String(lightBright / 100));
   ws?.style.setProperty("--node-module-light-spread", String(Math.max(0.1, Math.min(2.2, lightSpread / 100))));
   ws?.style.setProperty("--node-grid-line-alpha", String(gridBright / 100));
-  ws?.style.setProperty("--node-grid-mouse-light", String(gridMouseLight / 100));
-  ws?.style.setProperty("--node-grid-mouse-bright", String(gridMouseBright / 100));
-  ws?.style.setProperty("--node-grid-mouse-reach", String(gridMouseReach / 100));
   ws?.style.setProperty("--node-grid-reveal-spread", String(nodeUiDevSpreadRatioFromPercent(gridSpread)));
   // Never paint a full-workspace grid. Reveal is radius-around-modules only.
   ws?.style.setProperty("--node-min-grid-brightness-alpha", "0");
@@ -1103,9 +1090,6 @@ function bindNodeUiDevModuleLightGridControls() {
     "nodeUiDevModuleLightBrightness",
     "nodeUiDevModuleLightSpread",
     "nodeUiDevMinimumGridBrightness",
-    "nodeUiDevGridMouseLight",
-    "nodeUiDevGridMouseBright",
-    "nodeUiDevGridMouseReach",
     "nodeUiDevGridSpread",
   ]) {
     const input = document.getElementById(id);

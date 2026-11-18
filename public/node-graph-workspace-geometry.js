@@ -819,9 +819,14 @@ function nodeGraphModuleLightGradient(radiusX, radiusY, cx, cy, colorAt, peak) {
 // How much of the grid reveal / module light stays in a fully dark room (0..1).
 var NODE_GRID_DARK_FLOOR = 0.75;
 // The mouse is a light like a module: it reveals the grid with the same falloff a module does, wherever it is, in a lit room or a
-// dark one, so the lines around it are exactly as bright as the lines around a module. 1 = the same as a module (dial it here:
-// lower is fainter, above 1 reaches further).
-var NODE_GRID_LAMP_REVEAL = 1;
+// dark one. Dialled in by Elan (UI Dev, since removed):
+//   NODE_GRID_LAMP_REVEAL  how strongly the mouse reveals the lines (1 = the same as a module)
+//   NODE_GRID_LAMP_BRIGHT  how far the lines right at the mouse are pushed toward full white, past what a module shows (0..1)
+//   NODE_GRID_LAMP_REACH   how far the light reaches around the mouse, as a share of a module's reach; it is sized in SCREEN px,
+//                          so it does not change with the zoom
+var NODE_GRID_LAMP_REVEAL = 1.727; // 172.7%
+var NODE_GRID_LAMP_BRIGHT = 0.151; // 15.1%
+var NODE_GRID_LAMP_REACH = 1.256; // 125.6%
 // Grid for the GPU lights pass, or null when the grid is off. World-space cell (the grid is anchored at
 // the world origin), line colour + alpha, how far modules reveal it, and the mouse reveal.
 var nodeGridParamsCache = { at: 0, base: null };
@@ -842,9 +847,6 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
         spread: Math.max(0.4, Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78))),
         mouseSpread: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread"))),
         mouseBase: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount"))),
-        mouseLight: Math.max(0, Math.min(4, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-mouse-light", 1))),
-        mouseBright: Math.max(0, Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-mouse-bright", 0))),
-        mouseReach: Math.max(0.25, Math.min(4, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-mouse-reach", 1))),
       },
     };
   }
@@ -864,9 +866,9 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
     moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
     mouse: active ? mouse : null,
     // The mouse is a light like a module (see NODE_GRID_LAMP_REVEAL).
-    reflect: NODE_GRID_LAMP_REVEAL * b.mouseLight,
-    lampBright: b.mouseBright,
-    lampReach: b.mouseReach,
+    reflect: NODE_GRID_LAMP_REVEAL,
+    lampBright: NODE_GRID_LAMP_BRIGHT,
+    lampReach: NODE_GRID_LAMP_REACH,
     mouseRadius: Math.max(nodeGraphGridWidth(), nodeGraphGridHeight()) * (3 + 10.5 * b.mouseSpread),
     mouseAmount: 0.92 * mouseAmount,
   };
