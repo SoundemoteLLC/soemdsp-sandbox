@@ -143,7 +143,53 @@ the final Tube coefficient change was then incrementally rebuilt and relinked
 into the combined WASM. Syntax checks and `git diff --check` pass. No broader
 browser audio-reference smoke was run in this milestone.
 
-STFT, Crunch and the final parameter-pinned IR display remain unimplemented.
+## Fixed-Size STFT Vocoder
+
+The new Vocoder control blends between the retained body-only path (0, default)
+and the vocoder (1). All three bodies tint both the measured input and the BLIT
+carrier. Independent left/right spectral magnitudes shape the common carrier
+phase, so the input phase never takes over the pitched source. Formant Shift
+reindexes that envelope in semitones, interpolating positive values in
+log-magnitude; bins outside the spectrum are dropped rather than wrapped.
+DC and Nyquist bins are excluded from production spectral modulation.
+
+The fixed engine uses 512-sample periodic Hann windows, 128-sample hops and
+Hann synthesis scaled by 2/3. The squared four-window sum is 3/2. Streaming
+analysis/synthesis has exactly 512 samples of reconstruction delay. The final
+delay rings compensate this and the body's 8-sample interpolation delay,
+retaining the 2048-sample nominal reference for dry, body and vocoder. Modified
+spectral envelopes can spread transients within the analysis window; this is
+not a promise of an identical impulse onset on processed and dry paths.
+
+The STFT storage is pool-owned, allocated on first Vocoder use, and retained
+until destroy. Once allocated it continues processing at zero blend, avoiding
+frozen spectral tails on later blend changes. First activation still needs
+the normal pipeline fill. Reset clears analysis and overlap-add state.
+
+The reusable FFT header is adapted from Noise Convolution Reverb's radix-2
+butterfly. This worktree does not change that reverb or another agent's tree;
+migrating its private caller to the shared header remains a separate task.
+
+`node scripts/test_convolution_resonator_vocoder.mjs` builds a test-only WASM
+harness against the production headers. It verifies complex FFT round trips,
+sample-accurate unity-envelope reconstruction including startup and DC,
+envelope shift, carrier-phase ownership, silence, independent stereo levels,
+and proportional level response. Standalone module tests cover audible
+Buzz/String/Tube vocoding and reset. The graph test compares Vocoder and
+Formant Shift directly against native reference processing.
+
+This is the fixed-size proof, not the finished Crunch engine. Response-size
+morphing, controllable spectral bandwidth, oversampled fast AM and the final
+parameter-pinned IR display remain unimplemented. Shift changes at analysis
+hops, not inside an FFT frame. No alias-free claim is made for arbitrary fast
+modulation, and the broader browser audio-reference smoke is not part of this
+milestone. Listening is still required.
+
+Verification: all seven focused test scripts pass, including sample-for-sample
+graph/reference comparison at 0 and +12 semitones. FFT round-trip error is
+4.17e-7; unity-envelope streaming reconstruction error is 3.80e-7. All 199
+native modules built, followed by an incremental final vocoder relink. Syntax
+checks and `git diff --check` pass. The isolated server serves cache tag cres6.
 
 ## Next
 
@@ -152,9 +198,11 @@ STFT, Crunch and the final parameter-pinned IR display remain unimplemented.
 3. Argi verified that String can be played melodically and its buildup settles.
    Listen to Tube with Body = 1, Decay = 0.08 s and then longer decay; compare
    with String and sweep the intermediate body settings.
-4. Coordinate shared FFT extraction from Noise Convolution Reverb. Do not
-   modify Sandy's worktree. The FFT remains private to her module at this point.
-5. Fixed-size STFT, then Crunch transitions, anti-aliasing and pinned displays.
+4. Listen with Vocoder = 1 on voice/music, play Frequency, and try Formant Shift.
+   Compare with Vocoder = 0 without changing Body or Mix.
+5. Coordinate adoption of the shared FFT by Noise Convolution Reverb without
+   touching another agent's worktree. Then Crunch, high-frequency finish and
+   pinned displays.
 
 The 2048-sample latency is provisional until oversampled filter group delay is
 known. All wet branches and dry must share the final reported latency.

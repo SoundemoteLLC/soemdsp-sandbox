@@ -7344,6 +7344,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["frequency", "Frequency"], ["bodySize", "Size"]], h: 40 },
       { kind: "cells", params: [["body", "Body"], ["bodyDecay", "Decay"]], h: 40 },
+      { kind: "cells", params: [["vocoderMix", "Vocoder"], ["formantShift", "Formant Shift"]], h: 40 },
       { kind: "cells", params: [["transitionMs", "Transition"], ["mix", "Mix"]], h: 40 },
     ],
     inputs: ["In", "Left", "Right", "f"],
@@ -7363,10 +7364,14 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Physical body morph: 0 = finite Buzz, 0.5 = damped String, 1 = closed-open Tube with odd harmonics. The pulse train shortens into String; then string feedback recedes as the tube's modal coupling develops." },
       { key: "bodyDecay", label: "Decay", kind: "time", defaultValue: "0.08", min: "0.001", mid: "0.08", max: "1", step: "any", unit: "s", nonlinearSlider: true,
         tooltip: "Body decay time constant (1/e in seconds). String includes loop damping; Tube's fundamental follows this time and upper modes lose energy faster with square-root wall losses. No effect at the pure Buzz endpoint." },
+      { key: "vocoderMix", label: "Vocoder", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any",
+        tooltip: "Blend from the body-only effect to a fixed 512-sample STFT vocoder. The input's spectral magnitude shapes a body-tinted BLIT carrier at Frequency. Both paths retain the same timing reference; Crunch is not implemented yet." },
+      { key: "formantShift", label: "Formant Shift", defaultValue: "0", min: "-24", mid: "0", max: "24", step: "any", unit: "st",
+        tooltip: "Shifts the vocoder's spectral envelope in semitones without changing carrier pitch. Frequencies outside the analysis spectrum are dropped, not wrapped. Takes effect at each 128-sample analysis hop." },
       { key: "transitionMs", label: "Transition", defaultValue: "20", min: "0", mid: "20", max: "100", step: "any", unit: "ms",
         tooltip: "Crossfade time for Frequency and Size changes. Zero retunes directly for audio-rate modulation. While a fade is active, its destination follows new parameter values without restarting the fade." },
       { key: "mix", label: "Mix", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "any",
-        tooltip: "Dry/wet balance. Both paths retain the same 2048-sample timing reference. Wet is the resonant body at this development stage; no vocoder yet." },
+        tooltip: "Dry/wet balance. Dry, body and fixed-size vocoder retain the same 2048-sample timing reference." },
     ],
   },
   noiseConvReverb: {

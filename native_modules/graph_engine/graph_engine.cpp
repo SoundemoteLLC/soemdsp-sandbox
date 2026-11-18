@@ -827,7 +827,8 @@ extern "C" int soemdsp_noise_conv_reverb_create(double sampleRate);
 extern "C" int soemdsp_convolution_resonator_create();
 extern "C" void soemdsp_convolution_resonator_destroy(int handle);
 extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
-  double frequency, double periods, double mix, double sampleRate, double fadeMs, double body, double decay);
+  double frequency, double periods, double mix, double sampleRate, double fadeMs, double body, double decay,
+  double vocoderMix, double formantShift);
 extern "C" double soemdsp_convolution_resonator_right(int handle);
 extern "C" void soemdsp_noise_conv_reverb_destroy(int handle);
 extern "C" void soemdsp_noise_conv_reverb_reset(int handle);
@@ -4049,6 +4050,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.resonance,
+    (typeId == kTypeConvolutionResonator) ? 0.0 : // Vocoder blend; body-only remains default
     (typeId == kTypePurr) ? 2.5 : // Softness (Purr)
     (typeId == kTypeDsfMorphingOsc) ? 0.0 : // Rotate (DSF Morphing Osc)
     (typeId == kTypeResonantCompressor) ? 0.0 : // Resonance (Resonant Compressor)
@@ -15868,7 +15870,8 @@ static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
       resolve_osc_hz(g, f, liveF, false, node.frequency, 0.0, sr),
       control_audio(g, node.stages, f), control_audio(g, node.mix, f), sr,
       control_audio(g, node.offsetMs, f), control_audio(g, node.shape, f),
-      control_audio(g, node.timeNumerator, f));
+      control_audio(g, node.timeNumerator, f), control_audio(g, node.resonance, f),
+      control_audio(g, node.phaseParam, f));
     const double yr = soemdsp_convolution_resonator_right(node.nativeHandle);
     node.buf[kPortMono][f] = stereo_route_out(route.outMono, y, y, yr);
     node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, y, y, yr);

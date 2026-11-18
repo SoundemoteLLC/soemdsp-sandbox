@@ -2,11 +2,12 @@
 // soemdsp-native-label: Convolution Resonator
 // soemdsp-native-target: convolutionResonator
 // soemdsp-native-kind: effect
-// Finite Buzz / damped String / closed-open Tube and BLIT carrier. No STFT yet.
+// Buzz / String / Tube and fixed-size STFT vocoder with body-tinted BLIT carrier.
 #include <soemdsp/utility/memory_pool.h>
 #include <soemdsp/oscillator/blit_saw.h>
 #include <soemdsp/math/exp_log.h>
 #include <soemdsp/filter/comb_core.h>
+#include "vocoder_stft.h"
 
 namespace {
 constexpr int kInstances = 64;
@@ -36,6 +37,7 @@ struct State {
   int tubeCapacity, tubeCount;
   double tubeFrequency, tubeDecay, tubeRate;
   double tubeInput[3][2];
+  convolution_resonator::VocoderStft* vocoder;
   soemdsp_blit::BlitSaw oscillator;
   double carrier;
   int position;
@@ -48,7 +50,8 @@ State* state(int handle) {
 }
 bool finite(double x) { return __builtin_isfinite(x); }
 void clear(State& s) {
-  for (int i = 0; i < 4 * kLatency; ++i) s.delay[i] = 0.0;
+  for (int i = 0; i < 6 * kLatency; ++i) s.delay[i] = 0.0;
+  if (s.vocoder) s.vocoder->reset();
   if (s.history) for (int i = 0; i < 2 * s.capacity; ++i) s.history[i] = s.sums[i] = 0;
   s.write = 0;
   for (int c = 0; c < 2; ++c) s.integral[c] = s.dcX[c] = s.dcY[c] = 0;
@@ -288,7 +291,7 @@ double buzz(const State& s, int c, const Tap* taps, int count, double period, do
 extern "C" int soemdsp_convolution_resonator_create() {
   for (int i = 0; i < kInstances; ++i) {
     if (states[i].delay) continue;
-    auto* delay = static_cast<double*>(soemdsp::memory_pool::alloc(4 * kLatency * sizeof(double)));
+    auto* delay = static_cast<double*>(soemdsp::memory_pool::alloc(6 * kLatency * sizeof(double)));
     if (!delay) return 0;
     states[i].delay = delay;
     clear(states[i]);
@@ -303,6 +306,7 @@ extern "C" void soemdsp_convolution_resonator_destroy(int handle) {
   soemdsp::memory_pool::release(s->bodyBlock);
   soemdsp::memory_pool::release(s->stringBlock);
   soemdsp::memory_pool::release(s->tube);
+  soemdsp::memory_pool::release(s->vocoder);
   *s = {};
 }
 extern "C" void soemdsp_convolution_resonator_reset(int handle) {
@@ -310,11 +314,11 @@ extern "C" void soemdsp_convolution_resonator_reset(int handle) {
 }
 extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
   double frequency, double periods, double mix, double sampleRate, double fadeMs,
-  double body, double decay) {
+  double body, double decay, double vocoderMix, double formantShift) {
   auto* s = state(handle);
   if (!s) return 0.0;
   if (!finite(left) || !finite(right) || !finite(frequency) || !finite(periods) || !finite(mix)
-      || !finite(body) || !finite(decay)) {
+      || !finite(body) || !finite(decay) || !finite(vocoderMix) || !finite(formantShift)) {
     clear(*s);
     return 0.0;
   }
@@ -375,14 +379,31 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
     ? string_tick(s->string[2], carrier, stringPeriod, readDelay, gain, damping, 1 - tube) : carrier;
   if (active && tube > 0) s->carrier = tube_tick(*s, 2, s->carrier, tube);
   if (!finite(s->carrier)) { clear(*s); return 0; }
+  if (vocoderMix != 0 && !s->vocoder) {
+    s->vocoder = static_cast<convolution_resonator::VocoderStft*>(
+      soemdsp::memory_pool::alloc(sizeof(convolution_resonator::VocoderStft)));
+    if (!s->vocoder) { s->right = 0; return 0; }
+    s->vocoder->reset();
+  }
+  double vocoded[2]{};
+  if (s->vocoder) {
+    vocoded[0] = s->vocoder->tick(wet[0], wet[1], s->carrier, formantShift);
+    vocoded[1] = s->vocoder->right;
+    if (!finite(vocoded[0]) || !finite(vocoded[1])) { clear(*s); return 0; }
+  }
   const int p = s->position;
   const int wp = (p + kHalfKernel) % kLatency;
-  const double out = (1 - mix) * s->delay[p] + mix * s->delay[2 * kLatency + wp];
-  s->right = (1 - mix) * s->delay[kLatency + p] + mix * s->delay[3 * kLatency + wp];
+  const int vp = (p + kHalfKernel + convolution_resonator::kFrame) % kLatency;
+  const double out = (1 - mix) * s->delay[p] + mix * (
+    (1 - vocoderMix) * s->delay[2 * kLatency + wp] + vocoderMix * s->delay[4 * kLatency + vp]);
+  s->right = (1 - mix) * s->delay[kLatency + p] + mix * (
+    (1 - vocoderMix) * s->delay[3 * kLatency + wp] + vocoderMix * s->delay[5 * kLatency + vp]);
   s->delay[p] = left;
   s->delay[kLatency + p] = right;
   s->delay[2 * kLatency + p] = wet[0];
   s->delay[3 * kLatency + p] = wet[1];
+  s->delay[4 * kLatency + p] = vocoded[0];
+  s->delay[5 * kLatency + p] = vocoded[1];
   s->position = (p + 1) % kLatency;
   return out;
 }
@@ -395,4 +416,4 @@ extern "C" double soemdsp_convolution_resonator_carrier(int handle) {
   auto* s = state(handle);
   return s ? s->carrier : 0;
 }
-extern "C" int soemdsp_convolution_resonator_version() { return 5; }
+extern "C" int soemdsp_convolution_resonator_version() { return 6; }

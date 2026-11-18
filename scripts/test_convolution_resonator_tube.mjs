@@ -10,7 +10,7 @@ function impulse({ amplitude = 1, decay = 0.2, frequency = 110, body = 1, mix = 
   const out = new Float64Array(sr);
   for (let i = 0; i < out.length; ++i) {
     out[i] = x.soemdsp_convolution_resonator_sample(h, i === 0 ? amplitude : 0,
-      0, frequency, 4, mix, sr, 0, body, decay);
+      0, frequency, 4, mix, sr, 0, body, decay, 0, 0);
     assert.ok(Number.isFinite(out[i]));
     assert.equal(x.soemdsp_convolution_resonator_right(h), 0, "no stereo crosstalk");
   }
@@ -68,7 +68,7 @@ for (const rate of [44100, 48000, 96000]) {
     for (let i = 0; i < 4096; ++i) {
       const body = 0.5 + 0.5 * i / 4095;
       const out = x.soemdsp_convolution_resonator_sample(h, i < 64 ? 1 : 0,
-        0, frequency, 4, 1, rate, 0, body, 0.2);
+        0, frequency, 4, 1, rate, 0, body, 0.2, 0, 0);
       assert.ok(Number.isFinite(out), "finite morph and Nyquist-boundary output");
       assert.ok(Number.isFinite(x.soemdsp_convolution_resonator_carrier(h)), "finite body-tinted carrier");
     }
@@ -77,28 +77,28 @@ for (const rate of [44100, 48000, 96000]) {
 // A driven melody, then silence at a fixed tuning: stored energy must settle.
 for (let i = 0; i < sr; ++i) {
   const f = [55, 110, 330, 880][Math.floor(i / 3000) % 4];
-  const value = x.soemdsp_convolution_resonator_sample(h, Math.sin(i / 17), 0, f, 4, 1, sr, 0, 1, 0.08);
+  const value = x.soemdsp_convolution_resonator_sample(h, Math.sin(i / 17), 0, f, 4, 1, sr, 0, 1, 0.08, 0, 0);
   assert.ok(Number.isFinite(value));
 }
 let lateEnergy = 0;
 for (let i = 0; i < 2 * sr; ++i) {
-  const out = x.soemdsp_convolution_resonator_sample(h, 0, 0, 110, 4, 1, sr, 0, 1, 0.08);
+  const out = x.soemdsp_convolution_resonator_sample(h, 0, 0, 110, 4, 1, sr, 0, 1, 0.08, 0, 0);
   assert.ok(Number.isFinite(out));
   if (i > sr) lateEnergy += out * out;
 }
 assert.ok(lateEnergy < 1e-8, `tube must settle after excitation: ${lateEnergy}`);
 x.soemdsp_convolution_resonator_reset(h);
 for (let i = 0; i < 4096; ++i)
-  assert.equal(x.soemdsp_convolution_resonator_sample(h, 0, 0, 110, 4, 1, sr, 0, 1, 0.2), 0);
+  assert.equal(x.soemdsp_convolution_resonator_sample(h, 0, 0, 110, 4, 1, sr, 0, 1, 0.2, 0, 0), 0);
 x.soemdsp_convolution_resonator_destroy(h);
 // Grow a partially filled String ring, then reset before it wraps around.
 const grown = x.soemdsp_convolution_resonator_create();
 for (const frequency of [440, 10])
   for (let i = 0; i < 64; ++i)
-    x.soemdsp_convolution_resonator_sample(grown, 1, 0, frequency, 4, 1, sr, 0, 0.5, 0.2);
+    x.soemdsp_convolution_resonator_sample(grown, 1, 0, frequency, 4, 1, sr, 0, 0.5, 0.2, 0, 0);
 x.soemdsp_convolution_resonator_reset(grown);
 for (let i = 0; i < 8192; ++i)
-  assert.equal(x.soemdsp_convolution_resonator_sample(grown, 0, 0, 10, 4, 1, sr, 0, 0.5, 0.2), 0,
+  assert.equal(x.soemdsp_convolution_resonator_sample(grown, 0, 0, 10, 4, 1, sr, 0, 0.5, 0.2, 0, 0), 0,
     "reset after ring growth must not leave old samples at the end of storage");
 x.soemdsp_convolution_resonator_destroy(grown);
 console.log(`Tube: odd modes, wall losses, DC, decay, linearity (${error.toExponential(2)}), latency, range, morph and reset pass.`);

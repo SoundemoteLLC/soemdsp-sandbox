@@ -8,7 +8,7 @@ function impulse(body, decay, amplitude = 1, frequency = 110) {
   const out = new Float64Array(sr / 2);
   for (let i = 0; i < out.length; ++i) {
     out[i] = x.soemdsp_convolution_resonator_sample(h, i === 0 ? amplitude : 0,
-      0, frequency, 4, 1, sr, 0, body, decay);
+      0, frequency, 4, 1, sr, 0, body, decay, 0, 0);
     assert.ok(Number.isFinite(out[i]));
     assert.equal(x.soemdsp_convolution_resonator_right(h), 0, "no stereo crosstalk");
   }
@@ -54,11 +54,11 @@ for (let i = 0; i < sr; ++i) {
   const body = 0.25 + 0.25 * Math.sin(i / 200);
   const frequency = i % 4000 < 2000 ? 55 : 880;
   assert.ok(Number.isFinite(x.soemdsp_convolution_resonator_sample(h,
-    Math.sin(i / 30), 0, frequency, 4, 1, sr, 20, body, 0.2)));
+    Math.sin(i / 30), 0, frequency, 4, 1, sr, 20, body, 0.2, 0, 0)));
 }
 x.soemdsp_convolution_resonator_reset(h);
 for (let i = 0; i < 4096; ++i)
-  assert.equal(x.soemdsp_convolution_resonator_sample(h, 0, 0, 55, 4, 1, sr, 0, 0.5, 0.2), 0,
+  assert.equal(x.soemdsp_convolution_resonator_sample(h, 0, 0, 55, 4, 1, sr, 0, 0.5, 0.2, 0, 0), 0,
     "reset must clear the string tail and pending latency");
 x.soemdsp_convolution_resonator_destroy(h);
 console.log(`String body: ringing, decay, stereo, range, modulation, reset and linearity pass (max error ${linearError.toExponential(2)}).`);

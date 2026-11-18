@@ -109,3 +109,35 @@ for (const body of [0.5, 1])
   assert.ok(bodyTail(0.2, body) > 100 * bodyTail(0.01, body),
     `Body ${body} and Decay must reach native DSP through the graph`);
 console.log("Graph String/Tube Body/Decay controls and ringing tails pass.");
+
+for (const shift of [0, 12]) {
+  const g = x.soemdsp_graph_create(), reference = x.soemdsp_convolution_resonator_create();
+  x.soemdsp_graph_set_sample_rate(g, 48000);
+  for (const [id, type] of [[1, 132], [2, 268], [3, 6]])
+    assert.equal(x.soemdsp_graph_add_node(g, id, type), 0);
+  assert.equal(x.soemdsp_graph_connect(g, 1, 0, 2, 0), 0);
+  assert.equal(x.soemdsp_graph_connect(g, 2, 0, 3, 1), 0);
+  for (const [param, value] of [[10, 187.5], [20, 1], [14, shift], [40, 1]])
+    x.soemdsp_graph_set_param(g, 2, param, value);
+  x.soemdsp_graph_snap_controls(g);
+  assert.equal(x.soemdsp_graph_compile(g), 0);
+  let energy = 0, error = 0;
+  for (let b = 0; b < 200; ++b) {
+    const input = new Float64Array(x.memory.buffer, x.soemdsp_graph_node_port_ptr(g, 1, 0), N);
+    for (let i = 0; i < N; ++i) input[i] = Math.sin(2 * Math.PI * 375 * (b * N + i) / 48000);
+    const source = input.slice();
+    assert.equal(x.soemdsp_graph_process_block(g, N), N);
+    const out = new Float64Array(x.memory.buffer, x.soemdsp_graph_node_port_ptr(g, 2, 0), N).slice();
+    for (let i = 0; i < N; ++i) {
+      const expected = x.soemdsp_convolution_resonator_sample(reference, source[i], 0,
+        187.5, 4, 1, 48000, 20, 0, 0.08, 1, shift);
+      error = Math.max(error, Math.abs(expected - out[i]));
+      energy += out[i] * out[i];
+    }
+  }
+  assert.ok(error < 1e-10, `graph Vocoder/Formant Shift ${shift} must match native reference: ${error}`);
+  assert.ok(energy > 0.01, "vocoder graph must produce audio");
+  x.soemdsp_graph_destroy(g);
+  x.soemdsp_convolution_resonator_destroy(reference);
+}
+console.log("Graph vocoder and Formant Shift match the native reference sample-for-sample.");
