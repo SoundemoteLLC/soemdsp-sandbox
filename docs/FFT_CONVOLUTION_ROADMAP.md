@@ -70,12 +70,13 @@ measure the approximation instead of promising perfect transparency.
 
 Goal: kernels that turn impulses into recognizable or invented struck objects.
 
-- [ ] First compare the existing Convolution Resonator bodies with a small
-  modal/IR material proof; identify genuinely missing behavior before adding a module.
-- [ ] Candidate controls: Material, Fundamental/Size, Decay, Inharmonicity, Damping.
-- [ ] Later: excitation position and stereo pickup placement.
-- [ ] Choose finite IR versus recursive modal synthesis from measured cost and
-  required decay/modulation behavior; do not require FFT for its own sake.
+- [x] Compare existing Mode Ping and Convolution Resonator; implement a distinct
+  live-audio many-mode body, not another single-mode trigger or vocoder.
+- [x] Wood/Metal/Glass, Fundamental Hz, Base RT60 seconds, Inharmonicity, Damping Hz,
+  excitation position, stereo pickup spread, mode count, Input Gain dB and Mix.
+- [x] Recursive modal implementation avoids FFT latency and long generated kernels.
+  See [MATERIAL_RESONATOR.md](MATERIAL_RESONATOR.md).
+- [ ] Listening acceptance and further material-character refinement.
 
 Proof: inspect modal frequencies/decays, low-frequency behavior, response to
 single-sample excitation and sustained input. Retuning must have a defined policy.
@@ -119,10 +120,12 @@ Goal: output a detection score/trigger when incoming audio resembles a reference
 
 ## Proposed Order
 
-1. Generated IR Designer: one mathematical kernel, measured response and audible proof.
+1. Material Resonator: procedural live-audio modal body proof and listening acceptance.
 2. Dispersion: compare generated FIR and allpass prototypes before choosing runtime.
-3. Material experiments; compare existing resonators before adding another module.
-4. Correlation detection as an independent later milestone. Its reference audio is
+3. Spectral Cross-Synthesis: explicit envelope/phase ownership; compare existing
+   Convolution Resonator and Vocoder before duplicating their behavior.
+4. Generated IR Designer, then correlation detection, remain lower priority.
+   Correlation reference audio is
    not a room/cabinet IR-loading workflow.
 
 Architect can reorder by musical interest. No scheduler, cross-project framework

@@ -181,6 +181,9 @@ them simultaneously. Proposed order follows musical value and implementation ris
 
 ## Shared Engineering Gates
 
+Current Architect priority: Material Resonator, then Dispersion, then Spectral
+Cross-Synthesis. Other candidates remain backlog, not concurrent implementation.
+
 - [ ] Each module declares FFT/hop/window, reference latency, stereo policy,
   detector units, parameter update rate and persistent versus transient state.
 - [ ] Neutral reconstruction, DC/Nyquist, silence, impulse and multitone tests

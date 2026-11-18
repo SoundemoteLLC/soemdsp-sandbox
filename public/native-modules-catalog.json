@@ -1874,6 +1874,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "material_resonator",
+      "label": "Material Resonator",
+      "targetType": "materialResonator",
+      "kind": "effect",
+      "source": "native_modules/material_resonator/material_resonator.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/material_resonator/material_resonator.cpp",
+      "localSourceUrl": "/native_modules/material_resonator/material_resonator.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/material_resonator/material_resonator.wasm",
+      "wasmUrl": "native_modules/material_resonator/material_resonator.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "metallic_ratio",
       "label": "Metallic Ratio",
       "targetType": "metallicRatio",

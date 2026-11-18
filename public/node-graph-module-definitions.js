@@ -211,6 +211,7 @@ const nodeGraphNodeLabels = Object.freeze({
   spectralBlur: "Spectral Blur",
   spectralFreeze: "Spectral Freeze",
   spectralDelay: "Spectral Delay",
+  materialResonator: "Material Resonator",
   spectralSmear: "Spectral Smear",
   earlyReflectionConvolution: "Early Reflection Convolution",
   stftGate: "STFT Gate",
@@ -7542,6 +7543,157 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "%",
         "tooltip": "Delayed dry stereo versus reflected sound. Direct path is excluded from the IR; dry and wet share 256 samples of convolution buffering latency. Ready becomes high after the first kernel is built; Error reports an invalid or over-capacity request."
+      }
+    ],
+  },
+  materialResonator: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 14,
+    inputs: ["In", "Left", "Right", "f"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In", "ƒ": "f" },
+    outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["material", "Material", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["frequency", "Fundamental"], ["decay", "Base RT60"]], h: 40 },
+      { kind: "cells", params: [["dampingHz", "Damping"], ["inharmonicity", "Inharmonicity"]], h: 40 },
+      { kind: "cells", params: [["position", "Excitation Position"], ["stereoSpread", "Pickup Spread"]], h: 40 },
+      { kind: "cells", params: [["modes", "Modes"], ["inputGainDb", "Input Gain"], ["mix", "Mix"]], h: 40 },
+    ],
+    parameters:
+    [
+      {
+        "key": "material",
+        "label": "Material",
+        "kind": "choice",
+        "choices": [
+          "Wood",
+          "Metal",
+          "Glass"
+        ],
+        "choiceKeys": [
+          "wood",
+          "metal",
+          "glass"
+        ],
+        "choiceIds": [
+          0,
+          1,
+          2
+        ],
+        "defaultValue": "metal",
+        "min": "0",
+        "mid": "1",
+        "max": "2",
+        "step": "1",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "Procedural modal character: beam-like Wood, rectangular-plate Metal, or stylized Glass. Not measured material samples or an exact physical simulation. Material/position changes ramp modal ratios and pickup gains over 10 ms without clearing ringing state."
+      },
+      {
+        "key": "frequency",
+        "label": "Fundamental",
+        "kind": "frequency",
+        "defaultValue": "220",
+        "min": "20",
+        "mid": "220",
+        "max": "4000",
+        "step": "any",
+        "unit": "Hz",
+        "nonlinearSlider": true,
+        "tooltip": "Lowest modal frequency in Hz. A wired f input replaces this knob, including zero. Retuning preserves modal state; rapid modulation bends the ringing modes. Modes fade smoothly from 90% of Nyquist to Nyquist instead of folding back."
+      },
+      {
+        "key": "decay",
+        "label": "Base RT60",
+        "kind": "time",
+        "defaultValue": "1",
+        "min": "0.005",
+        "mid": "1",
+        "max": "20",
+        "step": "any",
+        "unit": "s",
+        "nonlinearSlider": true,
+        "tooltip": "Low-frequency modal decay to -60 dB in seconds. Higher modes decay faster according to Damping and material. Zero stops wet resonance. Each mode is approximately peak-gain normalized; this is not impulse-normalized synthesis and very short impulses can be quiet."
+      },
+      {
+        "key": "dampingHz",
+        "label": "Damping",
+        "kind": "frequency",
+        "defaultValue": "4000",
+        "min": "20",
+        "mid": "2000",
+        "max": "20000",
+        "step": "any",
+        "unit": "Hz",
+        "nonlinearSlider": true,
+        "tooltip": "Frequency scale in Hz for shortening higher-mode RT60. Lower settings sound duller and die faster. Wood loses high modes faster than Metal; Glass retains them longer. This is frequency-dependent modal decay, not an input lowpass."
+      },
+      {
+        "key": "inharmonicity",
+        "label": "Inharmonicity",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Zero makes harmonic mode spacing; 100% uses the selected material's procedural mode ratios. Changes ramp over 10 ms. No IR files, random samples, convolution or FFT buffering."
+      },
+      {
+        "key": "position",
+        "label": "Excitation Position",
+        "defaultValue": "0.31",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Virtual strike position changes how strongly modes are excited, including nodal cancellations. The exact endpoints are fixed-boundary nodes and may be silent. This is a live audio effect, not a trigger-driven exciter."
+      },
+      {
+        "key": "stereoSpread",
+        "label": "Pickup Spread",
+        "defaultValue": "0.6",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Separation of the two virtual pickups. Mono excitation can produce different modal balances on left and right; zero links pickup weighting. Input channel histories remain separate with no mono downmix or crossfeed."
+      },
+      {
+        "key": "modes",
+        "label": "Modes",
+        "defaultValue": "32",
+        "min": "1",
+        "mid": "16",
+        "max": "64",
+        "step": "1",
+        "linearSmoothing": false,
+        "tooltip": "Mode count, structurally bounded to 1 through 64. More modes add object detail and CPU work; modes beyond Nyquist are faded out. Mode-count changes ramp output weights instead of abruptly dumping every tail."
+      },
+      {
+        "key": "inputGainDb",
+        "label": "Input Gain",
+        "defaultValue": "0",
+        "min": "-24",
+        "mid": "0",
+        "max": "36",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Explicit excitation gain in dB, applied only to wet processing. Raise it for single-sample impulses; start at 0 dB for sustained audio. There is no hidden limiter, clipping, automatic makeup or mode-count loudness normalization."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Immediate dry versus resonant wet audio. Zero algorithmic buffering latency; no lookahead or delay compensation required."
       }
     ],
   },

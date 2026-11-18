@@ -12,6 +12,12 @@ if (!(Test-Path -LiteralPath $clang)) {
 # instead of one repeated clang++ invocation per module. Add a new module by
 # adding one entry here (Name, Exports, and Simd only if it uses <wasm_simd128.h>).
 $modules = @(
+  @{ Name = "material_resonator"; Simd = $false; Exports = @(
+    "soemdsp_material_resonator_create", "soemdsp_material_resonator_destroy", "soemdsp_material_resonator_reset",
+    "soemdsp_material_resonator_sample", "soemdsp_material_resonator_right", "soemdsp_material_resonator_error",
+    "soemdsp_material_resonator_mode_frequency", "soemdsp_material_resonator_latency", "soemdsp_material_resonator_version",
+    "soemdsp_material_resonator_metadata_json", "soemdsp_material_resonator_metadata_json_size"
+  ) }
   @{ Name = "spectral_delay"; Simd = $false; Exports = @(
     "soemdsp_spectral_delay_create", "soemdsp_spectral_delay_destroy", "soemdsp_spectral_delay_reset",
     "soemdsp_spectral_delay_configure", "soemdsp_spectral_delay_sample", "soemdsp_spectral_delay_right", "soemdsp_spectral_delay_error",

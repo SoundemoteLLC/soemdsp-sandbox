@@ -1111,6 +1111,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Capture and sustain a stereo spectrum with evolving phase. Freeze gate, Recapture trigger, infinite or decaying hold and optional stereo diffusion.",
     notes: ["spectral", "STFT", "freeze", "capture", "ambient", "native"],
   },
+  materialResonator: {
+    category: "space", label: "Material Resonator",
+    description: "Procedural Wood, Metal and Glass modal bodies excited by live audio. Zero buffering latency, no IR files; decay, damping, inharmonicity, strike position and stereo pickups.",
+    notes: ["material", "modal", "resonator", "wood", "metal", "glass", "body", "native"],
+  },
   spectralSmear: {
     browserEmoji: "🌊",
     category: "space", label: "Spectral Smear",
@@ -3980,6 +3985,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   spectralFreeze: {
     source: "native_modules/spectral_freeze/spectral_freeze.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_freeze/spectral_freeze.cpp",
+  },
+  materialResonator: {
+    source: "native_modules/material_resonator/material_resonator.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/material_resonator/material_resonator.cpp",
   },
   spectralDelay: {
     source: "native_modules/spectral_delay/spectral_delay.cpp",
