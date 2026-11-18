@@ -8408,7 +8408,7 @@ const nodeGraphModuleDefinitions = (
         label: "Rate",
         max: "68",
         maxDigits: 5,
-        mid: "2",
+        mid: "10",
         min: "0",
         step: "any",
         unit: "Hz",
