@@ -601,7 +601,7 @@ function nodeGraphXyPadDisplaySettingsForNode(node) {
 // (1 = one dot as big as the display). Renderers turn it into authored px at
 // 96 with dotUnitInkPx. Every other face keeps px at 96 (nodeGraphTraceDisplayNormalizeInkPx).
 const NODE_GRAPH_SCOPE_DOT_UNIT_SCHEMAS = Object.freeze(new Set([
-  "scope1dTrace", "scope2dTrace", "lineBurn", "scope2d", "xyPad",
+  "scope1dTrace", "scope2dTrace", "lineBurn", "scope2d", "xyPad", "vectorRgbFace",
 ]));
 
 function nodeGraphScopeDotSizeIsUnit(schema) {
