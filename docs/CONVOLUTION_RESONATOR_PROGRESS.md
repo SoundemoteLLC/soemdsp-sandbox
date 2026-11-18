@@ -104,15 +104,54 @@ the combined graph. JavaScript syntax checks and `git diff --check` pass.
 The old Python smoke entrypoint no longer exists in this checkout; the broader
 browser audio-reference smoke was not run for this milestone.
 
-Tube (Body = 1), STFT, Crunch and the final parameter-pinned IR display are not
-implemented yet. The exposed Body range ends at 0.5 for this milestone.
+## Tube Body
+
+Body now spans 0 Buzz / 0.5 String / 1 closed-open Tube. The String endpoint
+and default Buzz settings are unchanged. Above String, the string loop gain
+and its DC-trap coupling recede while the tube section's direct feedthrough
+recedes and modal residues develop. This is a cascade of physical filter
+sections with varying coefficients, not a mix of two complete body renders.
+Its intermediate IR is therefore the cascade's response, not a linear morph
+of isolated String and Tube impulse responses.
+
+The Tube section is a bank of two-pole bandpasses at (2n-1)*f. Each has zeros
+at DC and Nyquist. Complex rotating pole state keeps the state transition
+contractive as pitch changes, avoiding time-varying direct-form pole-state
+energy pumping. Mode decay time is Decay/sqrt(2n-1), giving increasing wall
+loss at upper modes; Decay is the fundamental's 1/e time. Mode density scales
+excitation by sqrt(4*f/sampleRate). Modes fade over the top 20% of Nyquist
+and leave the bank at Nyquist; newly entering modes start with clear state.
+There is no fixed mode-count ceiling or pitch floor. Low pitches and audio-rate
+retuning cost more: count follows Nyquist/f and coefficient changes update
+the bank. No claim of constant CPU cost is made.
+
+Voice left/right and the internal carrier have independent modal states.
+No saturation or limiter was added. Returning fully to String clears dormant
+tube state, so later re-entry cannot resurrect an old frozen tail. Reset also
+clears history moved to the end of enlarged String storage.
+
+`node scripts/test_convolution_resonator_tube.mjs` verifies odd/even response,
+DC rejection, faster high-mode decay, level-independent linearity, dry latency,
+finite morphs at 44.1/48/96 kHz and Nyquist boundaries, carrier finiteness,
+endpoint continuity, intermediate-body settling, decay after a rapid melody,
+and reset after storage growth. Browser listening remains Argi's acceptance
+step; arbitrary modulation is not claimed alias-free or click-free.
+
+All six focused Convolution Resonator scripts pass against the rebuilt native
+binaries, including String/Tube graph controls. All 199 native modules built;
+the final Tube coefficient change was then incrementally rebuilt and relinked
+into the combined WASM. Syntax checks and `git diff --check` pass. No broader
+browser audio-reference smoke was run in this milestone.
+
+STFT, Crunch and the final parameter-pinned IR display remain unimplemented.
 
 ## Next
 
 1. Diagnose the browser Render Sample stall, with a bounded test and diagnostics.
 2. Listen to Buzz with voice/music and verify its Mix and f controls.
-3. Listen to String with Body = 0.5 and Decay = 0.08 s, including isolated note
-   jumps and rapid retargeting; then implement Tube with matching IR probes.
+3. Argi verified that String can be played melodically and its buildup settles.
+   Listen to Tube with Body = 1, Decay = 0.08 s and then longer decay; compare
+   with String and sweep the intermediate body settings.
 4. Coordinate shared FFT extraction from Noise Convolution Reverb. Do not
    modify Sandy's worktree. The FFT remains private to her module at this point.
 5. Fixed-size STFT, then Crunch transitions, anti-aliasing and pinned displays.
