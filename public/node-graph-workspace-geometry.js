@@ -818,6 +818,10 @@ function nodeGraphModuleLightGradient(radiusX, radiusY, cx, cy, colorAt, peak) {
 
 // How much of the grid reveal / module light stays in a fully dark room (0..1).
 var NODE_GRID_DARK_FLOOR = 0.75;
+// The least the mouse lamp reflects off the grid, as a share of the Grid reflection setting, when the room dimmer is fully bright
+// (dial it here: 0 = no reflection with the room fully lit; 0.5 = what half-dimmed gave before, and it stays there until the room is
+// dimmed past half).
+var NODE_GRID_LAMP_REFLECT_FLOOR = 0.5;
 // Grid for the GPU lights pass, or null when the grid is off. World-space cell (the grid is anchored at
 // the world origin), line colour + alpha, how far modules reveal it, and the mouse reveal.
 var nodeGridParamsCache = { at: 0, base: null };
@@ -857,9 +861,9 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
     spread: b.spread,
     moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
     mouse: active ? mouse : null,
-    // How bright the lines reflect the mouse lamp: the Grid reflection setting times how far the room is dimmed (none with the room
-    // fully lit, the full setting when it is fully dark).
-    reflect: b.reflection * roomDim,
+    // How bright the lines reflect the mouse lamp: the Grid reflection setting times how far the room is dimmed, but never less than
+    // NODE_GRID_LAMP_REFLECT_FLOOR of it, so the grid still shows around the mouse with the room fully lit.
+    reflect: b.reflection * Math.max(NODE_GRID_LAMP_REFLECT_FLOOR, roomDim),
     mouseRadius: Math.max(nodeGraphGridWidth(), nodeGraphGridHeight()) * (3 + 10.5 * b.mouseSpread),
     mouseAmount: 0.92 * mouseAmount,
   };
