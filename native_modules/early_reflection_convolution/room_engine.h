@@ -8,16 +8,16 @@ inline soemdsp::fft::Radix2<fftSize> fft{};
 inline double bounded(double x, double lo, double hi) { return x < lo ? lo : x > hi ? hi : x; }
 struct Settings {
   double width=4, depth=5, height=2.5, sx=.3, sy=.3, sz=.5, lx=.6, ly=.7, lz=.5;
-  double absorption=.6, damping=12000, ears=.18, rate=48000;
+  double absorption=.6, damping=12000, ears=.18, diffusion=0, diffusionMs=8, rate=48000;
   int order=3;
   bool same(const Settings& b) const {
     return width==b.width && depth==b.depth && height==b.height && sx==b.sx && sy==b.sy && sz==b.sz
       && lx==b.lx && ly==b.ly && lz==b.lz && absorption==b.absorption && damping==b.damping
-      && ears==b.ears && rate==b.rate && order==b.order;
+      && ears==b.ears && diffusion==b.diffusion && diffusionMs==b.diffusionMs && rate==b.rate && order==b.order;
   }
 };
 struct Complex { float r, i; };
-struct Path { int delay, length; double fraction, gain, pole; };
+struct Path { int delay[9], length, taps; double fraction[9], gain[9], pole; };
 struct Kernel {
   float ir[2][capacity];
   Complex spectrum[2][parts][bins];
@@ -48,6 +48,7 @@ struct State {
   static double image(int cell,double length,double source) {
     return cell*length+(cell%2 ? length-source : source);
   }
+  static unsigned hash(unsigned x) { x^=x>>16; x*=0x7feb352du; x^=x>>15; x*=0x846ca68bu; return x^(x>>16); }
   bool begin() {
     building=requested; pathCount=0;
     Kernel& k=kernels[1-active]; k.length=1; k.count=0;
@@ -71,10 +72,23 @@ struct State {
         const double exponent=6.283185307179586*building.damping/(building.rate*n);
         const double pole=soemdsp_maths::dsp_exp(-exponent);
         const double tail=11.51292546497023/exponent+1;
-        if (!__builtin_isfinite(delay+tail) || delay+tail+2>=capacity || pathCount>=128) { stage=0; error=1; applied=building; return false; }
+        const double spread=building.diffusion>0 ? building.diffusionMs*.001*building.rate : 0;
+        if (!__builtin_isfinite(delay+tail+spread) || delay+tail+spread+2>=capacity || pathCount>=128) { stage=0; error=1; applied=building; return false; }
         const int length=(int)tail;
-        paths[ear][pathCount]={(int)delay,length,delay-(int)delay,gain/(distance>.001 ? distance : .001),pole};
-        const int end=(int)delay+length+2; if (end>k.length) k.length=end;
+        Path& path=paths[ear][pathCount]; path.length=length; path.pole=pole;
+        path.taps=spread>0 ? 9 : 1;
+        const double amplitude=gain/(distance>.001 ? distance : .001);
+        const unsigned seed=hash((unsigned)(x+4)*81u+(unsigned)(y+4)*9u+(unsigned)(z+4)+1u);
+        for (int tap=0;tap<path.taps;++tap) {
+          const double offset=tap ? spread*((tap-1)+(hash(seed+(unsigned)tap)*(1.0/4294967296.0)))/8 : 0;
+          const double time=delay+offset;
+          const unsigned signIndex=(tap+7+(seed%8))%8;
+          const double sign=signIndex==0 || signIndex==3 || signIndex==6 ? -1 : 1;
+          // Six positive and three negative 1/3 taps: unit DC sum and unit isolated-tap energy.
+          const double weight=path.taps==1 ? 1 : tap ? building.diffusion*sign/3 : 1-building.diffusion+building.diffusion/3;
+          path.delay[tap]=(int)time; path.fraction[tap]=time-(int)time; path.gain[tap]=amplitude*weight;
+          const int end=(int)time+length+2; if (end>k.length) k.length=end;
+        }
       }
       ++pathCount;
     }
@@ -99,9 +113,11 @@ struct State {
         for (int ear=0;ear<2;++ear) {
           const Path& p=paths[ear][pathIndex];
           if (pathSample>=p.length) continue;
-          const double value=p.gain*(1-p.pole)*pathPower[ear];
-          k.ir[ear][p.delay+pathSample]+=(float)(value*(1-p.fraction));
-          k.ir[ear][p.delay+pathSample+1]+=(float)(value*p.fraction);
+          const double value=(1-p.pole)*pathPower[ear];
+          for (int tap=0;tap<p.taps;++tap) {
+            k.ir[ear][p.delay[tap]+pathSample]+=(float)(value*p.gain[tap]*(1-p.fraction[tap]));
+            k.ir[ear][p.delay[tap]+pathSample+1]+=(float)(value*p.gain[tap]*p.fraction[tap]);
+          }
           pathPower[ear]*=p.pole; if (pathSample+1<p.length) more=true;
         }
         if (more) ++pathSample;

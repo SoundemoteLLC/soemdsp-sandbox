@@ -5,13 +5,13 @@ const x=(await WebAssembly.instantiate(fs.readFileSync(new URL('../native_module
 const p='soemdsp_early_reflection_convolution_';
 const call=(name,...args)=>x[p+name](...args);
 const metadata=JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,call('metadata_json'),call('metadata_json_size'))));
-assert.equal(metadata.targetType,'earlyReflectionConvolution'); assert.equal(metadata.parameters.length,14);
+assert.equal(metadata.targetType,'earlyReflectionConvolution'); assert.equal(metadata.parameters.length,16);
 assert.ok(metadata.parameters.every(p=>p.tooltip && p.defaultValue!==undefined));
 const defaults=[4,5,2.5,.3,.3,.5,.6,.7,.5,.6,12000,.18,3];
 function configure(h,rate,changes={}) {
   const names=['width','depth','height','sx','sy','sz','lx','ly','lz','absorption','damping','ears','order'];
   const args=defaults.map((v,i)=>changes[names[i]]??v);
-  return call('configure',h,...args,rate);
+  return call('configure',h,...args,rate,changes.diffusion??0,changes.diffusionMs??8);
 }
 function settle(h,rate) {
   for(let i=0;i<rate*4;++i) {
@@ -62,6 +62,29 @@ for(const rate of [44100,48000,96000,192000]) {
     assert.ok(Math.abs(call('ir_sample',h,0,i)-expected[i])<1e-6,'physical wall arrival and inverse-distance gain');
     assert.equal(call('ir_sample',h,0,i),call('ir_sample',h,1,i),'zero receiver spacing links stereo');
   }
+  const diffuseSettings={order:1,ears:0,damping:1e9,diffusion:1,diffusionMs:20};
+  configure(h,rate,diffuseSettings); settle(h,rate);
+  const diffuse=Float64Array.from({length:call('ir_length',h)},(_,i)=>call('ir_sample',h,0,i));
+  assert.ok(diffuse.length>expected.length,'diffusion extends arrivals, not buffering latency');
+  const sum=a=>a.reduce((s,v)=>s+v,0);
+  assert.ok(Math.abs(sum(diffuse)-sum(expected))<2e-6,'signed cluster preserves DC path sum without output normalization');
+  assert.ok(diffuse.some(v=>v<-.001),'diffusion is a signed scatter, not just an extra lowpass');
+  assert.ok(diffuse.filter(v=>Math.abs(v)>1e-6).length>3*expected.filter(v=>Math.abs(v)>1e-6).length,'reflections spread into more arrivals');
+  for(let i=0;i<diffuse.length+512;++i) {
+    const value=call('sample',h,i===0?1:0,i===0?1:0,1);
+    assert.ok(Math.abs(value-(diffuse[i-256]||0))<2e-6,'diffused IR convolves correctly with unchanged latency');
+  }
+  call('reset',h); settle(h,rate);
+  for(let i=0;i<diffuse.length;++i) {
+    assert.equal(call('ir_sample',h,0,i),diffuse[i],'static diffusion rebuilds deterministically');
+    assert.equal(call('ir_sample',h,1,i),diffuse[i],'zero ear distance still links stereo');
+  }
+  configure(h,rate,{...diffuseSettings,diffusion:.5}); settle(h,rate);
+  for(let i=0;i<diffuse.length;++i) assert.ok(Math.abs(call('ir_sample',h,0,i)-.5*((expected[i]||0)+diffuse[i]))<2e-6,'Diffusion blends the original and scattered IR');
+  configure(h,rate,{...diffuseSettings,diffusion:0,diffusionMs:5000}); settle(h,rate);
+  for(let i=0;i<expected.length;++i) assert.ok(Math.abs(call('ir_sample',h,0,i)-expected[i])<1e-6,'zero diffusion retains geometric response regardless of time');
+  configure(h,rate,{...diffuseSettings,diffusionMs:5000}); settle(h,rate);
+  assert.equal(call('error',h),1,'over-capacity diffusion time reports an error');
   assert.equal(configure(h,rate,{absorption:1}),0); settle(h,rate);
   for(let i=0;i<call('ir_length',h);++i) assert.equal(call('ir_sample',h,0,i),0,'fully absorbed room is silent');
   assert.equal(configure(h,rate,{width:10000}),0); settle(h,rate);
@@ -73,7 +96,7 @@ for(const rate of [44100,48000,96000,192000]) {
   let maxStep=0,last=0;
   const start=performance.now();
   for(let i=0;i<rate;++i) {
-    if(i===Math.floor(rate/4)) configure(h,rate,{width:.2,depth:.3,height:.4,order:4,damping:200});
+    if(i===Math.floor(rate/4)) configure(h,rate,{width:.2,depth:.3,height:.4,order:4,damping:200,diffusion:1,diffusionMs:20});
     const out=call('sample',h,.01,.01,1); assert.ok(Number.isFinite(out));
     maxStep=Math.max(maxStep,Math.abs(out-last)); last=out;
   }
@@ -81,7 +104,7 @@ for(const rate of [44100,48000,96000,192000]) {
   assert.equal(x.memory.buffer.byteLength,memory,'no processing-time memory growth');
   console.log(`${rate}: IR/direct convolution error ${error.toExponential(2)}, geometry, stereo, absorption, bounded edits; build ${(build/rate).toFixed(3)}s; one audio second ${(performance.now()-start).toFixed(1)}ms (JS overhead included).`);
   if(rate===48000) {
-    configure(h,rate,{width:10,depth:10,height:10,order:4,damping:100}); settle(h,rate);
+    configure(h,rate,{width:10,depth:10,height:10,order:4,damping:100,diffusion:1,diffusionMs:30}); settle(h,rate);
     const times=[];
     for(let b=0;b<400;++b) {
       const start=performance.now();
@@ -94,4 +117,4 @@ for(const rate of [44100,48000,96000,192000]) {
   call('sample',h,NaN,0,1); assert.equal(call('ready',h),0); settle(h,rate);
   call('destroy',h);
 }
-console.log('Early Reflection Convolution native contract passes.');
+console.log('Early Reflection Convolution: zero/full/partial diffusion, deterministic clusters, DC sum, timing/capacity and native convolution pass.');

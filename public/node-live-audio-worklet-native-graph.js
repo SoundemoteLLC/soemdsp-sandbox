@@ -640,7 +640,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   }
   if (t === "earlyReflectionConvolution") {
     const ids = { roomWidth:31, roomDepth:43, roomHeight:41, sourceX:70, sourceY:71, sourceZ:30,
-      listenerX:80, listenerY:81, listenerZ:82, absorption:20, dampingHz:10, earDistance:1, reflectionOrder:22, mix:40 };
+      listenerX:80, listenerY:81, listenerZ:82, absorption:20, dampingHz:10, earDistance:1, reflectionOrder:22, mix:40,
+      diffusion:42, diffusionMs:55 };
     if (Object.prototype.hasOwnProperty.call(ids, k)) return ids[k];
   }
   if (t === "spectralFreeze") {
@@ -6182,7 +6183,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "earlyReflectionConvolution") {
       for (const [key, value] of Object.entries({ roomWidth:4, roomDepth:5, roomHeight:2.5, sourceX:.3, sourceY:.3,
-        sourceZ:.5, listenerX:.6, listenerY:.7, listenerZ:.5, absorption:.6, dampingHz:12000, earDistance:.18, mix:.35 })) {
+        sourceZ:.5, listenerX:.6, listenerY:.7, listenerZ:.5, absorption:.6, dampingHz:12000, earDistance:.18, mix:.35,
+        diffusion:0, diffusionMs:8 })) {
         push(key, this.mapNativeGraphParamId(type, key), cont(key, value));
       }
       push("reflectionOrder", P.NATIVE_GRAPH_PARAM_STAGES, disc("reflectionOrder", 3));

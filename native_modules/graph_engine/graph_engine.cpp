@@ -842,7 +842,7 @@ extern "C" int soemdsp_spectral_freeze_create();
 extern "C" int soemdsp_early_reflection_convolution_create();
 extern "C" void soemdsp_early_reflection_convolution_destroy(int h);
 extern "C" int soemdsp_early_reflection_convolution_configure(int h,double width,double depth,double height,
-  double sx,double sy,double sz,double lx,double ly,double lz,double absorption,double damping,double ears,int order,double rate);
+  double sx,double sy,double sz,double lx,double ly,double lz,double absorption,double damping,double ears,int order,double rate,double diffusion,double diffusionMs);
 extern "C" double soemdsp_early_reflection_convolution_sample(int h,double l,double r,double mix);
 extern "C" double soemdsp_early_reflection_convolution_right(int h);
 extern "C" double soemdsp_early_reflection_convolution_ready(int h);
@@ -5048,6 +5048,7 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.inLow,.6,false); init_control(n.inHigh,.7,false); init_control(n.outLow,.5,false);
     init_control(n.resonance,.6,false); init_control(n.frequency,12000,false); init_control(n.pan,.18,false);
     init_control(n.stages,3,true); init_control(n.mix,.35,false);
+    init_control(n.diffusionAmount,0,false); init_control(n.offsetMs,8,false);
   }
   if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
     const bool gate = typeId == kTypeStftGate;
@@ -16006,7 +16007,7 @@ static void process_early_reflection_convolution(Circuit& g, Node& node, int fra
       control_audio(g,node.amplitude,f),control_audio(g,node.offset,f),control_audio(g,node.center,f),
       control_audio(g,node.inLow,f),control_audio(g,node.inHigh,f),control_audio(g,node.outLow,f),
       control_audio(g,node.resonance,f),control_audio(g,node.frequency,f),control_audio(g,node.pan,f),
-      (int)control_audio(g,node.stages,f),g.sampleRate);
+      (int)control_audio(g,node.stages,f),g.sampleRate,control_audio(g,node.diffusionAmount,f),control_audio(g,node.offsetMs,f));
     const double m=g.mixMono[f],l=g.mixLeft[f],r=g.mixRight[f];
     const double a=stereo_route_feed(route.runMono ? route.feedMono : route.feedL,m,l,r);
     const double b=stereo_route_feed(route.feedR,m,l,r);

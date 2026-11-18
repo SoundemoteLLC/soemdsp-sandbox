@@ -7356,10 +7356,33 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["sourceX", "Source X"], ["sourceY", "Source Y"], ["sourceZ", "Source Z"]], h: 40 },
       { kind: "cells", params: [["listenerX", "Listener X"], ["listenerY", "Listener Y"], ["listenerZ", "Listener Z"]], h: 40 },
       { kind: "cells", params: [["absorption", "Absorption"], ["dampingHz", "Damping"]], h: 40 },
+      { kind: "cells", params: [["diffusion", "Diffusion"], ["diffusionMs", "Diffusion Time"]], h: 40 },
       { kind: "cells", params: [["earDistance", "Ear Distance"], ["mix", "Mix"]], h: 40 },
     ],
     parameters:
     [
+      {
+        "key": "diffusion",
+        "label": "Diffusion",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Blend each geometric reflection into a deterministic nine-tap signed cluster. Zero preserves the original room IR. Static scattering breaks up regular reflection spacing without moving delays or pitch wobble. Cluster weights retain the path DC sum; no automatic output normalization is applied."
+      },
+      {
+        "key": "diffusionMs",
+        "label": "Diffusion Time",
+        "defaultValue": "8",
+        "min": "0",
+        "mid": "10",
+        "max": "100",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Maximum additional arrival spread for each reflection cluster in milliseconds. Zero disables spreading. Longer clusters can sound more diffuse but change coloration; they are an imaginary rough-wall model, not exact rectangular-room geometry. Edits rebuild and crossfade the IR; capacity errors retain the previous response."
+      },
       {
         "key": "roomWidth",
         "label": "Room Width",

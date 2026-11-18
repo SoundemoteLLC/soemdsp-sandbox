@@ -74,7 +74,14 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum=function(...args) {
     const node=nodeGraphMvp.patch.nodes.find(n=>n.id===id);
     return {width:node.params.roomWidth,count:nodeGraphModuleDefinitions.earlyReflectionConvolution.parameters.length};
   },ids.room);
-  assert.ok(Math.abs(Number(parameters.width)-.3)<1e-5); assert.equal(parameters.count,14);
+  assert.ok(Math.abs(Number(parameters.width)-.3)<1e-5); assert.equal(parameters.count,16);
+  const beforeDiffusion=await page.evaluate(()=>window.testRoom.length);
+  await page.evaluate(id=> {
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id,'diffusionMs'),'30');
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id,'diffusion'),'1');
+  },ids.room);
+  await page.waitForFunction(old=>window.testRoom?.ready===1 && !window.testRoom.busy && window.testRoom.length>old,beforeDiffusion,{timeout:30000});
+  assert.equal(await page.evaluate(()=>window.testRoom.error),0);
   for(const width of [1280,390]) {
     await page.setViewportSize({width,height:1000});
     await page.evaluate(id=> {

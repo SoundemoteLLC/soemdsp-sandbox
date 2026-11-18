@@ -13,6 +13,8 @@ const char metadata[]=R"json({
   "label":"Early Reflection Convolution", "kind":"reverb",
   "inputs":["In","Left","Right"], "outputs":["Mono","Left","Right","Ready","Error"],
   "parameters":[
+    {"key":"diffusion","label":"Diffusion","defaultValue":"0","min":"0","mid":"0.5","max":"1","step":"any","unit":"%","tooltip":"Blend each geometric reflection into a deterministic nine-tap signed cluster. Zero preserves the original room IR. Static scattering breaks up regular reflection spacing without moving delays or pitch wobble. Cluster weights retain the path DC sum; no automatic output normalization is applied."},
+    {"key":"diffusionMs","label":"Diffusion Time","defaultValue":"8","min":"0","mid":"10","max":"100","step":"any","unit":"ms","tooltip":"Maximum additional arrival spread for each reflection cluster in milliseconds. Zero disables spreading. Longer clusters can sound more diffuse but change coloration; they are an imaginary rough-wall model, not exact rectangular-room geometry. Edits rebuild and crossfade the IR; capacity errors retain the previous response."},
     {"key":"roomWidth","label":"Room Width","defaultValue":"4","min":"0.1","mid":"3","max":"10","step":"any","unit":"m","nonlinearSlider":true,"tooltip":"Room X dimension in meters. Image-source wall reflections generate a finite impulse response; edits queue an incremental rebuild and 50 ms crossfade. Capacity is 65536 samples; Error reports requests too large for that capacity."},
     {"key":"roomDepth","label":"Room Depth","defaultValue":"5","min":"0.1","mid":"3","max":"10","step":"any","unit":"m","nonlinearSlider":true,"tooltip":"Room Y dimension in meters. Short dimensions create tighter reflection spacing and stronger comb coloration, not an STFT smear."},
     {"key":"roomHeight","label":"Room Height","defaultValue":"2.5","min":"0.1","mid":"3","max":"10","step":"any","unit":"m","nonlinearSlider":true,"tooltip":"Room Z dimension in meters. Sound speed is 343 m/s. No diffuse late reverb or feedback loop is added."},
@@ -42,16 +44,16 @@ extern "C" void soemdsp_early_reflection_convolution_destroy(int h) {
 }
 extern "C" void soemdsp_early_reflection_convolution_reset(int h) { if (auto* s=get(h)) s->reset(); }
 extern "C" int soemdsp_early_reflection_convolution_configure(int h,double width,double depth,double height,
-  double sx,double sy,double sz,double lx,double ly,double lz,double absorption,double damping,double ears,int order,double rate) {
+  double sx,double sy,double sz,double lx,double ly,double lz,double absorption,double damping,double ears,int order,double rate,double diffusion,double diffusionMs) {
   auto* s=get(h); if (!s) return -1;
-  const double values[]={width,depth,height,sx,sy,sz,lx,ly,lz,absorption,damping,ears,rate};
+  const double values[]={width,depth,height,sx,sy,sz,lx,ly,lz,absorption,damping,ears,rate,diffusion,diffusionMs};
   for (double v:values) if (!__builtin_isfinite(v)) { s->badConfig=true; return -2; }
-  if (width<.01 || depth<.01 || height<.01 || damping<=0 || ears<0 || order<1 || order>4 || rate<8000 || rate>192000) { s->badConfig=true; return -2; }
+  if (width<.01 || depth<.01 || height<.01 || damping<=0 || ears<0 || diffusionMs<0 || order<1 || order>4 || rate<8000 || rate>192000) { s->badConfig=true; return -2; }
   if (s->requested.rate!=rate) s->reset();
   s->badConfig=false;
   using soemdsp_room_ir::bounded;
   s->requested={width,depth,height,bounded(sx,0,1),bounded(sy,0,1),bounded(sz,0,1),
-    bounded(lx,0,1),bounded(ly,0,1),bounded(lz,0,1),bounded(absorption,0,1),damping,ears,rate,order};
+    bounded(lx,0,1),bounded(ly,0,1),bounded(lz,0,1),bounded(absorption,0,1),damping,ears,bounded(diffusion,0,1),diffusionMs,rate,order};
   return 0;
 }
 extern "C" double soemdsp_early_reflection_convolution_sample(int h,double l,double r,double mix) {
@@ -61,7 +63,7 @@ extern "C" double soemdsp_early_reflection_convolution_right(int h) { auto* s=ge
 extern "C" double soemdsp_early_reflection_convolution_ready(int h) { auto* s=get(h); return s ? s->ready : 0; }
 extern "C" double soemdsp_early_reflection_convolution_error(int h) { auto* s=get(h); return s ? (s->error || s->badConfig ? 1 : 0) : 1; }
 extern "C" int soemdsp_early_reflection_convolution_latency() { return soemdsp_room_ir::hop; }
-extern "C" int soemdsp_early_reflection_convolution_version() { return 1; }
+extern "C" int soemdsp_early_reflection_convolution_version() { return 2; }
 extern "C" const char* soemdsp_early_reflection_convolution_metadata_json() { return metadata; }
 extern "C" int soemdsp_early_reflection_convolution_metadata_json_size() { return sizeof(metadata)-1; }
 extern "C" int soemdsp_early_reflection_convolution_ir_length(int h) { auto* s=get(h); return s && s->valid ? s->kernels[s->active].length : 0; }
