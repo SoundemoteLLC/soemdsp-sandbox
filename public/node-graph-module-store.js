@@ -95,6 +95,7 @@ const nodeGraphModuleCatalogShelfIdSet = Object.freeze(new Set(nodeGraphModuleCa
 // Default underconstructionsort shelf. UC = on this list (shop cards disabled,
 // native stub diagnostics silenced). Edit this array; do not keep a second set.
 const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
+  "spectralSmear",
   "fftReconstruction",
   "canvas",
   "metallicRatio",
@@ -196,6 +197,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
 
 /** Short shop-card reminder for under-construction modules (title tooltip). */
 const nodeGraphModuleConstructionPlans = Object.freeze({
+  spectralSmear: "pre and post ringing smear",
   fftReconstruction: "General buffered-audio FFT reconstruction: sample/live capture, independently controlled read position and speed, and spectral time stretching. Plan: docs/FFT_RECONSTRUCTION_PLAN.md. No DSP yet.",
   bloomGlow: "Screen bloom/glow/dim from CV. Parked until the shader wash stack is live.",
   gradientVectorscope: "Woscope XY beam with gradient-along-length and dest persist. Parked until that face is finished.",
@@ -1106,6 +1108,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     category: "space", label: "Spectral Freeze",
     description: "Capture and sustain a stereo spectrum with evolving phase. Freeze gate, Recapture trigger, infinite or decaying hold and optional stereo diffusion.",
     notes: ["spectral", "STFT", "freeze", "capture", "ambient", "native"],
+  },
+  spectralSmear: {
+    category: "space", label: "Spectral Smear",
+    description: "Under construction: pre and post ringing smear.",
+    notes: ["under construction", "spectral", "smear", "pre and post ringing smear", "pre-ringing", "post-ringing"],
   },
   spectralDelay: {
     category: "space", label: "Spectral Delay",

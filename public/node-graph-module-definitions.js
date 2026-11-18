@@ -211,6 +211,7 @@ const nodeGraphNodeLabels = Object.freeze({
   spectralBlur: "Spectral Blur",
   spectralFreeze: "Spectral Freeze",
   spectralDelay: "Spectral Delay",
+  spectralSmear: "Spectral Smear",
   earlyReflectionConvolution: "Early Reflection Convolution",
   stftGate: "STFT Gate",
   flanger: "Flanger",
@@ -7543,6 +7544,10 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "Delayed dry stereo versus reflected sound. Direct path is excluded from the IR; dry and wet share 256 samples of convolution buffering latency. Ready becomes high after the first kernel is built; Error reports an invalid or over-capacity request."
       }
     ],
+  },
+  spectralSmear: {
+    planRole: "processor",
+    inputs: [], outputs: [], parameters: [],
   },
   spectralDelay: {
     planRole: "processor", planFreeRun: true, defaultWidthGu: 12,

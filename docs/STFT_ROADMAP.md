@@ -126,6 +126,12 @@ them simultaneously. Proposed order follows musical value and implementation ris
   V1 uses moving, phase-aware fractional spectral reads. Time edits can bend pitch;
   FFT-size edits separately warm and crossfade two engines.
 
+### Parked: Spectral Smear
+
+- [x] Under-construction Module Browser entry: "pre and post ringing smear".
+- [ ] Revisit controlled transient lead-in and trailing ringing later.
+- No DSP, new lookahead, latency-compensation work or active module in this pass.
+
 ### 3. Spectral Blur
 
 - [x] Native v1: Time Smear (seconds), Frequency Blur (Hz), Diffusion blend,
