@@ -60,7 +60,7 @@ for (const body of [0.6, 0.75, 0.9]) {
   assert.ok(energy(middle, 0.8, 1) < 1e-7, `morphed body ${body} must settle`);
 }
 const dry = impulse({ mix: 0 });
-for (let i = 0; i < dry.length; ++i) assert.equal(dry[i], i === 2048 ? 1 : 0, "dry latency unchanged");
+for (let i = 0; i < dry.length; ++i) assert.equal(dry[i], i === x.soemdsp_convolution_resonator_latency() ? 1 : 0, "dry latency follows the shared reference");
 
 const h = x.soemdsp_convolution_resonator_create();
 for (const rate of [44100, 48000, 96000]) {

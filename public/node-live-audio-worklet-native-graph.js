@@ -6107,6 +6107,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("bodyDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("bodyDecay", 0.08));
       push("vocoderMix", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("vocoderMix", 0));
       push("formantShift", P.NATIVE_GRAPH_PARAM_PHASE, cont("formantShift", 0));
+      push("crunch", P.NATIVE_GRAPH_PARAM_CENTER, cont("crunch", 0.25));
+      push("response", P.NATIVE_GRAPH_PARAM_WIDTH, cont("response", 0));
+      push("bandwidth", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("bandwidth", 0));
       push("transitionMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("transitionMs", 20));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;

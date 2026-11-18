@@ -191,6 +191,55 @@ graph/reference comparison at 0 and +12 semitones. FFT round-trip error is
 native modules built, followed by an incremental final vocoder relink. Syntax
 checks and `git diff --check` pass. The isolated server serves cache tag cres6.
 
+## Crunch
+
+The vocoder now keeps seven valid STFT streams warm: 32/64/128/256/512/1024/2048.
+The smallest two use sliding hops of 1 and 2 samples; the rest use N/4. Each
+periodic Hann analysis/synthesis pair uses the exact 8*H/(3*N) OLA scale.
+All streams schedule onto a common 2048-sample reference. The body interpolator
+requires another 8 samples, so total reported latency is now **2056 samples**
+for dry, body and vocoder, independent of Crunch. Extra vocoder delay rings
+were removed because each STFT now supplies its own aligned output.
+
+Effective response is clamp(Crunch + Response, 0, 1), mapped logarithmically
+from 2048 to 32 samples. Adjacent complete output streams blend with a
+smoothstep, unity-gain crossfade. This deliberately replaces the plan's
+equal-power recommendation: these streams are correlated, and equal-power
+weights would create a 3 dB bump even for identical unity-envelope outputs.
+No frame is resized, reset or switched cold. Keeping all seven streams warm
+also replaces hop-boundary pair activation; the mixer alone can move each
+sample while each frame's FFT and OLA remain internally consistent.
+
+Effective bandwidth is clamp(Crunch + Bandwidth, 0, 1). A normalized two-sided
+exponential kernel operates on log frequency. Width is ln(2)*b/(1-b); zero
+means individual bins, and b=1 is exactly one mean over non-DC/non-Nyquist
+bins. Both boundary normalization and flat-spectrum preservation are tested.
+Crunch defaults to 0.25, with zero trims. For the previous fixed sound, use
+Crunch=1/3, Response=0, Bandwidth=-1/3. Vocoder still defaults to zero to retain
+the body-only audition path until enabled.
+
+The harness now sweeps size boundaries and trims against the aligned
+unity-envelope reference, with error about 4.2e-7 and no crossfade gain bump.
+It also verifies the old 512-sample reference and full-band collapse. A 1 kHz
+AM fixture produces sideband/carrier ratios about 0.0006 for long frames and
+0.24 for short sliding frames. This demonstrates faster envelope tracking,
+not added saturation. All earlier body contracts retain their behavior with
+the new shared latency.
+
+Cost is explicitly provisional: keeping seven streams warm took roughly
+0.34-0.36 seconds to process one second of the changing-control harness on
+this machine, including sample-by-sample JS/WASM test calls. This is not a
+browser/plugin performance benchmark, nor a many-instance guarantee. A later
+optimization must prove state-warm pair activation before replacing this
+reference. There is no oversampled-AM finish yet, so fast modulation and
+high-frequency aliasing must not be described as solved. Broader browser
+audio-reference smoke was not run; Argi's listening is the next gate.
+
+Verification: all seven focused scripts pass, including native Crunch/trim
+modulation and two graph/reference control configurations. All 199 modules
+and combined WASM build; syntax checks and `git diff --check` pass. Isolated
+server cache tag is cres7. Work remains on the unmerged development branch.
+
 ## Next
 
 1. Diagnose the browser Render Sample stall, with a bounded test and diagnostics.
@@ -198,10 +247,10 @@ checks and `git diff --check` pass. The isolated server serves cache tag cres6.
 3. Argi verified that String can be played melodically and its buildup settles.
    Listen to Tube with Body = 1, Decay = 0.08 s and then longer decay; compare
    with String and sweep the intermediate body settings.
-4. Listen with Vocoder = 1 on voice/music, play Frequency, and try Formant Shift.
-   Compare with Vocoder = 0 without changing Body or Mix.
+4. Argi confirmed the fixed-size vocoder sounds good. Listen to the Crunch
+   sweep with Vocoder=1 and zero trims, then try Response/Bandwidth separately.
 5. Coordinate adoption of the shared FFT by Noise Convolution Reverb without
-   touching another agent's worktree. Then Crunch, high-frequency finish and
+   touching another agent's worktree. Then performance/high-frequency finish and
    pinned displays.
 
 The 2048-sample latency is provisional until oversampled filter group delay is

@@ -3,27 +3,63 @@
 #include <soemdsp/math/exp_log.h>
 
 namespace convolution_resonator {
-constexpr int kFrame = 512, kHop = kFrame / 4;
-inline soemdsp::fft::Radix2<kFrame> fft{};
-struct VocoderStft {
-  float input[3][kFrame], ola[2][kFrame];
+constexpr int kFrame = 512, kHop = kFrame / 4, kMaxFrame = 2048;
+template<int N> inline soemdsp::fft::Radix2<N> frameFft{};
+inline auto& fft = frameFft<512>;
+template<int kFrame, int kHop> struct StftFrame {
+  float input[3][kFrame], ola[2][kMaxFrame];
   float carrierRe[kFrame], carrierIm[kFrame], re[kFrame], im[kFrame];
   float envelope[kFrame / 2 + 1], window[kFrame];
-  int position, hop;
+  float smoothA[kFrame / 2], smoothNorm[kFrame / 2], forward[kFrame / 2];
+  double lastBandwidth;
+  int position, outPosition, hop;
   double right;
 
   void reset() {
-    position = hop = 0; right = 0;
+    position = outPosition = hop = 0; right = 0; lastBandwidth = -1;
+    auto& fft = frameFft<kFrame>;
     fft.ensure();
     for (int i = 0; i < kFrame; ++i) {
       for (auto& channel : input) channel[i] = 0;
-      for (auto& channel : ola) channel[i] = 0;
       window[i] = i == kFrame / 2 ? 1.0f
         : 0.5f - 0.5f * fft.twRe[i < kFrame / 2 ? i : kFrame - i];
     }
+    for (auto& channel : ola) for (float& sample : channel) sample = 0;
   }
 
-  void frame(double shift, bool unityEnvelope) {
+  void smooth(double bandwidth) {
+    if (bandwidth <= 0) return;
+    constexpr int end = kFrame / 2 - 1;
+    if (lastBandwidth != bandwidth) {
+      const double width = bandwidth < 1 ? 0.6931471805599453 * bandwidth / (1 - bandwidth) : 0;
+      double weight = 0;
+      for (int k = 1; k <= end; ++k) {
+        smoothA[k] = k == 1 ? 0 : (bandwidth >= 1 ? 1 : (float)soemdsp_maths::dsp_exp(
+          -soemdsp_maths::dsp_ln((double)k / (k - 1)) / width));
+        weight = 1 + smoothA[k] * weight;
+        smoothNorm[k] = (float)weight;
+      }
+      weight = 0;
+      for (int k = end; k >= 1; --k) {
+        weight = 1 + (k == end ? 0 : smoothA[k + 1] * weight);
+        smoothNorm[k] = (float)(1 / (smoothNorm[k] + weight - 1));
+      }
+      lastBandwidth = bandwidth;
+    }
+    double value = 0;
+    for (int k = 1; k <= end; ++k) {
+      value = envelope[k] + smoothA[k] * value;
+      forward[k] = (float)value;
+    }
+    value = 0;
+    for (int k = end; k >= 1; --k) {
+      value = envelope[k] + (k == end ? 0 : smoothA[k + 1] * value);
+      envelope[k] = (float)((forward[k] + value - envelope[k]) * smoothNorm[k]);
+    }
+  }
+
+  void frame(double shift, bool unityEnvelope, double bandwidth) {
+    auto& fft = frameFft<kFrame>;
     for (int i = 0; i < kFrame; ++i) {
       carrierRe[i] = input[2][(position + 1 + i) % kFrame] * window[i];
       carrierIm[i] = 0;
@@ -38,6 +74,7 @@ struct VocoderStft {
       fft.transform(re, im, false);
       for (int k = 0; k <= kFrame / 2; ++k)
         envelope[k] = __builtin_sqrt((double)re[k] * re[k] + (double)im[k] * im[k]) * (4.0 / kFrame);
+      smooth(bandwidth);
       for (int k = 0; k <= kFrame / 2; ++k) {
         const double source = k / ratio;
         double gain = 0;
@@ -55,21 +92,54 @@ struct VocoderStft {
         if (k > 0 && k < kFrame / 2) { re[kFrame - k] = re[k]; im[kFrame - k] = -im[k]; }
       }
       fft.transform(re, im, true);
-      // Four periodic Hann-squared windows sum to 3/2. Frames are scheduled
-      // one sample ahead, giving an exact, fixed 512-sample streaming delay.
+      // Hann squared sums to 3*N/(8*H), including the sliding-hop sizes.
+      // All sizes schedule onto the same 2048-sample reference.
       for (int i = 0; i < kFrame; ++i)
-        ola[c][(position + 1 + i) % kFrame] += re[i] * window[i] * (2.0f / 3.0f);
+        ola[c][(outPosition + 1 + kMaxFrame - kFrame + i) % kMaxFrame]
+          += re[i] * window[i] * (8.0f * kHop / (3.0f * kFrame));
     }
   }
 
-  double tick(double left, double rightInput, double carrier, double shift, bool unityEnvelope = false) {
-    const double result = ola[0][position]; right = ola[1][position];
-    ola[0][position] = ola[1][position] = 0;
+  double tick(double left, double rightInput, double carrier, double shift, bool unityEnvelope = false, double bandwidth = 0) {
+    const double result = ola[0][outPosition]; right = ola[1][outPosition];
+    ola[0][outPosition] = ola[1][outPosition] = 0;
     input[0][position] = (float)left; input[1][position] = (float)rightInput;
     input[2][position] = (float)carrier;
-    if (++hop == kHop) { hop = 0; frame(shift, unityEnvelope); }
+    if (++hop == kHop) { hop = 0; frame(shift, unityEnvelope, bandwidth); }
     position = (position + 1) % kFrame;
+    outPosition = (outPosition + 1) % kMaxFrame;
     return result;
+  }
+};
+using VocoderStft = StftFrame<512, 128>;
+inline double unit(double value) { return value < 0 ? 0 : value > 1 ? 1 : value; }
+struct CrunchVocoder {
+  StftFrame<32, 1> n32;
+  StftFrame<64, 2> n64;
+  StftFrame<128, 32> n128;
+  StftFrame<256, 64> n256;
+  StftFrame<512, 128> n512;
+  StftFrame<1024, 256> n1024;
+  StftFrame<2048, 512> n2048;
+  double right;
+  void reset() {
+    n32.reset(); n64.reset(); n128.reset(); n256.reset(); n512.reset(); n1024.reset(); n2048.reset(); right = 0;
+  }
+  double tick(double left, double rightInput, double carrier, double shift,
+    double crunch, double response, double bandwidth, bool unity = false) {
+    const double width = unit(crunch + bandwidth);
+    double output[7][2];
+    auto run = [&](auto& core, int index) {
+      output[index][0] = core.tick(left, rightInput, carrier, shift, unity, width);
+      output[index][1] = core.right;
+    };
+    // Keep each valid OLA stream warm. No cold-state pair switch or frame resize.
+    run(n32, 0); run(n64, 1); run(n128, 2); run(n256, 3); run(n512, 4); run(n1024, 5); run(n2048, 6);
+    const double index = 6 * (1 - unit(crunch + response));
+    const int low = (int)index, high = low < 6 ? low + 1 : 6;
+    const double fraction = index - low, blend = fraction * fraction * (3 - 2 * fraction);
+    right = output[low][1] + blend * (output[high][1] - output[low][1]);
+    return output[low][0] + blend * (output[high][0] - output[low][0]);
   }
 };
 }

@@ -11,7 +11,7 @@
 
 namespace {
 constexpr int kInstances = 64;
-constexpr int kLatency = 2048;
+constexpr int kLatency = convolution_resonator::kMaxFrame + 8;
 constexpr int kHalfKernel = 8;
 struct Tap { int delay; double coefficients[16]; double weight; };
 struct TubeMode {
@@ -37,7 +37,8 @@ struct State {
   int tubeCapacity, tubeCount;
   double tubeFrequency, tubeDecay, tubeRate;
   double tubeInput[3][2];
-  convolution_resonator::VocoderStft* vocoder;
+  convolution_resonator::CrunchVocoder* vocoder;
+  double crunch, response, bandwidth;
   soemdsp_blit::BlitSaw oscillator;
   double carrier;
   int position;
@@ -50,7 +51,7 @@ State* state(int handle) {
 }
 bool finite(double x) { return __builtin_isfinite(x); }
 void clear(State& s) {
-  for (int i = 0; i < 6 * kLatency; ++i) s.delay[i] = 0.0;
+  for (int i = 0; i < 4 * kLatency; ++i) s.delay[i] = 0.0;
   if (s.vocoder) s.vocoder->reset();
   if (s.history) for (int i = 0; i < 2 * s.capacity; ++i) s.history[i] = s.sums[i] = 0;
   s.write = 0;
@@ -291,9 +292,10 @@ double buzz(const State& s, int c, const Tap* taps, int count, double period, do
 extern "C" int soemdsp_convolution_resonator_create() {
   for (int i = 0; i < kInstances; ++i) {
     if (states[i].delay) continue;
-    auto* delay = static_cast<double*>(soemdsp::memory_pool::alloc(6 * kLatency * sizeof(double)));
+    auto* delay = static_cast<double*>(soemdsp::memory_pool::alloc(4 * kLatency * sizeof(double)));
     if (!delay) return 0;
     states[i].delay = delay;
+    states[i].crunch = 1.0 / 3; states[i].response = 0; states[i].bandwidth = -1.0 / 3;
     clear(states[i]);
     return i + 1;
   }
@@ -380,30 +382,27 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
   if (active && tube > 0) s->carrier = tube_tick(*s, 2, s->carrier, tube);
   if (!finite(s->carrier)) { clear(*s); return 0; }
   if (vocoderMix != 0 && !s->vocoder) {
-    s->vocoder = static_cast<convolution_resonator::VocoderStft*>(
-      soemdsp::memory_pool::alloc(sizeof(convolution_resonator::VocoderStft)));
+    s->vocoder = static_cast<convolution_resonator::CrunchVocoder*>(
+      soemdsp::memory_pool::alloc(sizeof(convolution_resonator::CrunchVocoder)));
     if (!s->vocoder) { s->right = 0; return 0; }
     s->vocoder->reset();
   }
   double vocoded[2]{};
   if (s->vocoder) {
-    vocoded[0] = s->vocoder->tick(wet[0], wet[1], s->carrier, formantShift);
+    vocoded[0] = s->vocoder->tick(wet[0], wet[1], s->carrier, formantShift, s->crunch, s->response, s->bandwidth);
     vocoded[1] = s->vocoder->right;
     if (!finite(vocoded[0]) || !finite(vocoded[1])) { clear(*s); return 0; }
   }
   const int p = s->position;
   const int wp = (p + kHalfKernel) % kLatency;
-  const int vp = (p + kHalfKernel + convolution_resonator::kFrame) % kLatency;
   const double out = (1 - mix) * s->delay[p] + mix * (
-    (1 - vocoderMix) * s->delay[2 * kLatency + wp] + vocoderMix * s->delay[4 * kLatency + vp]);
+    (1 - vocoderMix) * s->delay[2 * kLatency + wp] + vocoderMix * vocoded[0]);
   s->right = (1 - mix) * s->delay[kLatency + p] + mix * (
-    (1 - vocoderMix) * s->delay[3 * kLatency + wp] + vocoderMix * s->delay[5 * kLatency + vp]);
+    (1 - vocoderMix) * s->delay[3 * kLatency + wp] + vocoderMix * vocoded[1]);
   s->delay[p] = left;
   s->delay[kLatency + p] = right;
   s->delay[2 * kLatency + p] = wet[0];
   s->delay[3 * kLatency + p] = wet[1];
-  s->delay[4 * kLatency + p] = vocoded[0];
-  s->delay[5 * kLatency + p] = vocoded[1];
   s->position = (p + 1) % kLatency;
   return out;
 }
@@ -416,4 +415,10 @@ extern "C" double soemdsp_convolution_resonator_carrier(int handle) {
   auto* s = state(handle);
   return s ? s->carrier : 0;
 }
-extern "C" int soemdsp_convolution_resonator_version() { return 6; }
+extern "C" int soemdsp_convolution_resonator_version() { return 7; }
+extern "C" void soemdsp_convolution_resonator_set_crunch(int handle, double crunch, double response, double bandwidth) {
+  if (auto* s = state(handle)) {
+    if (!finite(crunch) || !finite(response) || !finite(bandwidth)) { clear(*s); return; }
+    s->crunch = crunch; s->response = response; s->bandwidth = bandwidth;
+  }
+}

@@ -826,6 +826,7 @@ extern "C" int soemdsp_velvet_reverb_version();
 extern "C" int soemdsp_noise_conv_reverb_create(double sampleRate);
 extern "C" int soemdsp_convolution_resonator_create();
 extern "C" void soemdsp_convolution_resonator_destroy(int handle);
+extern "C" void soemdsp_convolution_resonator_set_crunch(int handle, double crunch, double response, double bandwidth);
 extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
   double frequency, double periods, double mix, double sampleRate, double fadeMs, double body, double decay,
   double vocoderMix, double formantShift);
@@ -4231,6 +4232,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.center,
+    (typeId == kTypeConvolutionResonator) ? 0.25 : // Crunch
     (typeId == kTypeCombPluck) ? 0.3 : // exciter Soft (Comb Pluck)
     (typeId == kTypeModeResonator) ? 0.5 : // exciter Soft (Mode Ping)
     (typeId == kTypePurr) ? 0.35 : // Body (Purr)
@@ -4293,6 +4295,7 @@ static void init_node_defaults(Node& n, int typeId) {
   // bradley2a = freqOffset; snowflake = angleÂ°.
   init_control(
     n.width,
+    (typeId == kTypeConvolutionResonator) ? 0.0 : // Response trim
     (typeId == kTypeCombPluck || typeId == kTypeModeResonator) ? 0.5 : // exciter Width x period (Comb Pluck / Mode Ping)
     (typeId == kTypePurr) ? 2.5 : // Body Ratio (Purr)
     (typeId == kTypePulseTrain) ? 0.0 : // ampCurve (Pulse Train)
@@ -4743,6 +4746,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(n.tempoBpm, 120.0, false);
   init_control(
     n.offset,
+    (typeId == kTypeConvolutionResonator) ? 0.0 : // Bandwidth trim
     (typeId == kTypePurr) ? 0.15 : // Rumble Floor (Purr)
     (typeId == kTypeXyPad) ? 0.5 // pad X unit
       : (typeId == kTypeHypersaw2) ? 20.0 // jitterFilter Hz at middle C
@@ -15865,6 +15869,8 @@ static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
     const double m = g.mixMono[f], l = g.mixLeft[f], r = g.mixRight[f];
     const double a = stereo_route_feed(route.runMono ? route.feedMono : route.feedL, m, l, r);
     const double b = stereo_route_feed(route.feedR, m, l, r);
+    soemdsp_convolution_resonator_set_crunch(node.nativeHandle, control_audio(g, node.center, f),
+      control_audio(g, node.width, f), control_audio(g, node.offset, f));
     const double y = soemdsp_convolution_resonator_sample(node.nativeHandle,
       route.runMono || route.runL ? a : 0.0, route.runR ? b : 0.0,
       resolve_osc_hz(g, f, liveF, false, node.frequency, 0.0, sr),
