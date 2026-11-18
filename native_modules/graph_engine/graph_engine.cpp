@@ -841,7 +841,7 @@ extern "C" int soemdsp_spectral_blur_create();
 extern "C" int soemdsp_spectral_freeze_create();
 extern "C" int soemdsp_spectral_delay_create();
 extern "C" void soemdsp_spectral_delay_destroy(int h);
-extern "C" int soemdsp_spectral_delay_configure(int h,int size,double base,double spread,double pivot,double curve,double feedback,double rate);
+extern "C" int soemdsp_spectral_delay_configure(int h,int size,double base,double spread,double pivot,double curve,double feedback,double rate,double tiltDb,double crossfeed);
 extern "C" double soemdsp_spectral_delay_sample(int h,double l,double r,double mix);
 extern "C" double soemdsp_spectral_delay_right(int h);
 extern "C" double soemdsp_spectral_delay_error(int h);
@@ -5062,6 +5062,7 @@ static void init_node_defaults(Node& n, int typeId) {
   if (typeId == kTypeSpectralDelay) {
     init_control(n.stages,4096,true); init_control(n.offsetMs,120,false); init_control(n.width,180,false);
     init_control(n.frequency,1000,false); init_control(n.shape,0,false); init_control(n.feedback,.35,false); init_control(n.mix,1,false);
+    init_control(n.center,0,false); init_control(n.pan,0,false);
   }
   if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
     const bool gate = typeId == kTypeStftGate;
@@ -16018,7 +16019,7 @@ static void process_spectral_delay(Circuit& g,Node& node,int frames) {
     control_frame(g,node,f);
     soemdsp_spectral_delay_configure(node.nativeHandle,(int)control_audio(g,node.stages,f),
       control_audio(g,node.offsetMs,f),control_audio(g,node.width,f),control_audio(g,node.frequency,f),
-      control_audio(g,node.shape,f),control_audio(g,node.feedback,f),g.sampleRate);
+      control_audio(g,node.shape,f),control_audio(g,node.feedback,f),g.sampleRate,control_audio(g,node.center,f),control_audio(g,node.pan,f));
     const double m=g.mixMono[f],l=g.mixLeft[f],r=g.mixRight[f];
     const double a=stereo_route_feed(route.runMono?route.feedMono:route.feedL,m,l,r);
     const double b=stereo_route_feed(route.feedR,m,l,r);

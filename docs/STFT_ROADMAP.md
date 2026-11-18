@@ -116,8 +116,9 @@ them simultaneously. Proposed order follows musical value and implementation ris
   Curve, Feedback, Mix and FFT sizes 512..16384. See [SPECTRAL_DELAY.md](SPECTRAL_DELAY.md).
 - [x] Bounded preallocated spectral histories; native capacity getter reports
   milliseconds, roughly 10.8 seconds at 48 kHz. Invalid requests raise Error.
-- [ ] Listening acceptance, long-tail FFT handoff and worst-case host CPU proof.
-- [ ] Later: band-pattern editing, feedback tilt, stereo crossfeed, tempo sync.
+- [x] Base module listening acceptance; Feedback Tilt (dB) and Stereo Crossfeed.
+- [ ] Listening acceptance for Tilt/Crossfeed, long-tail FFT handoff and worst-case host CPU proof.
+- [ ] Later: band-pattern editing and tempo sync.
 - Proof: known impulses arrive at specified band delays; modulation behavior is
   intentional; feedback decay and memory/CPU limits are measured.
 - Decision: shifting read heads versus crossfading delay taps changes the sound;

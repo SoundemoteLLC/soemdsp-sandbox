@@ -17,6 +17,7 @@ $modules = @(
     "soemdsp_spectral_delay_configure", "soemdsp_spectral_delay_sample", "soemdsp_spectral_delay_right", "soemdsp_spectral_delay_error",
     "soemdsp_spectral_delay_fft_size", "soemdsp_spectral_delay_busy", "soemdsp_spectral_delay_latency", "soemdsp_spectral_delay_latency_for_handle",
     "soemdsp_spectral_delay_max_delay_ms", "soemdsp_spectral_delay_state_bytes", "soemdsp_spectral_delay_bin_delay_ms",
+    "soemdsp_spectral_delay_feedback_gain",
     "soemdsp_spectral_delay_version", "soemdsp_spectral_delay_metadata_json", "soemdsp_spectral_delay_metadata_json_size"
   ) }
   @{ Name = "early_reflection_convolution"; Simd = $false; Exports = @(

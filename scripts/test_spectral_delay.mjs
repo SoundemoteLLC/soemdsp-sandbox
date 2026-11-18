@@ -4,9 +4,9 @@ import {performance} from 'node:perf_hooks';
 const x=(await WebAssembly.instantiate(fs.readFileSync(new URL('../native_modules/spectral_delay/spectral_delay.wasm',import.meta.url)),{})).instance.exports;
 const prefix='soemdsp_spectral_delay_', call=(k,...args)=>x[prefix+k](...args);
 const meta=JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,call('metadata_json'),call('metadata_json_size'))));
-assert.equal(meta.parameters.length,7); assert.ok(meta.parameters.every(p=>p.tooltip));
+assert.equal(meta.parameters.length,9); assert.ok(meta.parameters.every(p=>p.tooltip));
 assert.deepEqual(meta.parameters[0].choiceIds,[512,1024,2048,4096,8192,16384]);
-function configure(h,sr,n=1024,base=0,spread=0,pivot=1000,curve=0,fb=0) {return call('configure',h,n,base,spread,pivot,curve,fb,sr);}
+function configure(h,sr,n=1024,base=0,spread=0,pivot=1000,curve=0,fb=0,tilt=0,crossfeed=0) {return call('configure',h,n,base,spread,pivot,curve,fb,sr,tilt,crossfeed);}
 function settle(h,sr) {
   for(let i=0;i<sr*12;++i) {call('sample',h,0,0,1);if(!call('busy',h))return;}
   throw Error('size handoff timed out');
@@ -47,6 +47,32 @@ for(const sr of [44100,48000,96000,192000]) {
   configure(h,sr,n,4*hop*1000/sr,0,1000,0,-.5);call('reset',h);
   const [negative]=render(h,n*6,i=>[i===0?.1:0,0]);
   assert.ok(Math.abs(negative[n+8*hop]+.05)<2e-6,'negative feedback reverses echo polarity');
+  configure(h,sr,n,4*hop*1000/sr,0,1000,0,.5,0,1);call('reset',h);
+  const ping=render(h,n*8,i=>[i===0?.1:0,0]);
+  for(let repeat=0;repeat<5;++repeat) for(let c=0;c<2;++c) {
+    const expected=c===repeat%2?.1*.5**repeat:0;
+    assert.ok(Math.abs(ping[c][n+(repeat+1)*4*hop]-expected)<2e-6,'100% crossfeed alternates later echoes, not the first');
+  }
+  for(let i=0;i<ping[0].length;++i) {
+    const repeat=(i-n)/(4*hop)-1;
+    for(let c=0;c<2;++c) {
+      const expected=Number.isInteger(repeat)&&repeat>=0&&c===repeat%2?.1*.5**repeat:0;
+      assert.ok(Math.abs(ping[c][i]-expected)<2e-6,'crossfeed adds no channel-order hop or stray echo');
+    }
+  }
+  configure(h,sr,n,4*hop*1000/sr,0,1000,0,.5,0,.5);call('reset',h);
+  const centered=render(h,n*5,i=>[i===0?.1:0,0]);
+  assert.ok(Math.abs(centered[0][n+8*hop]-.025)<2e-6&&Math.abs(centered[1][n+8*hop]-.025)<2e-6,'50% crossfeed mixes feedback equally without doubling gain');
+  for(const tilt of [-24,0,24]) {
+    configure(h,sr,n,4*hop*1000/sr,0,sr/16,0,.5,tilt,0);call('reset',h);
+    const tilted=render(h,n*4,i=>[i===0?.1:0,0]);
+    const low=call('feedback_gain',h,0),high=call('feedback_gain',h,n/2),middle=call('feedback_gain',h,n/16);
+    const attenuated=.5*10**(-24/20);
+    assert.ok(Math.abs(low-(tilt>0?attenuated:.5))<1e-6,'tilt bass endpoint');
+    assert.ok(Math.abs(high-(tilt<0?attenuated:.5))<1e-6,'tilt treble endpoint');
+    assert.ok(Math.abs(middle-.5*10**(-Math.abs(tilt)/40))<1e-6,'pivot receives half the endpoint attenuation in dB');
+    assert.ok(Math.abs(tilted[0][n+4*hop]-.1)<2e-6,'tilt does not filter the first echo');
+  }
   configure(h,sr,n,20,100,1500);call('reset',h);render(h,n,()=>[0,0]);
   assert.ok(Math.abs(call('bin_delay_ms',h,0)-20)<1e-9);
   assert.ok(Math.abs(call('bin_delay_ms',h,n/2)-120)<1e-9);

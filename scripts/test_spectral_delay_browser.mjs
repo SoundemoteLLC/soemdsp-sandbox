@@ -23,8 +23,9 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum=function(...args) {
   const size=this.nativeGraph.soemdsp_spectral_delay_fft_size(h),busy=this.nativeGraph.soemdsp_spectral_delay_busy(h);
   const error=this.nativeGraph.soemdsp_spectral_delay_error(h),capacity=this.nativeGraph.soemdsp_spectral_delay_max_delay_ms(h);
   const low=this.nativeGraph.soemdsp_spectral_delay_bin_delay_ms(h,0),high=this.nativeGraph.soemdsp_spectral_delay_bin_delay_ms(h,size/2);
+  const lowGain=this.nativeGraph.soemdsp_spectral_delay_feedback_gain(h,0),highGain=this.nativeGraph.soemdsp_spectral_delay_feedback_gain(h,size/2);
   this.testDelayFrames=(this.testDelayFrames||0)+1;
-  if(this.testDelayFrames%32===0)this.port.postMessage({type:'test-delay',size,busy,error,capacity,low,high});
+  if(this.testDelayFrames%32===0)this.port.postMessage({type:'test-delay',size,busy,error,capacity,low,high,lowGain,highGain});
  }
  return result;
 };`;
@@ -59,6 +60,13 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum=function(...args) {
     assert.equal(await page.evaluate(()=>window.testDelay.error),0);
   }
   assert.ok(await page.evaluate(()=>window.testDelay.capacity)>10000);
+  await page.evaluate(id=> {
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id,'feedbackTiltDb'),'-24');
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id,'crossfeed'),'100');
+  },ids.delay);
+  await page.waitForFunction(()=>window.testDelay?.lowGain>.34&&window.testDelay?.highGain<.023,null,{timeout:15000});
+  const controls=await page.evaluate(id=>nodeGraphMvp.patch.nodes.find(n=>n.id===id).params,ids.delay);
+  assert.equal(Number(controls.crossfeed),1);assert.equal(Number(controls.feedbackTiltDb),-24);
   for(const width of [1280,390]) {
     await page.setViewportSize({width,height:900});
     await page.evaluate(id=>{const b=nodeGraphSliderForParameter(id,'mix').closest('article').getBoundingClientRect(),area=document.getElementById('nodeGraphWorkspace').getBoundingClientRect();nodeGraphMvp.pan.x+=(innerWidth-b.width)/2-b.left;nodeGraphMvp.pan.y+=area.top+25-b.top;applyNodeGraphViewportCssLight();},ids.delay);

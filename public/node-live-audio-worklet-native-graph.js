@@ -640,7 +640,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if (t === "spectralDelay") {
-    const ids={fftSize:22,baseDelayMs:55,spreadMs:31,pivotHz:10,curve:13,feedback:50,mix:40};
+    const ids={fftSize:22,baseDelayMs:55,spreadMs:31,pivotHz:10,curve:13,feedback:50,mix:40,feedbackTiltDb:30,crossfeed:1};
     if (Object.prototype.hasOwnProperty.call(ids,k)) return ids[k];
   }
   if (t === "earlyReflectionConvolution") {
@@ -6189,7 +6189,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "spectralDelay") {
       push("fftSize",P.NATIVE_GRAPH_PARAM_STAGES,disc("fftSize",4096));
-      for (const [key,value] of Object.entries({baseDelayMs:120,spreadMs:180,pivotHz:1000,curve:0,feedback:.35,mix:1})) {
+      for (const [key,value] of Object.entries({baseDelayMs:120,spreadMs:180,pivotHz:1000,curve:0,feedback:.35,mix:1,feedbackTiltDb:0,crossfeed:0})) {
         push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
       }
       continue;

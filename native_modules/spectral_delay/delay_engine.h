@@ -27,11 +27,11 @@ inline void transform(int n,float* r,float* i,bool inverse) {
 struct Complex { float r,i; };
 inline int frameCapacity(int size) { return storage/(size/2+1); }
 inline double maxDelayMs(int size,double rate) { return (frameCapacity(size)-2)*(size/4)*1000.0/rate; }
-struct Settings { double base=120,spread=180,pivot=1000,curve=0,feedback=.35,rate=48000; };
+struct Settings { double base=120,spread=180,pivot=1000,curve=0,feedback=.35,rate=48000,tiltDb=0,crossfeed=0; };
 struct Core {
   Complex history[2][storage];
   float input[2][maximum],ola[2][maximum],window[maximum],re[maximum],im[maximum];
-  double delays[maximum/2+1];
+  double delays[maximum/2+1],feedbackGains[maximum/2+1];
   int size,position,hop,cursor,written,samples;
   bool fault;
   double right;
@@ -42,7 +42,7 @@ struct Core {
       const int index=j<n ? (j<n/2 ? j:n-j)*(maximum/n):0;
       window[j]=j>=n ? 0 : j==n/2 ? 1 : .5f-.5f*f16384.twRe[index];
     }
-    for(int k=0;k<=maximum/2;++k) delays[k]=0;
+    for(int k=0;k<=maximum/2;++k) delays[k]=feedbackGains[k]=0;
     // A valid-frame count makes old spectral storage unreachable without a large callback-time clear.
   }
   Complex past(int channel,int bin,int age,Complex current) const {
@@ -76,11 +76,14 @@ struct Core {
     const double nyquist=s.rate*.5;
     for(int k=0;k<count;++k) {
       const double hz=(double)k*s.rate/size;
-      const double u=hz==0 ? 0 : hz*(nyquist-s.pivot)/(hz*(nyquist-2*s.pivot)+nyquist*s.pivot);
+      const double u=soemdsp::math::clamp01(hz==0 ? 0 : hz*(nyquist-s.pivot)/(hz*(nyquist-2*s.pivot)+nyquist*s.pivot));
       const double shape=soemdsp::math::segment_rational01(u,s.curve);
       const double amount=s.spread<0 ? 1-shape:shape;
       const double spread=s.spread<0 ? -s.spread:s.spread;
       delays[k]=(s.base+spread*amount)*.001*s.rate/step;
+      const double tilt=s.tiltDb<0 ? -s.tiltDb:s.tiltDb;
+      const double side=s.tiltDb<0 ? u:1-u;
+      feedbackGains[k]=tilt==0 ? s.feedback:s.feedback*soemdsp_maths::dsp_exp(-.1151292546497023*tilt*side);
     }
     for(int c=0;c<2;++c) {
       for(int j=0;j<size;++j) { re[j]=input[c][(position+1+j)%size]*window[j]; im[j]=0; }
@@ -88,7 +91,10 @@ struct Core {
       for(int k=0;k<count;++k) {
         const double delay=delays[k];
         const Complex old=read(c,k,delay>=1 ? delay:1,{0,0});
-        const Complex current={(float)(re[k]+s.feedback*old.r),(float)(im[k]+s.feedback*old.i)};
+        // Feedback reads are always historical, so the opposite channel cannot see this frame's writes.
+        const Complex other=s.crossfeed>0 && feedbackGains[k]!=0 ? read(1-c,k,delay>=1 ? delay:1,{0,0}):old;
+        const double fr=old.r+s.crossfeed*(other.r-old.r),fi=old.i+s.crossfeed*(other.i-old.i);
+        const Complex current={(float)(re[k]+feedbackGains[k]*fr),(float)(im[k]+feedbackGains[k]*fi)};
         if(!__builtin_isfinite(current.r) || !__builtin_isfinite(current.i)) return false;
         const Complex wet=delay>=1 ? old:read(c,k,delay,current);
         history[c][cursor*count+k]=current;

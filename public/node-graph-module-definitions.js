@@ -7554,6 +7554,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["baseDelayMs", "Base Delay"], ["spreadMs", "Delay Spread"]], h: 40 },
       { kind: "cells", params: [["pivotHz", "Frequency Pivot"], ["curve", "Delay Curve"]], h: 40 },
+      { kind: "cells", params: [["feedbackTiltDb", "Feedback Tilt"], ["crossfeed", "Stereo Crossfeed"]], h: 40 },
       { kind: "cells", params: [["feedback", "Feedback"], ["mix", "Mix"]], h: 40 },
     ],
     parameters:
@@ -7654,7 +7655,29 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "step": "any",
         "unit": "%",
-        "tooltip": "Spectral delay feedback coefficient; negative reverses feedback polarity. Absolute values below 100% decay; 100% can sustain and larger user-defined values can grow. No hidden limiter or clipping. The feedback loop has at least one STFT hop of delay even when a band's requested delay is shorter."
+        "tooltip": "Spectral delay feedback coefficient; negative reverses feedback polarity. Absolute values below 100% decay; 100% can sustain and larger user-defined values can grow. Tilt attenuates one frequency region; Crossfeed routes the feedback between channels. No hidden limiter or clipping. The feedback loop has at least one STFT hop of delay even when a band's requested delay is shorter."
+      },
+      {
+        "key": "feedbackTiltDb",
+        "label": "Feedback Tilt",
+        "defaultValue": "0",
+        "min": "-24",
+        "mid": "0",
+        "max": "24",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Feedback endpoint contrast in dB, shaped around Frequency Pivot. Positive retains high-frequency feedback and attenuates lows; negative retains lows and attenuates highs. At the Pivot, attenuation is half the absolute Tilt. Zero is flat. This is attenuation-only, not dB per octave or a hidden boost, and does not filter the first echo."
+      },
+      {
+        "key": "crossfeed",
+        "label": "Stereo Crossfeed",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Feedback routing between independent stereo delay histories. Zero keeps each channel separate; 50% mixes both feedback lanes equally; 100% swaps them so a left-only excitation alternates channels on later echoes. The first echo and dry signal stay in their original channels. Mono excitation stays centered; no extra lookahead or latency."
       },
       {
         "key": "mix",

@@ -1,7 +1,7 @@
 # Spectral Delay
 
 Native C++/WASM listening proof on `codex/convolution-resonator`.
-Module Browser: Space. Type `spectralDelay`, native ID 275, version 1.
+Module Browser: Space. Type `spectralDelay`, native ID 275, version 2.
 
 ## First Listening Tests
 
@@ -12,6 +12,11 @@ Module Browser: Space. Type `spectralDelay`, native ID 275, version 1.
 - Long spectral trails: FFT 4096 or 8192, Base 200 ms, Spread 1500 ms,
   Feedback 70%, Mix 70%. Start quietly; no hidden limiter or automatic gain.
 - For a neutral check, Base 0, Spread 0, Feedback 0 reconstructs delayed input.
+- Darker repeats: Feedback Tilt -12 dB. Brighter repeats: +12 dB. The first echo
+  is unchanged; filtering is applied only on subsequent feedback passes.
+- Ping-pong: Stereo Crossfeed 100%, Feedback 60%, Spread 0 and Base 200 ms.
+  Use differing L/R inputs. With this app's mono-fold routing, a single connected
+  input feeds both lanes; for a left-only test, also wire explicit silence to Right.
 
 ## Controls
 
@@ -32,6 +37,17 @@ Module Browser: Space. Type `spectralDelay`, native ID 275, version 1.
   clipping or limiter. Absolute values below 100% decay; unity can sustain and
   user-extended values above unity can grow. A feedback read is always at least
   one hop old, even when the band's requested output delay is shorter.
+- Feedback Tilt: endpoint contrast in dB, default 0. Positive attenuates low-band
+  feedback and retains high-band feedback; negative does the reverse. The shape
+  uses the existing Frequency Pivot independently of Delay Curve. At Pivot,
+  attenuation is half the absolute Tilt in dB. The retained endpoint stays at the
+  main Feedback coefficient; the other is attenuated by abs(Tilt). It is neither
+  dB/octave nor a boost, normalization or change to the first echo/dry signal.
+- Stereo Crossfeed: feedback-routing blend, default 0%. Zero keeps lanes separate;
+  50% averages both feedback lanes; 100% swaps lanes each feedback pass. Read heads
+  are always historical, so channel processing order cannot introduce an extra
+  hop or same-frame feedback. Centered mono remains centered. The initial wet echo
+  stays on its source channel; crossfeed applies only to following repeats.
 - Mix: dry/wet, default 100%. Both channels remain independent; no downmix or
   stereo crossfeed is applied. Mono wiring follows the existing stereo router.
 - Error output: invalid settings/capacity request or detected numerical failure.
@@ -69,7 +85,7 @@ remapping. At long delays the edit can take seconds to become active.
 
 Each core reserves 1,048,576 complex values per channel, using only valid written
 frames after reset. Entire delay histories are not memset on audio callbacks.
-Instance memory is approximately 33.13 MiB from the existing shared native pool;
+Instance memory is approximately 33.25 MiB from the existing shared native pool;
 there is no allocation or memory growth while processing or resizing FFTs.
 Pool exhaustion fails creation explicitly; JavaScript does not substitute DSP.
 
@@ -95,12 +111,15 @@ no private Canvas2D rendering or JavaScript DSP fallback.
   reconstruction, exact integer-hop impulse delay, phase-aware fractional tone,
   feedback echo timing/amplitude and polarity, actual low/high burst arrival
   ordering, capacity errors, local recovery and no processing-time memory growth.
+  Crossfeed tests verify alternating 100% routing and equal 50% routing; Tilt
+  tests verify actual endpoint/pivot gains and an unchanged first echo.
 - `test_spectral_delay_graph.mjs`: Mono/Left/Right/all routing combinations,
   live spread-direction edit, real Error output, pooled native lifecycle and
   sample-by-sample agreement with direct native processing.
 - `test_spectral_delay_browser.mjs`: native plan/audio, real UI timing updates,
   actual worklet FFT changes, capacity telemetry and desktop/mobile GL views.
 
-Listening acceptance remains required, especially fractional-delay texture,
-feedback at extreme values and FFT transitions on long tails. Band-pattern
-editing, feedback tilt, stereo crossfeed and tempo sync remain future work.
+Base delay listening acceptance is complete. Listening acceptance remains for
+Tilt/Crossfeed, extreme feedback and FFT transitions on long tails. Band-pattern
+editing and tempo sync remain future work. No new lookahead or latency is added
+by Tilt/Crossfeed.
