@@ -435,7 +435,8 @@ uniform float uGridDark;
 uniform highp vec4 uGridLamp;
 // The mouse as a module-like light: 1 = it reveals the grid as brightly as a module does (0 = not at all).
 uniform float uGridReflect;
-// TEMPORARY dial-in: x = push the lines at the mouse toward full white (0..1), y = how far the mouse light reaches (1 = a module's reach).
+// TEMPORARY dial-in: x = push the lines at the mouse toward full white (0..1), y = how far the mouse light reaches, in SCREEN (device)
+// px, so it does not change with the zoom.
 uniform vec2 uGridLampMore;
 uniform float uModuleAmt;
 uniform highp vec4 uMouse;
@@ -504,7 +505,8 @@ void main() {
       float ldw = length(vPx - uGridLamp.xy);
       float ld = ldw / max(uGridLamp.z, 1.0);
       lit = clamp(uGridLamp.w * exp(-1.6 * ld * ld), 0.0, 1.0);
-      float ug = ldw / max(uGridMin.x * uGridSpread * uGridLampMore.y, 1.0);
+      // Screen distance to the mouse over a screen-px reach: the mouse light is the same size on screen at every zoom.
+      float ug = (ldw * uZoomPx) / max(uGridLampMore.y, 1.0);
       lampRev = clamp(uGridReflect, 0.0, 4.0) * (1.0 / (1.0 + (ug / 0.3) * (ug / 0.3))) * (1.0 - smoothstep(0.55, 1.0, ug));
     }
     float gridF = 1.0 - uGridDark * (1.0 - lit);
@@ -3584,7 +3586,7 @@ void main() {
       const gridDark = Math.min(ambient, 0.75);
       const lamp = typeof global.nodeGraphRoomLightUniform === "function" ? global.nodeGraphRoomLightUniform() : null;
       if (s.lightGridReflect) gl.uniform1f(s.lightGridReflect, Math.max(0, Math.min(4, Number(grid.reflect) || 0)));
-      if (s.lightGridLampMore) gl.uniform2f(s.lightGridLampMore, Math.max(0, Math.min(1, Number(grid.lampBright) || 0)), Math.max(0.25, Number(grid.lampReach) || 1));
+      if (s.lightGridLampMore) gl.uniform2f(s.lightGridLampMore, Math.max(0, Math.min(1, Number(grid.lampBright) || 0)), Math.max(1, (lo.gridMinX || 140) * (Number(grid.spread) || 1) * Math.max(0.25, Number(grid.lampReach) || 1) * scalePx));
       if (s.lightGridDark) gl.uniform1f(s.lightGridDark, gridDark);
       if (s.lightGridLamp) gl.uniform4f(s.lightGridLamp, lamp ? lamp[0] : 0, lamp ? lamp[1] : 0, lamp ? lamp[2] : 1, lamp ? lamp[3] : 0);
     }
