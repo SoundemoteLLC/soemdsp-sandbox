@@ -78,10 +78,11 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum=function(...args) {
   const beforeDiffusion=await page.evaluate(()=>window.testRoom.length);
   await page.evaluate(id=> {
     updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id,'diffusionMs'),'30');
-    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id,'diffusion'),'1');
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id,'diffusion'),'100');
   },ids.room);
   await page.waitForFunction(old=>window.testRoom?.ready===1 && !window.testRoom.busy && window.testRoom.length>old,beforeDiffusion,{timeout:30000});
   assert.equal(await page.evaluate(()=>window.testRoom.error),0);
+  assert.equal(await page.evaluate(id=>Number(nodeGraphMvp.patch.nodes.find(n=>n.id===id).params.diffusion),ids.room),1,'100% UI entry reaches full native diffusion amount');
   for(const width of [1280,390]) {
     await page.setViewportSize({width,height:1000});
     await page.evaluate(id=> {
