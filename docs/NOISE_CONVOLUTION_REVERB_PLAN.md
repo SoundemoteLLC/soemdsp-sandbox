@@ -198,3 +198,26 @@ rate. Positive endpoints interpolate logarithmically using Spectral Shape;
 either direction is allowed. A zero endpoint uses linear interpolation to avoid
 logarithms of zero; two zero endpoints generate a silent IR. Old instances
 should be respawned for the new parameters. No compatibility work is required.
+
+### Parameter-Edit Crackle Fix
+
+Native version 6 corrects bank recycling and transition behavior:
+
+- Clear a recycled bank's pending output horizon before rebuilding; align its
+  output cursor with the live bank before activation.
+- Warm the new bank for its largest FFT hop using shared input history before
+  a 20 ms smoothstep output crossfade. Short direct-only kernels need no FFT warmup.
+- Finish an immutable build/transition, then accept the latest requested values.
+  Continuous edits no longer restart every build or overwrite active build state.
+- Limit generation to 512 taps, normalization to 4096 taps and partition building
+  to one stereo partition per call. Long kernels take longer to update rather
+  than performing the entire normalization/generation burst on one callback.
+- Reserve spectrum storage for the full final partition, even when the kernel
+  ends partway through it. The old allocation could overlap adjacent state.
+
+Transition regression tests cover direct/FFT and recycled banks at 44.1/48/96 kHz
+against steady-state tap sums. `test_noise_conv_reverb_extremes.mjs --baseline`
+intentionally fails on the pre-fix `ad44142c` binary. Current tests pass. A stronger
+six-second impulse comparison now matches the generated IR within 3e-9; the old
+tail-energy checks alone did not catch the allocation problem. Browser checks pass.
+Actual knob-movement listening acceptance remains with Architect.
