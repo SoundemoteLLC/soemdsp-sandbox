@@ -535,7 +535,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.7-dark-velvet-taps-snhit-1-beats-1-vbip-1-vrbknobs1-v12s1-v6s1-stg1-skw1-stg6-gap1-stg7-trand1-stg11-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-cnoclip1-lowcut1-nseed1-bump1-edge1-vfit1-mnoclip1-vblk1-vflt1-shapes3-mping1-vfltdef1-nconv1-cres31";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.16.7-dark-velvet-taps-snhit-1-beats-1-vbip-1-vrbknobs1-v12s1-v6s1-stg1-skw1-stg6-gap1-stg7-trand1-stg11-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-cnoclip1-lowcut1-nseed1-bump1-edge1-vfit1-mnoclip1-vblk1-vflt1-shapes3-mping1-vfltdef1-nconv1-cres32";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -3600,7 +3600,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-graph-parameter-smoother-filters.js?v=smooth-gpu-3p-1",
   // Bypass passthrough maps + frame eval (shared with main thread).
   "./public/node-graph-module-bypass.js?v=purr-1-cpluck1-nconv1-voc1",
-  "./public/node-graph-efficient-product.js?v=purr-1-cpluck1-nconv1-cres31",
+  "./public/node-graph-efficient-product.js?v=purr-1-cpluck1-nconv1-cres32",
   "./public/node-live-audio-worklet-core.js?v=softpop-ship-1",
   // Phase D: class methods extracted from core (must follow class definition).
   "./public/node-graph-segment-curves.js?v=segment-curves-1-sg-overhaul-1",
@@ -3621,7 +3621,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1-limits-print-2-budget",
-  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.16.8-pcache-lvlports1-dvel-3-snhit-1-beats-1-vrbknobs1-stg1-mgap1-stg6-gap1-stg7-trand1-stg10-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-cpluck2-lowcut1-nseed1-edge1-voff1-vflt1-shapes3-vfltdef1-nconv1-cres31",
+  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.16.8-pcache-lvlports1-dvel-3-snhit-1-beats-1-vrbknobs1-stg1-mgap1-stg6-gap1-stg7-trand1-stg10-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-cpluck2-lowcut1-nseed1-edge1-voff1-vflt1-shapes3-vfltdef1-nconv1-cres32",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=step-register-1-limits-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",

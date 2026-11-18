@@ -12,6 +12,13 @@ if (!(Test-Path -LiteralPath $clang)) {
 # instead of one repeated clang++ invocation per module. Add a new module by
 # adding one entry here (Name, Exports, and Simd only if it uses <wasm_simd128.h>).
 $modules = @(
+  @{ Name = "early_reflection_convolution"; Simd = $false; Exports = @(
+    "soemdsp_early_reflection_convolution_create", "soemdsp_early_reflection_convolution_destroy", "soemdsp_early_reflection_convolution_reset",
+    "soemdsp_early_reflection_convolution_configure", "soemdsp_early_reflection_convolution_sample", "soemdsp_early_reflection_convolution_right",
+    "soemdsp_early_reflection_convolution_ready", "soemdsp_early_reflection_convolution_error", "soemdsp_early_reflection_convolution_busy",
+    "soemdsp_early_reflection_convolution_ir_length", "soemdsp_early_reflection_convolution_ir_sample", "soemdsp_early_reflection_convolution_latency",
+    "soemdsp_early_reflection_convolution_version", "soemdsp_early_reflection_convolution_metadata_json", "soemdsp_early_reflection_convolution_metadata_json_size"
+  ) }
   @{ Name = "spectral_freeze"; Simd = $false; Exports = @(
     "soemdsp_spectral_freeze_create", "soemdsp_spectral_freeze_destroy", "soemdsp_spectral_freeze_reset",
     "soemdsp_spectral_freeze_sample", "soemdsp_spectral_freeze_right", "soemdsp_spectral_freeze_held",

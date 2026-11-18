@@ -295,6 +295,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   vocoder: 269,
   spectralBlur: 272,
   spectralFreeze: 273,
+  earlyReflectionConvolution: 274,
   stftContrast: 270,
   stftGate: 271,
 });
@@ -637,6 +638,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
+  if (t === "earlyReflectionConvolution") {
+    const ids = { roomWidth:31, roomDepth:43, roomHeight:41, sourceX:70, sourceY:71, sourceZ:30,
+      listenerX:80, listenerY:81, listenerZ:82, absorption:20, dampingHz:10, earDistance:1, reflectionOrder:22, mix:40 };
+    if (Object.prototype.hasOwnProperty.call(ids, k)) return ids[k];
+  }
   if (t === "spectralFreeze") {
     if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "captureBlendMs") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
@@ -950,6 +956,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   const t = String(type || "").trim();
   if (t === "stftGate" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "spectralFreeze" && p === "held") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
+  if (t === "earlyReflectionConvolution" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
+  if (t === "earlyReflectionConvolution" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "sturmianGrid") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "snare") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -3718,6 +3726,7 @@ NodeLiveAudioProcessor.prototype.postNativeGraphStatus = function postNativeGrap
 // Discrete Controls: push snapped targets (avoid fractional enum while ramping).
 NodeLiveAudioProcessor.NATIVE_GRAPH_DISCRETE_PARAMS = Object.freeze({
   recapture: true,
+  reflectionOrder: true,
   freeze: true,
   fftSize: true,
   waveform: true,
@@ -6169,6 +6178,14 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("tailRandom", P.NATIVE_GRAPH_PARAM_CENTER, cont("tailRandom", 1));
       push("tailCurve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("tailCurve", 0));
       push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 1));
+      continue;
+    }
+    if (type === "earlyReflectionConvolution") {
+      for (const [key, value] of Object.entries({ roomWidth:4, roomDepth:5, roomHeight:2.5, sourceX:.3, sourceY:.3,
+        sourceZ:.5, listenerX:.6, listenerY:.7, listenerZ:.5, absorption:.6, dampingHz:12000, earDistance:.18, mix:.35 })) {
+        push(key, this.mapNativeGraphParamId(type, key), cont(key, value));
+      }
+      push("reflectionOrder", P.NATIVE_GRAPH_PARAM_STAGES, disc("reflectionOrder", 3));
       continue;
     }
     if (type === "spectralFreeze") {

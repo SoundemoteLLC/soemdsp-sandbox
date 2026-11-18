@@ -90,16 +90,26 @@ Goal: kernels that turn impulses into recognizable or invented struck objects.
 Proof: inspect modal frequencies/decays, low-frequency behavior, response to
 single-sample excitation and sustained input. Retuning must have a defined policy.
 
-## 5. Early Reflection Designer
+## 5. Early Reflection Convolution
 
 Goal: tiny rooms, tunnels, slap clusters and impossible reflection geometry.
 
-- [ ] Prototype reflection times, amplitudes, damping and stereo placement.
-- [ ] Decide whether this belongs in Noise Convolution Reverb or a separate
-  editable reflection tool after comparing the actual workflows.
-- [ ] Candidate controls: Room Size, Reflection Density, Damping and Spread.
+The existing tap-based module is named Early Reflection Delay (stable type
+`earlyReflections`). The planned new room/IR module is Early Reflection
+Convolution; these are distinct modules, not two names for the same DSP.
+
+- [x] Native rectangular-room IR proof: reflection times, inverse-distance gains,
+  absorption, damping and spaced stereo receivers. See
+  [EARLY_REFLECTION_CONVOLUTION.md](EARLY_REFLECTION_CONVOLUTION.md).
+- [x] Separate Early Reflection Convolution module; Noise Convolution remains
+  the dense noise-kernel tool, Early Reflection Delay remains the tap/drift tool.
+- [x] Room dimensions, source/listener position, Order, Absorption, Damping,
+  Ear Distance and Mix. Ready/Error expose kernel availability/capacity failures.
 - [ ] Prefer sparse delay taps when cheaper than dense FFT convolution; support
   fractional-delay placement deliberately rather than quantizing casually.
+
+Current proof uses two-sample fractional placement and dense convolution for the
+damped path tails. Sparse/dense cost comparison and listening acceptance remain.
 
 Proof: impulse arrivals match specified paths; room-size edits do not produce
 unintended glitches; stereo/mono behavior and direct-path handling are explicit.

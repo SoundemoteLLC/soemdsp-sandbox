@@ -700,7 +700,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   earlyReflections: {
     category: "space",
     description: "Exponential early-reflection taps with seeded random offset, mix, and FBM drift (speed + amp).",
-    label: "Early Reflections",
+    label: "Early Reflection Delay",
     notes: ["delay", "early reflections", "exponential", "taps", "seed", "random offset", "mix", "fbm", "drift", "drift speed", "drift amp", "native", "experimental"],
   },
   bitConverter: {
@@ -1096,6 +1096,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Dark Velvet Noise (DVN) O(1) boxcar FIR diffuser: a sparse-tap reverb: Density spaces the taps, Decay is the tail length (RT60), Tail Darkness darkens the tail. The face shows where the taps land.",
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
+  },
+  earlyReflectionConvolution: {
+    category: "space", label: "Early Reflection Convolution",
+    description: "Design a rectangular room impulse response from image-source reflections. Native FFT convolution, stereo receivers, wall absorption and damping, with crossfaded room edits.",
+    notes: ["room", "early reflections", "convolution", "FFT", "image source", "tiny room", "native"],
   },
   spectralFreeze: {
     category: "space", label: "Spectral Freeze",
@@ -3941,6 +3946,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   vocoder: {
     source: "native_modules/vocoder/vocoder.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/vocoder/vocoder.cpp",
+  },
+  earlyReflectionConvolution: {
+    source: "native_modules/early_reflection_convolution/early_reflection_convolution.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/early_reflection_convolution/early_reflection_convolution.cpp",
   },
   spectralFreeze: {
     source: "native_modules/spectral_freeze/spectral_freeze.cpp",

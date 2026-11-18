@@ -839,6 +839,14 @@ extern "C" double soemdsp_vocoder_sample(int handle, double modL, double modR,
 extern "C" double soemdsp_vocoder_right(int handle);
 extern "C" int soemdsp_spectral_blur_create();
 extern "C" int soemdsp_spectral_freeze_create();
+extern "C" int soemdsp_early_reflection_convolution_create();
+extern "C" void soemdsp_early_reflection_convolution_destroy(int h);
+extern "C" int soemdsp_early_reflection_convolution_configure(int h,double width,double depth,double height,
+  double sx,double sy,double sz,double lx,double ly,double lz,double absorption,double damping,double ears,int order,double rate);
+extern "C" double soemdsp_early_reflection_convolution_sample(int h,double l,double r,double mix);
+extern "C" double soemdsp_early_reflection_convolution_right(int h);
+extern "C" double soemdsp_early_reflection_convolution_ready(int h);
+extern "C" double soemdsp_early_reflection_convolution_error(int h);
 extern "C" void soemdsp_spectral_freeze_destroy(int h);
 extern "C" double soemdsp_spectral_freeze_sample(int h, double l, double r, double gate, double recapture,
   double decay, double diffusion, double spread, double mix, double rate);
@@ -2621,6 +2629,7 @@ static const int kTypeConvolutionResonator = 268;
 static const int kTypeVocoder = 269;
 static const int kTypeSpectralBlur = 272;
 static const int kTypeSpectralFreeze = 273;
+static const int kTypeEarlyReflectionConvolution = 274;
 static const int kTypeStftContrast = 270;
 static const int kTypeStftGate = 271;
 
@@ -3302,6 +3311,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_spectral_blur_destroy(handle);
   } else if (kind == kTypeSpectralFreeze) {
     soemdsp_spectral_freeze_destroy(handle);
+  } else if (kind == kTypeEarlyReflectionConvolution) {
+    soemdsp_early_reflection_convolution_destroy(handle);
   } else if (kind == kTypeStftContrast) {
     soemdsp_stft_contrast_destroy(handle);
   } else if (kind == kTypeStftGate) {
@@ -5031,6 +5042,13 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.diffusionAmount, 0, false); init_control(n.pan, 1, false);
     init_control(n.mix, 1, false);
   }
+  if (typeId == kTypeEarlyReflectionConvolution) {
+    init_control(n.width,4,false); init_control(n.delaySize,5,false); init_control(n.diffusionSize,2.5,false);
+    init_control(n.amplitude,.3,false); init_control(n.offset,.3,false); init_control(n.center,.5,false);
+    init_control(n.inLow,.6,false); init_control(n.inHigh,.7,false); init_control(n.outLow,.5,false);
+    init_control(n.resonance,.6,false); init_control(n.frequency,12000,false); init_control(n.pan,.18,false);
+    init_control(n.stages,3,true); init_control(n.mix,.35,false);
+  }
   if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
     const bool gate = typeId == kTypeStftGate;
     init_control(n.shape, gate ? 0.5 : -0.35, false);
@@ -5858,6 +5876,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeVocoder) return soemdsp_vocoder_create();
   if (typeId == kTypeSpectralBlur) return soemdsp_spectral_blur_create();
   if (typeId == kTypeSpectralFreeze) return soemdsp_spectral_freeze_create();
+  if (typeId == kTypeEarlyReflectionConvolution) return soemdsp_early_reflection_convolution_create();
   if (typeId == kTypeStftContrast) return soemdsp_stft_contrast_create();
   if (typeId == kTypeStftGate) return soemdsp_stft_gate_create();
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
@@ -15975,6 +15994,32 @@ static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
   }
 }
 
+static void process_early_reflection_convolution(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  using namespace soemdsp::routing;
+  const StereoRoute route=stereo_route(probe_stereo_route_wiring(g,node));
+  mix_node_inputs(g,node,frames);
+  for (int f=0;f<frames;++f) {
+    control_frame(g,node,f);
+    soemdsp_early_reflection_convolution_configure(node.nativeHandle,
+      control_audio(g,node.width,f),control_audio(g,node.delaySize,f),control_audio(g,node.diffusionSize,f),
+      control_audio(g,node.amplitude,f),control_audio(g,node.offset,f),control_audio(g,node.center,f),
+      control_audio(g,node.inLow,f),control_audio(g,node.inHigh,f),control_audio(g,node.outLow,f),
+      control_audio(g,node.resonance,f),control_audio(g,node.frequency,f),control_audio(g,node.pan,f),
+      (int)control_audio(g,node.stages,f),g.sampleRate);
+    const double m=g.mixMono[f],l=g.mixLeft[f],r=g.mixRight[f];
+    const double a=stereo_route_feed(route.runMono ? route.feedMono : route.feedL,m,l,r);
+    const double b=stereo_route_feed(route.feedR,m,l,r);
+    const double y=soemdsp_early_reflection_convolution_sample(node.nativeHandle,a,b,control_audio(g,node.mix,f));
+    const double yr=soemdsp_early_reflection_convolution_right(node.nativeHandle);
+    node.buf[kPortMono][f]=stereo_route_out(route.outMono,y,y,yr);
+    node.buf[kPortLeft][f]=stereo_route_out(route.outLeft,y,y,yr);
+    node.buf[kPortRight][f]=stereo_route_out(route.outRight,y,y,yr);
+    node.buf[kPortPhase01][f]=soemdsp_early_reflection_convolution_ready(node.nativeHandle);
+    node.buf[kPortIsIdle][f]=soemdsp_early_reflection_convolution_error(node.nativeHandle);
+  }
+}
+
 static void process_spectral_freeze(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   using namespace soemdsp::routing;
@@ -17566,6 +17611,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeNoiseConvReverb
     || typeId == kTypeConvolutionResonator
     || typeId == kTypeVocoder
+    || typeId == kTypeEarlyReflectionConvolution
     || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralFreeze
     || typeId == kTypeSampleHold
     || typeId == kTypeMinMax
@@ -17730,7 +17776,7 @@ static bool type_needs_native(int typeId) {
 // Adding or removing one makes the host rebuild the engine, and their capacity is the node count
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
-  if (typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
+  if (typeId == kTypeEarlyReflectionConvolution || typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
     || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralFreeze) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
@@ -19192,6 +19238,9 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeSpectralFreeze) {
       process_spectral_freeze(g, node, frames); return;
+    }
+    if (node.typeId == kTypeEarlyReflectionConvolution) {
+      process_early_reflection_convolution(g,node,frames); return;
     }
     if (node.typeId == kTypeStftContrast || node.typeId == kTypeStftGate || node.typeId == kTypeSpectralBlur) {
       process_stft_dynamics(g, node, frames);

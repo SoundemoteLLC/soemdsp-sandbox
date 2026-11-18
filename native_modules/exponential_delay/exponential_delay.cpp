@@ -1,5 +1,5 @@
 // soemdsp-native-module: exponential_delay
-// soemdsp-native-label: Early Reflections
+// soemdsp-native-label: Early Reflection Delay
 // soemdsp-native-target: earlyReflections
 // soemdsp-native-kind: delay
 //
