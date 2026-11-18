@@ -7350,11 +7350,52 @@ const nodeGraphModuleDefinitions = (
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
     displayType: "scope1dTrace",
     face: [
-      { kind: "cells", params: [["freeze", "Freeze", "button", { onLabel: "Frozen" }]], h: 26 },
+      { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["freeze", "Freeze", "button", { onLabel: "Frozen" }], ["recapture", "Recapture", "button", { action: "increment" }]], h: 26 },
+      { kind: "cells", params: [["captureBlendMs", "Capture Blend"], ["refreshHz", "Refresh Rate"]], h: 40 },
       { kind: "cells", params: [["decaySeconds", "Decay"], ["diffusion", "Diffusion"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["mix", "Mix"]], h: 40 },
     ],
     parameters: [
+      {
+        "key": "fftSize",
+        "label": "FFT Size",
+        "kind": "choice",
+        "choices": [
+          "512",
+          "1024",
+          "2048",
+          "4096",
+          "8192",
+          "16384"
+        ],
+        "choiceKeys": [
+          "512",
+          "1024",
+          "2048",
+          "4096",
+          "8192",
+          "16384"
+        ],
+        "choiceIds": [
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384
+        ],
+        "defaultValue": "4096",
+        "min": "0",
+        "mid": "2.5",
+        "max": "5",
+        "step": "1",
+        "unit": "samples",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "Analysis window and processing delay in samples. Smaller windows capture shorter moments; larger windows resolve bass and harmonics. Edits preserve the held spectrum through remapping, warming and Capture Blend, not a new live capture. Delay follows size; plugin-host compensation is unverified."
+      },
       {
         "key": "freeze",
         "label": "Freeze",
@@ -7380,6 +7421,46 @@ const nodeGraphModuleDefinitions = (
         "displayChoices": true,
         "divideChoicesVisibly": false,
         "tooltip": "Frozen captures a complete analysis window and sustains its spectrum with evolving phase. Live releases to delayed input. A wired Freeze gate overrides this switch; rising high captures, low releases. Held reports a completed active capture."
+      },
+      {
+        "key": "recapture",
+        "label": "Recapture",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "1",
+        "max": "16777215",
+        "step": "1",
+        "control": "number",
+        "linearSmoothing": false,
+        "tooltip": "Button action counter: every click requests a new capture while Frozen. Requests are latched until an available FFT capture boundary; rapid requests coalesce. The wired Recapture input remains a rising-edge trigger.",
+        "modulation": false,
+        "parameterOutput": false
+      },
+      {
+        "key": "captureBlendMs",
+        "label": "Capture Blend",
+        "kind": "time",
+        "defaultValue": "20",
+        "min": "0",
+        "mid": "50",
+        "max": "1000",
+        "step": "any",
+        "unit": "ms",
+        "nonlinearSlider": true,
+        "tooltip": "Crossfade duration between warmed held states after recapture or an FFT-size edit. Zero switches directly after warm-up. Does not smooth or compress the held sound itself. Rapid requests queue the latest capture."
+      },
+      {
+        "key": "refreshHz",
+        "label": "Refresh Rate",
+        "kind": "frequency",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "1",
+        "max": "20",
+        "step": "any",
+        "unit": "Hz",
+        "nonlinearSlider": true,
+        "tooltip": "Rate at which the held spectrum gradually admits live power and phase-advance estimates. Zero holds the captured material unchanged. Rate 1 Hz means a one-second exponential time constant; this is not periodic hard recapture."
       },
       {
         "key": "decaySeconds",
@@ -7425,7 +7506,7 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "unit": "%",
         "step": "any",
-        "tooltip": "Live/held blend, aligned to 4096 samples. Capture/release uses a separate 20 ms handoff. Recapture takes effect at the next analysis hop while Frozen. This is not a looper or a repeated frozen FFT frame."
+        "tooltip": "Live/held blend aligned to the selected FFT Size. Capture/release has a separate 20 ms handoff; Capture Blend controls replacement of held states. Held reports an active ready capture."
       }
     ],
   },

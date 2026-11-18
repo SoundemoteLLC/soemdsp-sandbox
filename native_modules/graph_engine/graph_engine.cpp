@@ -844,6 +844,7 @@ extern "C" double soemdsp_spectral_freeze_sample(int h, double l, double r, doub
   double decay, double diffusion, double spread, double mix, double rate);
 extern "C" double soemdsp_spectral_freeze_right(int h);
 extern "C" double soemdsp_spectral_freeze_held(int h);
+extern "C" int soemdsp_spectral_freeze_configure(int h, int length, double blendMs, double refreshHz, double recaptureCount);
 extern "C" void soemdsp_spectral_blur_destroy(int h);
 extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double seconds,
   double hz, double diffusion, double mix, double rate);
@@ -5024,6 +5025,8 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.diffusionSize, 0, false);
   }
   if (typeId == kTypeSpectralFreeze) {
+    init_control(n.stages, 4096, true); init_control(n.offsetMs, 20, false);
+    init_control(n.width, 0, false); init_control(n.waveform, 0, true);
     init_control(n.mode, 0, true); init_control(n.timeNumerator, 0, false);
     init_control(n.diffusionAmount, 0, false); init_control(n.pan, 1, false);
     init_control(n.mix, 1, false);
@@ -15984,6 +15987,8 @@ static void process_spectral_freeze(Circuit& g, Node& node, int frames) {
     const double m = g.mixMono[f], l = g.mixLeft[f], r = g.mixRight[f];
     const double a = stereo_route_feed(route.runMono ? route.feedMono : route.feedL, m, l, r);
     const double b = stereo_route_feed(route.feedR, m, l, r);
+    soemdsp_spectral_freeze_configure(node.nativeHandle, (int)control_audio(g, node.stages, f),
+      control_audio(g, node.offsetMs, f), control_audio(g, node.width, f), control_audio(g, node.waveform, f));
     const double y = soemdsp_spectral_freeze_sample(node.nativeHandle, a, b,
       liveGate ? g.mixPhaseCv[f] : control_audio(g, node.mode, f),
       liveCapture ? g.mixReset[f] : 0, control_audio(g, node.timeNumerator, f),

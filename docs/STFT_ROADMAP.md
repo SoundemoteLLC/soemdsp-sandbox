@@ -103,8 +103,9 @@ them simultaneously. Proposed order follows musical value and implementation ris
   analysis frame. See [SPECTRAL_FREEZE.md](SPECTRAL_FREEZE.md).
 - [x] Sustain with captured phase advance, optional diffusion and stereo spread.
 - [x] Decay including explicit infinite hold, Mix and Held output.
-- [ ] Refresh/Blend and user listening acceptance.
-- [ ] Later: frequency diffusion, pitch/formant controls, stereo spread.
+- [x] FFT sizes 512..16384, Capture Blend (ms), Refresh Rate (Hz), Recapture button.
+- [ ] User listening acceptance for size remapping, refresh and recapture blend.
+- [ ] Later: frequency diffusion, pitch/formant controls, capture persistence.
 - Proof: silence remains silent; a captured transient sustains without periodic
   frame buzz; capture/release is click-controlled; repeated triggers work.
 - Keep distinct from Gate Hold: Freeze stores/synthesizes sound.

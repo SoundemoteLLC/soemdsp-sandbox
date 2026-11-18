@@ -15,7 +15,8 @@ $modules = @(
   @{ Name = "spectral_freeze"; Simd = $false; Exports = @(
     "soemdsp_spectral_freeze_create", "soemdsp_spectral_freeze_destroy", "soemdsp_spectral_freeze_reset",
     "soemdsp_spectral_freeze_sample", "soemdsp_spectral_freeze_right", "soemdsp_spectral_freeze_held",
-    "soemdsp_spectral_freeze_latency", "soemdsp_spectral_freeze_version", "soemdsp_spectral_freeze_metadata_json", "soemdsp_spectral_freeze_metadata_json_size"
+    "soemdsp_spectral_freeze_latency", "soemdsp_spectral_freeze_version", "soemdsp_spectral_freeze_metadata_json", "soemdsp_spectral_freeze_metadata_json_size",
+    "soemdsp_spectral_freeze_configure", "soemdsp_spectral_freeze_fft_size", "soemdsp_spectral_freeze_latency_for_handle", "soemdsp_spectral_freeze_capture_count"
   ) }
   @{ Name = "spectral_blur"; Simd = $false; Exports = @(
     "soemdsp_spectral_blur_create", "soemdsp_spectral_blur_destroy", "soemdsp_spectral_blur_reset",

@@ -801,6 +801,13 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     if (row && nodeGraphFinishArmedWireOnParamRow(row, event)) return;
   }
   const input = wd.param ? nodeGraphModuleFaceInput(article, wd.param) : null;
+  if (wd.button && wd.buttonOn?.action === "increment" && input) {
+    const min = Number(input.min || 0), max = Number(input.max);
+    const step = Math.max(1, Number(input.step) || 1);
+    const next = nodeGraphModuleFaceValue(input) + step;
+    setNodeGraphModuleFaceValue(input, Number.isFinite(max) && next > max ? min : next, false);
+    return;
+  }
   // "toggle" cell On strip: every click switches the Off/On param (no type-in
   // on double-click, so fast on/off clicks never open the value editor).
   if (wd.type === "cell" && wd.toggle && p.y < wd.y + Math.min(NODE_GRAPH_FACE_TOGGLE_STRIP_PX, wd.h * 0.5) + NODE_GRAPH_FACE_CELL_GAP_PX) {
@@ -1371,7 +1378,7 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       }
       if (wd.button) {
         // One toggle button: the label, lit when on (optional on label / fill).
-        const on = nodeGraphModuleFaceValue(input) >= Number(input?.min || 0) + 0.5;
+        const on = wd.buttonOn?.action !== "increment" && nodeGraphModuleFaceValue(input) >= Number(input?.min || 0) + 0.5;
         if (on) rect(wd.x + gap, top, cw, ch, wd.buttonOn?.onFill || ink.cellValueFill);
         const lab = on && wd.buttonOn?.onLabel ? wd.buttonOn.onLabel : wd.label;
         nodeGraphModuleFaceText(batch, lab, ox + cx * z, oy + (top + ch * 0.5) * z, 13.8 * z, on ? ink.value : ink.label, { maxWidth: (cw - 4) * z });

@@ -67,3 +67,51 @@ for (const sr of [44100, 48000, 96000]) {
   x.soemdsp_spectral_freeze_destroy(h);
   console.log(`${sr}: Live latency, infinite capture, ${measured.toFixed(2)} Hz phase continuation, stereo, release, recapture, decay, silence and recovery pass.`);
 }
+for (const sr of [44100, 48000, 96000]) for (const length of [512,1024,2048,4096,8192,16384]) {
+  const h = x.soemdsp_spectral_freeze_create();
+  assert.equal(x.soemdsp_spectral_freeze_configure(h,length,20,0,0),0);
+  const out = render(h,length+1000,sr,i => [Math.sin(i*0.1)*0.1,0],() => [0,0,0,0,0,1]);
+  for (let i = length; i < out[0].length; ++i) assert.ok(Math.abs(out[0][i]-Math.sin((i-length)*0.1)*0.1)<1e-8);
+  assert.equal(x.soemdsp_spectral_freeze_latency_for_handle(h),length);
+  x.soemdsp_spectral_freeze_destroy(h);
+}
+{
+  const sr=48000,h=x.soemdsp_spectral_freeze_create(), hold=()=>[1,0,0,0,0,1];
+  render(h,sr,sr,i=>[Math.sin(2*Math.PI*440.1*i/sr)*0.1,0],hold);
+  const count=x.soemdsp_spectral_freeze_capture_count(h), memory=x.memory.buffer.byteLength;
+  for (const length of [512,16384,1024,8192,2048,4096]) {
+    x.soemdsp_spectral_freeze_configure(h,length,20,0,0);
+    const out=render(h,sr*2,sr,()=>[0,0],hold);
+    assert.equal(x.soemdsp_spectral_freeze_fft_size(h),length);
+    assert.equal(x.soemdsp_spectral_freeze_capture_count(h),count,'FFT edit must not recapture silent live input');
+    assert.ok(energy(out[0],sr,sr*2)>1e-5,'FFT edit preserves held energy');
+    const hz=pitch(out[0],sr,sr,sr*2);
+    assert.ok(Math.abs(hz-440.1)<5,`held pitch after ${length} FFT remap: ${hz}`);
+  }
+  assert.equal(x.memory.buffer.byteLength,memory);
+  x.soemdsp_spectral_freeze_destroy(h);
+}
+for (const sr of [44100,48000,96000]) {
+  const h=x.soemdsp_spectral_freeze_create(), hold=()=>[1,0,0,0,0,1];
+  render(h,sr,sr,()=>[0.1,0],hold);
+  render(h,20000,sr,()=>[0.3,0],hold);
+  const before=x.soemdsp_spectral_freeze_capture_count(h);
+  x.soemdsp_spectral_freeze_configure(h,4096,200,0,1);
+  const blend=render(h,sr,sr,()=>[0.3,0],hold)[0];
+  assert.equal(x.soemdsp_spectral_freeze_capture_count(h),before+1,'UI count requests capture without a down/up pulse');
+  let jump=0;
+  for (let i=1;i<blend.length;++i) jump=Math.max(jump,Math.abs(blend[i]-blend[i-1]));
+  assert.ok(jump < 0.2*1.6/(0.2*sr)+2e-5,`200 ms capture blend ${sr}: ${jump}`);
+  assert.ok(Math.abs(blend.at(-1)-0.3)<1e-4);
+  x.soemdsp_spectral_freeze_configure(h,4096,0,0,2);
+  render(h,Math.floor(sr/2),sr,()=>[0.3,0],hold);
+  assert.equal(x.soemdsp_spectral_freeze_capture_count(h),before+2,'successive UI requests all work');
+  const unchanged=render(h,sr,sr,()=>[0.05,0],hold)[0];
+  assert.ok(Math.abs(unchanged.at(-1)-0.3)<1e-4,'Refresh 0 remains frozen');
+  x.soemdsp_spectral_freeze_configure(h,4096,20,10,2);
+  const refresh=render(h,sr,sr,()=>[0.05,0],hold)[0];
+  assert.ok(Math.abs(refresh.at(-1)-0.05)<0.002,`10 Hz refresh admits current level ${refresh.at(-1)}`);
+  assert.equal(x.soemdsp_spectral_freeze_configure(h,123,20,0,2),-1);
+  x.soemdsp_spectral_freeze_destroy(h);
+}
+console.log('All FFT sizes/latencies, held-spectrum remapping, UI Recapture counts, Capture Blend and real-Hz Refresh pass.');

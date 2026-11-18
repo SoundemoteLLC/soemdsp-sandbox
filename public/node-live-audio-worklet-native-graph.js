@@ -638,6 +638,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if (t === "spectralFreeze") {
+    if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
+    if (k === "captureBlendMs") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
+    if (k === "refreshHz") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "recapture") return P.NATIVE_GRAPH_PARAM_WAVEFORM;
     if (k === "freeze") return P.NATIVE_GRAPH_PARAM_MODE;
     if (k === "decaySeconds") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
     if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
@@ -3713,6 +3717,7 @@ NodeLiveAudioProcessor.prototype.postNativeGraphStatus = function postNativeGrap
 
 // Discrete Controls: push snapped targets (avoid fractional enum while ramping).
 NodeLiveAudioProcessor.NATIVE_GRAPH_DISCRETE_PARAMS = Object.freeze({
+  recapture: true,
   freeze: true,
   fftSize: true,
   waveform: true,
@@ -6167,6 +6172,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "spectralFreeze") {
+      push("fftSize", P.NATIVE_GRAPH_PARAM_STAGES, disc("fftSize", 4096));
+      push("captureBlendMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("captureBlendMs", 20));
+      push("refreshHz", P.NATIVE_GRAPH_PARAM_WIDTH, cont("refreshHz", 0));
+      push("recapture", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("recapture", 0));
       push("freeze", P.NATIVE_GRAPH_PARAM_MODE, disc("freeze", 0));
       push("decaySeconds", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decaySeconds", 0));
       push("diffusion", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusion", 0));

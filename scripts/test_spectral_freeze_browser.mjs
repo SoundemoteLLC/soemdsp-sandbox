@@ -24,6 +24,12 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     const h = this.nativeGraph.soemdsp_graph_node_native_handle(this.nativeGraphHandle, this.fnv1aHash32(String(id)));
     const held = this.nativeGraph.soemdsp_spectral_freeze_held(h);
     if (held !== this.testFreezeHeld) { this.testFreezeHeld = held; this.port.postMessage({ type: 'test-freeze-held', held }); }
+    const size = this.nativeGraph.soemdsp_spectral_freeze_fft_size(h);
+    const count = this.nativeGraph.soemdsp_spectral_freeze_capture_count(h);
+    if (size !== this.testFreezeSize || count !== this.testFreezeCount) {
+      this.testFreezeSize = size; this.testFreezeCount = count;
+      this.port.postMessage({ type: 'test-freeze-state', size, count });
+    }
   }
   return result;
 };`;
@@ -68,26 +74,41 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
   }
   await page.evaluate(() => {
     window.testHeld = -1;
-    nodeGraphMvp.live.node.port.addEventListener('message', e => { if (e.data?.type === 'test-freeze-held') window.testHeld = e.data.held; });
+    nodeGraphMvp.live.node.port.addEventListener('message', e => {
+      if (e.data?.type === 'test-freeze-held') window.testHeld = e.data.held;
+      if (e.data?.type === 'test-freeze-state') window.testFreezeState = e.data;
+    });
     nodeGraphMvp.live.node.port.start();
   });
-  const clickFreeze = async () => {
-    const point = await page.evaluate(id => {
-      const article = nodeGraphSliderForParameter(id, 'freeze').closest('article');
+  const clickButton = async (param = 'freeze') => {
+    const point = await page.evaluate(({ id, param }) => {
+      const article = nodeGraphSliderForParameter(id, param).closest('article');
       const face = article.querySelector('.node-face');
       const widgets = nodeGraphModuleFaceWidgets(nodeGraphModuleFaceSpecForElement(article), face.offsetWidth, article);
-      const wd = widgets.find(w => w.param === 'freeze');
+      const wd = widgets.find(w => w.param === param);
       if (!wd?.button || wd.horizontal) throw new Error('Freeze must use the shared click-only button');
       const rect = face.getBoundingClientRect(), z = rect.width / face.offsetWidth;
       return { x: rect.left + (wd.x + wd.w / 2) * z, y: rect.top + (wd.y + wd.h / 2) * z };
-    }, ids.freeze);
+    }, { id: ids.freeze, param });
     await page.mouse.click(point.x, point.y);
   };
-  await clickFreeze();
+  await clickButton();
   await page.waitForFunction(() => window.testHeld === 1, null, { timeout: 15000 });
+  for (const count of [2, 3]) {
+    await clickButton('recapture');
+    await page.waitForFunction(n => window.testFreezeState?.count === n, count, { timeout: 15000 });
+  }
   await page.evaluate(id => updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'amplitude'), '0'), ids.source);
   await page.waitForTimeout(500);
   assert.ok(await page.evaluate(() => nodeGraphMvp.live.outputLevelSmooth > 0.00001), 'freeze sustains after source silence');
+  for (const size of [512, 16384, 4096]) {
+    await page.evaluate(({ id, size }) => {
+      const input = nodeGraphSliderForParameter(id, 'fftSize');
+      updateNodeSliderCurrentValue(input, String(size));
+    }, { id: ids.freeze, size });
+    await page.waitForFunction(n => window.testFreezeState?.size === n, size, { timeout: 15000 });
+    assert.equal(await page.evaluate(() => window.testFreezeState.count), 3, 'size change must not recapture silence');
+  }
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(id => {
@@ -98,7 +119,7 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     }, ids.freeze);
     await page.screenshot({ path: path.join(os.tmpdir(), `spectral-freeze-${width}.png`), timeout: 15000 });
   }
-  await clickFreeze();
+  await clickButton();
   await page.waitForFunction(() => window.testHeld === 0 && nodeGraphMvp.live.outputLevelSmooth < 0.00001, null, { timeout: 15000 });
   assert.deepEqual(errors, []);
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(false));

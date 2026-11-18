@@ -11,6 +11,7 @@
 #include <soemdsp/math/scalar_helpers.h>
 #include <soemdsp/math/exp_log.h>
 #include <soemdsp/math/analog_filter_trig.h>
+#include <soemdsp/math/atan2.h>
 #include <soemdsp/nonlinearity/nonlinearity.h>
 
 namespace soemdsp_yellow_graph {
@@ -1167,20 +1168,7 @@ inline float yellow_sinc(float x) {
 }
 
 // Freestanding atan2. Phase of synced bins; identity at axis crossings.
-inline double yellow_atan2(double y, double x) {
-  if (x == 0.0 && y == 0.0) return 0.0;
-  const double ax = soemdsp_maths::dsp_fabs(x);
-  const double ay = soemdsp_maths::dsp_fabs(y);
-  const bool steep = ay > ax;
-  const double z = steep ? (ay > 0.0 ? ax / ay : 0.0) : (ax > 0.0 ? ay / ax : 0.0);
-  const double z2 = z * z;
-  double a = z * (0.99997726 + z2 * (-0.33262347 + z2 * (0.19354346
-    + z2 * (-0.11643287 + z2 * (0.05265332 + z2 * -0.01172120)))));
-  if (steep) a = soemdsp_maths::kPi * 0.5 - a;
-  if (x < 0.0) a = soemdsp_maths::kPi - a;
-  if (y < 0.0) a = -a;
-  return a;
-}
+inline double yellow_atan2(double y, double x) { return soemdsp::math::atan2_approx(y,x); }
 
 // One linear piece w=alpha+beta*θ of a sine partial, onto output bins.
 // Pinch's middle segment is a hold (beta = 0): one sinc per bin, not a chirp.
