@@ -43,7 +43,7 @@ try {
   assert.equal(report.endCutoffHz, 50);
   assert.equal(report.startUnit, 'Hz');
   assert.equal(report.endUnit, 'Hz');
-  assert.equal(report.nativeVersion, 5);
+  assert.equal(report.nativeVersion, 6);
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ...report, errors }));
 } finally { await browser.close(); }

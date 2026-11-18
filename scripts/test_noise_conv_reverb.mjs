@@ -29,7 +29,7 @@ const defMax = (() => {
   }
 })();
 
-ok("version 5", x.soemdsp_noise_conv_reverb_version() === 5, String(x.soemdsp_noise_conv_reverb_version()));
+ok("version 6", x.soemdsp_noise_conv_reverb_version() === 6, String(x.soemdsp_noise_conv_reverb_version()));
 ok("max length 6 s", Math.abs(x.soemdsp_noise_conv_reverb_max_length() - 6) < 1e-12, String(x.soemdsp_noise_conv_reverb_max_length()));
 if (defMax != null) {
   ok("definition Length max matches native max", defMax === x.soemdsp_noise_conv_reverb_max_length(), `def ${defMax}`);
@@ -173,6 +173,15 @@ ok("6 s Length builds a ~6 s IR", ir6 >= 6 * FS - 2 && ir6 <= 6 * FS + 2, String
 x.soemdsp_noise_conv_reverb_reset(h);
 const imp6 = run(h, Math.ceil(6.3 * FS), { ...longP, mix: 1 }, (i) => (i === 0 ? 1 : 0));
 ok("6 s impulse has no NaN or blowup", imp6.nan === 0 && imp6.inf === 0 && imp6.maxAbs > 1e-6 && imp6.maxAbs < 20, `max ${imp6.maxAbs}`);
+let longIrError = 0;
+let longIrErrorAt = 0;
+for (let i = 0; i < imp6.L.length; ++i) {
+  if (Math.abs(imp6.L[i] - x.soemdsp_noise_conv_reverb_ir_sample(h, 0, i)) > longIrError) longIrErrorAt = i;
+  longIrError = Math.max(longIrError,
+    Math.abs(imp6.L[i] - x.soemdsp_noise_conv_reverb_ir_sample(h, 0, i)),
+    Math.abs(imp6.R[i] - x.soemdsp_noise_conv_reverb_ir_sample(h, 1, i)));
+}
+ok("6 s impulse equals the full generated IR", longIrError < 2e-6, `error ${longIrError} at ${longIrErrorAt}`);
 const e6early = energy(imp6.L, 0, Math.floor(0.2 * FS));
 const e6late = energy(imp6.L, Math.floor(5.7 * FS), Math.floor(6.0 * FS));
 const e6after = energy(imp6.L, Math.floor(6.05 * FS), Math.floor(6.25 * FS));

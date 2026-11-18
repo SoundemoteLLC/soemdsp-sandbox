@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import nodeProcess from 'node:process';
 
-const compiled = await WebAssembly.compile(fs.readFileSync(
-  new URL('../native_modules/noise_conv_reverb/noise_conv_reverb.wasm', import.meta.url)));
+const bytes = nodeProcess.argv.includes('--previous-build')
+  ? execFileSync('git', ['show', 'HEAD:native_modules/noise_conv_reverb/noise_conv_reverb.wasm'], { maxBuffer: 1024 * 1024 })
+  : fs.readFileSync(new URL('../native_modules/noise_conv_reverb/noise_conv_reverb.wasm', import.meta.url));
+const compiled = await WebAssembly.compile(bytes);
 let x, block, pointers;
 const defaults = { amp: 0, spectral: 0, endCutoffHz: 120, startCutoffHz: 1500, decor: 1 };
 
@@ -29,7 +33,7 @@ function process(h, sr, length, p, inputL, inputR = inputL) {
 }
 
 function kernel(h, sr, length, p) {
-  process(h, sr, length, p, new Float64Array(Math.ceil(sr * 0.2)));
+  process(h, sr, length, p, new Float64Array(Math.ceil(sr * (0.2 + length * 1.25))));
   const n = x.soemdsp_noise_conv_reverb_ir_length(h);
   assert.equal(n, Math.max(1, Math.round(length * sr)));
   return [0, 1].map(ch => Float64Array.from({ length: n }, (_, i) =>
@@ -89,6 +93,30 @@ for (const sr of [44100, 48000, 96000]) {
       { ...defaults, startCutoffHz: [5, 1500, 16000][i % 3] }, new Float64Array(256).fill(0.1));
     const zero = kernel(h, sr, 0.025, { ...defaults, startCutoffHz: 0, endCutoffHz: 0 });
     for (const channel of zero) assert.ok(channel.every(value => value === 0), '0 Hz means zero cutoff, not a normalized minimum');
+    // A DC input makes the correct output of each warmed kernel exactly its tap sum.
+    // Every edit must remain a smooth convex blend, including recycled FFT banks.
+    for (const [fromLength, toLength, start, end] of [
+      [0.001, 0.05, 1500, 5], [0.05, 0.001, 5, 1500],
+      [0.05, 0.5, 1500, 120], [0.5, 0.025, 120, 50],
+    ]) {
+      const a = { ...defaults, startCutoffHz: start, endCutoffHz: start };
+      const b = { ...defaults, startCutoffHz: end, endCutoffHz: end };
+      const target = kernel(h, sr, toLength, b).map(c => c.reduce((s, v) => s + v, 0));
+      const initial = kernel(h, sr, fromLength, a).map(c => c.reduce((s, v) => s + v, 0));
+      process(h, sr, fromLength, a, new Float64Array(sr).fill(1));
+      const output = process(h, sr, toLength, b, new Float64Array(sr).fill(1));
+      for (let ch = 0; ch < 2; ++ch) {
+        const lo = Math.min(initial[ch], target[ch]), hi = Math.max(initial[ch], target[ch]);
+        const stepLimit = Math.abs(target[ch] - initial[ch]) * 1.6 / (0.02 * sr) + 2e-4;
+        let previous = initial[ch];
+        for (const value of output[ch]) {
+          assert.ok(value >= lo - 2e-4 && value <= hi + 2e-4, `no stale/unprimed output ${sr} ${fromLength}->${toLength}`);
+          assert.ok(Math.abs(value - previous) < stepLimit, `smooth edit ${sr} ${fromLength}->${toLength}`);
+          previous = value;
+        }
+        assert.ok(Math.abs(previous - target[ch]) < 2e-4, 'latest kernel is reached');
+      }
+    }
     console.log(`${sr} Hz: 1-sample/1..50 ms energy, endpoints, direct convolution, dark range, stereo and rapid edits pass.`);
   } finally { x.soemdsp_noise_conv_reverb_destroy(h); }
 }
