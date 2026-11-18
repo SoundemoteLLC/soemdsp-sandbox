@@ -22,6 +22,9 @@ const definition = vm.runInNewContext(`({${definitions.slice(start, end)}}).voco
 assert.deepEqual(JSON.parse(JSON.stringify(definition.parameters)), metadata.parameters,
   "C++ metadata and the current UI definitions must agree, including tooltips");
 assert.deepEqual(Array.from(definition.inputs), metadata.inputs);
+assert.deepEqual(JSON.parse(JSON.stringify(definition.inputAliases)), {
+  "Mod L": "Voice L", "Mod R": "Voice R", "Car L": "Synth L", "Car R": "Synth R"
+}, "existing listening patches retain their wiring");
 assert.equal(definition.displayType, "scope1dTrace");
 const h = create(), isolated = create();
 assert.ok(h && isolated && h !== isolated);

@@ -1097,7 +1097,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   vocoder: {
     category: "analogFilter",
-    description: "32-band native IIR vocoder: external modulator and carrier, narrow ringing bands through broad crunchy overlap, fast followers, and 2x oversampling. A single cable into either side of each input pair feeds both channels.",
+    description: "32-band native IIR vocoder: external voice and synth, narrow ringing bands through broad crunchy overlap, fast followers, and 2x oversampling. A single cable into either side of each input pair feeds both channels.",
     label: "Vocoder",
     notes: ["vocoder", "filter bank", "voice", "carrier", "ringing", "native"],
   },

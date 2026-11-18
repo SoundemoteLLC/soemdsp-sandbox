@@ -32,7 +32,7 @@ try {
     patch.nodes.find(n => n.id === car).params = { waveform: 1, frequency: 110, amplitude: 0.2 };
     const wire = (sourceNode, sourcePort, destinationNode, destinationPort) =>
       ({ sourceNode, sourcePort, destinationNode, destinationPort });
-    patch.connections = [wire(mod, "Wave", vocoder, "Mod L"), wire(car, "Wave", vocoder, "Car L"),
+    patch.connections = [wire(mod, "Wave", vocoder, "Voice L"), wire(car, "Wave", vocoder, "Synth L"),
       wire(vocoder, "Left", output.id, "Left"), wire(vocoder, "Right", output.id, "Right")];
     patch.modulations = [];
     commitNodeGraphPatch(patch, { status: "Vocoder browser test" });

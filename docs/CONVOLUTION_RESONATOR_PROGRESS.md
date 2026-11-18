@@ -16,7 +16,7 @@ is made. Order, flatness, and variable band count remain future work.
 
 - Native type 269, `native_modules/vocoder/vocoder.cpp`, category Analog Filter.
 - Replaces the old parked Vocoder placeholder; no duplicate module or JS DSP.
-- Mod L/R and Car L/R inputs. One connected side of either pair feeds both
+- Voice L/R and Synth L/R inputs. One connected side of either pair feeds both
   channels; two connected sides are independent stereo. Mono averages L/R.
 - Band Width (spawn range 0.001..4 oct), Follower (0..20 ms), Formant Shift,
   and Mix. Width remains editable near zero for narrow ringing bands.
@@ -44,7 +44,7 @@ Warm WASM graph processing measured about 9..10% of one realtime budget at
 48 kHz for one stereo 32-band instance on this machine. This includes graph
 and resampling work, excludes UI, and is not a DAW CPU or 100-band estimate.
 
-Listening: wire music/voice to Mod L/R and a bright oscillator to Car L/R;
+Listening: wire music/voice to Voice L/R and a bright oscillator to Synth L/R;
 use Mix 1. Try Band Width 0.01 with Follower 0 for narrow ringing, then widen
 the bands for overlap/crunch. There is no internal carrier in this module.
 Keep the resonator comparison until the standalone sound is confirmed.

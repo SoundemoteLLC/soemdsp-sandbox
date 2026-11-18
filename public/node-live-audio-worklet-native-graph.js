@@ -1581,10 +1581,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   const p = raw.toLowerCase();
   const tDst = String(type || "").trim();
   if (tDst === "vocoder") {
-    if (p === "mod l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
-    if (p === "mod r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
-    if (p === "car l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_L;
-    if (p === "car r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_R;
+    if (p === "voice l" || p === "mod l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "voice r" || p === "mod r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "synth l" || p === "car l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_L;
+    if (p === "synth r" || p === "car r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_R;
   }
   if (tDst === "sturmianGrid") {
     if (p === "restart") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
