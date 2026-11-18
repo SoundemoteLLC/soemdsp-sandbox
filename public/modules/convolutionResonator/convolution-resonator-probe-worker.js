@@ -2,7 +2,7 @@
 let engine;
 self.onmessage = async ({ data: job }) => {
   try {
-    if (!engine) engine = fetch(new URL("../../../native_modules/convolution_resonator/convolution_resonator.wasm?v=cres10", self.location.href))
+    if (!engine) engine = fetch(new URL("../../../native_modules/convolution_resonator/convolution_resonator.wasm?v=cres17", self.location.href))
       .then(response => { if (!response.ok) throw new Error(`Native probe HTTP ${response.status}`); return response.arrayBuffer(); })
       .then(bytes => WebAssembly.instantiate(bytes, {})).then(result => result.instance.exports);
     const wasm = await engine;

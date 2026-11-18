@@ -10,8 +10,9 @@ Current listening gate: the STFT implementation works but did not meet Argi's
 Vocodex-like sound target. Argi confirmed that the IIR filter-bank comparison
 has the desired family of character, especially very narrow, ringing bands.
 It is now also available as a standalone Vocoder; no exact Vocodex-match claim
-is made. Standalone band count now spans 5..100; Order and Flatness remain
-future work.
+is made. The temporary comparison is now removed from Convolution Resonator;
+all filter-bank features live in standalone Vocoder, with 5..100 bands.
+Order and Flatness remain future work.
 
 ## Standalone Vocoder Extraction
 
@@ -23,8 +24,8 @@ future work.
   and Mix. Width remains editable near zero for narrow ringing bands.
 - Originally 32 bands, rectified one-pole envelopes, independent stereo carrier filters.
   Mix blends the dry modulator, not a hidden oscillator or carrier passthrough.
-- The bank and 2x resampler now live beside Vocoder. The resonator comparison
-  uses that same implementation; existing mono-carrier results match exactly.
+- The bank and 2x resampler live beside Vocoder. Only the generic resampler is
+  still shared by Convolution Resonator's STFT path; no bank DSP remains there.
 - No STFT or body processing in the standalone path. Its resampling reference
   delay is 128 samples, not the resonator's 2184. IIR group delay/ringing still
   vary with frequency and bandwidth. Dry is delayed by the same 128 samples.
@@ -48,12 +49,12 @@ and resampling work, excludes UI, and is not a DAW CPU or 100-band estimate.
 Listening: wire music/voice to Voice L/R and a bright oscillator to Synth L/R;
 use Mix 1. Try Band Width 0.01 with Follower 0 for narrow ringing, then widen
 the bands for overlap/crunch. There is no internal carrier in this module.
-Keep the resonator comparison until the standalone sound is confirmed.
+Standalone Vocoder was confirmed; the resonator comparison has been removed.
 
 ## Variable Band Count
 
 - Standalone Vocoder now exposes Bands, integer 5..100, default 32. The
-  original 32-band response and the resonator comparison remain unchanged.
+  original 32-band response remains unchanged in standalone Vocoder.
 - Band centers cover the same 40 Hz..0.45*sampleRate range logarithmically.
   Band Width stays in octaves rather than being reinterpreted as band spacing.
   Count changes can change summed level; no hidden gain correction was added.
@@ -80,6 +81,20 @@ Keep the resonator comparison until the standalone sound is confirmed.
 Next listening proof: compare 5, 32, and 100 at Band Width 0.01, then widen
 to hear the density/overlap change. Order and Flatness are deliberately not
 folded into this count change.
+
+## Comparison Removal
+
+At Argi's request, Convolution Resonator is back to its single body/STFT path.
+Removed the Filter Bank and raw-STFT comparison models, Model / Band Width /
+Follower controls, model switching, warm-up/crossfade state, extra delay rings,
+raw/bank processor allocations, native setter/export and worklet bindings.
+Native version is 10. Buzz/String/Tube, Crunch, Response, Bandwidth, Formant
+Shift, body/vocoder blend and the 2184-sample timing reference are retained.
+The face again shows only the body IR and native STFT kernels.
+
+The former comparison section below is historical, not an active feature.
+Its core IIR tests now live in `scripts/test_vocoder_bank.mjs`; retired model
+switching tests are deleted. Standalone Vocoder is not removed or altered.
 
 ## Native Timing Proof
 
@@ -427,7 +442,7 @@ Verification:
   was incrementally rebuilt/relinked. Syntax and diff checks pass. Cache tag:
   cres9. Broader audio-reference smoke and REAPER were not run for this step.
 
-## Overlapping Filter-Bank Listening Experiment
+## Historical Filter-Bank Listening Experiment (Removed)
 
 Following Argi's report that the STFT sound was not the desired Vocodex-like
 character, add a bounded native comparison rather than assuming more STFT
@@ -486,9 +501,9 @@ Verification:
   incrementally rebuilt/relinked. Diff and syntax checks pass. Cache tag:
   cres10. No REAPER test or broad audio-reference smoke was run here.
 
-The next decision is sonic: determine whether the bank is closer to the
-wanted character before deciding whether it replaces STFT or becomes another
-part of Crunch. Match output level by ear when comparing overlap settings.
+That listening experiment is historical. Filter-bank processing now belongs
+only to standalone Vocoder; its retained bank-core tests are in
+`test_vocoder_bank.mjs`. Convolution Resonator keeps its body-colored STFT path.
 
 ## Next
 
@@ -497,12 +512,11 @@ part of Crunch. Match output level by ear when comparing overlap settings.
 3. Argi verified that String can be played melodically and its buildup settles.
    Listen to Tube with Body = 1, Decay = 0.08 s and then longer decay; compare
    with String and sweep the intermediate body settings.
-4. Compare raw STFT and the overlapping Filter Bank with the same input and
-   carrier pitch. Listen before adding further bank features or integrating
-   it into the Crunch macro.
+4. Continue filter-bank listening and development in standalone Vocoder only.
+   Do not restore the removed comparison models to Convolution Resonator.
 5. Coordinate adoption of the shared FFT by Noise Convolution Reverb without
    touching another agent's worktree. Refine after display acceptance, then
    plan a separate merge/release checkpoint; this worktree remains unmerged.
 
-The 2048-sample latency is provisional until oversampled filter group delay is
-known. All wet branches and dry must share the final reported latency.
+The current oversampled path reports 2184 samples of latency. All wet branches
+and dry share that timing; the focused native and graph tests enforce it.

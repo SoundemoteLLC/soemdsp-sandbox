@@ -30,8 +30,7 @@ $modules = @(
     "soemdsp_convolution_resonator_right", "soemdsp_convolution_resonator_latency",
     "soemdsp_convolution_resonator_version", "soemdsp_convolution_resonator_carrier",
     "soemdsp_convolution_resonator_set_crunch",
-    "soemdsp_convolution_resonator_probe", "soemdsp_convolution_resonator_probe_buffer",
-    "soemdsp_convolution_resonator_set_filter_bank"
+    "soemdsp_convolution_resonator_probe", "soemdsp_convolution_resonator_probe_buffer"
   ) }
   @{ Name = "wall_delay"; Simd = $false; Exports = @("soemdsp_wall_delay_version") }
   @{ Name = "rapt_elliptic_decimator"; Simd = $false; Exports = @(

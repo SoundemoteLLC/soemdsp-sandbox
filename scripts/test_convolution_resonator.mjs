@@ -4,6 +4,8 @@ import fs from "node:fs";
 const file = new URL("../native_modules/convolution_resonator/convolution_resonator.wasm", import.meta.url);
 const { instance } = await WebAssembly.instantiate(fs.readFileSync(file));
 const x = instance.exports;
+assert.equal(x.soemdsp_convolution_resonator_version(), 10);
+assert.equal(x.soemdsp_convolution_resonator_set_filter_bank, undefined);
 const create = x.soemdsp_convolution_resonator_create;
 const destroy = x.soemdsp_convolution_resonator_destroy;
 const sample = (h, l, r, frequency = 110, periods = 4, mix = 0, sr = 48000) =>

@@ -1113,7 +1113,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   convolutionResonator: {
     category: "space",
-    description: "Buzz/String/Tube resonator and 2x-oversampled Crunch STFT vocoder, plus an experimental 32-band overlapping-filter comparison. Raw STFT and Filter Bank bypass Body for a common-carrier listening test.",
+    description: "Buzz/String/Tube resonator with a body-colored BLIT carrier and 2x-oversampled Crunch STFT vocoder. Filter-bank vocoding lives in the separate Vocoder module.",
     label: "Convolution Resonator",
     notes: ["vocoder", "convolution", "robot", "crunch", "resonator", "voice", "native"],
   },
