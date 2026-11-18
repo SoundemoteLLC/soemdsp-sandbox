@@ -827,6 +827,7 @@ extern "C" int soemdsp_noise_conv_reverb_create(double sampleRate);
 extern "C" int soemdsp_convolution_resonator_create();
 extern "C" void soemdsp_convolution_resonator_destroy(int handle);
 extern "C" void soemdsp_convolution_resonator_set_crunch(int handle, double crunch, double response, double bandwidth);
+extern "C" void soemdsp_convolution_resonator_set_filter_bank(int handle, int model, double width, double response);
 extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, double right,
   double frequency, double periods, double mix, double sampleRate, double fadeMs, double body, double decay,
   double vocoderMix, double formantShift);
@@ -4082,6 +4083,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.mode,
+    (typeId == kTypeConvolutionResonator) ? 0.0 : // STFT Body (comparison models are opt-in)
     (typeId == kTypeCombPluck || typeId == kTypeModeResonator) ? 0.0 : // Retrigger Stack (Comb Pluck / Mode Ping)
     (typeId == kTypeRobinOscillator) ? 0.0 // freqUpdate: On cycle
       : (typeId == kTypeTimeQuantizer) ? 4.0 // Division 1/16
@@ -4436,6 +4438,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.diffusionAmount,
+    (typeId == kTypeConvolutionResonator) ? 0.25 : // filter-bank follower milliseconds
     (typeId == kTypeResonantEnvelope || typeId == kTypeResonantFollower) ? 0.0 // Follow Source
       :    (typeId == kTypeBradley2a) ? 0.0 // harm3
       : (typeId == kTypeSidechain) ? 0.0 // Ducked Mix (env 1)
@@ -4527,6 +4530,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.feedback,
+    (typeId == kTypeConvolutionResonator) ? 0.75 : // filter-bank octave bandwidth
     (typeId == kTypePulseTrain) ? 0.0 : // Curve polarity + (0) / - (1)
     (typeId == kTypeDsfMorphingOsc) ? 0.0 : // Odd/Even (0 all, 1 odd only)
     (typeId == kTypePhaser) ? 0.3
@@ -15871,6 +15875,8 @@ static void process_convolution_resonator(Circuit& g, Node& node, int frames) {
     const double b = stereo_route_feed(route.feedR, m, l, r);
     soemdsp_convolution_resonator_set_crunch(node.nativeHandle, control_audio(g, node.center, f),
       control_audio(g, node.width, f), control_audio(g, node.offset, f));
+    soemdsp_convolution_resonator_set_filter_bank(node.nativeHandle, (int)control_audio(g, node.mode, f),
+      control_audio(g, node.feedback, f), 0.001 * control_audio(g, node.diffusionAmount, f));
     const double y = soemdsp_convolution_resonator_sample(node.nativeHandle,
       route.runMono || route.runL ? a : 0.0, route.runR ? b : 0.0,
       resolve_osc_hz(g, f, liveF, false, node.frequency, 0.0, sr),

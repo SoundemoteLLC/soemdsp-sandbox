@@ -1,8 +1,9 @@
 # Convolution Resonator — plan
 
-Status: **plan only, nothing built.** Requested by Argi via MasterBot on
-2026-11-17. Another agent will implement it later. This document is the
-brief: no code, no scaffolding in the tree.
+Status: **implementation and listening experiments in progress** on
+`codex/convolution-resonator`. See `CONVOLUTION_RESONATOR_PROGRESS.md` for
+current behavior and verification. The original design brief below is kept
+for reference; the desired Vocodex-like sound is not yet confirmed.
 
 Proposed key: `convolutionResonator`. Label: **Convolution Resonator**.
 Internal type id: the next free `kType…` / `NATIVE_GRAPH_TYPE_IDS` number

@@ -23,8 +23,14 @@ try {
   const selector = `.node-convolution-resonator-display[data-node="${id}"]`;
   await page.waitForFunction(s => Boolean(document.querySelector(s)?._convolutionPacket), selector, { timeout: 30000 });
   const reports = [];
-  for (const [name, viewport] of [["desktop", { width: 1280, height: 900 }], ["mobile", { width: 390, height: 844 }], ["compact", { width: 390, height: 844 }]]) {
+  for (const [name, viewport] of [["desktop", { width: 1280, height: 900 }], ["bank", { width: 1280, height: 900 }], ["mobile", { width: 390, height: 844 }], ["compact", { width: 390, height: 844 }]]) {
     await page.setViewportSize(viewport);
+    if (name === "bank") await page.evaluate(s => {
+      const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
+      const node = patch.nodes.find(node => node.id === document.querySelector(s).dataset.node);
+      node.params.vocoderModel = "filterBank";
+      commitNodeGraphPatch(patch, { status: "filter-bank comparison" });
+    }, selector);
     if (name === "compact") await page.evaluate(s => {
       const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
       const id = document.querySelector(s).dataset.node;
@@ -51,13 +57,22 @@ try {
       if (pixels) for (let i = 0; i < pixels.data.length; i += 4)
         if (pixels.data[i] + pixels.data[i + 1] + pixels.data[i + 2] > 80) ++lit;
       const rect = section.getBoundingClientRect();
+      const modelSlider = nodeGraphSliderForParameter(section.dataset.node, "vocoderModel");
+      const followerSlider = nodeGraphSliderForParameter(section.dataset.node, "bankFollowerMs");
       return { width: rect.width, height: rect.height, lit, canvasTags: section.querySelectorAll("canvas").length,
+        model: nodeGraphConvolutionComparisonView(nodeGraphPatchNode(section.dataset.node)).model,
+        modelLabel: modelSlider?.closest("label")?.querySelector(".node-slider-readout-value")?.textContent,
+        followerValue: followerSlider?.closest("label")?.querySelector(".node-slider-readout-value")?.textContent,
+        followerUnit: followerSlider?.closest("label")?.querySelector(".node-slider-readout-unit")?.textContent,
         schema: nodeGraphModuleDisplaySettingsSchemaForNode(nodeGraphPatchNode(section.dataset.node)),
         key: section._convolutionRequestKey, length: section._convolutionPacket.length };
     }, selector);
     assert.ok(report.width > 0 && report.height > 0 && report.lit > 100, `${name}: nonblank GL face`);
     assert.equal(report.canvasTags, 0, "face uses the shared GL texture, not a private canvas");
     assert.equal(report.schema, "", "no inherited Trace settings");
+    assert.equal(report.model, name === "desktop" ? 0 : 2, "choice metadata resolves to the correct comparison view");
+    assert.equal(report.modelLabel?.trim(), name === "desktop" ? "STFT Body" : "Filter Bank", "Model shows a name, not an index");
+    assert.ok(Number(report.followerValue) === 0.25 && report.followerUnit?.trim() === "ms", "Follower has a readable millisecond value");
     if (name === "compact") assert.ok(report.height < 48, "compact IR-only view fits small display heights");
     const screenshot = path.join(os.tmpdir(), `convolution-resonator-${name}.png`);
     await page.screenshot({ path: screenshot, timeout: 10000 });

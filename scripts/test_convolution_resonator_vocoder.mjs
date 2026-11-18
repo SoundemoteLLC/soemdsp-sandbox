@@ -1,24 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
-const root = fileURLToPath(new URL("../", import.meta.url));
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-stft-test-"));
-let h;
-try {
-  const output = path.join(temporary, "harness.wasm");
-  execFileSync(process.env.CLANGXX || "C:/Program Files/LLVM/bin/clang++.exe", [
-    "--target=wasm32", "-O3", "-msimd128", "-nostdlib", "-fno-exceptions", "-fno-rtti",
-    "-Ilibrary/include", "-Wl,--no-entry", "-Wl,--export-memory",
-    ...["reset", "tick", "right", "re", "im", "fft", "crunch_reset", "crunch_tick", "envelope", "smooth", "reference_reset", "reference_tick", "os_reset", "os_tick", "os_right", "os_stereo"].map(key => `-Wl,--export=test_${key}`),
-    "scripts/fixtures/convolution_vocoder_harness.cpp", "-o", output,
-  ], { cwd: root, stdio: "pipe" });
-  h = (await WebAssembly.instantiate(fs.readFileSync(output))).instance.exports;
-} finally {
-  fs.rmSync(temporary, { recursive: true, force: true });
-}
+import { loadConvolutionHarness } from "./fixtures/load-convolution-harness.mjs";
+const h = await loadConvolutionHarness(["reset", "tick", "right", "re", "im", "fft", "crunch_reset", "crunch_tick", "envelope", "smooth", "reference_reset", "reference_tick", "os_reset", "os_tick", "os_right", "os_stereo"]);
 const re = new Float32Array(h.memory.buffer, h.test_re(), 512);
 const im = new Float32Array(h.memory.buffer, h.test_im(), 512);
 for (let i = 0; i < 512; ++i) { re[i] = Math.sin(i * 0.53); im[i] = Math.cos(i * 0.17); }

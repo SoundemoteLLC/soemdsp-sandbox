@@ -1,10 +1,12 @@
 #include "../../native_modules/convolution_resonator/vocoder_stft.h"
 #include "../../native_modules/convolution_resonator/vocoder_oversampling.h"
+#include "../../native_modules/convolution_resonator/filter_bank_vocoder.h"
 namespace {
 convolution_resonator::VocoderStft core{};
 convolution_resonator::CrunchVocoder crunch{};
 convolution_resonator::CrunchVocoder reference{};
 convolution_resonator::OversampledVocoder oversampled{};
+convolution_resonator::FilterBankVocoder bank{};
 float re[512], im[512];
 }
 extern "C" void test_reset() { core.reset(); }
@@ -33,3 +35,8 @@ extern "C" double test_os_right() { return oversampled.right; }
 extern "C" double test_os_stereo(double voice, double right, double carrier, double c) {
   return oversampled.tick(voice, right, carrier, 0, c, 0, 0);
 }
+extern "C" void test_bank_reset() { bank.reset(); }
+extern "C" double test_bank_tick(double voice, double right, double carrier, double rate, double width, double response, double shift) {
+  return bank.tick(voice, right, carrier, rate, width, response, shift);
+}
+extern "C" double test_bank_right() { return bank.right; }

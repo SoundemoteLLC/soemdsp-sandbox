@@ -6,21 +6,36 @@ const nodeGraphConvolutionProbeDefaults = Object.freeze({
   crunch: 0.25, response: 0, bandwidth: 0, formantShift: 0,
 });
 
+// Only an active authored knob drag overrides patch state, never wired pitch,
+// input buffers or live MOD/ghost values.
+function nodeGraphConvolutionAuthoredValue(node, key, fallback) {
+  const drag = typeof nodeGraphMvp === "undefined" ? null : nodeGraphMvp.sliderDragging;
+  if (drag?.slider?.dataset?.node === String(node?.id) && drag.slider.dataset.param === key) {
+    const value = Number(drag.slider.dataset.domainValue);
+    if (Number.isFinite(value)) return value;
+  }
+  return node?.params?.[key] ?? fallback;
+}
 function nodeGraphConvolutionProbeParameters(node, sampleRate) {
   const params = { sampleRate };
-  const drag = typeof nodeGraphMvp === "undefined" ? null : nodeGraphMvp.sliderDragging;
   for (const [key, fallback] of Object.entries(nodeGraphConvolutionProbeDefaults)) {
-    const raw = node?.params?.[key];
+    const raw = nodeGraphConvolutionAuthoredValue(node, key, fallback);
     const value = raw !== "" && raw != null ? Number(raw) : NaN;
     params[key] = Number.isFinite(value) ? value : fallback;
-    // Only the user's active knob drag can override authoring state. Never
-    // consume scope buffers, ghost sliders, wired pitch or live MOD values.
-    if (drag?.slider?.dataset?.node === String(node?.id) && drag.slider.dataset.param === key) {
-      const dragging = Number(drag.slider.dataset.domainValue);
-      if (Number.isFinite(dragging)) params[key] = dragging;
-    }
   }
   return params;
+}
+function nodeGraphConvolutionComparisonView(node) {
+  const raw = nodeGraphConvolutionAuthoredValue(node, "vocoderModel", 0);
+  const parameter = typeof nodeGraphModuleDefinitions === "undefined" ? null
+    : nodeGraphModuleDefinitions.convolutionResonator?.parameters.find(p => p.key === "vocoderModel");
+  const choice = (parameter?.choiceKeys || []).indexOf(String(raw));
+  const label = (parameter?.choices || []).indexOf(String(raw));
+  const index = choice >= 0 ? choice : label;
+  const model = Number.isFinite(Number(raw)) ? Number(raw) : Number(parameter?.choiceIds?.[index] ?? index);
+  return { model: model >= 0 ? model : 0,
+    width: Number(nodeGraphConvolutionAuthoredValue(node, "bankWidth", 0.75)),
+    follower: 0.001 * Number(nodeGraphConvolutionAuthoredValue(node, "bankFollowerMs", 0.25)) };
 }
 
 function nodeGraphConvolutionProbeDispatch() {
@@ -33,7 +48,7 @@ function nodeGraphConvolutionProbeDispatch() {
   try {
     if (!state.worker) {
       const source = nodeGraphConvolutionDisplayScript || new URL("./public/modules/convolutionResonator/convolution-resonator-display.js", document.baseURI).href;
-      state.worker = new Worker(new URL("./convolution-resonator-probe-worker.js?v=cres9", source));
+      state.worker = new Worker(new URL("./convolution-resonator-probe-worker.js?v=cres10", source));
       state.worker.onmessage = ({ data }) => {
         const active = state.busy;
         if (!active || active.id !== data.id) return;
@@ -114,10 +129,11 @@ function drawNodeGraphConvolutionResonatorDisplay(section) {
   const sr = Number(audio?.clampedEngineSampleRate)
     || Number(typeof nodeGraphMvp === "undefined" ? 0 : nodeGraphMvp.sampleRate) || 48000;
   const params = nodeGraphConvolutionProbeParameters(node, sr);
+  const comparison = nodeGraphConvolutionComparisonView(node);
   const probeKey = JSON.stringify(params);
   if (section._convolutionRequestKey !== probeKey) nodeGraphConvolutionProbeRequest(section, params, probeKey);
   const { cssWidth: w, cssHeight: h, pixelRatio: dpr } = metrics;
-  const paintKey = `${probeKey}|${w}|${h}|${dpr}`;
+  const paintKey = `${probeKey}|${w}|${h}|${dpr}|${JSON.stringify(comparison)}`;
   if (section._convolutionPaintKey === paintKey && !section._convolutionForce) return;
   section._convolutionForce = false;
   const batch = nodeGraphGlLinesBegin(canvas, [0.015, 0.022, 0.028, 1], { scale: dpr, textInk: false });
@@ -138,7 +154,8 @@ function drawNodeGraphConvolutionResonatorDisplay(section) {
     const spacious = h >= 180, bandTitleY = irBottom + font + 5;
     const bandTop = bandTitleY + font + (spacious ? font + 5 : 4), bandBottom = h - font - 5;
     if (labeled) {
-      text(w < 180 ? "IR" : p[15] ? "IR envelope" : "Body IR", 5, 3);
+      text(comparison.model !== 0 ? (w >= 240 ? "Body IR (bypassed)" : "IR off")
+        : w < 180 ? "IR" : p[15] ? "IR envelope" : "Body IR", 5, 3);
       const value = peak >= 100 ? peak.toExponential(1) : peak.toFixed(2);
       text(`${w >= 180 ? "peak " : ""}${value}x`, w - 5, 3, "right", peak > 1 ? colors[1] : ink);
     }
@@ -153,20 +170,26 @@ function drawNodeGraphConvolutionResonatorDisplay(section) {
       text(`${(1000 * duration).toFixed(duration < 0.01 ? 2 : 0)} ms${p[5] ? (w >= 220 ? " (tail continues)" : " +") : ""}`, right, irBottom + 2, "right");
     }
     if (expanded) {
-      text(w >= 190 ? "Band kernels (peak-normalized)" : "Band (norm)", 5, bandTitleY);
-      const logMin = Math.log(p[10]), logRange = Math.log(p[11] / p[10]);
-      const xAt = hz => left + (Math.log(hz) - logMin) / logRange * (right - left);
-      for (const hz of [100, 1000, 10000]) if (hz < p[11]) { const x = xAt(hz); line(x, bandTop, x, bandBottom); text(hz < 1000 ? String(hz) : `${hz / 1000}k`, x, bandBottom + 2, "center"); }
-      line(left, bandBottom, right, bandBottom);
-      for (let band = 0; band < 4; ++band) {
-        const curve = [];
-        for (let i = 0; i < count; ++i) curve.push(xAt(p[bandBase + i]), bandBottom - p[bandBase + count * (band + 1) + i] * (bandBottom - bandTop));
-        nodeGraphGlLinesPolyline(batch, curve, 0.6, 1 / dpr, colors[band]);
-      }
-      const frameText = p[8] === 0 ? `${p[6]}` : `${p[6]}/${p[7]}`;
-      if (w >= 180 && spacious) {
-        ["100", "500", "2k", "8k"].forEach((label, i) => text(label, left + i * font * 2.6, bandTop - font - 2, "left", colors[i]));
-        text(w >= 300 ? `${frameText} samples | BW ${p[9].toFixed(2)}` : `${frameText} samples`, right, bandTop - font - 2, "right");
+      if (comparison.model === 2) {
+        text(w >= 200 ? "Filter bank / 32 bands" : "Bank: 32", 5, bandTitleY);
+        text(`${comparison.width.toFixed(2)} oct`, left, bandTop + 4);
+        text(`${(1000 * comparison.follower).toFixed(2)} ms${w >= 200 ? " follower" : ""}`, left, bandTop + font + 9);
+      } else {
+        text(w >= 190 ? "Band kernels (peak-normalized)" : "Band (norm)", 5, bandTitleY);
+        const logMin = Math.log(p[10]), logRange = Math.log(p[11] / p[10]);
+        const xAt = hz => left + (Math.log(hz) - logMin) / logRange * (right - left);
+        for (const hz of [100, 1000, 10000]) if (hz < p[11]) { const x = xAt(hz); line(x, bandTop, x, bandBottom); text(hz < 1000 ? String(hz) : `${hz / 1000}k`, x, bandBottom + 2, "center"); }
+        line(left, bandBottom, right, bandBottom);
+        for (let band = 0; band < 4; ++band) {
+          const curve = [];
+          for (let i = 0; i < count; ++i) curve.push(xAt(p[bandBase + i]), bandBottom - p[bandBase + count * (band + 1) + i] * (bandBottom - bandTop));
+          nodeGraphGlLinesPolyline(batch, curve, 0.6, 1 / dpr, colors[band]);
+        }
+        const frameText = p[8] === 0 ? `${p[6]}` : `${p[6]}/${p[7]}`;
+        if (w >= 180 && spacious) {
+          ["100", "500", "2k", "8k"].forEach((label, i) => text(label, left + i * font * 2.6, bandTop - font - 2, "left", colors[i]));
+          text(w >= 300 ? `${frameText} samples | BW ${p[9].toFixed(2)}` : `${frameText} samples`, right, bandTop - font - 2, "right");
+        }
       }
     }
   }

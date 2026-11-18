@@ -2,12 +2,13 @@
 // soemdsp-native-label: Convolution Resonator
 // soemdsp-native-target: convolutionResonator
 // soemdsp-native-kind: effect
-// Buzz / String / Tube and fixed-size STFT vocoder with body-tinted BLIT carrier.
+// Buzz / String / Tube, 2x STFT vocoder, and an overlapping-filter listening test.
 #include <soemdsp/utility/memory_pool.h>
 #include <soemdsp/oscillator/blit_saw.h>
 #include <soemdsp/math/exp_log.h>
 #include <soemdsp/filter/comb_core.h>
 #include "vocoder_oversampling.h"
+#include "filter_bank_vocoder.h"
 
 namespace {
 constexpr int kInstances = 64;
@@ -38,6 +39,10 @@ struct State {
   double tubeFrequency, tubeDecay, tubeRate;
   double tubeInput[3][2];
   convolution_resonator::OversampledVocoder* vocoder;
+  convolution_resonator::OversampledVocoder* rawVocoder;
+  convolution_resonator::FilterBankVocoder* filterBank;
+  int desiredModel, currentModel, targetModel, modelWarm, rawPosition;
+  double modelFade, bankWidth, bankResponse, rawDelay[2][8];
   double crunch, response, bandwidth;
   soemdsp_blit::BlitSaw oscillator;
   double carrier;
@@ -51,8 +56,13 @@ State* state(int handle) {
 }
 bool finite(double x) { return __builtin_isfinite(x); }
 void clear(State& s) {
-  for (int i = 0; i < 4 * kLatency; ++i) s.delay[i] = 0.0;
+  for (int i = 0; i < 6 * kLatency; ++i) s.delay[i] = 0.0;
   if (s.vocoder) s.vocoder->reset();
+  if (s.rawVocoder) s.rawVocoder->reset();
+  if (s.filterBank) s.filterBank->reset();
+  for (auto& channel : s.rawDelay) for (auto& value : channel) value = 0;
+  s.rawPosition = s.modelWarm = 0; s.modelFade = 1;
+  s.currentModel = s.targetModel = s.desiredModel;
   if (s.history) for (int i = 0; i < 2 * s.capacity; ++i) s.history[i] = s.sums[i] = 0;
   s.write = 0;
   for (int c = 0; c < 2; ++c) s.integral[c] = s.dcX[c] = s.dcY[c] = 0;
@@ -287,15 +297,64 @@ double buzz(const State& s, int c, const Tap* taps, int count, double period, do
   }
   return out / norm;
 }
+void reset_model(State& s, int model) {
+  if (model == 0 && s.vocoder) s.vocoder->reset();
+  if (model == 1) {
+    if (s.rawVocoder) s.rawVocoder->reset();
+    for (auto& channel : s.rawDelay) for (auto& value : channel) value = 0;
+    s.rawPosition = 0;
+  }
+  if (model == 2) {
+    if (s.filterBank) s.filterBank->reset();
+    for (int i = 4 * kLatency; i < 6 * kLatency; ++i) s.delay[i] = 0;
+  }
+}
+bool process_model(State& s, int model, const double wet[2], double left, double right,
+  double rawCarrier, double sr, double shift, double out[2]) {
+  if (model == 2) {
+    if (!s.filterBank) {
+      s.filterBank = static_cast<convolution_resonator::FilterBankVocoder*>(soemdsp::memory_pool::alloc(sizeof(convolution_resonator::FilterBankVocoder)));
+      if (!s.filterBank) return false;
+      s.filterBank->reset();
+    }
+    const double value = s.filterBank->tick(left, right, rawCarrier, sr, s.bankWidth, s.bankResponse, shift);
+    const double other = s.filterBank->right;
+    if (!finite(value) || !finite(other)) return false;
+    const int read = (s.position + convolution_resonator::Resampler2x::filterLatency) % kLatency;
+    out[0] = s.delay[4 * kLatency + read]; out[1] = s.delay[5 * kLatency + read];
+    s.delay[4 * kLatency + s.position] = value; s.delay[5 * kLatency + s.position] = other;
+    return true;
+  }
+  auto*& processor = model == 0 ? s.vocoder : s.rawVocoder;
+  if (!processor) {
+    processor = static_cast<convolution_resonator::OversampledVocoder*>(soemdsp::memory_pool::alloc(sizeof(convolution_resonator::OversampledVocoder)));
+    if (!processor) return false;
+    processor->reset();
+  }
+  out[0] = processor->tick(model == 0 ? wet[0] : left, model == 0 ? wet[1] : right,
+    model == 0 ? s.carrier : rawCarrier, shift, s.crunch, s.response, s.bandwidth);
+  out[1] = processor->right;
+  if (!finite(out[0]) || !finite(out[1])) return false;
+  if (model == 1) {
+    // Raw STFT bypasses the body's 8-sample interpolator, but not its timing.
+    for (int c = 0; c < 2; ++c) {
+      const double delayed = s.rawDelay[c][s.rawPosition];
+      s.rawDelay[c][s.rawPosition] = out[c]; out[c] = delayed;
+    }
+    s.rawPosition = (s.rawPosition + 1) % 8;
+  }
+  return true;
+}
 }
 
 extern "C" int soemdsp_convolution_resonator_create() {
   for (int i = 0; i < kInstances; ++i) {
     if (states[i].delay) continue;
-    auto* delay = static_cast<double*>(soemdsp::memory_pool::alloc(4 * kLatency * sizeof(double)));
+    auto* delay = static_cast<double*>(soemdsp::memory_pool::alloc(6 * kLatency * sizeof(double)));
     if (!delay) return 0;
     states[i].delay = delay;
     states[i].crunch = 1.0 / 3; states[i].response = 0; states[i].bandwidth = -1.0 / 3;
+    states[i].bankWidth = 0.75; states[i].bankResponse = 0.00025;
     clear(states[i]);
     return i + 1;
   }
@@ -309,6 +368,8 @@ extern "C" void soemdsp_convolution_resonator_destroy(int handle) {
   soemdsp::memory_pool::release(s->stringBlock);
   soemdsp::memory_pool::release(s->tube);
   soemdsp::memory_pool::release(s->vocoder);
+  soemdsp::memory_pool::release(s->rawVocoder);
+  soemdsp::memory_pool::release(s->filterBank);
   *s = {};
 }
 extern "C" void soemdsp_convolution_resonator_reset(int handle) {
@@ -325,7 +386,8 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
     return 0.0;
   }
   const double sr = finite(sampleRate) && sampleRate > 0 ? sampleRate : 48000;
-  const bool active = frequency > 0 && frequency < sr * 0.5 && periods > 0;
+  const bool carrierActive = frequency > 0 && frequency < sr * 0.5;
+  const bool active = carrierActive && periods > 0;
   const double morph = body <= 0.5 ? 2 * body : 1;
   const double tube = body > 0.5 ? 2 * body - 1 : 0;
   if (tube <= 0 && s->tubeCount) {
@@ -342,7 +404,7 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
   const double damping = 0.4 * morph2 / (1 + morph2);
   const double readDelay = active && (morph2 > 0 || s->stringBlock)
     ? string_read_delay(stringPeriod, damping) : 0;
-  const double carrier = active ? s->oscillator.update(sr / frequency) : 0;
+  const double carrier = carrierActive ? s->oscillator.update(sr / frequency) : 0;
   double wet[2]{};
   if (active) {
     const double fadeTime = finite(fadeMs) && fadeMs > 0 ? fadeMs : 0;
@@ -381,17 +443,32 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
     ? string_tick(s->string[2], carrier, stringPeriod, readDelay, gain, damping, 1 - tube) : carrier;
   if (active && tube > 0) s->carrier = tube_tick(*s, 2, s->carrier, tube);
   if (!finite(s->carrier)) { clear(*s); return 0; }
-  if (vocoderMix != 0 && !s->vocoder) {
-    s->vocoder = static_cast<convolution_resonator::OversampledVocoder*>(
-      soemdsp::memory_pool::alloc(sizeof(convolution_resonator::OversampledVocoder)));
-    if (!s->vocoder) { s->right = 0; return 0; }
-    s->vocoder->reset();
-  }
   double vocoded[2]{};
-  if (s->vocoder) {
-    vocoded[0] = s->vocoder->tick(wet[0], wet[1], s->carrier, formantShift, s->crunch, s->response, s->bandwidth);
-    vocoded[1] = s->vocoder->right;
-    if (!finite(vocoded[0]) || !finite(vocoded[1])) { clear(*s); return 0; }
+  if (s->currentModel != s->targetModel && s->desiredModel == s->currentModel) {
+    if (s->modelWarm == 0) {
+      const int previous = s->currentModel; s->currentModel = s->targetModel; s->targetModel = previous;
+      s->modelFade = 1 - s->modelFade;
+    } else s->targetModel = s->currentModel;
+  }
+  if (s->currentModel == s->targetModel && s->desiredModel != s->currentModel) {
+    s->targetModel = s->desiredModel; s->modelWarm = kLatency; s->modelFade = 0;
+    reset_model(*s, s->targetModel);
+  }
+  const bool changing = s->currentModel != s->targetModel;
+  if (vocoderMix != 0 || s->vocoder || s->currentModel != 0 || changing) {
+    if (!process_model(*s, s->currentModel, wet, left, right, carrier, sr, formantShift, vocoded)) { clear(*s); return 0; }
+    if (changing) {
+      double target[2]{};
+      if (!process_model(*s, s->targetModel, wet, left, right, carrier, sr, formantShift, target)) { clear(*s); return 0; }
+      if (s->modelWarm > 0) --s->modelWarm;
+      else {
+        s->modelFade += 1 / (0.02 * sr);
+        if (s->modelFade > 1) s->modelFade = 1;
+        const double blend = s->modelFade * s->modelFade * (3 - 2 * s->modelFade);
+        for (int c = 0; c < 2; ++c) vocoded[c] += blend * (target[c] - vocoded[c]);
+        if (s->modelFade == 1) s->currentModel = s->targetModel;
+      }
+    }
   }
   const int p = s->position;
   const int wp = (p + kHalfKernel) % kLatency;
@@ -415,7 +492,14 @@ extern "C" double soemdsp_convolution_resonator_carrier(int handle) {
   auto* s = state(handle);
   return s ? s->carrier : 0;
 }
-extern "C" int soemdsp_convolution_resonator_version() { return 8; }
+extern "C" int soemdsp_convolution_resonator_version() { return 9; }
+// Native API uses seconds; the graph binding converts UI bankFollowerMs here.
+extern "C" void soemdsp_convolution_resonator_set_filter_bank(int handle, int model, double width, double response) {
+  if (auto* s = state(handle)) {
+    if (model < 0 || model > 2 || !finite(width) || !finite(response)) { clear(*s); return; }
+    s->desiredModel = model; s->bankWidth = width; s->bankResponse = response;
+  }
+}
 extern "C" void soemdsp_convolution_resonator_set_crunch(int handle, double crunch, double response, double bandwidth) {
   if (auto* s = state(handle)) {
     if (!finite(crunch) || !finite(response) || !finite(bandwidth)) { clear(*s); return; }

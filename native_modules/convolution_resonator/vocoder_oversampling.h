@@ -23,22 +23,18 @@ struct HalfbandCoefficients {
   }
 };
 inline HalfbandCoefficients halfband{};
-struct OversampledVocoder {
+struct Resampler2x {
   static constexpr int filterLatency = 128;
-  CrunchVocoderT<2> core;
   double input[3][128], output[2][512];
   int upPosition, downPosition;
-  double right;
   void reset() {
-    core.reset(); halfband.ensure();
+    halfband.ensure();
     for (auto& channel : input) for (auto& sample : channel) sample = 0;
     for (auto& channel : output) for (auto& sample : channel) sample = 0;
-    upPosition = downPosition = 0; right = 0;
+    upPosition = downPosition = 0;
   }
-  double tick(double left, double rightInput, double carrier, double shift,
-    double crunch, double response, double bandwidth, bool unity = false) {
+  void upsample(double left, double rightInput, double carrier, double high[2][3]) {
     input[0][upPosition] = left; input[1][upPosition] = rightInput; input[2][upPosition] = carrier;
-    double high[2][3];
     for (int c = 0; c < 3; ++c) {
       high[0][c] = input[c][(upPosition - 64) & 127];
       high[1][c] = 0;
@@ -46,17 +42,31 @@ struct OversampledVocoder {
         high[1][c] += 2 * halfband.odd[k] * input[c][(upPosition - k) & 127];
     }
     upPosition = (upPosition + 1) & 127;
+  }
+  void downsample(int phase, double left, double right, double result[2]) {
+    output[0][downPosition] = left; output[1][downPosition] = right;
+    if (phase == 0) for (int c = 0; c < 2; ++c) {
+      result[c] = 0.5 * output[c][(downPosition - 128) & 511];
+      for (int k = 0; k < 128; ++k)
+        result[c] += halfband.odd[k] * output[c][(downPosition - 2 * k - 1) & 511];
+    }
+    downPosition = (downPosition + 1) & 511;
+  }
+};
+struct OversampledVocoder {
+  static constexpr int filterLatency = Resampler2x::filterLatency;
+  CrunchVocoderT<2> core;
+  Resampler2x resampler;
+  double right;
+  void reset() { core.reset(); resampler.reset(); right = 0; }
+  double tick(double left, double rightInput, double carrier, double shift,
+    double crunch, double response, double bandwidth, bool unity = false) {
+    double high[2][3]; resampler.upsample(left, rightInput, carrier, high);
     double result[2]{};
     for (int phase = 0; phase < 2; ++phase) {
-      output[0][downPosition] = core.tick(high[phase][0], high[phase][1], high[phase][2], shift,
+      const double value = core.tick(high[phase][0], high[phase][1], high[phase][2], shift,
         crunch, response, bandwidth, unity);
-      output[1][downPosition] = core.right;
-      if (phase == 0) for (int c = 0; c < 2; ++c) {
-        result[c] = 0.5 * output[c][(downPosition - 128) & 511];
-        for (int k = 0; k < 128; ++k)
-          result[c] += halfband.odd[k] * output[c][(downPosition - 2 * k - 1) & 511];
-      }
-      downPosition = (downPosition + 1) & 511;
+      resampler.downsample(phase, value, core.right, result);
     }
     right = result[1];
     return result[0];

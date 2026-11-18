@@ -6,6 +6,9 @@ Current runtime: active-pair, 2x-oversampled Crunch vocoder; **2184 samples**
 reported latency. Earlier sections below record the successive proof stages.
 Current face: native, parameter-pinned body IR and vocoder band kernels,
 evaluated off-thread and presented through the shared WebGL picture device.
+Current listening gate: the STFT implementation works but did not meet Argi's
+Vocodex-like sound target. A 32-band raw comparison is now awaiting listening;
+no Vocodex-match or completed-sonic-goal claim is made.
 
 ## Native Timing Proof
 
@@ -353,6 +356,69 @@ Verification:
   was incrementally rebuilt/relinked. Syntax and diff checks pass. Cache tag:
   cres9. Broader audio-reference smoke and REAPER were not run for this step.
 
+## Overlapping Filter-Bank Listening Experiment
+
+Following Argi's report that the STFT sound was not the desired Vocodex-like
+character, add a bounded native comparison rather than assuming more STFT
+polish will reach that sound. This is not a clone or a claim about Vocodex's
+undocumented implementation.
+
+Model choices:
+
+- **STFT Body** (default): the existing body-colored STFT path, unchanged.
+- **STFT Raw**: bypass Body on voice and carrier, retaining the existing BLIT
+  oscillator and STFT settings. Eight alignment samples replace the bypassed
+  body interpolator.
+- **Filter Bank**: the same raw voice and BLIT carrier, 32 logarithmically
+  spaced constant-peak TPT bandpasses. Rectified per-band voice signals run
+  through one-pole envelopes and multiply corresponding synthesis bands.
+  Left/right have separate analysis filters/envelopes and share carrier bands.
+
+Analysis centers span 40 Hz to 0.45 * base sample rate. Formant Shift moves
+synthesis centers, not carrier pitch. Unrepresentable synthesis bands fade at
+Nyquist rather than wrap. Band Width sets nominal octave bandwidth through Q;
+bilinear warping narrows the digital width near Nyquist. Follower is in **ms**
+on the UI (default 0.25 ms), converted to seconds in the native graph binding.
+Zero means instantaneous rectification; attack/release share a time constant.
+Pi/2 calibrates a rectified unit sine's mean. There is no envelope amplitude
+clamp, limiter, saturation, or automatic overlap/loudness compensation.
+
+Both implementations use the same module-local 2x polyphase resampler. The
+bank's extra alignment ring preserves the 2184-sample nominal timing reference.
+Models warm for this latency before a 20 ms smoothstep crossfade. Reversals
+preserve the current blend; a third request is queued until the ongoing
+transition finishes. Only the active model and an in-transition target run;
+inactive processors retain allocations but are reset before re-entry.
+
+Use Vocoder=1 and Mix=1 for the raw A/B. Compare **STFT Raw** against **Filter
+Bank**; Body/Size/Decay do not color either. Crunch/Response/Bandwidth belong
+to STFT; Band Width/Follower belong to the bank. The face marks Body as
+bypassed and shows bank readouts instead of falsely displaying STFT kernels
+as a bank response. A bank response plot is intentionally not part of this
+first listening proof. Existing body DSP still advances to preserve the
+body-only blend, so sonic bypass is not a promise of zero body CPU cost.
+
+Verification:
+
+- `test_convolution_resonator_bank.mjs`: a pure 6 kHz voice/carrier produces
+  an 18 kHz ripple ratio of 0.0496 with instantaneous followers vs 5.10e-5 at
+  20 ms. Width changes the actual overlap. Stereo scaling, 10x input scaling,
+  raw Body-bypass identity, sample-rate/range endpoints, reset/non-finite
+  recovery, model modulation and preservation of old output during warm-up pass.
+- All prior focused scripts pass, including the resampler/alias regression.
+  Those STFT alias measurements do **not** certify every bank AM product.
+- Graph tests compare all three models and non-default bank controls against
+  direct native processing. Browser tests verify named Model choices, readable
+  0.25 ms follower values, correct bank view and desktop/mobile/compact GL output.
+  Screenshots were inspected. No page/probe errors are observed.
+- All 199 native modules built; the final graph millisecond conversion was
+  incrementally rebuilt/relinked. Diff and syntax checks pass. Cache tag:
+  cres10. No REAPER test or broad audio-reference smoke was run here.
+
+The next decision is sonic: determine whether the bank is closer to the
+wanted character before deciding whether it replaces STFT or becomes another
+part of Crunch. Match output level by ear when comparing overlap settings.
+
 ## Next
 
 1. Diagnose the browser Render Sample stall, with a bounded test and diagnostics.
@@ -360,9 +426,9 @@ Verification:
 3. Argi verified that String can be played melodically and its buildup settles.
    Listen to Tube with Body = 1, Decay = 0.08 s and then longer decay; compare
    with String and sweep the intermediate body settings.
-4. Argi confirmed the 2x high-frequency/performance pass. Inspect the new face:
-   edit Body/Decay and Crunch/Response/Bandwidth/Shift; play wired pitch and
-   confirm the static curves remain pinned to the knobs.
+4. Compare raw STFT and the overlapping Filter Bank with the same input and
+   carrier pitch. Listen before adding further bank features or integrating
+   it into the Crunch macro.
 5. Coordinate adoption of the shared FFT by Noise Convolution Reverb without
    touching another agent's worktree. Refine after display acceptance, then
    plan a separate merge/release checkpoint; this worktree remains unmerged.

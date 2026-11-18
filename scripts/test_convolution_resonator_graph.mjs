@@ -110,15 +110,16 @@ for (const body of [0.5, 1])
     `Body ${body} and Decay must reach native DSP through the graph`);
 console.log("Graph String/Tube Body/Decay controls and ringing tails pass.");
 
-for (const [shift, crunch, response, bandwidth] of [[0, 0.25, 0, 0], [12, 0.75, -0.3, 0.1]]) {
+for (const [shift, crunch, response, bandwidth, model] of [[0, 0.25, 0, 0, 0], [0, 1 / 3, 0, -1 / 3, 1], [12, 0.75, -0.3, 0.1, 2]]) {
   const g = x.soemdsp_graph_create(), reference = x.soemdsp_convolution_resonator_create();
   x.soemdsp_convolution_resonator_set_crunch(reference, crunch, response, bandwidth);
+  x.soemdsp_convolution_resonator_set_filter_bank(reference, model, 0.9, 0.0005);
   x.soemdsp_graph_set_sample_rate(g, 48000);
   for (const [id, type] of [[1, 132], [2, 268], [3, 6]])
     assert.equal(x.soemdsp_graph_add_node(g, id, type), 0);
   assert.equal(x.soemdsp_graph_connect(g, 1, 0, 2, 0), 0);
   assert.equal(x.soemdsp_graph_connect(g, 2, 0, 3, 1), 0);
-  for (const [param, value] of [[10, 187.5], [20, 1], [14, shift], [40, 1], [30, crunch], [31, response], [71, bandwidth]])
+  for (const [param, value] of [[10, 187.5], [20, 1], [14, shift], [40, 1], [30, crunch], [31, response], [71, bandwidth], [21, model], [50, 0.9], [42, 0.5]])
     x.soemdsp_graph_set_param(g, 2, param, value);
   x.soemdsp_graph_snap_controls(g);
   assert.equal(x.soemdsp_graph_compile(g), 0);
