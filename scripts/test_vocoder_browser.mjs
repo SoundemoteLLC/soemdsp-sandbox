@@ -44,6 +44,22 @@ try {
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(true));
   await page.waitForFunction(() => nodeGraphMvp.live.node && nodeGraphMvp.live.outputLevelSmooth > 0.00001,
     null, { timeout: 60000 });
+  const originalWorklet = await page.evaluate(() => {
+    globalThis.vocoderTestOriginalWorklet = nodeGraphMvp.live.node;
+    return Boolean(vocoderTestOriginalWorklet);
+  });
+  assert.ok(originalWorklet);
+  for (const count of [5, 64, 100]) {
+    await page.evaluate(({ id, count }) => {
+      const slider = nodeGraphSliderForParameter(id, "bands");
+      slider.value = String(count);
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+      slider.dispatchEvent(new Event("change", { bubbles: true }));
+    }, { id: ids.vocoder, count });
+    await page.waitForTimeout(200);
+    const actual = await page.evaluate(id => Number(nodeGraphPatchNode(id).params.bands), ids.vocoder);
+    assert.equal(actual, count, "Bands uses the normal parameter control path");
+  }
   const reports = [];
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
@@ -59,13 +75,18 @@ try {
     reports.push(await page.evaluate(id => {
       const node = nodeGraphPatchNode(id), slider = nodeGraphSliderForParameter(id, "bandWidth");
       const box = slider.closest("article").getBoundingClientRect();
+      const bands = nodeGraphSliderForParameter(id, "bands");
       return { width: box.width, height: box.height, scope: nodeGraphModuleDisplayRendererForNode(node),
         min: slider.min, peak: nodeGraphMvp.live.outputLevelSmooth,
+        bands: Number(node.params.bands), bandLimit: Number(bands.max),
+        sameWorklet: nodeGraphMvp.live.node === vocoderTestOriginalWorklet,
         inputs: nodeGraphModuleDefinitions.vocoder.inputs };
     }, ids.vocoder));
     await page.screenshot({ path: path.join(os.tmpdir(), `vocoder-${viewport.width}.png`), timeout: 15000 });
   }
   assert.ok(reports.every(r => r.width > 0 && r.height > 0 && r.scope === "scope1dTrace"));
+  assert.ok(reports.every(r => r.bands === 100 && r.bandLimit === 100 && r.sameWorklet && r.peak > 0.00001),
+    "100 bands remain live without replacing the AudioWorklet");
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ reports, errors }));
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(false));

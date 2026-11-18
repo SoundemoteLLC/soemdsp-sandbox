@@ -834,6 +834,7 @@ extern "C" double soemdsp_convolution_resonator_sample(int handle, double left, 
 extern "C" double soemdsp_convolution_resonator_right(int handle);
 extern "C" int soemdsp_vocoder_create();
 extern "C" void soemdsp_vocoder_destroy(int handle);
+extern "C" void soemdsp_vocoder_set_bands(int handle, int count);
 extern "C" double soemdsp_vocoder_sample(int handle, double modL, double modR,
   double carL, double carR, double width, double followerSeconds, double shift, double mix, double rate);
 extern "C" double soemdsp_vocoder_right(int handle);
@@ -4227,6 +4228,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 1.0 // Color Gaussian
       : (typeId == kTypeSoftpop2) ? 0.0 // Color White
       : (typeId == kTypeVelvetNoise) ? 8.0 // Sinc Lobes
+      : (typeId == kTypeVocoder) ? 32.0 // Band count
       : 4.0,
     // Generator Harmonics + Hypersaw2/RobinSupersaw voices stay continuous for Decimal trailing amp.
     // Freq Manager semitones live on stages and stay continuous, same as Pitch Manager octave.
@@ -15911,6 +15913,7 @@ static void process_vocoder(Circuit& g, Node& node, int frames) {
   // One cable feeds both channels; two cables remain independent stereo.
   for (int f = 0; f < frames; ++f) {
     control_frame(g, node, f);
+    soemdsp_vocoder_set_bands(node.nativeHandle, (int)control_audio(g, node.stages, f));
     const double left = soemdsp_vocoder_sample(node.nativeHandle,
       ml ? modL[f] : mr ? modR[f] : 0, mr ? modR[f] : ml ? modL[f] : 0,
       cl ? carL[f] : cr ? carR[f] : 0, cr ? carR[f] : cl ? carL[f] : 0,

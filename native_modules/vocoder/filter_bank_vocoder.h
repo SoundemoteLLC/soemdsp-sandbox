@@ -3,15 +3,16 @@
 #include <soemdsp/filter/tpt_svf.h>
 
 namespace soemdsp_vocoder {
-// Listening proof: 32 overlapping constant-peak bandpasses, rectification,
+// Overlapping constant-peak bandpasses, rectification,
 // one-pole envelopes, and multiplication onto corresponding carrier bands.
 struct FilterBankCore {
-  static constexpr int count = 32;
+  static constexpr int maxBands = 100;
+  int count;
   struct Band {
     soemdsp_maths::TptSvfCoeffs analysis, synthesis;
     soemdsp_maths::TptSvfState voice[2], carrier[2];
     double envelope[2], gain;
-  } bands[count];
+  } bands[maxBands];
   double lastRate, lastWidth, lastShift, lastResponse, pole, right;
   void reset() {
     for (auto& band : bands) {
@@ -19,16 +20,18 @@ struct FilterBankCore {
       for (auto& state : band.carrier) soemdsp_maths::tpt_svf_reset(state);
       band.envelope[0] = band.envelope[1] = 0;
     }
+    count = 0;
     lastRate = lastWidth = lastShift = lastResponse = -1; right = 0;
   }
-  void configure(double baseRate, double width, double shift, double response) {
+  void configure(double baseRate, double width, double shift, double response, int bandCount = 32) {
     using namespace soemdsp_maths;
     const bool rateChanged = baseRate != lastRate;
     if (rateChanged || response != lastResponse) {
       pole = response > 0 ? dsp_exp(-1 / (response * 2 * baseRate)) : 0;
       lastResponse = response;
     }
-    if (!rateChanged && width == lastWidth && shift == lastShift) return;
+    if (!rateChanged && width == lastWidth && shift == lastShift && count == bandCount) return;
+    count = bandCount < 5 ? 5 : bandCount > maxBands ? maxBands : bandCount;
     // Nominal octave bandwidth maps to Q. Bilinear warping narrows digital
     // width near Nyquist; there is no hidden overlap or gain compensation.
     const double edge = dsp_exp(0.5 * 0.6931471805599453 * width);
@@ -55,7 +58,8 @@ struct FilterBankCore {
   double tick(double left, double rightInput, double carrierLeft, double carrierRight) {
     double out[2]{}, input[2] = {left, rightInput};
     const double carrier[2] = {carrierLeft, carrierRight};
-    for (auto& band : bands) {
+    for (int i = 0; i < count; ++i) {
+      auto& band = bands[i];
       for (int c = 0; c < 2; ++c) {
         const double synthesis = band.gain == 0 ? 0 : soemdsp_maths::tpt_svf_tick(band.carrier[c], band.synthesis, carrier[c]) * band.gain;
         const double analysis = soemdsp_maths::tpt_svf_tick(band.voice[c], band.analysis, input[c]);
@@ -76,8 +80,8 @@ struct FilterBankVocoder {
     return tick(left, rightInput, carrier, carrier, rate, width, response, shift);
   }
   double tick(double left, double rightInput, double carrierLeft, double carrierRight,
-    double rate, double width, double response, double shift) {
-    core.configure(rate, width, shift, response);
+    double rate, double width, double response, double shift, int bandCount = 32) {
+    core.configure(rate, width, shift, response, bandCount);
     const double source[4] = {left, rightInput, carrierLeft, carrierRight};
     double high[2][4], result[2]{};
     resampler.upsample(source, high);

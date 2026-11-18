@@ -40,3 +40,7 @@ extern "C" double test_bank_tick(double voice, double right, double carrier, dou
   return bank.tick(voice, right, carrier, rate, width, response, shift);
 }
 extern "C" double test_bank_right() { return bank.right; }
+extern "C" double test_bank_tick_count(double voice, double right, double carrier,
+  double rate, double width, double response, double shift, int count) {
+  return bank.tick(voice, right, carrier, carrier, rate, width, response, shift, count);
+}

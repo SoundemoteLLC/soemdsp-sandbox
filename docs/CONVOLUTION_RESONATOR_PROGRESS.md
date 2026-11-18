@@ -10,7 +10,8 @@ Current listening gate: the STFT implementation works but did not meet Argi's
 Vocodex-like sound target. Argi confirmed that the IIR filter-bank comparison
 has the desired family of character, especially very narrow, ringing bands.
 It is now also available as a standalone Vocoder; no exact Vocodex-match claim
-is made. Order, flatness, and variable band count remain future work.
+is made. Standalone band count now spans 5..100; Order and Flatness remain
+future work.
 
 ## Standalone Vocoder Extraction
 
@@ -20,7 +21,7 @@ is made. Order, flatness, and variable band count remain future work.
   channels; two connected sides are independent stereo. Mono averages L/R.
 - Band Width (spawn range 0.001..4 oct), Follower (0..20 ms), Formant Shift,
   and Mix. Width remains editable near zero for narrow ringing bands.
-- 32 bands, rectified one-pole envelopes, independent stereo carrier filters.
+- Originally 32 bands, rectified one-pole envelopes, independent stereo carrier filters.
   Mix blends the dry modulator, not a hidden oscillator or carrier passthrough.
 - The bank and 2x resampler now live beside Vocoder. The resonator comparison
   uses that same implementation; existing mono-carrier results match exactly.
@@ -48,6 +49,37 @@ Listening: wire music/voice to Voice L/R and a bright oscillator to Synth L/R;
 use Mix 1. Try Band Width 0.01 with Follower 0 for narrow ringing, then widen
 the bands for overlap/crunch. There is no internal carrier in this module.
 Keep the resonator comparison until the standalone sound is confirmed.
+
+## Variable Band Count
+
+- Standalone Vocoder now exposes Bands, integer 5..100, default 32. The
+  original 32-band response and the resonator comparison remain unchanged.
+- Band centers cover the same 40 Hz..0.45*sampleRate range logarithmically.
+  Band Width stays in octaves rather than being reinterpreted as band spacing.
+  Count changes can change summed level; no hidden gain correction was added.
+- Both filter layouts are preallocated at instance creation. A live count edit
+  resets the inactive layout, runs it for 20 ms while retaining the old output,
+  then smoothstep-crossfades for 20 ms. Very narrow filters still have their
+  natural, longer settling/ringing time. Rapid edits queue the latest target
+  instead of restarting fades; at most two banks run during a transition.
+- Cold start/reset uses the selected count immediately. Permanent resampling
+  reference delay stays 128 samples. No audio-loop allocations or memory growth.
+- Native capacity is explicitly 100; metadata exposes that structural limit.
+  The existing sample ABI is unchanged; count is passed through a new setter.
+- Tests cover independent 5/16/32/64/100-band references, stereo, original
+  32-band identity, warm-output preservation, rapid edits, latest-target
+  convergence, capacity bounds, cold start, and allocation-free switching.
+  Graph parameter slot Stages carries Bands; the real browser slider reaches
+  100 while retaining the same AudioWorklet and producing output. Desktop and
+  mobile faces remain visible with no page errors.
+- Warm 48 kHz WASM graph benchmark: about 4% / 8% / 12% / 17% of one realtime
+  budget at 5 / 32 / 64 / 100 bands respectively. This is one local Node/WASM
+  measurement, not a DAW CPU reading; transition processing temporarily runs
+  both layouts. Full 200-module build and focused resonator regressions pass.
+
+Next listening proof: compare 5, 32, and 100 at Band Width 0.01, then widen
+to hear the density/overlap change. Order and Flatness are deliberately not
+folded into this count change.
 
 ## Native Timing Proof
 

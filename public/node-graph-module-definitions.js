@@ -7343,6 +7343,7 @@ const nodeGraphModuleDefinitions = (
     planFreeRun: true,
     defaultWidthGu: 12,
     face: [
+      { kind: "cells", params: [["bands", "Bands", "horizontal"]], h: 26 },
       { kind: "cells", params: [["bandWidth", "Band Width"], ["followerMs", "Follower"]], h: 40 },
       { kind: "cells", params: [["formantShift", "Formant Shift"], ["mix", "Mix"]], h: 40 },
     ],
@@ -7353,8 +7354,10 @@ const nodeGraphModuleDefinitions = (
     bypassMap: [{ out: "Mono", in: "Voice L" }, { out: "Left", in: "Voice L" }, { out: "Right", in: "Voice R" }],
     displayType: "scope1dTrace",
     parameters: [
+      { key: "bands", label: "Bands", defaultValue: "32", min: "5", mid: "32", max: "100", step: "1", linearSmoothing: false,
+        tooltip: "Number of logarithmic IIR bands from 40 Hz to 90% of Nyquist. Changes warm a new layout for 20 ms, then crossfade for 20 ms. Rapid edits queue the latest count. More bands use more CPU and can change level; no automatic gain compensation. Native capacity is 100." },
       { key: "bandWidth", label: "Band Width", defaultValue: "0.75", min: "0.001", mid: "0.1", max: "4", step: "any", unit: "oct", nonlinearSlider: true,
-        tooltip: "Nominal octave width of 32 logarithmic IIR bands. Very narrow bands ring; wider bands overlap. High-frequency widths warp near Nyquist. No automatic level compensation." },
+        tooltip: "Nominal octave width of each logarithmic IIR band. Very narrow bands ring; wider bands overlap. High-frequency widths warp near Nyquist. No automatic level compensation." },
       { key: "followerMs", label: "Follower", defaultValue: "0.25", min: "0", mid: "1", max: "20", step: "any", unit: "ms", nonlinearSlider: true,
         tooltip: "Rectified envelope time constant in milliseconds, shared attack/release. Zero retains instantaneous waveform ripple and crunchy audio-rate modulation. Longer times smooth the envelope." },
       { key: "formantShift", label: "Formant Shift", defaultValue: "0", min: "-24", mid: "0", max: "24", step: "any", unit: "st",

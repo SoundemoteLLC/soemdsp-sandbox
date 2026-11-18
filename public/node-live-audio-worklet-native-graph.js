@@ -613,6 +613,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "precision") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
   }
   if (t === "vocoder") {
+    if (k === "bands") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "bandWidth") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
     if (k === "followerMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "formantShift") return P.NATIVE_GRAPH_PARAM_PHASE;
@@ -6114,6 +6115,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "vocoder") {
+      push("bands", P.NATIVE_GRAPH_PARAM_STAGES, disc("bands", 32));
       push("bandWidth", P.NATIVE_GRAPH_PARAM_FEEDBACK, cont("bandWidth", 0.75));
       push("followerMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("followerMs", 0.25));
       push("formantShift", P.NATIVE_GRAPH_PARAM_PHASE, cont("formantShift", 0));

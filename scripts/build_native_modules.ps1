@@ -15,7 +15,8 @@ $modules = @(
   @{ Name = "vocoder"; Simd = $false; Exports = @(
     "soemdsp_vocoder_create", "soemdsp_vocoder_destroy", "soemdsp_vocoder_reset",
     "soemdsp_vocoder_sample", "soemdsp_vocoder_right", "soemdsp_vocoder_latency",
-    "soemdsp_vocoder_version", "soemdsp_vocoder_metadata_json", "soemdsp_vocoder_metadata_json_size"
+    "soemdsp_vocoder_version", "soemdsp_vocoder_metadata_json", "soemdsp_vocoder_metadata_json_size",
+    "soemdsp_vocoder_set_bands", "soemdsp_vocoder_bands"
   ) }
   @{ Name = "convolution_resonator"; Simd = $false; Exports = @(
     "soemdsp_convolution_resonator_create", "soemdsp_convolution_resonator_destroy",

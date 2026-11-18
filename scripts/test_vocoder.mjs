@@ -28,13 +28,16 @@ assert.deepEqual(JSON.parse(JSON.stringify(definition.inputAliases)), {
 assert.equal(definition.displayType, "scope1dTrace");
 const h = create(), isolated = create();
 assert.ok(h && isolated && h !== isolated);
+x.soemdsp_vocoder_set_bands(isolated, 100);
+tick(isolated, 0, 0, 0, 0);
+assert.equal(x.soemdsp_vocoder_bands(isolated), 100, "cold start uses the selected count immediately");
 for (let i = 0; i < 400; ++i) {
   assert.equal(tick(h, i === 0 ? 2 : 0, i === 0 ? -3 : 0, 0, 0, 0.75, 0, 0, 0), i === 128 ? 2 : 0);
   assert.equal(right(h), i === 128 ? -3 : 0);
   assert.equal(tick(isolated, 0, 0, 0, 0), 0);
 }
 destroy(isolated);
-const fixture = await loadConvolutionHarness(["bank_reset", "bank_tick", "bank_right"]);
+const fixture = await loadConvolutionHarness(["bank_reset", "bank_tick", "bank_right", "bank_tick_count"]);
 fixture.test_bank_reset(); reset(h);
 let peak = 0;
 for (let i = 0; i < 12000; ++i) {
@@ -46,6 +49,43 @@ for (let i = 0; i < 12000; ++i) {
   peak = Math.max(peak, Math.abs(actual));
 }
 assert.ok(peak > 0.001);
+for (const count of [5, 16, 32, 64, 100]) {
+  x.soemdsp_vocoder_set_bands(h, count); reset(h); fixture.test_bank_reset();
+  assert.equal(x.soemdsp_vocoder_bands(h), count);
+  for (let i = 0; i < 8000; ++i) {
+    const voice = Math.sin(i * 0.07), synth = Math.sin(i * 0.11);
+    const expected = fixture.test_bank_tick_count(voice, voice * 0.25, synth, rate, 0.01, 0, 0, count);
+    assert.ok(Math.abs(tick(h, voice, voice * 0.25, synth, synth, 0.01, 0) - expected) < 1e-12,
+      `${count} bands match the independent fixed-layout reference`);
+    assert.ok(Math.abs(right(h) - fixture.test_bank_right()) < 1e-12);
+  }
+}
+x.soemdsp_vocoder_set_bands(h, 32); reset(h);
+const oldLayout = create(), switching = create();
+for (let i = 0; i < 8000; ++i) {
+  if (i === 4000) x.soemdsp_vocoder_set_bands(switching, 100);
+  const voice = Math.sin(i * 0.07), synth = Math.sin(i * 0.11);
+  const before = tick(oldLayout, voice, voice, synth, synth);
+  const after = tick(switching, voice, voice, synth, synth);
+  if (i < 4960) assert.equal(after, before, "keep the old output while the new layout warms");
+  assert.ok(Number.isFinite(after) && Number.isFinite(right(switching)));
+}
+assert.equal(x.soemdsp_vocoder_bands(switching), 100);
+const memoryBytes = x.memory.buffer.byteLength;
+for (let i = 0; i < 16000; ++i) {
+  if (i % 13 === 0) x.soemdsp_vocoder_set_bands(switching, 5 + (i % 96));
+  assert.ok(Number.isFinite(tick(switching, Math.sin(i * 0.07), 0, Math.sin(i * 0.11), 0, 0.001, 0)));
+}
+x.soemdsp_vocoder_set_bands(switching, 73);
+for (let i = 0; i < 5000; ++i) tick(switching, 0, 0, 0, 0);
+assert.equal(x.soemdsp_vocoder_bands(switching), 73, "rapid edits settle at the latest request");
+assert.equal(x.memory.buffer.byteLength, memoryBytes, "count changes never allocate or grow memory");
+for (const [requested, actual] of [[-1, 5], [101, 100]]) {
+  x.soemdsp_vocoder_set_bands(switching, requested); reset(switching);
+  assert.equal(x.soemdsp_vocoder_bands(switching), actual, "structural band capacity is explicit");
+}
+destroy(oldLayout); destroy(switching);
+console.log("Vocoder Bands: 5/16/32/64/100 layouts, narrow-band reference, warm/fade, rapid edits, capacity and allocation-free switching pass.");
 for (const which of ["mod", "carrier"]) {
   reset(h);
   for (let i = 0; i < 2048; ++i)
@@ -89,8 +129,11 @@ function graphCase(modPorts, carPorts, overrides = []) {
   for (const p of modPorts) assert.equal(g.soemdsp_graph_connect(circuit, 1, p, 3, p), 0);
   for (const p of carPorts) assert.equal(g.soemdsp_graph_connect(circuit, 2, p, 3, p + 2), 0);
   for (const p of [1, 2]) assert.equal(g.soemdsp_graph_connect(circuit, 3, p, 4, p), 0);
-  const params = new Map([[50, 0.75], [42, 0.25], [14, 0], [40, 1], ...overrides]);
-  for (const [id, value] of params) g.soemdsp_graph_set_param(circuit, 3, id, value);
+  const params = new Map([[22, 32], [50, 0.75], [42, 0.25], [14, 0], [40, 1], ...overrides]);
+  for (const [id, value] of params) {
+    if (id !== 22 || overrides.some(([key]) => key === 22))
+      g.soemdsp_graph_set_param(circuit, 3, id, value);
+  }
   g.soemdsp_graph_snap_controls(circuit);
   assert.equal(g.soemdsp_graph_compile(circuit), 0);
   assert.equal(g.soemdsp_graph_type_uses_pool(269), 1);
@@ -107,6 +150,7 @@ function graphCase(modPorts, carPorts, overrides = []) {
     const feed = (ports, side, offset, i) => ports.includes(side) ? sources[offset + side - 1][i]
       : ports.length ? sources[offset + ports[0] - 1][i] : 0;
     for (let i = 0; i < N; ++i) {
+      g.soemdsp_vocoder_set_bands(reference, params.get(22));
       const l = g.soemdsp_vocoder_sample(reference, feed(modPorts, 1, 0, i), feed(modPorts, 2, 0, i),
         feed(carPorts, 1, 2, i), feed(carPorts, 2, 2, i), params.get(50), params.get(42) * 0.001,
         params.get(14), params.get(40), rate);
@@ -121,9 +165,12 @@ function graphCase(modPorts, carPorts, overrides = []) {
 for (const [mod, car] of [[[1, 2], [1, 2]], [[1], [1]], [[2], [2]], [[1], [2]], [[1, 2], []], [[], [1, 2]]])
   g.soemdsp_graph_destroy(graphCase(mod, car));
 g.soemdsp_graph_destroy(graphCase([1, 2], [1, 2], [[50, 0.01], [42, 0], [14, 7], [40, 0.6]]));
-const circuit = graphCase([1, 2], [1, 2]);
-const blocks = 1000, benchmarkStart = performance.now();
-for (let i = 0; i < blocks; ++i) g.soemdsp_graph_process_block(circuit, N);
-const elapsedMs = performance.now() - benchmarkStart, audioMs = blocks * N / rate * 1000;
-g.soemdsp_graph_destroy(circuit);
-console.log(`Vocoder graph: stereo/mono/missing inputs and controls pass. Warm WASM graph benchmark: ${elapsedMs.toFixed(1)} ms / ${audioMs.toFixed(1)} ms audio (${(100 * elapsedMs / audioMs).toFixed(1)}% of one realtime budget; not a DAW CPU measurement).`);
+for (const bands of [5, 32, 64, 100]) {
+  const circuit = graphCase([1, 2], [1, 2], [[22, bands]]);
+  const blocks = 1000, benchmarkStart = performance.now();
+  for (let i = 0; i < blocks; ++i) g.soemdsp_graph_process_block(circuit, N);
+  const elapsedMs = performance.now() - benchmarkStart, audioMs = blocks * N / rate * 1000;
+  g.soemdsp_graph_destroy(circuit);
+  console.log(`Vocoder ${bands} bands: warm WASM graph ${elapsedMs.toFixed(1)} ms / ${audioMs.toFixed(1)} ms audio (${(100 * elapsedMs / audioMs).toFixed(1)}% of one realtime budget; not a DAW CPU measurement).`);
+}
+console.log("Vocoder graph: stereo/mono/missing inputs, all counts and controls pass.");
