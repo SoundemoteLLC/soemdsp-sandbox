@@ -433,7 +433,7 @@ uniform float uGridSpread;
 // brightness, lifts the lines toward white.
 uniform float uGridDark;
 uniform highp vec4 uGridLamp;
-// How bright the lines reflect the lamp: the Grid reflection setting x how far the room is dimmed (0 = not at all).
+// The mouse as a module-like light: 1 = it reveals the grid as brightly as a module does (0 = not at all).
 uniform float uGridReflect;
 uniform float uModuleAmt;
 uniform highp vec4 uMouse;
@@ -493,20 +493,22 @@ void main() {
       float mr = uMouse.w * (1.0 / (1.0 + (mt / 0.35) * (mt / 0.35))) * (1.0 - smoothstep(0.6, 1.0, mt));
       rv = 1.0 - (1.0 - rv) * (1.0 - clamp(mr, 0.0, 1.0));
     }
-    // Like module text, the lamp lights the grid wherever it is, not only near modules, but only as much as the room is dimmed
-    // (uGridReflect): nothing with the room fully lit, the Grid reflection setting when it is fully dark. A dark room also
-    // dims the lines away from the lamp, like text.
+    // The mouse is a light like a module: it reveals the grid with the same falloff, over the same reach and at the same line
+    // strength a module does (uGridReflect scales it; 1 = exactly as bright as around a module), wherever it is, in a lit room or
+    // a dark one. The text lamp (lit) also lifts the lines toward white and, in a dark room, undims them around the cursor.
     float lit = 0.0;
+    float lampRev = 0.0;
     if (uGridLamp.w > 0.0) {
-      float ld = length(vPx - uGridLamp.xy) / max(uGridLamp.z, 1.0);
+      float ldw = length(vPx - uGridLamp.xy);
+      float ld = ldw / max(uGridLamp.z, 1.0);
       lit = clamp(uGridLamp.w * exp(-1.6 * ld * ld), 0.0, 1.0);
+      float ug = ldw / max(uGridMin.x * uGridSpread, 1.0);
+      lampRev = clamp(uGridReflect, 0.0, 4.0) * (1.0 / (1.0 + (ug / 0.3) * (ug / 0.3))) * (1.0 - smoothstep(0.55, 1.0, ug));
     }
-    float refl = lit * clamp(uGridReflect, 0.0, 1.0);
     float gridF = 1.0 - uGridDark * (1.0 - lit);
-    vec3 gridRgb = mix(uGridRgba.rgb, vec3(1.0), 0.45 * refl * refl);
-    rv = 1.0 - (1.0 - rv) * (1.0 - refl);
-    // Under the lamp a line rises from its unlit level toward full brightness by the reflection amount.
-    float gridA = cov * mix(uGridRgba.a * rv * gridF, 1.0, refl);
+    vec3 gridRgb = mix(uGridRgba.rgb, vec3(1.0), 0.45 * lit * lit);
+    rv = 1.0 - (1.0 - rv) * (1.0 - clamp(lampRev, 0.0, 1.0));
+    float gridA = uGridRgba.a * cov * rv * gridF;
     acc.rgb += (1.0 - acc.a) * gridRgb * gridA;
     acc.a += (1.0 - acc.a) * gridA;
   }
