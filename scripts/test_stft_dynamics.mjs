@@ -23,6 +23,7 @@ for (const [snake, type, next, order] of cases) {
     create: x[prefix + "create"], destroy: x[prefix + "destroy"], reset: x[prefix + "reset"],
     tick(h, l, r, p = {}, rate = sr) {
       const params = { ...defaults, ...p };
+      if (type === "stftGate") x[prefix + "set_knee"](h, params.kneeDb);
       return x[prefix + "sample"](h, l, r, ...order.map(k => params[k]), rate);
     }, right: x[prefix + "right"] };
   assert.equal(x[prefix + "latency"](), 1024);
@@ -81,6 +82,25 @@ for (const amplitude of [0.001, 0.5]) {
   const ratio = rms(out.slice(8192)) / (amplitude / Math.sqrt(2));
   assert.ok(amplitude < 0.01 ? ratio < 0.002 : ratio > 0.99, `manual gate ${amplitude}: ${ratio}`); g.destroy(h);
 }
+const kneeRatios = [];
+for (const kneeDb of [0, 6, 24]) {
+  const levels = [];
+  for (const offset of [-0.1, 0.1]) {
+    const id = g.create(), samples = [];
+    // A bin-centered unit sine has center-bin one-sided power 1/3.
+    const thresholdDb = 10 * Math.log10(1 / 3) + offset;
+    for (let i = 0; i < 16384; ++i) {
+      const v = tone(750, i);
+      const y = g.tick(id, v, v, { kneeDb, thresholdDb, depthDb: 60, attackMs: 0, releaseMs: 0, smooth: 0 });
+      if (i >= 8192) samples.push(y);
+    }
+    levels.push(rms(samples)); g.destroy(id);
+  }
+  kneeRatios.push(levels[0] / levels[1]);
+}
+assert.ok(kneeRatios[0] > 500, `zero-knee harmonic pop-in must be abrupt: ${kneeRatios}`);
+assert.ok(kneeRatios[1] < 2 && kneeRatios[2] < kneeRatios[1], "wide knees retain progressive opening");
+console.log(`Gate Knee: 0/6/24 dB near-threshold amplitude ratios ${kneeRatios.map(v => v.toFixed(2))} pass.`);
 let seed = 1;
 function noise() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed / 0x100000000 - 0.5) * 0.01; }
 const gh = g.create();

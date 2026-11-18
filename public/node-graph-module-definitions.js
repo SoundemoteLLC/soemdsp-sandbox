@@ -7464,9 +7464,9 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["profileMode","Noise Profile","horizontal"]], h: 26 },
       { kind: "cells", params: [["thresholdDb","Threshold"],["marginDb","Margin"]], h: 40 },
-      { kind: "cells", params: [["depthDb","Depth"],["smooth","Smooth"]], h: 40 },
+      { kind: "cells", params: [["depthDb","Depth"],["kneeDb","Knee"]], h: 40 },
       { kind: "cells", params: [["attackMs","Attack"],["releaseMs","Release"]], h: 40 },
-      { kind: "cells", params: [["mix","Mix","horizontal"]], h: 26 },
+      { kind: "cells", params: [["smooth","Smooth"],["mix","Mix"]], h: 40 },
     ],
     parameters: [
       {
@@ -7507,7 +7507,7 @@ const nodeGraphModuleDefinitions = (
         "max": "0",
         "step": "any",
         "unit": "dB",
-        "tooltip": "Manual gate threshold per FFT bin, in normalized one-sided bin-power dBFS. Six-dB soft knee. Not a whole-signal peak threshold."
+        "tooltip": "Manual gate threshold per FFT bin, in normalized one-sided bin-power dBFS. Knee controls how sharply bins open. Not a whole-signal peak threshold."
       },
       {
         "key": "marginDb",
@@ -7530,6 +7530,17 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "dB",
         "tooltip": "Maximum attenuation for closed bins. Zero disables attenuation; no hard audio clipping."
+      },
+      {
+        "key": "kneeDb",
+        "label": "Knee",
+        "defaultValue": "6",
+        "min": "0",
+        "mid": "6",
+        "max": "24",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Transition width around the manual or learned threshold. Zero hard-switches bins for abrupt harmonic pop-in; 6 dB retains the original soft behavior. For extreme effects also set Attack, Release and Smooth to zero. STFT overlap still blends adjacent frames."
       },
       {
         "key": "attackMs",

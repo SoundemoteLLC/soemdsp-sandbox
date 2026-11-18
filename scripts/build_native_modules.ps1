@@ -16,7 +16,7 @@ $modules = @(
     "soemdsp_stft_contrast_create", "soemdsp_stft_contrast_destroy", "soemdsp_stft_contrast_reset", "soemdsp_stft_contrast_sample", "soemdsp_stft_contrast_right", "soemdsp_stft_contrast_latency", "soemdsp_stft_contrast_version", "soemdsp_stft_contrast_metadata_json", "soemdsp_stft_contrast_metadata_json_size"
   ) }
   @{ Name = "stft_gate"; Simd = $false; Exports = @(
-    "soemdsp_stft_gate_create", "soemdsp_stft_gate_destroy", "soemdsp_stft_gate_reset", "soemdsp_stft_gate_sample", "soemdsp_stft_gate_right", "soemdsp_stft_gate_latency", "soemdsp_stft_gate_version", "soemdsp_stft_gate_metadata_json", "soemdsp_stft_gate_metadata_json_size", "soemdsp_stft_gate_ready", "soemdsp_stft_gate_profile_frames"
+    "soemdsp_stft_gate_create", "soemdsp_stft_gate_destroy", "soemdsp_stft_gate_reset", "soemdsp_stft_gate_sample", "soemdsp_stft_gate_right", "soemdsp_stft_gate_latency", "soemdsp_stft_gate_version", "soemdsp_stft_gate_metadata_json", "soemdsp_stft_gate_metadata_json_size", "soemdsp_stft_gate_ready", "soemdsp_stft_gate_profile_frames", "soemdsp_stft_gate_set_knee"
   ) }
   @{ Name = "vocoder"; Simd = $false; Exports = @(
     "soemdsp_vocoder_create", "soemdsp_vocoder_destroy", "soemdsp_vocoder_reset",

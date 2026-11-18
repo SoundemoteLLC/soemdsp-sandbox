@@ -47,9 +47,16 @@ fixed delay. This is not a Soundgoodizer/Maximus clone.
 
 ## STFT Gate
 
-Each bin has a six-dB soft knee around its threshold. Depth sets the closed
+Each bin has a variable Knee around its threshold (default 6 dB, preserving
+the original behavior). Knee 0 hard-switches at the threshold; positive values
+use a smooth transition across the specified dB width. Depth sets the closed
 attenuation. Smooth blends gain decisions with a five-bin triangular average
 in linear gain; Attack opens and Release closes the stereo-linked gains.
+
+For extreme harmonic pop-in, use Manual, Knee 0, Attack 0, Release 0, Smooth 0,
+Depth 100..120 dB and Mix 1; sweep Threshold through the harmonics. Learn and
+Use Profile also honor Knee. STFT overlap still blends frame transitions;
+hard bin decisions are intentionally not a promise of sample-domain clicks.
 
 Noise Profile modes:
 

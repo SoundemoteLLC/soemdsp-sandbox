@@ -14,7 +14,7 @@ inline double unit(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 struct Params {
   double contrast = 0, scale = 1, threshold = -24, ratio = 1;
   double attack = 10, release = 100, boost = 18, gain = 0, mix = 1;
-  double margin = 3, depth = 60, smooth = 0.5;
+  double margin = 3, depth = 60, smooth = 0.5, knee = 6;
   int profile = 0;
 };
 
@@ -26,7 +26,7 @@ template<bool Gate> struct Engine {
   double bandPower[Gate ? 1 : regions], bandGain[Gate ? 1 : regions];
   double weights[Gate ? 1 : regions][Gate ? 1 : regions];
   int bandIndex[Gate ? 1 : bins];
-  double bandFraction[Gate ? 1 : bins], lastRate, lastScale, lastGain, outputGain, right, profileRate;
+  double bandFraction[Gate ? 1 : bins], lastRate, lastScale, lastGain, outputGain, right, profileRate, gateKnee;
   unsigned long long learnedFrames, samples, learnStart;
   int position, hop, previousProfile;
 
@@ -91,8 +91,9 @@ template<bool Gate> struct Engine {
       for (int k = 0; k < bins; ++k) {
         double threshold = p.threshold;
         if (p.profile == 2 && learnedFrames) threshold = db(noise[k]) + p.margin;
-        // Six-dB knee around the threshold, then explicit attenuation depth.
-        const double opening = unit((db(power[k]) - threshold + 3) / 6);
+        const double delta = db(power[k]) - threshold;
+        const double opening = p.knee > 0 ? unit((delta + 0.5 * p.knee) / p.knee)
+          : (delta >= 0 ? 1 : 0);
         target[k] = amp(-p.depth * (1 - opening * opening * (3 - 2 * opening)));
         if (p.profile == 1 || (p.profile == 2 && !learnedFrames)) target[k] = 1;
       }
@@ -148,7 +149,7 @@ template<bool Gate> struct Engine {
   }
   double tick(double left, double r, const Params& p, double rate) {
     const double values[] = {left, r, p.contrast, p.scale, p.threshold, p.ratio,
-      p.attack, p.release, p.boost, p.gain, p.mix, p.margin, p.depth, p.smooth, rate};
+      p.attack, p.release, p.boost, p.gain, p.mix, p.margin, p.depth, p.smooth, p.knee, rate};
     for (double v : values) if (!__builtin_isfinite(v)) { reset(false); return 0; }
     if (!__builtin_isfinite((float)left) || !__builtin_isfinite((float)r)) { reset(false); return 0; }
     if (rate <= 100 || p.ratio <= 0) { reset(false); return 0; }
@@ -183,7 +184,7 @@ template<bool Gate> struct Pool {
     for (int i = 0; i < capacity; ++i) if (!items[i]) {
       auto* s = static_cast<Engine<Gate>*>(soemdsp::memory_pool::alloc(sizeof(Engine<Gate>)));
       if (!s) return 0;
-      s->reset(); items[i] = s; return i + 1;
+      s->gateKnee = 6; s->reset(); items[i] = s; return i + 1;
     }
     return 0;
   }
