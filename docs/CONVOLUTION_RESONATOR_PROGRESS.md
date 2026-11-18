@@ -4,6 +4,8 @@ Branch: `codex/convolution-resonator`
 
 Current runtime: active-pair, 2x-oversampled Crunch vocoder; **2184 samples**
 reported latency. Earlier sections below record the successive proof stages.
+Current face: native, parameter-pinned body IR and vocoder band kernels,
+evaluated off-thread and presented through the shared WebGL picture device.
 
 ## Native Timing Proof
 
@@ -299,6 +301,58 @@ module relink after zero-frame skipping. Syntax and diff checks pass; cache
 tag is cres8. No broader browser audio-reference smoke or REAPER benchmark
 was run. Argi's live listening/performance acceptance remains the next gate.
 
+## Parameter-Pinned Display
+
+Convolution Resonator now owns a `convolutionResonatorFace` recipe, with no
+captured audio source and no inherited Trace/Burn settings. New instances
+default to 12 GU wide and an 8-GU face; existing saved dimensions are preserved.
+The shared face creator, drawing pump, texture sizing and GL line/text renderer
+handle presentation. There is no private canvas, 2D drawing or JS DSP fallback.
+
+The upper plot is a unit-impulse response evaluated through the real native
+body with its fixed latency removed. Its amplitude axis stays at +/-1, with
+actual peak labeling and geometry clipping at the view edge, not value clamps
+or automatic peak scaling. Small responses retain every sample. Long responses
+use chronological bin extrema, retain the actual peak, and are explicitly
+named "IR envelope." The display window is limited to 2 seconds / 192000
+samples; a limited window says "tail continues" (or + at narrow sizes). This
+is only a display budget, not a change to the audible decay.
+
+The lower plot shows four native tone-probe kernels (100/500/2k/8k Hz), using
+the production FFT, log-frequency smoother, formant interpolation, size
+selection and blend law. They are explicitly peak-normalized **shapes**, not
+output gain measurements or a complete nonlinear vocoder transfer function.
+FFT-grid peaks are included in the frequency grid. Above-Nyquist probe anchors
+are omitted rather than aliased. Frame counts and effective bandwidth appear
+when there is room; compact heights show only the IR.
+
+Only stored parameter values and the user's active knob drag drive the probe.
+Wired frequency, input audio and live MOD/ghost values do not move the plots.
+Sample rate comes from the existing audio-derivation source of truth, including
+global engine oversampling. Resize remaps the same data without rerunning DSP.
+
+A dedicated worker loads the standalone native module. It creates its own
+probe handles and never touches the worklet. Main-thread requests coalesce
+per face, stale results are discarded, and twelve bounded parameter snapshots
+are cached. Every face instance has its own completion target, including
+multiple views of the same node. Native loading/evaluation failures are
+reported to the debug console and face, not silently reinterpreted in JS.
+
+Verification:
+
+- All previous seven focused DSP scripts still pass.
+- `test_convolution_resonator_display.mjs` verifies exact native IR identity,
+  preserved extrema/peaks, explicit tail limits, shift/bandwidth behavior,
+  above-Nyquist anchor omission, pinning and isolation from running vocoders.
+- `test_convolution_resonator_display_browser.mjs` verifies the actual worker
+  and nonblank shared-GL pixels on desktop/mobile and a real one-GU resize.
+  It finds no private canvas, no inherited settings, no page/probe errors, and
+  no probe-key changes from unrelated Mix/Vocoder edits. Screenshots were
+  inspected; temporary images are written to the OS temp directory.
+- All 199 native modules and combined WASM built; a final probe-only correction
+  was incrementally rebuilt/relinked. Syntax and diff checks pass. Cache tag:
+  cres9. Broader audio-reference smoke and REAPER were not run for this step.
+
 ## Next
 
 1. Diagnose the browser Render Sample stall, with a bounded test and diagnostics.
@@ -306,11 +360,12 @@ was run. Argi's live listening/performance acceptance remains the next gate.
 3. Argi verified that String can be played melodically and its buildup settles.
    Listen to Tube with Body = 1, Decay = 0.08 s and then longer decay; compare
    with String and sweep the intermediate body settings.
-4. Argi confirmed both the fixed vocoder and Crunch. Listen to the new 2x path
-   on high notes and rapid parameter changes, and compare live CPU behavior.
+4. Argi confirmed the 2x high-frequency/performance pass. Inspect the new face:
+   edit Body/Decay and Crunch/Response/Bandwidth/Shift; play wired pitch and
+   confirm the static curves remain pinned to the knobs.
 5. Coordinate adoption of the shared FFT by Noise Convolution Reverb without
-   touching another agent's worktree. Then pinned displays and any refinements
-   needed after live performance acceptance.
+   touching another agent's worktree. Refine after display acceptance, then
+   plan a separate merge/release checkpoint; this worktree remains unmerged.
 
 The 2048-sample latency is provisional until oversampled filter group delay is
 known. All wet branches and dry must share the final reported latency.

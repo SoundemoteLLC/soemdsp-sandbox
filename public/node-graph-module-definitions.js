@@ -7341,6 +7341,9 @@ const nodeGraphModuleDefinitions = (
   convolutionResonator: {
     planRole: "processor",
     planFreeRun: true,
+    customDisplayArea: true,
+    displayHeightGu: 8,
+    defaultWidthGu: 12,
     face: [
       { kind: "cells", params: [["frequency", "Frequency"], ["bodySize", "Size"]], h: 40 },
       { kind: "cells", params: [["body", "Body"], ["bodyDecay", "Decay"]], h: 40 },
@@ -7354,7 +7357,9 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Mono", "Left", "Right"],
     outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
-    displayType: "lineBurn",
+    displayType: "convolutionResonatorFace",
+    displaySignals: [],
+    displayModes: [{ key: "bodyAndBands", label: "Body / Bands", renderer: "convolutionResonatorFace", source: {}, settingsSchema: "" }],
     parameters: [
       { key: "frequency", label: "Frequency", kind: "frequency", defaultValue: "110",
         min: "10", mid: "110", max: "20000", step: "any", nonlinearSlider: true, unit: "Hz",

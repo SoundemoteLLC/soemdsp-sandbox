@@ -59,6 +59,17 @@ template<int kFrame, int kHop, int kAlignment = kMaxFrame, int kSpectralScale = 
     }
   }
 
+  double envelopeGain(double source) const {
+    if (!(source >= 1 && source < kFrame / (2 * kSpectralScale))) return 0;
+    const int index = (int)source;
+    const double fraction = source - index, a = envelope[index], b = envelope[index + 1];
+    return fraction == 0 ? a : (a > 0 && b > 0
+      ? soemdsp_maths::dsp_exp(soemdsp_maths::dsp_ln(a)
+        + fraction * (soemdsp_maths::dsp_ln(b) - soemdsp_maths::dsp_ln(a)))
+      : a + fraction * (b - a));
+  }
+  void analyze() { frameFft<kFrame>.transform(re, im, false); }
+
   void frame(double shift, bool unityEnvelope, double bandwidth, int skip = 0) {
     auto& fft = frameFft<kFrame>;
     bool hasCarrier = false, hasVoice[2]{};
@@ -79,7 +90,7 @@ template<int kFrame, int kHop, int kAlignment = kMaxFrame, int kSpectralScale = 
         re[i] = input[c][(position + 1 + i) % kFrame] * window[i];
         im[i] = 0;
       }
-      fft.transform(re, im, false);
+      analyze();
       for (int k = 0; k <= kFrame / 2; ++k)
         envelope[k] = __builtin_sqrt((double)re[k] * re[k] + (double)im[k] * im[k]) * (4.0 / kFrame);
       smooth(bandwidth);
@@ -87,15 +98,7 @@ template<int kFrame, int kHop, int kAlignment = kMaxFrame, int kSpectralScale = 
         const double source = k / ratio;
         double gain = 0;
         if (unityEnvelope) gain = 1;
-        else if (k > 0 && k < kFrame / 2 && source >= 1 && source < kFrame / (2 * kSpectralScale)) {
-          const int index = (int)source;
-          const double fraction = source - index;
-          const double a = envelope[index], b = envelope[index + 1];
-          gain = fraction == 0 ? a : (a > 0 && b > 0
-            ? soemdsp_maths::dsp_exp(soemdsp_maths::dsp_ln(a)
-              + fraction * (soemdsp_maths::dsp_ln(b) - soemdsp_maths::dsp_ln(a)))
-            : a + fraction * (b - a));
-        }
+        else if (k > 0 && k < kFrame / 2) gain = envelopeGain(source);
         re[k] = (float)(carrierRe[k] * gain); im[k] = (float)(carrierIm[k] * gain);
         if (k > 0 && k < kFrame / 2) { re[kFrame - k] = re[k]; im[kFrame - k] = -im[k]; }
       }
@@ -121,6 +124,13 @@ template<int kFrame, int kHop, int kAlignment = kMaxFrame, int kSpectralScale = 
 };
 using VocoderStft = StftFrame<512, 128>;
 inline double unit(double value) { return value < 0 ? 0 : value > 1 ? 1 : value; }
+struct CrunchSelection { int low, high; double blend; };
+inline CrunchSelection selectCrunch(double crunch, double response) {
+  const double index = 6 * (1 - unit(crunch + response));
+  const int low = (int)index;
+  const double fraction = index - low;
+  return {low, low < 6 ? low + 1 : 6, fraction * fraction * (3 - 2 * fraction)};
+}
 template<int Scale> struct CrunchVocoderT {
   static constexpr int alignment = kMaxFrame * Scale, historySize = 2 * alignment;
   StftFrame<32 * Scale, Scale, alignment, Scale> n32;
@@ -147,9 +157,9 @@ template<int Scale> struct CrunchVocoderT {
   double tick(double left, double rightInput, double carrier, double shift,
     double crunch, double response, double bandwidth, bool unity = false, bool reference = false) {
     const double width = unit(crunch + bandwidth);
-    const double index = 6 * (1 - unit(crunch + response));
-    const int low = (int)index, high = low < 6 ? low + 1 : 6;
-    const double fraction = index - low, blend = fraction * fraction * (3 - 2 * fraction);
+    const auto selected = selectCrunch(crunch, response);
+    const int low = selected.low, high = selected.high;
+    const double blend = selected.blend;
     const int hp = (int)(time % historySize);
     history[0][hp] = (float)left; history[1][hp] = (float)rightInput; history[2][hp] = (float)carrier;
     shifts[hp] = shift; widths[hp] = width; unities[hp] = unity;

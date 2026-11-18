@@ -422,3 +422,4 @@ extern "C" void soemdsp_convolution_resonator_set_crunch(int handle, double crun
     s->crunch = crunch; s->response = response; s->bandwidth = bandwidth;
   }
 }
+#include "resonator_probe.h"
