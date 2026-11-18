@@ -7562,6 +7562,59 @@ const nodeGraphModuleDefinitions = (
     parameters:
     [
       {
+        "key": "structureAspect",
+        "label": "Structure / Aspect (WIP)",
+        "defaultValue": "1",
+        "min": "0.25",
+        "mid": "1",
+        "max": "4",
+        "step": "any",
+        "hidden": true,
+        "modulation": false,
+        "parameterOutput": false,
+        "tooltip": "Under construction. Reserved for changing the object's structure/aspect and modal relationships. Currently inactive: changing this value does nothing."
+      },
+      {
+        "key": "dampingCurve",
+        "label": "Damping Curve (WIP)",
+        "defaultValue": "0",
+        "min": "-1",
+        "mid": "0",
+        "max": "1",
+        "step": "any",
+        "hidden": true,
+        "modulation": false,
+        "parameterOutput": false,
+        "tooltip": "Under construction. Reserved for shaping high-mode decay. Currently inactive: changing this value does nothing."
+      },
+      {
+        "key": "modalDisplay",
+        "label": "Modal Display (WIP)",
+        "kind": "choice",
+        "choices": [
+          "Off",
+          "On"
+        ],
+        "choiceKeys": [
+          "off",
+          "on"
+        ],
+        "choiceIds": [
+          0,
+          1
+        ],
+        "defaultValue": "off",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "1",
+        "hidden": true,
+        "modulation": false,
+        "parameterOutput": false,
+        "linearSmoothing": false,
+        "tooltip": "Under construction. Reserved for a display of modal frequencies and ringing energy. Currently inactive: no modal display is implemented."
+      },
+      {
         "key": "material",
         "label": "Material",
         "kind": "choice",

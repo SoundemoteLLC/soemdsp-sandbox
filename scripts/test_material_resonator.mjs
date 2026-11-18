@@ -4,7 +4,10 @@ import {performance} from 'node:perf_hooks';
 const x=(await WebAssembly.instantiate(fs.readFileSync(new URL('../native_modules/material_resonator/material_resonator.wasm',import.meta.url)),{})).instance.exports;
 const p='soemdsp_material_resonator_',call=(name,...args)=>x[p+name](...args);
 const meta=JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,call('metadata_json'),call('metadata_json_size'))));
-assert.equal(meta.parameters.length,10);assert.ok(meta.parameters.every(p=>p.tooltip));assert.equal(call('latency'),0);
+assert.equal(meta.parameters.length,13);assert.ok(meta.parameters.every(p=>p.tooltip));assert.equal(call('latency'),0);
+for(const key of ['structureAspect','dampingCurve','modalDisplay']) {
+  const param=meta.parameters.find(p=>p.key===key);assert.equal(param.hidden,true);assert.equal(param.modulation,false);assert.equal(param.parameterOutput,false);assert.match(param.tooltip,/inactive/i);
+}
 function render(h,n,sr,options={},input=i=>[i===0?1:0,i===0?1:0]) {
   const a=new Float64Array(n),b=new Float64Array(n);
   for(let i=0;i<n;++i) {

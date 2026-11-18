@@ -33,6 +33,18 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum=function(...args){
    {sourceNode:material,sourcePort:'Right',destinationNode:output.id,destinationPort:'Right'}];
   patch.modulations=[];commitNodeGraphPatch(patch,{status:'Material test'});const plan=nodeGraphBuildLivePlan();if(plan.issues?.length)throw Error(JSON.stringify(plan.issues));return{source,material};
  });
+ const parked=await page.evaluate(()=> {
+  const def=nodeGraphModuleDefinitions.materialResonator;
+  return ['structureAspect','dampingCurve','modalDisplay'].map(key=> {
+   const p=def.parameters.find(p=>p.key===key);
+   return {key,visible:nodeGraphParameterDefaultVisible(p),modulation:p.modulation,output:p.parameterOutput,tooltip:p.tooltip,
+     widget:def.face.some(row=>(row.params||[]).some(cell=>cell[0]===key))};
+  });
+ });
+ for(const p of parked){assert.equal(p.visible,false);assert.equal(p.modulation,false);assert.equal(p.output,false);assert.equal(p.widget,false);assert.match(p.tooltip,/inactive/i);}
+ if(process.argv.includes('--metadata-only')) {
+  assert.deepEqual(errors,[]);console.log('Material placeholders: hidden defaults, inactive tooltips, no face widgets or modulation/output ports pass.');
+ } else {
  await page.evaluate(()=>setNodeGraphLiveOutputEnabled(true));await page.waitForFunction(()=>nodeGraphMvp.live.node,null,{timeout:30000});
  await page.evaluate(()=>{nodeGraphMvp.live.node.port.addEventListener('message',e=>{if(e.data?.type==='test-material')window.testMaterial=e.data;});nodeGraphMvp.live.node.port.start();});
  await page.waitForFunction(()=>Math.abs((window.testMaterial?.f||0)-220)<.01&&nodeGraphMvp.live.outputLevelSmooth>1e-5,null,{timeout:30000});
@@ -44,4 +56,5 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum=function(...args){
   await page.screenshot({path:path.join(os.tmpdir(),`material-resonator-${width}.png`)});
  }
  assert.deepEqual(errors,[]);await page.evaluate(()=>setNodeGraphLiveOutputEnabled(false));console.log('Material browser: native audio, real frequency/material edits, clean GL desktop/mobile and no page errors pass.');
+ }
 }finally{await browser.close();}

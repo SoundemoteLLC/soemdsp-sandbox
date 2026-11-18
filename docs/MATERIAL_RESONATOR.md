@@ -94,3 +94,13 @@ renderer. Face uses the existing shared GL 1D Trace.
 Listening acceptance is required; impulse level and material character are the
 first listening questions. Exact measured materials, custom modal-table editing,
 nonlinear coupling and object-to-object interaction are not part of this proof.
+
+## Parked Controls
+
+Listening acceptance for the initial material effect is complete.
+Three hidden, inactive parameter placeholders are reserved for later:
+`structureAspect`, `dampingCurve`, and `modalDisplay`. They have WIP labels and
+explicit no-effect tooltips, no modulation ports or parameter outputs, no face
+widgets, no runtime parameter binding and no DSP implementation. The normal
+hidden-parameter visibility mechanism is used; revealing them does not make them
+functional. Modal Display is only a reserved setting, not an implemented view.
