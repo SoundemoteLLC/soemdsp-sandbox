@@ -83,6 +83,10 @@ const nodeUiDevSettingControls = Object.freeze([
   // Floor for fit-to-box tip text. The fitter never goes below this; longer tips clip.
   { defaultValue: 12, id: "nodeUiDevTooltipTextSize", key: "tooltipTextSize", max: 96, min: 12, type: "number" },
   { defaultValue: 100, id: "nodeUiDevModuleLightBrightness", key: "moduleLightBrightness", max: 300, min: 0, type: "number" },
+  // TEMPORARY: dial-in controls for how the mouse lights the grid (remove once the numbers are baked into code).
+  { defaultValue: 100, id: "nodeUiDevGridMouseLight", key: "gridMouseLight", max: 400, min: 0, step: 5, type: "number" },
+  { defaultValue: 30, id: "nodeUiDevGridMouseBright", key: "gridMouseBright", max: 100, min: 0, step: 1, type: "number" },
+  { defaultValue: 250, id: "nodeUiDevGridMouseReach", key: "gridMouseReach", max: 400, min: 25, step: 5, type: "number" },
   { defaultValue: 34.5, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, step: 0.5, type: "number" },
   {
     defaultValue: 220,
@@ -307,6 +311,9 @@ const nodeUiDevSettingSections = Object.freeze([
     title: "grid",
     ids: [
       "nodeUiDevMinimumGridBrightness",
+      "nodeUiDevGridMouseLight",
+      "nodeUiDevGridMouseBright",
+      "nodeUiDevGridMouseReach",
       "nodeUiDevGridSpread",
       "nodeUiDevGridDivisionMultiply",
       "nodeUiDevGridColor",

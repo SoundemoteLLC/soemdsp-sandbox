@@ -842,6 +842,9 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
         spread: Math.max(0.4, Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78))),
         mouseSpread: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread"))),
         mouseBase: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount"))),
+        mouseLight: Math.max(0, Math.min(4, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-mouse-light", 1))),
+        mouseBright: Math.max(0, Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-mouse-bright", 0))),
+        mouseReach: Math.max(0.25, Math.min(4, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-mouse-reach", 1))),
       },
     };
   }
@@ -861,7 +864,9 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
     moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
     mouse: active ? mouse : null,
     // The mouse is a light like a module (see NODE_GRID_LAMP_REVEAL).
-    reflect: NODE_GRID_LAMP_REVEAL,
+    reflect: NODE_GRID_LAMP_REVEAL * b.mouseLight,
+    lampBright: b.mouseBright,
+    lampReach: b.mouseReach,
     mouseRadius: Math.max(nodeGraphGridWidth(), nodeGraphGridHeight()) * (3 + 10.5 * b.mouseSpread),
     mouseAmount: 0.92 * mouseAmount,
   };

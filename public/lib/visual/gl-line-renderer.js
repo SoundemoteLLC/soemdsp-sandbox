@@ -435,6 +435,8 @@ uniform float uGridDark;
 uniform highp vec4 uGridLamp;
 // The mouse as a module-like light: 1 = it reveals the grid as brightly as a module does (0 = not at all).
 uniform float uGridReflect;
+// TEMPORARY dial-in: x = push the lines at the mouse toward full white (0..1), y = how far the mouse light reaches (1 = a module's reach).
+uniform vec2 uGridLampMore;
 uniform float uModuleAmt;
 uniform highp vec4 uMouse;
 uniform float uZoomPx;
@@ -502,13 +504,13 @@ void main() {
       float ldw = length(vPx - uGridLamp.xy);
       float ld = ldw / max(uGridLamp.z, 1.0);
       lit = clamp(uGridLamp.w * exp(-1.6 * ld * ld), 0.0, 1.0);
-      float ug = ldw / max(uGridMin.x * uGridSpread, 1.0);
+      float ug = ldw / max(uGridMin.x * uGridSpread * uGridLampMore.y, 1.0);
       lampRev = clamp(uGridReflect, 0.0, 4.0) * (1.0 / (1.0 + (ug / 0.3) * (ug / 0.3))) * (1.0 - smoothstep(0.55, 1.0, ug));
     }
     float gridF = 1.0 - uGridDark * (1.0 - lit);
     vec3 gridRgb = mix(uGridRgba.rgb, vec3(1.0), 0.45 * lit * lit);
     rv = 1.0 - (1.0 - rv) * (1.0 - clamp(lampRev, 0.0, 1.0));
-    float gridA = uGridRgba.a * cov * rv * gridF;
+    float gridA = cov * mix(uGridRgba.a * rv * gridF, 1.0, clamp(lampRev, 0.0, 1.0) * clamp(uGridLampMore.x, 0.0, 1.0));
     acc.rgb += (1.0 - acc.a) * gridRgb * gridA;
     acc.a += (1.0 - acc.a) * gridA;
   }
@@ -868,6 +870,7 @@ void main() {
         lightGridDark: gl.getUniformLocation(lightProgram, "uGridDark"),
         lightGridLamp: gl.getUniformLocation(lightProgram, "uGridLamp"),
         lightGridReflect: gl.getUniformLocation(lightProgram, "uGridReflect"),
+        lightGridLampMore: gl.getUniformLocation(lightProgram, "uGridLampMore"),
         lightModuleAmt: gl.getUniformLocation(lightProgram, "uModuleAmt"),
         lightMouse: gl.getUniformLocation(lightProgram, "uMouse"),
         lightZoomPx: gl.getUniformLocation(lightProgram, "uZoomPx"),
@@ -3580,7 +3583,8 @@ void main() {
         ? Math.max(0, Math.min(1, Number(global.nodeGraphRoomAmbientDark()) || 0)) : 0;
       const gridDark = Math.min(ambient, 0.75);
       const lamp = typeof global.nodeGraphRoomLightUniform === "function" ? global.nodeGraphRoomLightUniform() : null;
-      if (s.lightGridReflect) gl.uniform1f(s.lightGridReflect, Math.max(0, Math.min(1, Number(grid.reflect) || 0)));
+      if (s.lightGridReflect) gl.uniform1f(s.lightGridReflect, Math.max(0, Math.min(4, Number(grid.reflect) || 0)));
+      if (s.lightGridLampMore) gl.uniform2f(s.lightGridLampMore, Math.max(0, Math.min(1, Number(grid.lampBright) || 0)), Math.max(0.25, Number(grid.lampReach) || 1));
       if (s.lightGridDark) gl.uniform1f(s.lightGridDark, gridDark);
       if (s.lightGridLamp) gl.uniform4f(s.lightGridLamp, lamp ? lamp[0] : 0, lamp ? lamp[1] : 0, lamp ? lamp[2] : 1, lamp ? lamp[3] : 0);
     }
