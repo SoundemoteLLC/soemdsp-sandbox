@@ -1095,6 +1095,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Dark Velvet Reverb",
     notes: ["velvet reverb", "dark velvet reverb", "velvet noise", "dark velvet noise", "dvn", "diffuser", "boxcar", "reverb", "sparse", "native"],
   },
+  spectralBlur: {
+    category: "space", label: "Spectral Blur",
+    description: "Native STFT ambient wash: smear spectral power over time, spread harmonics across frequency and blend in phase diffusion. Fixed 4096-sample latency.",
+    notes: ["spectral", "STFT", "blur", "ambient", "smear", "native"],
+  },
   stftContrast: {
     category: "dynamics", label: "STFT Contrast",
     description: "Stereo-linked spectral contrast and compression across overlapping logarithmic regions. Reveal quiet detail or emphasize spectral peaks, with explicit boost limits and no hidden limiter.",
@@ -3923,6 +3928,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   vocoder: {
     source: "native_modules/vocoder/vocoder.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/vocoder/vocoder.cpp",
+  },
+  spectralBlur: {
+    source: "native_modules/spectral_blur/spectral_blur.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_blur/spectral_blur.cpp",
   },
   stftContrast: {
     source: "native_modules/stft_contrast/stft_contrast.cpp",

@@ -12,6 +12,11 @@ if (!(Test-Path -LiteralPath $clang)) {
 # instead of one repeated clang++ invocation per module. Add a new module by
 # adding one entry here (Name, Exports, and Simd only if it uses <wasm_simd128.h>).
 $modules = @(
+  @{ Name = "spectral_blur"; Simd = $false; Exports = @(
+    "soemdsp_spectral_blur_create", "soemdsp_spectral_blur_destroy", "soemdsp_spectral_blur_reset",
+    "soemdsp_spectral_blur_sample", "soemdsp_spectral_blur_right", "soemdsp_spectral_blur_latency",
+    "soemdsp_spectral_blur_version", "soemdsp_spectral_blur_metadata_json", "soemdsp_spectral_blur_metadata_json_size"
+  ) }
   @{ Name = "stft_contrast"; Simd = $false; Exports = @(
     "soemdsp_stft_contrast_create", "soemdsp_stft_contrast_destroy", "soemdsp_stft_contrast_reset", "soemdsp_stft_contrast_sample", "soemdsp_stft_contrast_right", "soemdsp_stft_contrast_latency", "soemdsp_stft_contrast_version", "soemdsp_stft_contrast_metadata_json", "soemdsp_stft_contrast_metadata_json_size"
   ) }

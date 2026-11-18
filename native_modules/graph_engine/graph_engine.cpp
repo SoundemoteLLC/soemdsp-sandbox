@@ -837,6 +837,11 @@ extern "C" void soemdsp_vocoder_set_bands(int handle, int count);
 extern "C" double soemdsp_vocoder_sample(int handle, double modL, double modR,
   double carL, double carR, double width, double followerSeconds, double shift, double mix, double rate);
 extern "C" double soemdsp_vocoder_right(int handle);
+extern "C" int soemdsp_spectral_blur_create();
+extern "C" void soemdsp_spectral_blur_destroy(int h);
+extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double seconds,
+  double hz, double diffusion, double mix, double rate);
+extern "C" double soemdsp_spectral_blur_right(int h);
 extern "C" int soemdsp_stft_contrast_create();
 extern "C" void soemdsp_stft_contrast_destroy(int handle);
 extern "C" double soemdsp_stft_contrast_sample(int h, double l, double r, double contrast,
@@ -2604,6 +2609,7 @@ static const int kTypeCombPluck = 266; // Comb Pluck: strict Trigger + built-in 
 static const int kTypeNoiseConvReverb = 267; // Noise Convolution Reverb: shaped noise IR, zero-latency partitioned convolution
 static const int kTypeConvolutionResonator = 268;
 static const int kTypeVocoder = 269;
+static const int kTypeSpectralBlur = 272;
 static const int kTypeStftContrast = 270;
 static const int kTypeStftGate = 271;
 
@@ -3281,6 +3287,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_convolution_resonator_destroy(handle);
   } else if (kind == kTypeVocoder) {
     soemdsp_vocoder_destroy(handle);
+  } else if (kind == kTypeSpectralBlur) {
+    soemdsp_spectral_blur_destroy(handle);
   } else if (kind == kTypeStftContrast) {
     soemdsp_stft_contrast_destroy(handle);
   } else if (kind == kTypeStftGate) {
@@ -4993,6 +5001,12 @@ static void init_node_defaults(Node& n, int typeId) {
     }
     for (int i = 0; i < kMaxBlockFrames; i += 1) n.yellowCutoffStrip[i] = 1.0f;
   }
+  if (typeId == kTypeSpectralBlur) {
+    init_control(n.timeNumerator, 2, false);
+    init_control(n.width, 100, false);
+    init_control(n.diffusionAmount, 1, false);
+    init_control(n.mix, 1, false);
+  }
   if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
     const bool gate = typeId == kTypeStftGate;
     init_control(n.shape, gate ? 0.5 : -0.35, false);
@@ -5818,6 +5832,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeNoiseConvReverb) return soemdsp_noise_conv_reverb_create((double)sampleRate);
   if (typeId == kTypeConvolutionResonator) return soemdsp_convolution_resonator_create();
   if (typeId == kTypeVocoder) return soemdsp_vocoder_create();
+  if (typeId == kTypeSpectralBlur) return soemdsp_spectral_blur_create();
   if (typeId == kTypeStftContrast) return soemdsp_stft_contrast_create();
   if (typeId == kTypeStftGate) return soemdsp_stft_gate_create();
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
@@ -15949,7 +15964,12 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
     // Linked detection must observe both inputs regardless of output wiring.
     const double left = a, right = b;
     double y, yr;
-    if (gate) {
+    if (node.typeId == kTypeSpectralBlur) {
+      y = soemdsp_spectral_blur_sample(node.nativeHandle, left, right,
+        control_audio(g, node.timeNumerator, f), control_audio(g, node.width, f),
+        control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);
+      yr = soemdsp_spectral_blur_right(node.nativeHandle);
+    } else if (gate) {
       soemdsp_stft_gate_set_knee(node.nativeHandle, control_audio(g, node.resonance, f));
       soemdsp_stft_gate_set_hold(node.nativeHandle, control_audio(g, node.diffusionSize, f));
       y = soemdsp_stft_gate_sample(node.nativeHandle, left, right,
@@ -17490,7 +17510,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeNoiseConvReverb
     || typeId == kTypeConvolutionResonator
     || typeId == kTypeVocoder
-    || typeId == kTypeStftContrast || typeId == kTypeStftGate
+    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur
     || typeId == kTypeSampleHold
     || typeId == kTypeMinMax
     || typeId == kTypeClock
@@ -17655,7 +17675,7 @@ static bool type_needs_native(int typeId) {
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
   if (typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
-    || typeId == kTypeStftContrast || typeId == kTypeStftGate) return true;
+    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
     || typeId == kTypeSampleDelay || typeId == kTypeExponentialDelay || typeId == kTypeDelayEffect
@@ -19114,7 +19134,7 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_vocoder(g, node, frames);
       return;
     }
-    if (node.typeId == kTypeStftContrast || node.typeId == kTypeStftGate) {
+    if (node.typeId == kTypeStftContrast || node.typeId == kTypeStftGate || node.typeId == kTypeSpectralBlur) {
       process_stft_dynamics(g, node, frames);
       return;
     }

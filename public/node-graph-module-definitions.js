@@ -208,6 +208,7 @@ const nodeGraphNodeLabels = Object.freeze({
   phaser: "Phaser",
   vocoder: "Vocoder",
   stftContrast: "STFT Contrast",
+  spectralBlur: "Spectral Blur",
   stftGate: "STFT Gate",
   flanger: "Flanger",
   chorus: "Chorus",
@@ -7338,6 +7339,67 @@ const nodeGraphModuleDefinitions = (
         unit: "%",
         tooltip: "Dry/wet mix (0% = dry input, 100% = wet)."
       },
+    ],
+  },
+  spectralBlur: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
+    outputs: ["Mono", "Left", "Right"], outputAliases: { Out: "Mono" },
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["smearSeconds", "Time Smear"], ["blurHz", "Frequency Blur"]], h: 40 },
+      { kind: "cells", params: [["diffusion", "Diffusion"], ["mix", "Mix"]], h: 40 },
+    ],
+    parameters: [
+      {
+        "key": "smearSeconds",
+        "label": "Time Smear",
+        "kind": "time",
+        "defaultValue": "2",
+        "min": "0",
+        "mid": "1",
+        "max": "10",
+        "unit": "s",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Spectral power averaging time constant in seconds. Zero follows each frame; longer values soften attacks and leave slowly decaying spectral clouds. Not a delay or freeze."
+      },
+      {
+        "key": "blurHz",
+        "label": "Frequency Blur",
+        "kind": "frequency",
+        "defaultValue": "100",
+        "min": "0",
+        "mid": "200",
+        "max": "4000",
+        "unit": "Hz",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Power-spreading neighborhood half-width in Hz. Zero leaves bins separate. Higher values spread harmonics into surrounding frequencies. The fixed FFT limits frequency resolution."
+      },
+      {
+        "key": "diffusion",
+        "label": "Diffusion",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "%",
+        "step": "any",
+        "tooltip": "Complex-spectrum blend from coherent phase to a fixed-rate phase diffuser. Shared phase offsets preserve matched stereo channels. Intermediate blends can reduce level through phase cancellation; no hidden makeup gain."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "%",
+        "step": "any",
+        "tooltip": "Dry/wet blend aligned to 4096 samples of latency. Time Smear 0, Frequency Blur 0 and Diffusion 0 are neutral."
+      }
     ],
   },
   stftContrast: {

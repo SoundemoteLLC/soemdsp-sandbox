@@ -293,6 +293,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   noiseConvReverb: 267,
   convolutionResonator: 268,
   vocoder: 269,
+  spectralBlur: 272,
   stftContrast: 270,
   stftGate: 271,
 });
@@ -623,6 +624,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "releaseMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "maxBoostDb") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
     if (k === "gainDb") return P.NATIVE_GRAPH_PARAM_LEVEL;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+  }
+  if (t === "spectralBlur") {
+    if (k === "smearSeconds") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "blurHz") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if (t === "stftGate") {
@@ -6138,6 +6145,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("tailRandom", P.NATIVE_GRAPH_PARAM_CENTER, cont("tailRandom", 1));
       push("tailCurve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("tailCurve", 0));
       push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 1));
+      continue;
+    }
+    if (type === "spectralBlur") {
+      push("smearSeconds", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("smearSeconds", 2));
+      push("blurHz", P.NATIVE_GRAPH_PARAM_WIDTH, cont("blurHz", 100));
+      push("diffusion", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusion", 1));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;
     }
     if (type === "stftContrast") {

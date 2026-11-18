@@ -3098,6 +3098,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "spectral_blur",
+      "label": "Spectral Blur",
+      "targetType": "spectralBlur",
+      "kind": "effect",
+      "source": "native_modules/spectral_blur/spectral_blur.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_blur/spectral_blur.cpp",
+      "localSourceUrl": "/native_modules/spectral_blur/spectral_blur.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/spectral_blur/spectral_blur.wasm",
+      "wasmUrl": "native_modules/spectral_blur/spectral_blur.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "step_graph",
       "label": "Step Graph",
       "targetType": "stepGraph",
