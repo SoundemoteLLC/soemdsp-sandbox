@@ -15,8 +15,16 @@ delay and smear incoming sound, but cannot generate new harmonics, transpose
 frequencies or perform dynamics compression. A changing kernel is a different,
 time-varying system and needs explicit transition/artefact handling.
 
-These are candidates, not an instruction to create eight new module types.
+These are candidates, not an instruction to create all of these module types.
 Extend existing modules where the behavior and user interaction genuinely fit.
+
+## No IR-Sample Workflow
+
+Do not add IR-file loaders, captured-sound-as-IR modules or two-IR asset morphing.
+Convolution kernels in this roadmap are generated internally from parameters,
+geometry or mathematical designs; no imported/captured IR assets are required.
+FFT Reconstruction is a separate FFT sample player and stays unchanged: ordinary
+audio playback/resynthesis is not an IR-loading workflow.
 
 ## Existing Foundations
 
@@ -32,13 +40,13 @@ Extend existing modules where the behavior and user interaction genuinely fit.
 
 Goal: make a designed filter visible, editable and reusable as an IR.
 
-- [ ] Begin with a bounded magnitude-response editor and deterministic FIR export.
+- [ ] Begin with a bounded magnitude-response editor and deterministic FIR generation.
 - [ ] Explicit frequency axis, gain units, kernel length and output gain.
 - [ ] Linear-phase mode with known delay and visible pre-ringing tradeoff.
 - [ ] Minimum-phase mode as a separate tested design step. Define the magnitude
   floor needed for log-spectrum construction; do not hide it as audio clipping.
 - [ ] Preview actual realized magnitude/phase, not just the requested curve.
-- [ ] Later: smoothing, spectral tilt, notches and generic resource export/import.
+- [ ] Later: smoothing, spectral tilt and notches. Kernels remain internally generated.
 
 Proof: impulse output equals the generated kernel; measured response matches
 the requested curve within stated resolution/window limits. Account for design
@@ -58,25 +66,7 @@ Proof: plot group delay and magnitude; listen to impulses, kicks and pulse train
 An ideal allpass preserves magnitude, but truncating its IR generally does not;
 measure the approximation instead of promising perfect transparency.
 
-## 3. Captured-Sound Convolution / Cross-Synthesis
-
-Goal: use a captured sound as the filter for another sound.
-
-- [ ] Signal input, separate capture source, Capture trigger and Ready state.
-- [ ] Explicit capture duration, trim/start, endpoint taper and kernel gain.
-- [ ] Audition the captured IR independently from the processed signal.
-- [ ] First version freezes the capture; repeated capture replaces it through
-  an intentional transition. Continuous convolution between two live streams
-  is not an implied feature.
-- [ ] Later: reverse, playback-rate resampling of the IR and resource loading.
-  Resampling the IR changes its response, not the pitch of all incoming audio.
-- [ ] Store captured IRs using existing asset conventions, not hidden patch blobs.
-
-Proof: voice, glass, clap and drum captures yield deterministic convolution;
-silence/very quiet captures do not cause automatic gain explosions. Normalization,
-if offered, is explicit. No dependency on the future File Grid UI to prove capture.
-
-## 4. Material Resonator
+## 3. Material Resonator
 
 Goal: kernels that turn impulses into recognizable or invented struck objects.
 
@@ -90,12 +80,12 @@ Goal: kernels that turn impulses into recognizable or invented struck objects.
 Proof: inspect modal frequencies/decays, low-frequency behavior, response to
 single-sample excitation and sustained input. Retuning must have a defined policy.
 
-## 5. Early Reflection Convolution
+## 4. Early Reflection Convolution
 
 Goal: tiny rooms, tunnels, slap clusters and impossible reflection geometry.
 
 The existing tap-based module is named Early Reflection Delay (stable type
-`earlyReflections`). The planned new room/IR module is Early Reflection
+`earlyReflections`). The implemented procedural room module is Early Reflection
 Convolution; these are distinct modules, not two names for the same DSP.
 
 - [x] Native rectangular-room IR proof: reflection times, inverse-distance gains,
@@ -109,41 +99,13 @@ Convolution; these are distinct modules, not two names for the same DSP.
   fractional-delay placement deliberately rather than quantizing casually.
 
 Current proof uses two-sample fractional placement and dense convolution for the
-damped path tails. Sparse/dense cost comparison and listening acceptance remain.
+damped path tails. Diffusion and listening acceptance are complete; sparse/dense
+cost comparison remains.
 
 Proof: impulse arrivals match specified paths; room-size edits do not produce
 unintended glitches; stereo/mono behavior and direct-path handling are explicit.
 
-## 6. Convolution Cabinet / Body Loader
-
-Goal: consume imported cabinet, enclosure, microphone or instrument-body IRs.
-
-- [ ] Load an audio resource as an IR without replacing the running patch.
-- [ ] Define mono, dual-mono and true-stereo channel layouts; never infer a
-  four-channel matrix from an ordinary stereo file.
-- [ ] Controls: trim, gain, optional normalization, polarity and aligned Mix.
-- [ ] Resample at load time, precompute partitions off the audio callback,
-  enforce a reported memory capacity and expose load failures clearly.
-- [ ] Decide whether this and Captured-Sound Convolution share one user-facing
-  module with two kernel sources. Do not duplicate a loader merely for naming.
-
-Proof: reference IR files produce expected output across sample rates, switching
-does not drop unrelated audio, and missing assets are reported rather than ignored.
-
-## 7. IR Morph
-
-Goal: move between two acoustic signatures with an honest description of the math.
-
-- [ ] Start with two loaded/generated IRs and an aligned output crossfade.
-- [ ] Label this as a blend; parallel convolution is not structural feature morphing.
-- [ ] Later: magnitude/phase interpolation or matched reflection/modal movement.
-  Establish phase alignment and zero/null handling before promising smooth morphs.
-- [ ] Check whether a two-slot kernel source in IR Designer/Loader is sufficient.
-
-Proof: exact endpoints, controlled latency, predictable cancellation/level and
-smooth automation. Do not hide loudness matching or normalize away the experiment.
-
-## 8. Matched Filter / Correlation Detector
+## 5. Matched Filter / Correlation Detector
 
 Goal: output a detection score/trigger when incoming audio resembles a reference.
 
@@ -157,12 +119,11 @@ Goal: output a detection score/trigger when incoming audio resembles a reference
 
 ## Proposed Order
 
-1. Finish the scoped Noise Convolution short-IR/darkness milestone.
-2. IR Designer: one designed kernel, measured response and audible proof.
-3. Dispersion: compare FIR and allpass prototypes before choosing runtime.
-4. Captured-Sound Convolution, then generic IR loading/persistence.
-5. Material and reflection experiments; decide extension versus new module.
-6. IR Morph and correlation detection as independent later milestones.
+1. Generated IR Designer: one mathematical kernel, measured response and audible proof.
+2. Dispersion: compare generated FIR and allpass prototypes before choosing runtime.
+3. Material experiments; compare existing resonators before adding another module.
+4. Correlation detection as an independent later milestone. Its reference audio is
+   not a room/cabinet IR-loading workflow.
 
 Architect can reorder by musical interest. No scheduler, cross-project framework
 or broad shared convolution abstraction is authorized by this document alone.
