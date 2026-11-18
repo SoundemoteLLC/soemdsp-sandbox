@@ -1,5 +1,8 @@
 # STFT Contrast And STFT Gate
 
+Feature tracking and proposed modules: [STFT_ROADMAP.md](STFT_ROADMAP.md).
+Standalone IIR Vocoder development: [VOCODER_ROADMAP.md](VOCODER_ROADMAP.md).
+
 Native listening proofs on `codex/convolution-resonator`. Both modules are in
 Dynamics. DSP is C++/WASM; the face uses the shared WebGL 1D Trace and settings.
 No JavaScript DSP or drawing fallback was added. Vocoder is unchanged.
