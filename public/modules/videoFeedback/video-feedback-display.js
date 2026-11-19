@@ -25,6 +25,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_DEFAULTS = Object.freeze({
   spectrumCircleColorLevel: "on",
   spectrumCircleColorRadius: "off",
   spectrumCircleSymmetric: "on",
+  spectrumCircleReverse: "off", // Default: falling pitch travels from top to bottom.
 });
 
 // Choice values come from the shared Display Settings choice table (one list).
@@ -67,6 +68,7 @@ function normalizeNodeGraphVideoFeedbackSettings(settings = {}) {
     spectrumCircleColorLevel: nodeGraphVideoFeedbackChoice("spectrumCircleColorLevel", source.spectrumCircleColorLevel, legacyRadius ? "off" : d.spectrumCircleColorLevel),
     spectrumCircleColorRadius: nodeGraphVideoFeedbackChoice("spectrumCircleColorRadius", source.spectrumCircleColorRadius, legacyRadius ? "on" : d.spectrumCircleColorRadius),
     spectrumCircleSymmetric: nodeGraphVideoFeedbackChoice("spectrumCircleSymmetric", source.spectrumCircleSymmetric, d.spectrumCircleSymmetric),
+    spectrumCircleReverse: nodeGraphVideoFeedbackChoice("spectrumCircleReverse", source.spectrumCircleReverse, d.spectrumCircleReverse),
     gradientStops,
     backgroundHue: Number.isFinite(hue) ? hue : 0,
   };
@@ -116,6 +118,7 @@ function buildNodeGraphVideoFeedbackDisplaySettingsBodyHtml() {
       ${nodeGraphDisplaySettingsBuildChoiceRowHtml("spectrumCircleBands")}
       ${nodeGraphDisplaySettingsBuildStepperRowHtml("spectrumCircleRayWidth", type)}
       ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleSymmetric")}
+      ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleReverse")}
       ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleColorLevel")}
       ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleColorRadius")}
     </div>
@@ -328,6 +331,7 @@ function drawNodeGraphVideoFeedbackFaceItem(_renderer, item) {
       colorByLevel: settings.spectrumCircleColorLevel === "on",
       colorByRadius: settings.spectrumCircleColorRadius === "on",
       symmetric: settings.spectrumCircleSymmetric === "on",
+      reverseFrequency: settings.spectrumCircleReverse === "on",
       lutRgb: nodeGraphVideoFeedbackLutRgb(settings),
     });
   }

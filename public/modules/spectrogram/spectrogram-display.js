@@ -23,7 +23,7 @@
 // GPU path (spectrogram-gl.js, display-shader plan M1): when the shared picture
 // device is usable, JS only keeps a ring of raw spectrum columns plus the
 // settings each column was painted with; the fragment shader does the row→Hz
-// mapping, bin lerp, dBFS window, contrast/brightness and LUT per pixel. GL only:
+// mapping, bin lerp, dBFS window, floorDb/ceilingDb and LUT per pixel. GL only:
 // the Canvas2D bitmap + ring->2D rebuild fallback is gone (no ring -> plate).
 
 const spectrogramHistory = new Map();
@@ -194,7 +194,7 @@ function spectrogramLutRgb01(lutRgb, brightness01) {
   return [r / 255, g / 255, b / 255];
 }
 
-/** Opaque gradient sample. Brightness is 0..1, then LUT. Alpha stays 1. Not rgb * brightness. */
+/** Opaque gradient sample. Brightness is 0..1, then LUT. Alpha stays 1. */
 function spectrogramCssAtBrightness(lutRgb, brightness01) {
   const raw = Number(brightness01);
   const u = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0;
@@ -281,6 +281,15 @@ function spectrogramResolveViewBand(minFreqHz, maxFreqHz, sampleRate) {
  * Row t=0 (top of face) → high freq; t=1 (bottom) → low freq.
  * Maps the chosen Min/Max band through Linear / Mel / Bark.
  */
+function nodeGraphFrequencyCurveHz(t, curve, lo, hi) {
+  const u = Math.max(0, Math.min(1, t));
+  const amount = Math.max(0, Math.min(1, nodeGraphFiniteNumber(curve, 1)));
+  const low = Math.max(1e-3, lo);
+  const linearHz = lo + u * (hi - lo);
+  const logHz = low * Math.exp(u * Math.log(Math.max(hi, low * 1.000001) / low));
+  return linearHz + amount * (logHz - linearHz);
+}
+
 function spectrogramRowTToHz(t, freqScaleIdx, sampleRate, minFreqHz, maxFreqHz) {
   const band = spectrogramResolveViewBand(minFreqHz, maxFreqHz, sampleRate);
   const scale = Math.max(0, Math.min(2, Math.round(nodeGraphFiniteNumber(freqScaleIdx))));
@@ -451,12 +460,12 @@ function spectrogramIngestHop(
   spectrumBins,
   hopSize,
   sampleRate,
-  freqScaleIdx,
+  frequencyCurve,
   lutRgb,
-  brightness,
+  ceilingDb,
   minFreqHz,
   maxFreqHz,
-  contrast,
+  floorDb,
 ) {
   const h = st.faceH;
   // Wall-clock width = what the user sees (present), not a stale buffer size
@@ -488,9 +497,9 @@ function spectrogramIngestHop(
       // Settings frozen per column (permanent ink), resolved like spectrogramRowTToHz.
       const band = spectrogramResolveViewBand(minFreqHz, maxFreqHz, sampleRate);
       spectrogramGlRingWrite(st.ring, whole, {
-        contrast,
-        brightness,
-        freqScale: freqScaleIdx,
+        floorDb,
+        ceilingDb,
+        frequencyCurve,
         minFreq: band.minFreq,
         maxFreq: band.maxFreq,
         nyquist: band.nyquist,
@@ -525,11 +534,11 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
 
   const node = nodeGraphPatchNode(nodeId);
   const settings = spectrogramSettingsForNode(node);
-  const brightnessRaw = Number(node?.params?.brightness);
-  const brightness = Number.isFinite(brightnessRaw) ? brightnessRaw : 1;
-  const contrastRaw = Number(node?.params?.contrast);
-  const contrast = Number.isFinite(contrastRaw) ? contrastRaw : 1;
-  const freqScaleIdx = Math.max(0, Math.min(2, Math.round(nodeGraphFiniteNumber(settings.freqScale))));
+  const ceilingRaw = Number(node?.params?.ceilingDb);
+  const ceilingDb = Number.isFinite(ceilingRaw) ? ceilingRaw : 0;
+  const floorRaw = Number(node?.params?.floorDb);
+  const floorDb = Number.isFinite(floorRaw) ? floorRaw : -80;
+  const frequencyCurve = Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings.frequencyCurve, 1)));
   const minFreqHz = Number(settings.minFreq);
   const maxFreqHz = Number(settings.maxFreq);
   const lutStops = typeof nodeGraphApplyGradientHueRotation === "function"
@@ -570,7 +579,7 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   st.inkMode = st.useGl ? "gl" : "none";
 
   // Ink uses settings at paint time; already-drawn pixels stay as-is.
-  st.paintFreqScale = freqScaleIdx;
+  st.paintFreqScale = frequencyCurve;
   st.paintSampleRate = sampleRate;
   st.paintMinFreq = minFreqHz;
   st.paintMaxFreq = maxFreqHz;
@@ -632,12 +641,12 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
             bins,
             hopSize,
             sampleRate,
-            freqScaleIdx,
+            frequencyCurve,
             lutRgb,
-            brightness,
+            ceilingDb,
             minFreqHz,
             maxFreqHz,
-            contrast,
+            floorDb,
           );
         }
         ingested = true;
@@ -648,12 +657,12 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
           spectrumBins,
           hopSize,
           sampleRate,
-          freqScaleIdx,
+          frequencyCurve,
           lutRgb,
-          brightness,
+          ceilingDb,
           minFreqHz,
           maxFreqHz,
-          contrast,
+          floorDb,
         );
         ingested = true;
       }

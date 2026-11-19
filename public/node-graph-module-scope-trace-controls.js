@@ -235,6 +235,15 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "backgroundHue",
     "ghostBlend",
     "shapeParam",
+    "circularAfterglow",
+    "circularSweepFade",
+    "circularHangTurns",
+    "frequencyCurve",
+    "spectrumSmoothMs",
+    "spectrumBarCount",
+    "spectrumBarWidth",
+    "spectrumMinBarPx",
+    "spectrumMinGapPx",
     "pill",
     "squircle",
     "lightThickness",
@@ -249,6 +258,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
   // lists — anything missing leaks onto every module (e.g. Output saw
   // Window / Overlap / Freq scale because those choices were unregistered).
   toggles: [
+    "reverseFrequency",
     "autoZoomLines",
     "waterfallSteps",
     "liveTrace",
@@ -282,6 +292,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "buttonShowLabel",
   ],
   choices: [
+    "circularHeadMode",
     "syncChannel",
     "plotDraw",
     "stereoBlend",
@@ -726,6 +737,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "spectrumAxis",
       "spectrumCircleBands",
       "spectrumCircleSymmetric",
+      "spectrumCircleReverse",
       "spectrumCircleColorLevel",
       "spectrumCircleColorRadius",
     ]),
@@ -823,15 +835,15 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   // Spectrogram: FFT + analysis choices. History / Min·Max Freq are module sliders.
   // Gradient separate. Pause on silence matches Instant Waterfall (default off).
   spectrogramBurn: Object.freeze({
-    fields: Object.freeze([]),
+    fields: Object.freeze(["frequencyCurve"]),
     colors: Object.freeze([]),
     toggles: Object.freeze(["pauseOnSilence"]),
-    choices: Object.freeze(["fftSize", "window", "overlap", "freqOverlap", "freqScale"]),
+    choices: Object.freeze(["fftSize", "window", "overlap", "freqOverlap"]),
   }),
   // 1D Spectrum: same FFT analysis choices as Spectrogram (shared keys) + its
   // own axis / dB / draw / peak choices. Colors on the shared color row.
   spectrumLine: Object.freeze({
-    fields: Object.freeze([]),
+    fields: Object.freeze(["frequencyCurve", "spectrumSmoothMs", "spectrumBarCount", "spectrumBarWidth", "spectrumMinBarPx", "spectrumMinGapPx"]),
     colors: Object.freeze(["dot1Color", "backgroundColor"]),
     toggles: Object.freeze([]),
     choices: Object.freeze([
@@ -839,7 +851,6 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "window",
       "overlap",
       "freqOverlap",
-      "spectrumAxis",
       "spectrumDbMode",
       "spectrumDbFloor",
       "spectrumDbCeiling",
@@ -1172,6 +1183,10 @@ function nodeGraphTraceDisplayActiveControlsForType(type = nodeGraphTraceDisplay
   const key = String(type || "").trim();
   if (nodeGraphTraceDisplayActiveControlsByType[key]) {
     const spec = nodeGraphTraceDisplayActiveControlsByType[key];
+    if (key === "spectrogramBurn" && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
+      && nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type === "circularSpectrogram") {
+      return { ...spec, fields: [...spec.fields, "circularSweepFade", "circularAfterglow", "circularHangTurns"], toggles: [...spec.toggles, "reverseFrequency"], choices: [...spec.choices, "circularHeadMode"] };
+    }
     if (
       typeof nodeGraphDisplayFormTypeHas1dSync === "function"
       && nodeGraphDisplayFormTypeHas1dSync(key)
@@ -1243,6 +1258,15 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
     // Phosphor residual order: Ghost → Trail → Scale → Pixel density → Dot Budget.
     // Stamp size/blur/bright live only under the Dot/Stamp section.
     fields: Object.freeze([
+      "spectrumMinBarPx",
+      "spectrumMinGapPx",
+      "spectrumSmoothMs",
+      "spectrumBarCount",
+      "spectrumBarWidth",
+      "frequencyCurve",
+      "circularSweepFade",
+      "circularAfterglow",
+      "circularHangTurns",
       "decimals",
       "maxDigits",
       "residual",
@@ -1301,7 +1325,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
     ]),
     // Face plate (+ number readout ghost ink) + Knob arc colors.
     colors: Object.freeze(["backgroundColor", "ghostColor", "arcFill", "arcTrack", "strokeColor", "dotColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor", "barColor", "textColor"]),
-    toggles: Object.freeze(["sourceSync",
+    toggles: Object.freeze(["reverseFrequency", "sourceSync",
       "skipDiscontinuities",
       "skipLight",
       "waterfallSteps",
@@ -1325,6 +1349,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
     // cornerShape = LED / Raster RGB / Matrix Waterfall (square|squircle).
     choices: Object.freeze([
       "outerPlate",
+      "circularHeadMode",
       "lightBlend",
       "faceView",
       "window",
@@ -1536,6 +1561,46 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     inputmode: "decimal",
     id: "nodeTraceDisplayGhost",
     title: "Dim scorch layer with its own hang (not Trail). 0 = off. Mid ≈ sweet afterglow. 1 = longest dim floor. Not Bright.",
+  }),
+  circularAfterglow: Object.freeze({
+    label: "Afterglow",
+    inputmode: "decimal",
+    title: "Older revolutions beneath the clean current sweep. 0 = one clean revolution only; 1 = full-strength older ink. Works with Fixed Head and Moving Head.",
+  }),
+  circularSweepFade: Object.freeze({
+    label: "Sweep fade",
+    inputmode: "decimal",
+    title: "Fraction of a revolution that fades down before it retires. 0 = original hard boundary, no dark fade. 0.2 = soften the final fifth; 1 = fade across the whole turn. Independent of Afterglow strength. Works with both head modes.",
+  }),
+  frequencyCurve: Object.freeze({
+    label: "Frequency curve",
+    inputmode: "decimal",
+    title: "Continuous frequency spacing: 0 = linear, 1 = logarithmic. Higher values give bass more room; lower values give treble more room. Spectrograms apply changes to new ink; 1D Spectrum updates immediately.",
+  }),
+  spectrumSmoothMs: Object.freeze({
+    label: "Smooth (ms)", inputmode: "decimal",
+    title: "Time constant for live spectrum height smoothing, independent of peak hold. 0 = off. Applies to Filled, Line, and Bars. Display only; does not smooth the audio.",
+  }),
+  spectrumBarCount: Object.freeze({
+    label: "Max bars", inputmode: "numeric",
+    title: "Maximum visual bar count. Zooming out reduces the count to preserve minimum pixel widths and gaps. Neighboring frequencies are max-pooled so narrow peaks remain visible.",
+  }),
+  spectrumBarWidth: Object.freeze({
+    label: "Bar width", inputmode: "decimal",
+    title: "Fraction of each bar slot that is filled. 0 = bars disappear, 1 = bars touch. Widths and gaps use uniform whole pixels; leftover space stays in the outside margins. Used by Bars drawing only.",
+  }),
+  spectrumMinBarPx: Object.freeze({
+    label: "Min bar (px)", inputmode: "numeric",
+    title: "Minimum rendered bar width in screen pixels. Larger values use fewer, thicker bars at small zoom. Bars are grouped automatically; Max bars remains the upper limit.",
+  }),
+  spectrumMinGapPx: Object.freeze({
+    label: "Min gap (px)", inputmode: "numeric",
+    title: "Minimum whole-pixel gap between bars when Bar width is below 1. Bar width 1 still means touching bars and ignores this gap.",
+  }),
+  circularHangTurns: Object.freeze({
+    label: "Hang (turns)",
+    inputmode: "decimal",
+    title: "Revolutions for old ink to fade to 1%. Independent of Spin speed. 0 disables older ink; 0 Hz holds the picture. Works with both head modes.",
   }),
   glowCore: Object.freeze({
     label: "Glow core",
@@ -2150,6 +2215,10 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
 });
 
 const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
+  reverseFrequency: Object.freeze({
+    label: "Reverse frequency", id: "nodeTraceDisplayReverseFrequency",
+    title: "Put bass on the outer edge and highs at the inner edge. Uses the selected frequency scale; does not change time direction.",
+  }),
   sourceSync: Object.freeze({
     label: "Sync",
     id: "nodeTraceDisplaySourceSync",
@@ -2555,6 +2624,11 @@ const nodeGraphDisplaySettingsColorMeta = Object.freeze({
 });
 
 const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
+  circularHeadMode: Object.freeze({
+    label: "Head mode", id: "nodeTraceDisplayCircularHeadMode",
+    title: "Fixed: new ink starts at a fixed angle and history scrolls. Moving: the write head sweeps while older marks stay in place. Mirror repeats the sweep on both halves.",
+    options: Object.freeze([Object.freeze({value:"fixed",label:"Fixed Head"}),Object.freeze({value:"moving",label:"Moving Head"})]),
+  }),
   sliderAlign: Object.freeze({
     label: "Bar align",
     aria: "Slider bar vertical alignment",
@@ -2953,6 +3027,7 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     aria: "Frequency scale",
     id: "nodeTraceDisplayFreqScale",
     options: Object.freeze([
+      Object.freeze({ value: "3", label: "Log" }),
       Object.freeze({ value: "0", label: "Linear" }),
       Object.freeze({ value: "1", label: "Mel" }),
       Object.freeze({ value: "2", label: "Bark" }),
@@ -3015,6 +3090,11 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     title: "On mirrors the spectrum across two halves. Off maps low to high once around the full circle, starting at the bottom before Twist.",
     options: Object.freeze([Object.freeze({ value: "off", label: "Off" }), Object.freeze({ value: "on", label: "On" })]),
   }),
+  spectrumCircleReverse: Object.freeze({
+    label: "Reverse freq", id: "nodeTraceDisplaySpectrumCircleReverse",
+    title: "Default Off: higher frequencies at the top, bass at the bottom, so a falling-pitch kick travels downward. On reverses frequency-bin order without changing circle geometry or Rotate.",
+    options: Object.freeze([Object.freeze({ value: "off", label: "Off" }), Object.freeze({ value: "on", label: "On" })]),
+  }),
   spectrumDbCeiling: Object.freeze({
     label: "dB ceiling",
     aria: "1D Spectrum top of range in dBFS",
@@ -3030,16 +3110,18 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     options: Object.freeze([
       Object.freeze({ value: "filled", label: "Filled" }),
       Object.freeze({ value: "line", label: "Line" }),
+      Object.freeze({ value: "bars", label: "Bars" }),
     ]),
   }),
   spectrumPeakHold: Object.freeze({
     label: "Peak hold",
     aria: "1D Spectrum peak hold",
     id: "nodeTraceDisplaySpectrumPeakHold",
-    title: "Hold = keep each peak 0.5 s, then fall at the Peak decay rate.",
+    title: "Hold = keep each peak 0.5 s, then fall. Fall = rise immediately and fall with no hold delay. Both use Peak decay, independently of live spectrum smoothing.",
     options: Object.freeze([
       Object.freeze({ value: "off", label: "Off" }),
       Object.freeze({ value: "hold", label: "Hold, then fall" }),
+      Object.freeze({ value: "fall", label: "Fall" }),
     ]),
   }),
   spectrumPeakDecay: Object.freeze({

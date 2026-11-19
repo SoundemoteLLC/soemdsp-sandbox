@@ -921,10 +921,10 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   let ly = event.clientY;
   let ax = 0;
   let ay = 0;
-  const travel = (ev) => {
+  const travel = (ev, screenPixels = false) => {
     const k = typeof nodeGraphNumericDragMultiplier === "function" ? nodeGraphNumericDragMultiplier(ev) : 1;
-    ax += (ev.clientX - lx) * p.sx * k;
-    ay += (ev.clientY - ly) * p.sy * k;
+    ax += (ev.clientX - lx) * (screenPixels ? 1 : p.sx) * k;
+    ay += (ev.clientY - ly) * (screenPixels ? 1 : p.sy) * k;
     lx = ev.clientX;
     ly = ev.clientY;
     return { dx: ax, dy: ay };
@@ -1000,13 +1000,15 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     }
     // Like every slider: up or right raises, down or left lowers.
     move = (ev) => {
-      const { dx, dy } = travel(ev);
+      // Horizontal handles follow their visible lane; column fills use fixed screen travel.
+      const { dx, dy } = travel(ev, true);
       const d = dx - dy;
       // Wraparound params (definition flag) keep unwrapped gesture travel:
       // nodeSliderValueFromTravel folds it into min/max, so the drag spins
       // through the seam. Clamping here pinned travel at 1, which folds to
       // min on every later move ("wraps to 0, then cannot drag").
-      const raw = t0 + d / NODE_GRAPH_FACE_CELL_DRAG_PX;
+      const dragPixels = wd.horizontal ? Math.max(1, wd.w / p.sx) : NODE_GRAPH_FACE_CELL_DRAG_PX;
+      const raw = t0 + d / dragPixels;
       const wraps = !choiceSwitch && typeof nodeSliderShouldWraparound === "function"
         && nodeSliderShouldWraparound(input);
       const t = wraps ? raw : Math.max(0, Math.min(1, raw));

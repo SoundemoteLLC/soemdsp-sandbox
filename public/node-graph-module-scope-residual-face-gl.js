@@ -174,7 +174,7 @@ function nodeGraphResidualFaceGlDrop(canvas) {
   canvas[NODE_GRAPH_RESIDUAL_FACE_KEY] = null;
   const gl = st.gl;
   if (!gl || gl.isContextLost()) return;
-  for (const t of [st.read, st.write]) {
+  for (const t of [st.read, st.write, st.circularCurrent]) {
     if (t?.fbo) gl.deleteFramebuffer(t.fbo);
     if (t?.tex) gl.deleteTexture(t.tex);
   }

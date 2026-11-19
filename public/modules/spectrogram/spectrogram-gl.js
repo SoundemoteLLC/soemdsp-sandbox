@@ -5,20 +5,20 @@
 //     spectrum bins (4 bins per RGBA float texel). Each emitted pixel column
 //     writes one row; uHead says which row is the oldest, so nothing scrolls.
 //   • Per-column settings ("permanent ink"): a small meta texture keeps the
-//     contrast, brightness, freq scale, band, Nyquist, bin count and colour
+//     floorDb, ceilingDb, freq scale, band, Nyquist, bin count and colour
 //     row that were live when the column was painted. Changing a knob only
-//     affects new columns, same as the Canvas2D waterfall.
+//     affects new columns.
 //   • Colour: 256-wide LUT rows (one per gradient that still has ink on face).
 //   • Circular Spectrogram reuses the ring, meta and LUT with a second
 //     fragment shader (FS_POLAR): angle → column age, radius → frequency.
 //   • Shader per pixel: ring lookup → Linear / Mel / Bark row→Hz → bilinear
-//     bin lerp → undo log10(1+mag·100) → dBFS → 80 dB window → contrast
-//     gamma → LUT. Contrast > 1 lifts quiet partials (harmonics). Brightness
-//     is linear gain before the dB window (1 = 0 dBFS at the top).
+//     bin lerp → undo log10(1+mag·100) → dBFS → soft floor/ceiling → interpolated LUT.
+//   • Moving-head circular ink has a clean current revolution and a separate
+//     older-sweep layer whose afterglow lifetime is measured in turns.
 //
 // Device: the shared picture device (public/lib/visual/picture-device.js).
 // Its hidden canvas never resizes; we draw into a bottom-left scissor rect and
-// drawImage that rect onto the face. No WebGL context per face.
+// copy that rect into the face texture. No WebGL context per face.
 //
 // The CPU copy of the ring is kept so a new / restored context re-uploads the
 // history.
@@ -46,7 +46,7 @@ uniform sampler2D uLut;    // RGBA8, 256 x uLutRows
 uniform vec2 uSize;        // buffer W (= ring rows), H
 uniform float uHead;       // ring row of the oldest (leftmost) column
 uniform float uSub;        // leftover hop-time in buffer pixels [0,1)
-uniform vec3 uPlate;       // brightness-0 LUT (right sliver while uSub > 0)
+uniform vec3 uPlate;       // darkest LUT color (right sliver while uSub > 0)
 uniform float uRingTexW;   // texels per ring row
 uniform float uLutRows;
 uniform float uFullMag;    // windowSum/2: 1.0 in dBFS is a full-scale sine
@@ -75,26 +75,57 @@ float barkToHz(float bark) {
 float powPos(float x, float e) { return x <= 0.0 ? 0.0 : pow(x, e); }
 
 // Worklet stores c = log10(1 + ema·100). Recover linear mag, then dBFS.
-// 80 dB window. Contrast |c| > 1 uses gamma 1/|c| so turning Contrast up
-// lifts harmonics instead of crushing them into the floor (the old photo
-// S-curve around 0.5 did that). Brightness is gain on the linear amp.
-float grade01(float x, float contrast, float brightness) {
-  if (brightness == 0.0) return 0.0;
-  if (contrast == 0.0) {
-    float mid = 0.5;
-    if (brightness < 0.0) mid = 1.0 - mid;
-    return mid;
+// Soft knees occupy the outer 20% of the range; the middle stays linear.
+float spectrogramSoftLevel(float v) {
+  v = clamp(v, 0.0, 1.0);
+  const float knee = 0.2;
+  float edge = min(v, 1.0 - v);
+  if (edge >= knee) return v;
+  float t = edge / knee;
+  float shaped = knee * t * t * (2.0 - t);
+  return v < 0.5 ? shaped : 1.0 - shaped;
+}
+
+// Map the explicit dBFS floor/ceiling range into the gradient, without gain or gamma.
+vec3 spectrogramGradient(float level, float row) {
+  float index = clamp(level, 0.0, 1.0) * 255.0;
+  float lo = floor(index);
+  float hi = min(lo + 1.0, 255.0);
+  float y = (row + 0.5) / uLutRows;
+  vec3 a = texture2D(uLut, vec2((lo + 0.5) / 256.0, y)).rgb;
+  vec3 b = texture2D(uLut, vec2((hi + 0.5) / 256.0, y)).rgb;
+  return mix(a, b, index - lo);
+}
+
+float hzForU(float u, float scale, float lo, float hi) {
+  if (scale >= 3.5) {
+    float l = max(lo, 1e-3);
+    float linearHz = mix(lo, hi, u);
+    float logHz = l * exp(u * log(max(hi, l * 1.000001) / l));
+    return mix(linearHz, logHz, clamp(scale - 4.0, 0.0, 1.0));
   }
+  if (scale > 2.5) {
+    float l = max(lo, 1e-3);
+    return l * exp(u * log(max(hi, l * 1.000001) / l));
+  }
+  if (scale > 0.5 && scale < 1.5) {
+    float a = hzToMel(lo);
+    float b = hzToMel(hi);
+    return melToHz(a + u * (b - a));
+  }
+  if (scale >= 1.5) {
+    float a = hzToBark(lo);
+    float b = hzToBark(hi);
+    return barkToHz(a + u * (b - a));
+  }
+  return lo + u * (hi - lo);
+}
+
+float grade01(float x, float floorDb, float ceilingDb) {
   float ema = max(0.0, (powPos(10.0, x) - 1.0) / 100.0);
-  float ref = max(uFullMag, 1e-9);
-  float amp = ema / ref * abs(brightness);
+  float amp = ema / max(uFullMag, 1e-9);
   float db = 20.0 * log(max(amp, 1e-12)) / LN10;
-  float v = clamp((db + 80.0) / 80.0, 0.0, 1.0);
-  float gamma = 1.0 / max(abs(contrast), 0.05);
-  float y = powPos(v, gamma);
-  if (contrast < 0.0) y = 1.0 - y;
-  if (brightness < 0.0) y = 1.0 - y;
-  return clamp(y, 0.0, 1.0);
+  return spectrogramSoftLevel((db - floorDb) / max(ceilingDb - floorDb, 0.01));
 }
 `;
 
@@ -114,8 +145,8 @@ void main() {
   float rowV = (row + 0.5) / uSize.x;
   vec4 m0 = texture2D(uMeta, vec2(0.25, rowV));
   vec4 m1 = texture2D(uMeta, vec2(0.75, rowV));
-  float contrast = m0.x;
-  float brightness = m0.y;
+  float floorDb = m0.x;
+  float ceilingDb = m0.y;
   float scale = m0.z;
   float bins = m0.w;
   float lo = m1.x;
@@ -128,18 +159,7 @@ void main() {
     // spectrogramRowTToHz: t=0 top → Max freq.
     float t = yTop / max(1.0, uSize.y - 1.0);
     float u = clamp(1.0 - t, 0.0, 1.0);
-    float hz;
-    if (scale > 0.5 && scale < 1.5) {
-      float a = hzToMel(lo);
-      float b = hzToMel(hi);
-      hz = melToHz(a + u * (b - a));
-    } else if (scale >= 1.5) {
-      float a = hzToBark(lo);
-      float b = hzToBark(hi);
-      hz = barkToHz(a + u * (b - a));
-    } else {
-      hz = lo + u * (hi - lo);
-    }
+    float hz = hzForU(u, scale, lo, hi);
     // spectrogramHzToLinearBin + bilinear bin blend.
     float lb = max(1.0, bins);
     float binF = clamp(max(0.0, hz) / max(1e-9, nyq) * (lb - 1.0), 0.0, lb - 1.0);
@@ -148,10 +168,9 @@ void main() {
     float bf = binF - b0;
     mag = binAt(rowV, b0) * (1.0 - bf) + binAt(rowV, b1) * bf;
   }
-  float v = grade01(mag, contrast, brightness);
-  // spectrogramCssAtBrightness: floor(u * 255 + 1e-6).
-  float li = clamp(floor(v * 255.0 + 1e-6), 0.0, 255.0);
-  vec3 rgb = texture2D(uLut, vec2((li + 0.5) / 256.0, (lutRow + 0.5) / uLutRows)).rgb;
+  float v = grade01(mag, floorDb, ceilingDb);
+  // Interpolate within the selected LUT row without blending neighboring histories' palettes.
+  vec3 rgb = spectrogramGradient(v, lutRow);
   gl_FragColor = vec4(rgb, 1.0);
 }
 `;
@@ -162,29 +181,26 @@ void main() {
   // Mirror: age = |angle from head| / pi on both halves. Else one sweep:
   // clockwise from the head for Down, anticlockwise for Up. Radius → Hz with
   // bass at the inner radius; meta scale 3 is log Hz.
+  const POLAR_AGE_GLSL = `
+float polarAge(vec2 xy) {
+  vec2 p = xy - 0.5 * uSize;
+  float ang = atan(p.x, p.y);
+  float head = uPolar.z + (uPolar.y > 0.5 ? 3.141592653589793 : 0.0);
+  float d = mod(ang - head + 3.141592653589793, 6.283185307179586) - 3.141592653589793;
+  if (uPolar.x > 0.5) return abs(d) / 3.141592653589793;
+  return mod(uPolar.y > 0.5 ? -d : d, 6.283185307179586) / 6.283185307179586;
+}
+`;
+
   const FS_POLAR = FS_HEAD + `
 uniform float uCols;
 uniform vec4 uPolar;
+uniform float uReverseFrequency;
+uniform vec2 uHeadMode;
+uniform float uEnergy; // retained current sweep rather than opaque presentation
+${POLAR_AGE_GLSL}
 
-const float PI = 3.141592653589793;
 
-float hzForU(float u, float scale, float lo, float hi) {
-  if (scale > 2.5) {
-    float l = max(lo, 1e-3);
-    return l * exp(u * log(max(hi, l * 1.000001) / l));
-  }
-  if (scale > 0.5 && scale < 1.5) {
-    float a = hzToMel(lo);
-    float b = hzToMel(hi);
-    return melToHz(a + u * (b - a));
-  }
-  if (scale >= 1.5) {
-    float a = hzToBark(lo);
-    float b = hzToBark(hi);
-    return barkToHz(a + u * (b - a));
-  }
-  return lo + u * (hi - lo);
-}
 
 void main() {
   vec2 p = gl_FragCoord.xy - 0.5 * uSize;
@@ -195,25 +211,17 @@ void main() {
   // 1 px soft rim on both edges so the circle is not stair-stepped.
   float edge = clamp(outerPx - rPx, 0.0, 1.0) * clamp(rPx - inner * outerPx + 1.0, 0.0, 1.0);
   if (edge <= 0.0) {
+    if (uEnergy > 0.5) discard;
     gl_FragColor = vec4(uPlate, 1.0);
     return;
   }
-  // Clockwise angle from 12 o'clock (GL y is up).
-  float ang = atan(p.x, p.y);
-  float head = uPolar.z + (uPolar.y > 0.5 ? PI : 0.0);
-  float d = mod(ang - head + PI, 2.0 * PI) - PI;
-  float age;
-  if (uPolar.x > 0.5) {
-    age = abs(d) / PI;
-  } else if (uPolar.y > 0.5) {
-    age = mod(-d, 2.0 * PI) / (2.0 * PI);
-  } else {
-    age = mod(d, 2.0 * PI) / (2.0 * PI);
-  }
+  float age = polarAge(gl_FragCoord.xy);
+  if (uHeadMode.x > 0.5) age = fract(uHeadMode.y - age);
   float cols = max(1.0, uCols);
   // Same leftover-time slide as the waterfall: the head gets a plate sliver.
   float x = (1.0 - age) * cols + uSub;
   if (x >= cols) {
+    if (uEnergy > 0.5) discard;
     gl_FragColor = vec4(uPlate, 1.0);
     return;
   }
@@ -227,6 +235,7 @@ void main() {
   float mag = 0.0;
   if (bins >= 1.0) {
     float u = clamp((r - inner) / max(1e-6, 1.0 - inner), 0.0, 1.0);
+    if (uReverseFrequency > 0.5) u = 1.0 - u;
     float hz = hzForU(u, m0.z, m1.x, m1.y);
     float lb = max(1.0, bins);
     float binF = clamp(max(0.0, hz) / max(1e-9, nyq) * (lb - 1.0), 0.0, lb - 1.0);
@@ -236,8 +245,12 @@ void main() {
     mag = binAt(rowV, b0) * (1.0 - bf) + binAt(rowV, b1) * bf;
   }
   float v = grade01(mag, m0.x, m0.y);
-  float li = clamp(floor(v * 255.0 + 1e-6), 0.0, 255.0);
-  vec3 rgb = texture2D(uLut, vec2((li + 0.5) / 256.0, (m1.w + 0.5) / uLutRows)).rgb;
+  vec3 rgb = spectrogramGradient(v, m1.w);
+  if (uEnergy > 0.5) {
+    vec3 energy = max(rgb - uPlate, vec3(0.0)) * edge;
+    gl_FragColor = vec4(energy, clamp(max(energy.r, max(energy.g, energy.b)), 0.0, 1.0));
+    return;
+  }
   gl_FragColor = vec4(mix(uPlate, rgb, edge), 1.0);
 }
 `;
@@ -337,7 +350,7 @@ void main() {
   }
 
   function polarProgramFor(dev) {
-    return buildProgram(dev, polarPrograms, FS_POLAR, ["uCols", "uPolar"]);
+    return buildProgram(dev, polarPrograms, FS_POLAR, ["uCols", "uPolar", "uReverseFrequency", "uHeadMode", "uEnergy"]);
   }
 
   function pictureDevice() {
@@ -375,7 +388,7 @@ void main() {
     return true;
   }
 
-  /** Empty ring: every column is "brightness 0" on LUT row 0 (the empty plate). */
+  /** Empty ring: every column uses the darkest color on LUT row 0. */
   function spectrogramGlRingCreate(width, lutRgb) {
     const w = Math.max(1, width | 0);
     const ring = {
@@ -478,7 +491,7 @@ void main() {
 
   /**
    * Emit n identical columns from the pending pool (same as the Canvas2D
-   * scroll-and-paint). params: contrast, brightness, freqScale, minFreq,
+   * scroll-and-paint). params: floorDb, ceilingDb, freqScale, minFreq,
    * maxFreq (already band-resolved), nyquist, lutRgb.
    */
   function spectrogramGlRingWrite(ring, nPixels, params) {
@@ -487,13 +500,16 @@ void main() {
     if (n < 1) return;
     const p = params || {};
     const row = lutRowFor(ring, p.lutRgb);
-    const contrastRaw = Number(p.contrast);
-    const brightnessRaw = Number(p.brightness);
+    const floorRaw = Number(p.floorDb);
+    const ceilingRaw = Number(p.ceilingDb);
     // Missing / NaN only. Explicit 0 stays 0.
-    const contrast = Number.isFinite(contrastRaw) ? contrastRaw : 1;
-    const brightness = Number.isFinite(brightnessRaw) ? brightnessRaw : 1;
+    const floorDb = Number.isFinite(floorRaw) ? floorRaw : -80;
+    const ceilingDb = Number.isFinite(ceilingRaw) ? ceilingRaw : 0;
     // 0 Linear, 1 Mel, 2 Bark; 3 log Hz (Circular Spectrogram only).
-    const scale = SoemMath.clamp(Math.round(nodeGraphFiniteNumber(p.freqScale)), 0, 3);
+    // 0..3 retain legacy named scales; 4..5 encode the continuous polar curve.
+    const scale = p.frequencyCurve == null
+      ? SoemMath.clamp(Math.round(nodeGraphFiniteNumber(p.freqScale)), 0, 3)
+      : 4 + SoemMath.clamp(nodeGraphFiniteNumber(p.frequencyCurve, 1), 0, 1);
     const lo = nodeGraphFiniteNumber(p.minFreq, 20);
     const hi = nodeGraphFiniteNumber(p.maxFreq, 20000);
     const nyq = nodeGraphFiniteNumber(p.nyquist, 22050);
@@ -503,8 +519,8 @@ void main() {
       const r = (ring.head + k) % ring.w;
       ring.mags.set(src, r * stride);
       const m = r * META_FLOATS;
-      ring.meta[m] = contrast;
-      ring.meta[m + 1] = brightness;
+      ring.meta[m] = floorDb;
+      ring.meta[m + 1] = ceilingDb;
       ring.meta[m + 2] = scale;
       ring.meta[m + 3] = ring.pendingBins;
       ring.meta[m + 4] = lo;
@@ -665,11 +681,11 @@ void main() {
    * base owns the ring textures (the waterfall program); entry is the program
    * drawn with; extra(gl, u) sets its own uniforms. False when GL is lost.
    */
-  function shadeRing(dev, base, entry, ring, w, h, subPx, plateRgb, fullMag, extra) {
+  function shadeRing(dev, base, entry, ring, w, h, subPx, plateRgb, fullMag, extra, target = null) {
     const gl = dev.gl;
     const g = syncGpu(ring, gl, base);
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target?.fbo || null);
     gl.viewport(0, 0, w, h);
     gl.scissor(0, 0, w, h);
     gl.enable(gl.SCISSOR_TEST);
@@ -705,6 +721,10 @@ void main() {
     gl.uniform1f(entry.u.uFullMag, magRef > 0 ? magRef : 1e-9);
     if (extra) extra(gl, entry.u);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disable(gl.BLEND);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.disable(gl.SCISSOR_TEST);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, null);
@@ -757,6 +777,9 @@ void main() {
     const p = polar || {};
     const shaded = shadeRing(dev, base, entry, ring, w, h, subPx, plateRgb, fullMag, (gl, u) => {
       gl.uniform1f(u.uCols, ring.w);
+      gl.uniform1f(u.uReverseFrequency, p.reverseFrequency ? 1 : 0);
+      gl.uniform2f(u.uHeadMode, p.movingHead ? 1 : 0, nodeGraphFiniteNumber(p.sweepPhase));
+      gl.uniform1f(u.uEnergy, 0);
       gl.uniform4f(
         u.uPolar,
         p.mirror ? 1 : 0,
@@ -769,30 +792,159 @@ void main() {
     return copyOut(dev, destCtx, w, h, destW, destH);
   }
 
+  const FS_CIRCULAR_SWEEPS = `
+precision highp float;
+uniform sampler2D uSrc;
+uniform sampler2D uCurrent;
+uniform vec2 uSize;
+uniform vec4 uPolar;
+uniform float uPhase;
+uniform float uMoving;
+uniform float uShift;
+uniform float uColumns;
+uniform float uCols;
+uniform float uKeep;
+uniform float uAfterglow;
+uniform float uSweepFade;
+uniform float uPass;
+uniform vec3 uBg;
+${POLAR_AGE_GLSL}
+vec4 sweepSample(sampler2D image, vec2 uv) {
+  vec2 p = uv * uSize - 0.5;
+  vec2 base = floor(p), f = fract(p);
+  vec2 a = (base + 0.5) / uSize;
+  vec2 px = 1.0 / uSize;
+  return mix(mix(texture2D(image, a), texture2D(image, a + vec2(px.x, 0.0)), f.x),
+    mix(texture2D(image, a + vec2(0.0, px.y)), texture2D(image, a + px), f.x), f.y);
+}
+void main() {
+  vec2 uv = gl_FragCoord.xy / uSize;
+  float sweepAge = polarAge(gl_FragCoord.xy);
+  float age = uMoving > 0.5 ? fract(uPhase - sweepAge) : sweepAge;
+  if (uPass < 0.5 && uMoving < 0.5) {
+    // Fixed head: scroll existing layers by angular travel before retiring the tail.
+    vec2 p = gl_FragCoord.xy - 0.5 * uSize;
+    float head = uPolar.z + (uPolar.y > 0.5 ? 3.141592653589793 : 0.0);
+    float d = mod(atan(p.x, p.y) - head + 3.141592653589793, 6.283185307179586) - 3.141592653589793;
+    float previousAge = fract(sweepAge - uShift);
+    float direction = uPolar.x > 0.5 ? (d < 0.0 ? -1.0 : 1.0) : (uPolar.y > 0.5 ? -1.0 : 1.0);
+    float angle = head + direction * previousAge * (uPolar.x > 0.5 ? 3.141592653589793 : 6.283185307179586);
+    uv = (0.5 * uSize + length(p) * vec2(sin(angle), cos(angle))) / uSize;
+  }
+  vec4 old = texture2D(uSrc, uv);
+  vec4 current = texture2D(uCurrent, uv);
+  if (uPass < 0.5 && uMoving < 0.5) {
+    old = sweepSample(uSrc, uv);
+    current = sweepSample(uCurrent, uv);
+  }
+  if (uPass < 0.5) {
+    old *= uKeep;
+    // Retire only the part of the old sweep being revisited, before replacing it.
+    if (age * uCols < uColumns) old = max(old, current);
+    gl_FragColor = old;
+  } else {
+    // Zero preserves a hard sweep boundary; nonzero eases only the chosen tail width.
+    float fade = uSweepFade > 0.0 ? smoothstep(1.0 - uSweepFade, 1.0, age) : 0.0;
+    current *= mix(1.0, uAfterglow, fade);
+    vec4 ink = max(current, old * uAfterglow);
+    gl_FragColor = vec4(ink.rgb + uBg * (1.0 - clamp(ink.a, 0.0, 1.0)), 1.0);
+  }
+}
+`;
+
+  /** One clean revolution plus older ink whose lifetime is measured in turns. */
+  function spectrogramGlRingPresentPolarRetained(ring, canvas, plateRgb, fullMag, polar, settings, columns, turns) {
+    if (!ring || !canvas) return false;
+    const plate = nodeGraphResidualFaceGlPlate(canvas, "circular-sweeps");
+    if (!plate) return false;
+    ring.polarCanvas = canvas;
+    const gl = plate.gl;
+    if (!plate.circularCurrent) {
+      plate.circularCurrent = nodeGraphResidualFaceGlTarget(gl, plate.w, plate.h);
+      if (!plate.circularCurrent) return false;
+    }
+    const dev = pictureDevice();
+    const base = programFor(dev), entry = polarProgramFor(dev);
+    if (!base || !entry || ring.w > entry.maxTex) return false;
+    const p = polar;
+    const moving = p.movingHead !== false;
+    const hang = Math.max(0, nodeGraphFiniteNumber(settings.circularHangTurns, 1));
+    const amount = hang > 0 ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings.circularAfterglow, 0.2))) : 0;
+    // Hang = number of turns to 1%, not seconds. Spin 0 therefore holds both layers.
+    const keep = hang > 0 ? Math.exp(-Math.LN10 * 2 * Math.max(0, turns) / hang) : 0;
+    const uniforms = (pass) => (g, prog) => {
+      g.activeTexture(g.TEXTURE1);
+      g.bindTexture(g.TEXTURE_2D, plate.circularCurrent.tex);
+      g.uniform1i(g.getUniformLocation(prog, "uCurrent"), 1);
+      g.uniform4f(g.getUniformLocation(prog, "uPolar"), p.mirror ? 1 : 0, p.up ? 1 : 0, p.rotate, p.inner);
+      g.uniform1f(g.getUniformLocation(prog, "uPhase"), p.sweepPhase);
+      g.uniform1f(g.getUniformLocation(prog, "uMoving"), moving ? 1 : 0);
+      g.uniform1f(g.getUniformLocation(prog, "uShift"), Math.max(0, turns) % 1);
+      g.uniform1f(g.getUniformLocation(prog, "uColumns"), Math.min(columns, ring.w));
+      g.uniform1f(g.getUniformLocation(prog, "uCols"), ring.w);
+      g.uniform1f(g.getUniformLocation(prog, "uKeep"), keep);
+      g.uniform1f(g.getUniformLocation(prog, "uAfterglow"), amount);
+      g.uniform1f(g.getUniformLocation(prog, "uSweepFade"), Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings.circularSweepFade))));
+      g.uniform1f(g.getUniformLocation(prog, "uPass"), pass);
+      g.uniform3f(g.getUniformLocation(prog, "uBg"), plateRgb[0], plateRgb[1], plateRgb[2]);
+      g.activeTexture(g.TEXTURE0);
+    };
+    nodeGraphResidualFaceGlReset(gl);
+    if (columns > 0) {
+      if (!nodeGraphResidualFaceGlFullPass(plate, plate.write.fbo, FS_CIRCULAR_SWEEPS, "circular-sweeps", uniforms(0))) return false;
+      nodeGraphResidualFaceGlSwap(plate);
+    }
+    if (columns > 0 || !plate.circularCurrentReady || plate.circularMoving !== moving) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, plate.circularCurrent.fbo);
+      gl.viewport(0, 0, plate.w, plate.h);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      const ok = shadeRing(dev, base, entry, ring, plate.w, plate.h, 0, plateRgb, fullMag, (g, u) => {
+        g.uniform1f(u.uCols, ring.w);
+        g.uniform1f(u.uReverseFrequency, p.reverseFrequency ? 1 : 0);
+        g.uniform2f(u.uHeadMode, moving ? 1 : 0, p.sweepPhase);
+        g.uniform1f(u.uEnergy, 1);
+        g.uniform4f(u.uPolar, p.mirror ? 1 : 0, p.up ? 1 : 0, p.rotate, p.inner);
+      }, plate.circularCurrent);
+      if (!ok) return false;
+      plate.circularCurrentReady = true;
+      plate.circularMoving = moving;
+    }
+    const ctx = nodeGraphSharedGlPresentTarget(canvas);
+    if (!ctx) return false;
+    nodeGraphResidualFaceGlReset(gl);
+    nodeGraphSharedGlBindPresent(gl, plate.w, plate.h);
+    const ok = nodeGraphResidualFaceGlFullPass(plate, null, FS_CIRCULAR_SWEEPS, "circular-sweeps", uniforms(1));
+    nodeGraphSharedGlEndPresent(gl);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+    if (!ok || gl.isContextLost()) return false;
+    return copyOut(dev, ctx, plate.w, plate.h, canvas.width, canvas.height);
+  }
+
   function spectrogramGlRingRelease(ring) {
+    if (ring?.polarCanvas) {
+      nodeGraphResidualFaceGlDrop(ring.polarCanvas);
+      ring.polarCanvas = null;
+    }
     releaseGpu(ring);
   }
 
   // JS twin of grade01 (smoke + 1D-style dBFS checks). x is log10(1+ema·100).
   const SPECTROGRAM_GRADE_WINDOW_DB = 80;
-  function spectrogramGrade01(x, contrast, brightness, fullMag) {
-    const c = Number(contrast);
-    const b = Number(brightness);
-    if (!(b > 0) && !(b < 0)) return 0;
-    if (!(c > 0) && !(c < 0)) {
-      return 0.5;
-    }
-    const powPos = (v, e) => (v <= 0 ? 0 : Math.pow(v, e));
-    const ema = Math.max(0, (powPos(10, Number(x)) - 1) / 100);
-    const ref = Math.max(Number(fullMag) || 0, 1e-9);
-    const amp = ema / ref * Math.abs(b);
-    const db = 20 * Math.log10(Math.max(amp, 1e-12));
-    const v = Math.min(1, Math.max(0, (db + SPECTROGRAM_GRADE_WINDOW_DB) / SPECTROGRAM_GRADE_WINDOW_DB));
-    const gamma = 1 / Math.max(Math.abs(c), 0.05);
-    let y = powPos(v, gamma);
-    if (c < 0) y = 1 - y;
-    if (b < 0) y = 1 - y;
-    return Math.min(1, Math.max(0, y));
+  function spectrogramGrade01(x, floorDb, ceilingDb, fullMag) {
+    const floor = Number.isFinite(Number(floorDb)) ? Number(floorDb) : -80;
+    const ceiling = Number.isFinite(Number(ceilingDb)) ? Number(ceilingDb) : 0;
+    const ema = Math.max(0, (Math.pow(10, Number(x)) - 1) / 100);
+    const db = 20 * Math.log10(Math.max(ema / Math.max(Number(fullMag) || 0, 1e-9), 1e-12));
+    const v = Math.min(1, Math.max(0, (db - floor) / Math.max(ceiling - floor, 0.01)));
+    const knee = 0.2;
+    const edge = Math.min(v, 1 - v);
+    if (edge >= knee) return v;
+    const t = edge / knee;
+    const shaped = knee * t * t * (2 - t);
+    return v < 0.5 ? shaped : 1 - shaped;
   }
 
   global.SPECTROGRAM_GL_LUT_ROWS = LUT_ROWS;
@@ -806,5 +958,6 @@ void main() {
   global.spectrogramGlUsable = spectrogramGlUsable;
   global.spectrogramGlRingPresent = spectrogramGlRingPresent;
   global.spectrogramGlRingPresentPolar = spectrogramGlRingPresentPolar;
+  global.spectrogramGlRingPresentPolarRetained = spectrogramGlRingPresentPolarRetained;
   global.spectrogramGlRingRelease = spectrogramGlRingRelease;
 })(typeof globalThis !== "undefined" ? globalThis : window);

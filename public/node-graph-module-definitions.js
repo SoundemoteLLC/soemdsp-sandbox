@@ -23862,10 +23862,11 @@ const nodeGraphModuleDefinitions = (
     visualSink: true
   },
   spectrogram: {
-    // Hand-written face (node-graph-module-face.js): Freq band, Contrast | Bright | History.
+    // Hand-written face (node-graph-module-face.js): Freq band, Floor | Ceiling | History.
     face: [
       { kind: "band", lo: "minFreq", hi: "maxFreq", label: "Freq", h: 34 },
-      { kind: "cells", params: [["contrast", "Contrast", "bipolar"], ["brightness", "Bright", "bipolar"], ["historySeconds", "History"]], h: 52 },
+      { kind: "band", lo: "floorDb", hi: "ceilingDb", label: "Level", h: 34 },
+      { kind: "cells", params: [["historySeconds", "History"]], h: 40 },
     ],
     planRole: "monitor",
     customDisplayArea: true,
@@ -23888,27 +23889,29 @@ const nodeGraphModuleDefinitions = (
     // Analysis look (FFT / window / overlap / freq scale / gradient) stays in Display Settings.
     parameters: [
       {
-        bipolar: true,
-        defaultValue: "1",
-        key: "contrast",
-        label: "Contrast",
-        max: "4",
-        mid: "0",
-        min: "-4",
+        key: "floorDb",
+        label: "Floor",
+        defaultValue: "-80",
+        min: "-160",
+        mid: "-40",
+        max: "24",
+        unit: "dB",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Gamma on an 80 dB window after dBFS. 1 = linear dB. Turn up to lift quiet harmonics. 0 = mid grey. Negative inverts." },
+        tooltip: "Levels at or below this dBFS threshold use the darkest gradient color. Raise Floor to remove quiet detail."
+      },
       {
-        bipolar: true,
-        defaultValue: "1",
-        key: "brightness",
-        label: "Brightness",
-        max: "4",
-        mid: "0",
-        min: "-4",
+        key: "ceilingDb",
+        label: "Ceiling",
+        defaultValue: "0",
+        min: "-160",
+        mid: "-40",
+        max: "24",
+        unit: "dB",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Linear gain before the dB window. 1 = 0 dBFS at the top. 0 = black. Negative is the same gain, then invert." },
+        tooltip: "Levels at or above this dBFS threshold use the brightest gradient color. Lower Ceiling without lifting levels below Floor."
+      },
       {
         key: "minFreq",
         kind: "frequency",
@@ -24011,11 +24014,11 @@ const nodeGraphModuleDefinitions = (
   // the face shader maps angle to time and radius to frequency (bass inside),
   // so a kick throws arms that travel round the ring. Thru is dry passthrough.
   circularSpectrogram: {
-    // Hand-written face (node-graph-module-face.js): Freq band, Contrast | Bright |
-    // History, Inner | Rotate, Mirror, Down / Up.
+    // Hand-written face: frequency and level ranges, Spin, Inner / Rotate, Mirror, Direction.
     face: [
       { kind: "band", lo: "minFreq", hi: "maxFreq", label: "Freq", h: 34 },
-      { kind: "cells", params: [["contrast", "Contrast", "bipolar"], ["brightness", "Bright", "bipolar"], ["historySeconds", "History"]], h: 52 },
+      { kind: "band", lo: "floorDb", hi: "ceilingDb", label: "Level", h: 34 },
+      { kind: "cells", params: [["spinHz", "Spin"]], h: 40 },
       { kind: "cells", params: [["innerRadius", "Inner"], ["rotate", "Rotate"]], h: 40 },
       { kind: "choices", param: "mirror", labels: ["Mirror Off", "Mirror On"], h: 26 },
       { kind: "choices", param: "direction", labels: ["Down", "Up"], h: 26 },
@@ -24035,26 +24038,28 @@ const nodeGraphModuleDefinitions = (
     outputLabels: { Thru: "←", rgba: "📺" },
     parameters: [
       {
-        bipolar: true,
-        defaultValue: "1",
-        key: "contrast",
-        label: "Contrast",
-        max: "4",
-        mid: "0",
-        min: "-4",
+        key: "floorDb",
+        label: "Floor",
+        defaultValue: "-80",
+        min: "-160",
+        mid: "-40",
+        max: "24",
+        unit: "dB",
         nonlinearSlider: false,
-        step: "any"
+        step: "any",
+        tooltip: "Levels at or below this dBFS threshold use the darkest gradient color. Raise Floor to remove quiet detail."
       },
       {
-        bipolar: true,
-        defaultValue: "1",
-        key: "brightness",
-        label: "Brightness",
-        max: "4",
-        mid: "0",
-        min: "-4",
+        key: "ceilingDb",
+        label: "Ceiling",
+        defaultValue: "0",
+        min: "-160",
+        mid: "-40",
+        max: "24",
+        unit: "dB",
         nonlinearSlider: false,
-        step: "any"
+        step: "any",
+        tooltip: "Levels at or above this dBFS threshold use the brightest gradient color. Lower Ceiling without lifting levels below Floor."
       },
       {
         key: "minFreq",
@@ -24081,15 +24086,16 @@ const nodeGraphModuleDefinitions = (
         unit: "Hz"
       },
       {
-        key: "historySeconds",
-        label: "History",
-        defaultValue: "2",
-        min: "0.1",
-        mid: "2",
-        max: "30",
+        key: "spinHz",
+        label: "Spin",
+        defaultValue: "0.5",
+        min: "0",
+        mid: "1",
+        max: "60",
         step: "any",
         maxDigits: 4,
-        unit: "s"
+        unit: "Hz",
+        tooltip: "Sweeps per second. 1 = one sweep each second (both halves when mirrored). 0 pauses the head and both picture layers. Moving Head keeps one clean revolution plus optional afterglow measured in turns."
       },
       {
         defaultValue: "0.12",
@@ -24137,6 +24143,9 @@ const nodeGraphModuleDefinitions = (
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "radialScale",
+        hidden: true,
+        modulation: false,
+        parameterOutput: false,
         kind: "choice",
         label: "Radius Map",
         linearSmoothing: false,
@@ -24144,6 +24153,14 @@ const nodeGraphModuleDefinitions = (
         mid: "0",
         min: "0",
         step: "1"
+      },
+      {
+        key: "reverseFrequency", label: "Reverse Frequency", kind: "choice",
+        hidden: true, modulation: false, parameterOutput: false,
+        choices: ["Off", "On"], defaultValue: "0",
+        min: "0", mid: "0", max: "1", step: "1",
+        displayChoices: true, divideChoicesVisibly: true, linearSmoothing: false,
+        tooltip: "On puts bass at the outer edge and high frequencies at the inner edge. Changes only radial frequency lookup; time direction and stored history are unchanged."
       },
     ],
     visualInputs: [

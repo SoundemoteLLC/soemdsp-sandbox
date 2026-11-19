@@ -698,6 +698,8 @@ function nodeGraphDisplaySettingsBuildChoiceRowHtml(key) {
   }
   const idAttr = meta.id ? ` id="${nodeGraphDisplaySettingsEscapeHtml(meta.id)}"` : "";
   const options = (meta.options || [])
+    .filter(option => key !== "freqScale" || option.value !== "3"
+      || (typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function" && nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type === "circularSpectrogram"))
     .map((option) => (
       `<option value="${nodeGraphDisplaySettingsEscapeHtml(option.value)}">${nodeGraphDisplaySettingsEscapeHtml(option.label)}</option>`
     ))

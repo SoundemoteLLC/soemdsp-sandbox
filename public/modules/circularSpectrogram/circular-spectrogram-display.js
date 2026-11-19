@@ -9,15 +9,17 @@
 //   • Shader: spectrogramGlRingPresentPolar maps each face pixel to
 //     angle → column age and radius → frequency (bass at the inner radius).
 //
-// Time runs around the ring. The newest column sits at the head (top for
-// Down, bottom for Up, turned by Rotate); older columns travel away from it.
+// Fixed Head scrolls the spectrum history away from a fixed angle. Moving Head
+// keeps one clean revolution and retires overwritten pixels into a separate
+// afterglow plate. Hang is measured in turns, independent of Spin speed.
+// Spin (Hz) advances in audio time; zero holds both picture layers.
 // Mirror on: both halves show the same history, so a kick throws a matching
 // pair of arms that travel down (or up) the circle. Mirror off: one sweep all
 // the way round (clockwise from the top for Down, anticlockwise from the
-// bottom for Up). History (s) is one trip from head to tail.
+// bottom for Up). Spin 1 Hz is one mirrored half-sweep or full unmirrored turn.
 //
-// Radius Map Log (default) gives every octave the same ring width so the kick
-// body has room; Freq Scale uses the Display Settings Linear / Mel / Bark.
+// Frequency curve continuously blends linear (0) and logarithmic (1, default)
+// radial spacing, independently of Reverse Frequency.
 //
 // State lives in spectrogramHistory so engine stop, wipe and delete clear it
 // the same way as Spectrogram (and screen solo keeps the module buffer size
@@ -25,8 +27,6 @@
 
 const CIRCULAR_SPECTROGRAM_MIN_COLUMNS = 128;
 const CIRCULAR_SPECTROGRAM_MAX_COLUMNS = 2048;
-// Freq scale index the polar shader reads as log Hz (Spectrogram uses 0…2).
-const CIRCULAR_SPECTROGRAM_LOG_SCALE = 3;
 
 function circularSpectrogramNumber(raw, fallback) {
   const n = Number(raw);
@@ -57,6 +57,9 @@ function circularSpectrogramEnsureState(nodeId, bufW, bufH, mirror, historySecon
       faceW: w,
       faceH: h,
       scrollDebtSec: 0,
+      sweepPhase: 0,
+      pendingColumns: 0,
+      pendingTurns: 0,
       lastHop: -1,
       lastAbs: Number.NaN,
       ring: null,
@@ -78,29 +81,56 @@ function circularSpectrogramEnsureState(nodeId, bufW, bufH, mirror, historySecon
   return st;
 }
 
-/** Face raster that fits the shared device, same aspect (the circle stays round). */
-function circularSpectrogramRaster(faceW, faceH) {
-  const dev = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
-  const maxW = Math.max(1, dev?.canvas?.width | 0);
-  const maxH = Math.max(1, dev?.canvas?.height | 0);
-  const k = Math.min(1, maxW / faceW, maxH / faceH);
-  return {
-    w: Math.max(1, Math.floor(faceW * k)),
-    h: Math.max(1, Math.floor(faceH * k)),
-  };
+/** Audio-clock elapsed time, independent of FFT packet arrival and render cadence. */
+function circularSpectrogramElapsed(st, time, source, active) {
+  const previous = st.clockTime;
+  const sameClock = st.clockSource === source;
+  st.clockSource = source;
+  if (!Number.isFinite(time)) {
+    st.clockTime = Number.NaN;
+    return 0;
+  }
+  st.clockTime = sameClock && Number.isFinite(previous) ? Math.max(previous, time) : time;
+  return active && sameClock && Number.isFinite(previous) ? Math.max(0, time - previous) : 0;
 }
 
-/** One STFT hop of audio time: pool, then emit whole columns (History / columns each). */
-function circularSpectrogramIngestHop(st, spectrum, bins, hopSize, sampleRate, ink) {
+function circularSpectrogramClock(liveIn, sampleRate) {
+  const live = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp.live : null;
+  const ctx = live?.context;
+  if (ctx?.state === "running" && live.node) {
+    let time = Number(ctx.currentTime);
+    if (typeof ctx.getOutputTimestamp === "function") {
+      const stamp = ctx.getOutputTimestamp();
+      if (Number.isFinite(stamp.contextTime) && Number.isFinite(stamp.performanceTime) && stamp.performanceTime > 0) {
+        time = stamp.contextTime + (performance.now() - stamp.performanceTime) / 1000;
+      }
+    }
+    return { time, source: ctx };
+  }
+  // Plugin: no AudioContext. Follow the host's sample counter, never packet count.
+  return { time: Number(liveIn?.absoluteFrame) / Math.max(1, sampleRate), source: liveIn };
+}
+
+/** Paint elapsed sweep time using the latest available spectrum (sample-and-hold). */
+function circularSpectrogramAdvance(st, spectrum, bins, seconds, ink) {
+  if (!(st.spinHz > 0)) {
+    st.ring.pendingValid = false;
+    st.ring.pending.fill(0);
+    return;
+  }
+  if (!(seconds > 0)) return;
   spectrogramGlRingPool(st.ring, spectrum, bins);
   const cols = Math.max(1, st.ring.w | 0);
   const secPerCol = st.historySeconds / cols;
   st.scrollDebtSec = Math.max(0, circularSpectrogramNumber(st.scrollDebtSec, 0))
-    + Math.max(1, hopSize) / Math.max(1, sampleRate);
+    + seconds;
   const whole = Math.floor(st.scrollDebtSec / Math.max(1e-12, secPerCol));
   if (whole < 1) return;
   spectrogramGlRingWrite(st.ring, Math.min(cols, whole), ink);
-  st.scrollDebtSec = whole >= cols ? 0 : Math.max(0, st.scrollDebtSec - whole * secPerCol);
+  st.pendingColumns = Math.min(cols, st.pendingColumns + whole);
+  st.pendingTurns += whole / cols;
+  st.sweepPhase = ((st.sweepPhase || 0) + whole / cols) % 1;
+  st.scrollDebtSec = Math.max(0, st.scrollDebtSec - whole * secPerCol);
 }
 
 /** Leftover hop-time as a fraction of one column [0, 1). */
@@ -134,24 +164,21 @@ function drawNodeGraphCircularSpectrogramItem(_renderer, item, pixelRatio) {
   const node = nodeGraphPatchNode(nodeId);
   const p = node?.params && typeof node.params === "object" ? node.params : {};
   const settings = spectrogramSettingsForNode(node);
-  const brightness = circularSpectrogramNumber(p.brightness, 1);
-  const contrast = circularSpectrogramNumber(p.contrast, 1);
+  const ceilingDb = circularSpectrogramNumber(p.ceilingDb, 0);
+  const floorDb = circularSpectrogramNumber(p.floorDb, -80);
   const mirror = Math.round(circularSpectrogramNumber(p.mirror, 1)) !== 0;
   const up = Math.round(circularSpectrogramNumber(p.direction, 0)) === 1;
+  const reverseFrequency = settings.reverseFrequency === true;
   // Rotate is in turns (0…1 wraps), like the other phase knobs.
   const rotate = circularSpectrogramNumber(p.rotate, 0) * 2 * Math.PI;
   const inner = Math.max(0, Math.min(0.9, circularSpectrogramNumber(p.innerRadius, 0.12)));
-  const freqScaleIdx = Math.round(circularSpectrogramNumber(p.radialScale, 0)) === 0
-    ? CIRCULAR_SPECTROGRAM_LOG_SCALE
-    : Math.max(0, Math.min(2, Math.round(nodeGraphFiniteNumber(settings.freqScale))));
+  const frequencyCurve = Math.max(0, Math.min(1, circularSpectrogramNumber(settings.frequencyCurve, 1)));
   const lutStops = typeof nodeGraphApplyGradientHueRotation === "function"
     ? nodeGraphApplyGradientHueRotation(settings.gradientStops, settings)
     : settings.gradientStops;
   const lutRgb = spectrogramLutRgbForStops(lutStops);
-  const historySeconds = Math.max(
-    SPECTROGRAM_MIN_HISTORY_SECONDS,
-    Math.min(SPECTROGRAM_MAX_HISTORY_SECONDS, nodeGraphFiniteNumber(settings.historySeconds, 2)),
-  );
+  const spinHz = Math.max(0, circularSpectrogramNumber(p.spinHz, 0.5));
+  const historySeconds = spinHz > 0 ? 1 / spinHz : 2;
 
   if (typeof nodeGraphFacePlateApplyCss === "function") {
     nodeGraphFacePlateApplyCss(screenElement, spectrogramCssAtBrightness(lutRgb, 0));
@@ -161,11 +188,12 @@ function drawNodeGraphCircularSpectrogramItem(_renderer, item, pixelRatio) {
   const spectrumBatch = nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, "SpectrumBatch"));
   const spectrumBins = (spectrum instanceof Float32Array) ? spectrum.length : 0;
 
-  const { hopSize, sampleRate, hopSerial, batchColumns, windowSum, fftSize } = spectrogramHopMeta(settings, node);
+  const { sampleRate, hopSerial, batchColumns, windowSum, fftSize } = spectrogramHopMeta(settings, node);
   const winSum = windowSum > 0 ? windowSum : Math.max(1, fftSize) / 2;
   const fullMag = Math.max(1e-9, winSum / 2);
   const buf = spectrogramBufferSizeForFace(nodeId, faceW, faceH, screenElement);
   const st = circularSpectrogramEnsureState(nodeId, buf.w, buf.h, mirror, historySeconds);
+  st.spinHz = spinHz;
   if (!st.ring) st.ring = spectrogramGlRingCreate(st.columns, lutRgb);
 
   const frozen = typeof nodeGraphModuleScopePhosphorFrozen === "function"
@@ -194,63 +222,48 @@ function drawNodeGraphCircularSpectrogramItem(_renderer, item, pixelRatio) {
       liveIn,
     );
 
-  if (!frozen && hopSerial > 0 && hopSerial !== st.lastHop) {
-    let ingested = silentHold;
-    if (!silentHold) {
-      const band = spectrogramResolveViewBand(settings.minFreq, settings.maxFreq, sampleRate);
-      const ink = {
-        contrast,
-        brightness,
-        freqScale: freqScaleIdx,
-        minFreq: band.minFreq,
-        maxFreq: band.maxFreq,
-        nyquist: band.nyquist,
-        lutRgb,
-      };
-      const bins = spectrumBins > 0
-        ? spectrumBins
-        : (spectrumBatch instanceof Float32Array && batchColumns > 0
-          ? Math.floor(spectrumBatch.length / batchColumns)
-          : 0);
-      if (
-        spectrumBatch instanceof Float32Array
-        && batchColumns > 0
-        && bins > 0
-        && spectrumBatch.length >= batchColumns * bins
-      ) {
-        for (let c = 0; c < batchColumns; c += 1) {
-          circularSpectrogramIngestHop(st, spectrumBatch.subarray(c * bins, (c + 1) * bins), bins, hopSize, sampleRate, ink);
-        }
-        ingested = true;
-      } else if (spectrumBins > 0) {
-        circularSpectrogramIngestHop(st, spectrum, spectrumBins, hopSize, sampleRate, ink);
-        ingested = true;
+  const bins = spectrumBins > 0 ? spectrumBins
+    : (spectrumBatch instanceof Float32Array && batchColumns > 0
+      ? Math.floor(spectrumBatch.length / batchColumns) : 0);
+  const hasBatch = spectrumBatch instanceof Float32Array && batchColumns > 0
+    && bins > 0 && spectrumBatch.length >= batchColumns * bins;
+  const clock = circularSpectrogramClock(liveIn, sampleRate);
+  const seconds = circularSpectrogramElapsed(st, clock.time, clock.source,
+    !frozen && !silentHold && spinHz > 0 && hopSerial > 0 && bins > 0);
+  if (!(spinHz > 0)) circularSpectrogramAdvance(st, null, 0, 0, null);
+  if (seconds > 0) {
+    const band = spectrogramResolveViewBand(settings.minFreq, settings.maxFreq, sampleRate);
+    const ink = { floorDb, ceilingDb, frequencyCurve,
+      minFreq: band.minFreq, maxFreq: band.maxFreq, nyquist: band.nyquist, lutRgb };
+    if (hasBatch && hopSerial !== st.lastHop) {
+      // Distribute this frame's elapsed time across the available spectra;
+      // packet count never determines sweep speed.
+      for (let c = 0; c < batchColumns; c += 1) {
+        circularSpectrogramAdvance(st, spectrumBatch.subarray(c * bins, (c + 1) * bins),
+          bins, seconds / batchColumns, ink);
       }
-    }
-    if (ingested) {
-      st.lastHop = hopSerial;
-      if (Number.isFinite(undrawn.absEnd) && undrawn.count > 0) {
-        st.lastAbs = undrawn.absEnd;
-      }
+    } else {
+      const latest = spectrumBins > 0 ? spectrum
+        : spectrumBatch.subarray((batchColumns - 1) * bins, batchColumns * bins);
+      circularSpectrogramAdvance(st, latest, bins, seconds, ink);
     }
   }
+  st.lastHop = hopSerial;
+  if (Number.isFinite(undrawn.absEnd) && undrawn.count > 0) st.lastAbs = undrawn.absEnd;
 
-  const raster = circularSpectrogramRaster(faceW, faceH);
-  if (spectrogramGlRingPresentPolar(
-      st.ring,
-      raster.w,
-      raster.h,
-      ctx,
-      faceW,
-      faceH,
-      circularSpectrogramSubColumn(st),
-      spectrogramLutRgb01(lutRgb, 0),
-      fullMag,
-      { mirror, up, rotate, inner },
-    )) {
+  const ok = spectrogramGlRingPresentPolarRetained(st.ring, canvas,
+    spectrogramLutRgb01(lutRgb, 0), fullMag,
+    { mirror, up, rotate, inner, reverseFrequency, sweepPhase: st.sweepPhase,
+      movingHead: settings.circularHeadMode === "moving" },
+    settings, frozen ? 0 : st.pendingColumns, frozen ? 0 : st.pendingTurns);
+  if (ok) {
+    if (!frozen) {
+      st.pendingColumns = 0;
+      st.pendingTurns = 0;
+    }
     st.hasFrame = true;
     return;
   }
   st.hasFrame = false;
-  nodeGraphDisplayGlFailed(canvas, "Circular Spectrogram GL present failed");
+  nodeGraphDisplayGlFailed(canvas, "Circular Spectrogram sweep GL present failed");
 }

@@ -6,13 +6,21 @@ rotation are GLSL on the existing shared picture device. No JS drawing fallback.
 
 ## Rotation
 
-Twist is a wrapping phase parameter. The -1..+1 range covers one full turn:
+Rotate (saved key `twist`) is a wrapping phase parameter. The -1..+1 range covers one full turn:
 0.5 is 90 degrees; -1 and +1 are the same orientation. Spin input adds using
 the same scale. Retained ink rotates by the change in orientation, not by a
 separate frame-dependent Twist velocity. Crossing the wrap seam does not clear
 the plate or reverse an unrelated trail-spin effect.
 
 ## Settings
+
+- Inner sets where rays start, as a fraction of Size. Their magnitude fills
+  the remaining distance from Inner to Size, preserving short rays instead
+  of cutting them away. Radius coloring also spans Inner to Size.
+  The saved parameter key remains `zoom`. The mask-only Cutout Curve was removed.
+
+- Reverse freq: reverses the frequency order. In symmetric mode, lows start
+  at the top and highs travel down before Rotate is applied. Default Off.
 
 - Ray width: continuous fraction of an angular band slot, 0..1. Zero hides
   discrete rays, one fills the slot. Continuous Bands does not use this value.

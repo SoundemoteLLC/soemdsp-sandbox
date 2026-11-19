@@ -2,7 +2,7 @@
 // audio rate). Each step fades the previous plate by Decay, rotates retained
 // ink with the orientation change, and keeps the brighter of it and new rays.
 
-const NODE_GRAPH_VIDEO_FEEDBACK_GL_REV = 11;
+const NODE_GRAPH_VIDEO_FEEDBACK_GL_REV = 15;
 // Longest plate side; the other side scales with it so the circle stays round.
 const NODE_GRAPH_VIDEO_FEEDBACK_MAX = 1024;
 // Spectrum texels: one per band, or one per slot when Continuous.
@@ -52,6 +52,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     uniform float uColorByRadius;
     uniform float uColorByLevel;
     uniform float uSymmetric;
+    uniform float uReverseFrequency;
     uniform float uPx;
     uniform vec2 uFit;
 
@@ -65,6 +66,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     }
 
     float vfWave(float texel) {
+      if (uReverseFrequency > 0.5) texel = uCount - 1.0 - texel;
       return texture2D(uWave, vec2((texel + 0.5) / WAVE, 0.5)).r;
     }
 
@@ -118,7 +120,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
 
   const UNIFORMS = [
     "uPrev", "uWave", "uLut", "uDecay", "uRotation", "uTrailRotation", "uBright", "uSmooth", "uSize", "uInner",
-    "uBands", "uCount", "uRayWidth", "uColorByRadius", "uColorByLevel", "uSymmetric", "uPx", "uFit",
+    "uBands", "uCount", "uRayWidth", "uColorByRadius", "uColorByLevel", "uSymmetric", "uReverseFrequency", "uPx", "uFit",
   ];
 
   function link(gl, vsSrc, fsSrc) {
@@ -354,6 +356,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     gl.uniform1f(device.uColorByRadius, options.colorByRadius ? 1 : 0);
     gl.uniform1f(device.uColorByLevel, (options.colorByLevel ?? !options.colorByRadius) ? 1 : 0);
     gl.uniform1f(device.uSymmetric, options.symmetric !== false ? 1 : 0);
+    gl.uniform1f(device.uReverseFrequency, options.reverseFrequency ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     const tmp = renderer.read;

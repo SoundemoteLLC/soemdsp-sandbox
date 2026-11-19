@@ -372,8 +372,8 @@ function normalizeNodeGraphSpectrogramSettings(settings = {}, node = null) {
     defaults.freqOverlap,
   );
   const freqScale = snapChoice(
-    source.freqScale ?? node?.params?.freqScale ?? defaults.freqScale,
-    2,
+    source.freqScale ?? node?.params?.freqScale ?? (node?.type === "circularSpectrogram" && Number(node?.params?.radialScale ?? 0) === 0 ? 3 : defaults.freqScale),
+    node?.type === "circularSpectrogram" ? 3 : 2,
     defaults.freqScale,
   );
   // View band (Hz). Hard range 1…24000; min always strictly below max.
@@ -413,6 +413,12 @@ function normalizeNodeGraphSpectrogramSettings(settings = {}, node = null) {
     overlap,
     freqOverlap,
     freqScale,
+    reverseFrequency: source.reverseFrequency == null ? Number(node?.params?.reverseFrequency) === 1 : source.reverseFrequency === true,
+    circularHeadMode: source.circularHeadMode === "moving" ? "moving" : "fixed",
+    circularAfterglow: normalizeNodeGraphTraceDisplayNumber(source.circularAfterglow, 0.2, 0, 1),
+    circularSweepFade: normalizeNodeGraphTraceDisplayNumber(source.circularSweepFade, 0, 0, 1),
+    frequencyCurve: normalizeNodeGraphTraceDisplayNumber(source.frequencyCurve ?? source.circularFrequencyCurve, 1, 0, 1),
+    circularHangTurns: normalizeNodeGraphTraceDisplayNumber(source.circularHangTurns, 1, 0, 30),
     minFreq,
     maxFreq,
     // Face width = historySeconds of audio. Longer = slower scroll.
@@ -443,11 +449,16 @@ const nodeGraphSpectrumLineSettingsDefaults = Object.freeze({
   window: 1, // Hann
   overlap: 2, // 4× hop
   freqOverlap: 0,
-  spectrumAxis: "log",
+  frequencyCurve: 1,
   spectrumDbMode: "exactDb",
   spectrumDbFloor: -96,
   spectrumDbCeiling: 0,
   spectrumDrawStyle: "filled",
+  spectrumSmoothMs: 0,
+  spectrumBarCount: 64,
+  spectrumBarWidth: 0.8,
+  spectrumMinBarPx: 2,
+  spectrumMinGapPx: 1,
   spectrumPeakHold: "off",
   spectrumPeakDecay: 12,
   dot1Color: "#4fd1ff",
@@ -483,12 +494,17 @@ function normalizeNodeGraphSpectrumLineSettings(settings = {}, node = null) {
     freqOverlap: analysis.freqOverlap,
     // Worklet ignores freqScale; kept so shared param injection stays well-formed.
     freqScale: 0,
-    spectrumAxis: pick(source.spectrumAxis, ["log", "linear", "mel", "bark"], d.spectrumAxis),
+    frequencyCurve: normalizeNodeGraphTraceDisplayNumber(source.frequencyCurve, source.spectrumAxis === "linear" ? 0 : 1, 0, 1),
     spectrumDbMode: pick(source.spectrumDbMode, ["exactDb", "db", "compressed", "linear"], d.spectrumDbMode),
     spectrumDbFloor: dbFloor,
     spectrumDbCeiling: dbCeiling,
-    spectrumDrawStyle: pick(source.spectrumDrawStyle, ["filled", "line"], d.spectrumDrawStyle),
-    spectrumPeakHold: pick(source.spectrumPeakHold, ["off", "hold"], d.spectrumPeakHold),
+    spectrumDrawStyle: pick(source.spectrumDrawStyle, ["filled", "line", "bars"], d.spectrumDrawStyle),
+    spectrumSmoothMs: normalizeNodeGraphTraceDisplayNumber(source.spectrumSmoothMs, d.spectrumSmoothMs, 0, 5000),
+    spectrumBarCount: Math.round(normalizeNodeGraphTraceDisplayNumber(source.spectrumBarCount, d.spectrumBarCount, 1, 512)),
+    spectrumBarWidth: normalizeNodeGraphTraceDisplayNumber(source.spectrumBarWidth, d.spectrumBarWidth, 0, 1),
+    spectrumMinBarPx: Math.round(normalizeNodeGraphTraceDisplayNumber(source.spectrumMinBarPx, d.spectrumMinBarPx, 1, 32)),
+    spectrumMinGapPx: Math.round(normalizeNodeGraphTraceDisplayNumber(source.spectrumMinGapPx, d.spectrumMinGapPx, 0, 16)),
+    spectrumPeakHold: pick(source.spectrumPeakHold, ["off", "hold", "fall"], d.spectrumPeakHold),
     spectrumPeakDecay: pickNum(source.spectrumPeakDecay, [3, 6, 12, 24, 48, 96], d.spectrumPeakDecay),
   };
 }

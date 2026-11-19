@@ -2900,7 +2900,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     notes: ["fft", "spectrum", "circular spectrogram", "polar", "radial", "mirrored", "spectral display", "thru"],
   },
   spectrum1d: {
-    browserEmoji: "🌊",
+    browserEmoji: "📟",
     category: "multimeter",
     description: "See the frequency spectrum right now (magnitude vs frequency) while passing audio through.",
     label: "1D Spectrum",

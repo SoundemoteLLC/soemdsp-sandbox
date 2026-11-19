@@ -29,7 +29,7 @@ registerNodeGraphChromelessModule("videoFeedback", {
     inputLabels: { A: "→", B: "Spin" },
     inputTooltips: {
       A: "Audio in (→). FFT drives the spectrum circle; passes straight to Thru (←).",
-      B: "Spin. Adds to Twist.",
+      B: "Spin. Adds to Rotate.",
     },
     outputs: ["Thru", "rgba"],
     outputLabels: { Thru: "←", rgba: "📺" },
@@ -59,8 +59,7 @@ registerNodeGraphChromelessModule("videoFeedback", {
         step: "any",
       },
       {
-        // Key stays zoom for saved patches: where the rays start, as a share
-        // of Size (0 = from the centre).
+        // Keep the saved key: where rays start, as a fraction of Size.
         defaultValue: "0",
         key: "zoom",
         label: "Inner",
@@ -69,11 +68,12 @@ registerNodeGraphChromelessModule("videoFeedback", {
         min: "0",
         nonlinearSlider: false,
         step: "any",
+        tooltip: "Starting radius of the spectrum rays, as a fraction of Size. Rays extend outward from Inner through the remaining radius; 0 starts at the center.",
       },
       {
         defaultValue: "0",
         key: "twist",
-        label: "Twist",
+        label: "Rotate",
         kind: "phase",
         wraparound: true,
         bipolar: true,
@@ -82,7 +82,7 @@ registerNodeGraphChromelessModule("videoFeedback", {
         min: "-1",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Full circle rotation: -1 to +1 covers 360 degrees and wraps at the ends. Spin input uses the same scale and adds to Twist.",
+        tooltip: "Full circle rotation: -1 to +1 covers 360 degrees and wraps at the ends. Spin input uses the same scale and adds to Rotate.",
       },
       {
         defaultValue: "0.75",
