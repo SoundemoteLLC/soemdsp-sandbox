@@ -885,7 +885,8 @@ function nodeGraphModuleIoSectionHeightGu(type, node = null) {
  * force the shell taller than the face (face can be 1gu with N ports).
  */
 function nodeGraphLayoutBPortBandGu(_type = null) {
-  return 1;
+  // One jack row = the whole-pixel jack pitch (ioRowHeightGu = 15 px), so a module with no display hugs its jacks.
+  return nodeGraphModuleLayout.ioRowHeightGu;
 }
 
 /** @deprecated alias — use nodeGraphLayoutBPortBandGu */
