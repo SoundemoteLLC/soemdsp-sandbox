@@ -23969,8 +23969,10 @@ const nodeGraphModuleDefinitions = (
     displayType: "spectrumLine",
     inputs: ["In"],
     layout: "scopeFace",
-    // Single In / Thru pair: → / ← come from nodeGraphThruPairPortDisplayLabel.
+    // Two outs (Thru + rgba) so the auto In/Thru arrows don't apply: label them explicitly.
+    inputLabels: { In: "→" },
     outputs: ["Thru", "rgba"],
+    outputLabels: { Thru: "←", rgba: "📺" },
     parameters: [
       {
         key: "minFreq",
@@ -24027,8 +24029,10 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 12,
     inputs: ["In"],
     layout: "scopeFace",
-    // Single In / Thru pair: → / ← come from nodeGraphThruPairPortDisplayLabel.
+    // Two outs (Thru + rgba) so the auto In/Thru arrows don't apply: label them explicitly.
+    inputLabels: { In: "→" },
     outputs: ["Thru", "rgba"],
+    outputLabels: { Thru: "←", rgba: "📺" },
     parameters: [
       {
         bipolar: true,

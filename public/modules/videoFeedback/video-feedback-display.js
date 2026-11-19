@@ -7,7 +7,8 @@
 function nodeGraphVideoFeedbackPortLabel(_node, port) {
   const key = String(port || "");
   if (key === "rgba" || key === "\u{1F4FA}") return "\u{1F4FA}";
-  if (key === "A") return "In";
+  if (key === "A") return "→";
+  if (key === "Thru") return "←";
   if (key === "B") return "Spin";
   return key;
 }
