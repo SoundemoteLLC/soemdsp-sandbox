@@ -709,7 +709,7 @@ async function nodeGraphAudioPlayerLibraryLoadPlaylist(nodeId) {
   }
   const loaded = nodeGraphAudioPlayerPlaylistForNode(nodeId);
   if (wantedFile && loaded?.items?.length) {
-    const norm = (s) => String(s || "").replace(/\/g, "/").toLowerCase();
+    const norm = (s) => String(s || "").replace(/[\\]/g, "/").toLowerCase();
     const want = norm(wantedFile);
     const at = loaded.items.findIndex((item) => norm(item.path || item.rel || item.name) === want
       || want.endsWith("/" + norm(item.rel || item.name)));
