@@ -62,6 +62,8 @@
     if (next === state.view) return state.view;
     state.view = next;
     state.hover = "";
+    pinned = false;
+    if (typeof nodeGraphGlGraphState === "object") nodeGraphGlGraphState.ioExpanded = null;
     try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
     applyBodyState();
     refreshGeometry();
@@ -105,6 +107,85 @@
     if (mode === "full" || full.length <= 4 || typeof nodeGraphRailShortLabel !== "function") return full;
     return nodeGraphRailShortLabel(full) || full;
   };
+
+  // ---- IO overflow pill: hover or click it to expand the crowded edge's full jack list ----------------------------
+  let pinned = false;
+
+  function pointOf(event) {
+    return typeof nodeGraphClientToZoomSurfacePoint === "function"
+      ? nodeGraphClientToZoomSurfacePoint(event.clientX, event.clientY)
+      : null;
+  }
+
+  function setExpanded(id, io) {
+    const gl = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
+    if (!gl) return;
+    const cur = gl.ioExpanded;
+    if (!id) {
+      if (!cur) return;
+      gl.ioExpanded = null;
+    } else {
+      if (cur && cur.id === id && cur.io === io) return;
+      gl.ioExpanded = { id, io };
+    }
+    redraw();
+  }
+
+  function pillAt(point) {
+    const pills = nodeGraphGlGraphState?.chrome?.pills || [];
+    for (let i = pills.length - 1; i >= 0; i -= 1) {
+      const pill = pills[i];
+      const side = pill.io === "output" ? -1 : 1;
+      const w = pill.r * 3.4;
+      const x0 = side > 0 ? pill.x : pill.x - w;
+      if (point.x >= x0 && point.x <= x0 + w && Math.abs(point.y - pill.y) <= pill.r) return pill;
+    }
+    return null;
+  }
+
+  function insideExpanded(point) {
+    const ex = nodeGraphGlGraphState?.ioExpanded;
+    if (!ex || typeof nodeGraphGlGraphIoExpandedRegion !== "function") return false;
+    const reg = nodeGraphGlGraphIoExpandedRegion(ex.id, ex.io);
+    const pad = 4;
+    return Boolean(reg && point.x >= reg.x0 - pad && point.x <= reg.x1 + pad && point.y >= reg.y0 - pad && point.y <= reg.y1 + pad);
+  }
+
+  document.addEventListener("pointermove", (event) => {
+    if (typeof nodeGraphGlGraphState !== "object" || pinned) return;
+    const point = pointOf(event);
+    if (!point) return;
+    if (nodeGraphGlGraphState.ioExpanded) {
+      if (insideExpanded(point)) return;
+      setExpanded(null);
+    }
+    const pill = pillAt(point);
+    if (pill) setExpanded(pill.id, pill.io);
+  }, { passive: true });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || typeof nodeGraphGlGraphState !== "object") return;
+    const point = pointOf(event);
+    if (!point) return;
+    const pill = pillAt(point);
+    if (pill) {
+      // Click the pill: keep the list open (click again to close).
+      pinned = true;
+      setExpanded(pill.id, pill.io);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (pinned && nodeGraphGlGraphState.ioExpanded) {
+      const ex = nodeGraphGlGraphState.ioExpanded;
+      const reg = nodeGraphGlGraphIoExpandedRegion?.(ex.id, ex.io);
+      const onPillSlot = reg && point.x >= reg.x0 - 4 && point.x <= reg.x1 + 4 && point.y >= reg.y0 - 4 && point.y <= reg.y1 + 4;
+      if (!onPillSlot) {
+        pinned = false;
+        setExpanded(null);
+      }
+    }
+  }, true);
 
   document.addEventListener("pointermove", (event) => {
     if (VIEWS[state.view].wires !== "hover") return;
