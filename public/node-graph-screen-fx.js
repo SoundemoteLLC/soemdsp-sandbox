@@ -339,6 +339,29 @@ function nodeGraphScreenFxRunShader(kit, id, script, w, h, now) {
   }
 }
 
+/**
+ * True when the picture chain behind this node is fed all the way back: every effect on the way has its 📺 in connected (to a
+ * source: Screen Space In, a Vector RGB, ...). An effect with nothing plugged in only makes black, so Screen Space Out ignores
+ * such a chain and the plain circuit shows (the shaders are off).
+ */
+function nodeGraphScreenFxChainFed(nodeId) {
+  const table = typeof nodeGraphPictureEdges === "function" ? nodeGraphPictureEdges() : null;
+  const nodes = nodeGraphMvp?.patch?.nodes;
+  if (!table || !Array.isArray(nodes)) return true;
+  const typeOf = new Map(nodes.map((n) => [String(n?.id || ""), String(n?.type || "")]));
+  const seen = new Set();
+  const fed = (id) => {
+    if (seen.has(id)) return true; // a feedback loop: not a missing source
+    seen.add(id);
+    const def = nodeGraphModuleDefinitions?.[typeOf.get(id)];
+    if (!def || !Array.isArray(def.inputs) || !def.inputs.includes("rgba")) return true; // a source
+    const feeds = table.inlets.get(`${id}\u0000rgba`);
+    if (!feeds || !feeds.length) return false;
+    return feeds.some((feed) => fed(feed));
+  };
+  return fed(nodeId);
+}
+
 /** One frame. Returns the surface to show, or null when the screen is not involved. */
 function nodeGraphScreenFxRender(host, nodes, onScreen) {
   const st = nodeGraphScreenFxState;
@@ -380,6 +403,9 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
     // 3. Screen: Screen Space Out's picture, else the plain scene.
     let screen = null;
     for (const id of nodes.screenOuts) {
+      // Screen Space Out only replaces the screen while its chain is fed. With nothing plugged into an effect on the way (Screen
+      // Space In disconnected) it would only be black, so the shaders are simply off: the plain circuit shows.
+      if (!nodeGraphScreenFxChainFed(id)) continue;
       screen = typeof nodeGraphPictureRead === "function" ? nodeGraphPictureRead(id, "rgba") : null;
       if (screen?.texture) break;
     }

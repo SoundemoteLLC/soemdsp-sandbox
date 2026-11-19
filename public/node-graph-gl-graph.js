@@ -356,6 +356,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const jacks = [];
   const sliders = [];
   const seeds = [];
+  const xyPads = [];
   const keys = [];
   const keypads = [];
   const keyboards = [];
@@ -530,6 +531,32 @@ function nodeGraphGlGraphRebuildChrome() {
           || "",
       });
     }
+    // XY parameter pads (node-graph-xy-param-pad.js): the DOM box is the hit target, WebGL draws the pad.
+    const xyPadEls = el.querySelectorAll(".node-xy-param-pad");
+    for (let xp = 0; xp < xyPadEls.length; xp += 1) {
+      const padEl = xyPadEls[xp];
+      const padBox = nodeGraphGlGraphWorldBox(padEl);
+      if (!padBox) continue;
+      // Where each jack sits against the pad (0 top .. 1 bottom): a jack has no width, so it has no world box.
+      const padRect = padEl.getBoundingClientRect();
+      const portRel = (key) => {
+        const port = el.querySelector(`.node-param-port.modulation-input[data-param="${CSS.escape(String(key || ""))}"]`);
+        if (!port || !(padRect.height > 0)) return null;
+        const r = port.getBoundingClientRect();
+        return (r.top + r.height * 0.5 - padRect.top) / padRect.height;
+      };
+      xyPads.push({
+        id,
+        el: padEl,
+        x: padBox.x,
+        y: padBox.y,
+        w: padBox.w,
+        h: padBox.h,
+        label: String(padEl.dataset.label || ""),
+        xRel: portRel(padEl.dataset.xKey),
+        yRel: portRel(padEl.dataset.yKey),
+      });
+    }
     const keypadFace = el.querySelector(".node-keypad-face");
     const keypadFaceBox = keypadFace ? nodeGraphGlGraphWorldBox(keypadFace) : null;
     if (keypadFaceBox) {
@@ -575,7 +602,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const root = document.documentElement;
   const ghostHost = host || root;
   nodeGraphGlGraphState.chrome = {
-    titles, labels, jacks, sliders, seeds, keys, keypads, keyboards, graphs, headerButtons,
+    titles, labels, jacks, sliders, seeds, xyPads, keys, keypads, keyboards, graphs, headerButtons,
     // Read once per rebuild, not per present.
     seedLine: typeof nodeGraphGlLinesCss === "function"
       ? nodeGraphGlLinesCss(getComputedStyle(root).getPropertyValue("--line") || "#3a4248")
@@ -591,7 +618,7 @@ function nodeGraphGlGraphRebuildChrome() {
 }
 
 const NODE_GRAPH_CHROME_LISTS = [
-  "titles", "labels", "jacks", "sliders", "seeds", "keys", "keypads", "keyboards", "graphs", "headerButtons",
+  "titles", "labels", "jacks", "sliders", "seeds", "xyPads", "keys", "keypads", "keyboards", "graphs", "headerButtons",
 ];
 
 function nodeGraphGlGraphChromePart(chrome) {
@@ -1276,6 +1303,75 @@ function nodeGraphGlGraphDrawSeedWidget(batch, cells, text, zoom, opts = {}) {
   }
 }
 
+// XY parameter pads (node-graph-xy-param-pad.js). World boxes come from the rebuild; the position is read from the two inputs
+// at draw time (a drag only has to ask for a present).
+function nodeGraphGlGraphDrawXyPads(batch, toX, toY, zoom, cssW, cssH) {
+  const chrome = nodeGraphGlGraphState.chrome;
+  const pads = chrome?.xyPads || [];
+  if (!pads.length) return;
+  const line = chrome.seedLine || [0.23, 0.26, 0.28, 1];
+  const well = [0.031, 0.043, 0.051, 1];
+  const faint = [line[0], line[1], line[2], 0.55];
+  const mid = [line[0] * 1.5, line[1] * 1.5, line[2] * 1.5, 0.95];
+  const accent = [0.5, 0.78, 0.85, 1];
+  const ink = [0.98, 0.992, 1, 0.9];
+  const dim = [0.75, 0.8, 0.85, 0.65];
+  for (let i = 0; i < pads.length; i += 1) {
+    const pad = pads[i];
+    const x = toX(pad.x);
+    const y = toY(pad.y);
+    const w = pad.w * zoom;
+    const h = pad.h * zoom;
+    if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
+    const pos = typeof nodeGraphXyParamPadRead === "function" ? nodeGraphXyParamPadRead(pad.el) : null;
+    const stroke = Math.max(1, zoom);
+    nodeGraphGlGraphDrawOver(batch, () => {
+      // Plain rects (not a round rect: its fill would paint over the grid and the handle drawn after it).
+      nodeGraphGlLinesRect(batch, x, y, w, h, well);
+      nodeGraphGlLinesRect(batch, x, y, w, stroke, line);
+      nodeGraphGlLinesRect(batch, x, y + h - stroke, w, stroke, line);
+      nodeGraphGlLinesRect(batch, x, y, stroke, h, line);
+      nodeGraphGlLinesRect(batch, x + w - stroke, y, stroke, h, line);
+      // Quarter grid, brighter centre cross.
+      for (let g = 1; g < 4; g += 1) {
+        const c = g === 2 ? mid : faint;
+        nodeGraphGlLinesRect(batch, x + (w * g) / 4 - stroke * 0.5, y + stroke, stroke, h - stroke * 2, c);
+        nodeGraphGlLinesRect(batch, x + stroke, y + (h * g) / 4 - stroke * 0.5, w - stroke * 2, stroke, c);
+      }
+      if (pos) {
+        const px = x + pos.u * w;
+        const py = y + (1 - pos.v) * h;
+        nodeGraphGlLinesRect(batch, px - stroke * 0.5, y + stroke, stroke, h - stroke * 2, [accent[0], accent[1], accent[2], 0.35]);
+        nodeGraphGlLinesRect(batch, x + stroke, py - stroke * 0.5, w - stroke * 2, stroke, [accent[0], accent[1], accent[2], 0.35]);
+        if (typeof nodeGraphGlLinesRing === "function") nodeGraphGlLinesRing(batch, px, py, 6.5 * zoom, stroke * 0.7, 0.7, accent);
+        if (typeof nodeGraphGlLinesDot === "function") nodeGraphGlLinesDot(batch, px, py, 3 * zoom, 0.7, ink);
+      }
+    });
+    if (typeof nodeGraphGlLinesText !== "function") continue;
+    const px = Math.max(7, Math.min(11 * zoom, h * 0.085));
+    if (pad.label) {
+      nodeGraphGlLinesText(batch, pad.label, x + 5 * zoom, y + 4 * zoom + px * 0.5, nodeGraphGlGraphTextOpts({
+        px, rgba: dim, align: "left", baseline: "middle", weight: 600,
+      }));
+    }
+    // The two jacks sit just outside the pad's left edge: say which is which.
+    const axisLabel = (rel, text) => {
+      if (rel == null) return;
+      nodeGraphGlLinesText(batch, text, x + 5 * zoom, y + rel * h, nodeGraphGlGraphTextOpts({
+        px: Math.max(7, 10 * zoom), rgba: dim, align: "left", baseline: "middle", weight: 600,
+      }));
+    };
+    axisLabel(pad.xRel, "X");
+    axisLabel(pad.yRel, "Y");
+    if (pos) {
+      const fmt = (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
+      nodeGraphGlLinesText(batch, `${fmt(pos.x)}, ${fmt(pos.y)}`, x + w - 5 * zoom, y + h - 4 * zoom - px * 0.5, nodeGraphGlGraphTextOpts({
+        px, rgba: dim, align: "right", baseline: "middle", weight: 400,
+      }));
+    }
+  }
+}
+
 function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const chrome = nodeGraphGlGraphState.chrome;
   if (!chrome) return;
@@ -1394,6 +1490,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     }
   }
   nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH);
+  nodeGraphGlGraphDrawXyPads(batch, toX, toY, zoom, cssW, cssH);
   const labels = chrome.labels || [];
   for (let i = 0; i < labels.length; i += 1) {
     const label = labels[i];
@@ -3788,7 +3885,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-clock-face, .node-sturmian-grid, .node-arp-keys-face, .node-pitch-quantizer-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-keyboard-surface, .node-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell, [data-vactrol-show-key]",
+    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-xy-param-pad, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-clock-face, .node-sturmian-grid, .node-arp-keys-face, .node-pitch-quantizer-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-keyboard-surface, .node-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell, [data-vactrol-show-key]",
   ));
 }
 
