@@ -1132,6 +1132,24 @@ function nodeGraphGlGraphJackHoles(jacks, plate, plateStyle, camera, device) {
   return holes;
 }
 
+/**
+ * IO view C's pill strip (a one-row band at the top of the shell, or at the top of the slider section) gets the
+ * display's colour, so it reads as part of the display. [y0, y1, r, g, b, a] in world y, or null.
+ */
+function nodeGraphGlGraphIoStrip(id) {
+  const cfg = typeof nodeGraphIoViewConfig === "function" ? nodeGraphIoViewConfig() : null;
+  if (!cfg || !cfg.panel || !nodeGraphGlGraphIoOverlay(id)) return null;
+  const slot = typeof nodeGraphIoViewPillSlot === "function" ? nodeGraphIoViewPillSlot() : "top";
+  if (slot === "bottom") return null;
+  const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
+  const pitch = nodeGraphGlGraphJackDiameter();
+  const part = slot === "top" ? ":scope > .node-solid-module-shell" : ":scope > .dsp-node-body";
+  const target = el?.querySelector(part);
+  const box = target && !target.hidden ? nodeGraphGlGraphWorldBox(target) : null;
+  if (!box || box.h < pitch) return null;
+  return [box.y, box.y + pitch, 0, 0, 0, 1];
+}
+
 /** A jack is drawn unless the IO view has jacks off; the pills (pseudo-jacks) are always drawn as cutouts. */
 function nodeGraphGlGraphIoJackShown(jack) {
   return Boolean(jack && (jack.pill || !nodeGraphGlGraphIoJacksOff()));
@@ -1427,7 +1445,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     const fill = mode === "rim" ? [0, 0, 0, 0] : mode === "dim" ? [0, 0, 0, dark]
       : (mode === "emit" ? [0, 0, 0, 0]
         : (mode === "shine" ? [color[0], color[1], color[2], 0.28] : plate.fill));
-    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, fill, cuts, round, mode === "dim" || mode === "shine" ? "" : plate.id, selected === true, mode === "dim" ? true : (mode === "shine" ? 2 : (mode === "rim" ? 5 : false)));
+    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, fill, cuts, round, mode === "dim" || mode === "shine" ? "" : plate.id, selected === true, mode === "dim" ? true : (mode === "shine" ? 2 : (mode === "rim" ? 5 : false)), undefined, mode === "" ? nodeGraphGlGraphIoStrip(plate.id) : null);
   }
 }
 

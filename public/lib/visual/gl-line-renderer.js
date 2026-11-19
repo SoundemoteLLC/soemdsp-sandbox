@@ -582,6 +582,9 @@ varying highp vec2 vPx;
 uniform highp vec4 uPlate;
 uniform vec4 uPlateColor;
 uniform vec4 uFill;
+// A band of the plate drawn in another fill (IO view C: the pill strip, in the display's colour): world y0, y1.
+uniform highp vec2 uStripY;
+uniform vec4 uStripColor;
 uniform float uStroke;
 // Plate corners: (top radius, top shape, bottom radius, bottom shape). Radius in
 // plate units, shape 0 round, 1 squircle, 2 pill (full end). All zero = square.
@@ -806,11 +809,21 @@ void main() {
   if (uDimShape > 0.5) rim = 0.0;
   bandOut *= 1.0 - wallClear;
   bandIn *= 1.0 - wallClear;
+  vec4 fillCol = uFill;
+  if (uStripY.y > uStripY.x) {
+    float sy0 = uStripY.x;
+    float sy1 = uStripY.y;
+    if (uPixel > 0.5) {
+      sy0 = ceil((uStripY.x - uCam.y) * z * devScale - 0.5);
+      sy1 = ceil((uStripY.y - uCam.y) * z * devScale - 0.5);
+    }
+    if (px.y >= sy0 && px.y < sy1) fillCol = uStripColor;
+  }
   float strokeA = bandOut * strokeCol.a;
-  float plateA = (1.0 - inner) * uFill.a;
+  float plateA = (1.0 - inner) * fillCol.a;
   // Behind the fill: what the fill lets through (fill alpha is per covered area, so the hidden band
   // is weighted by 1 - fill alpha).
-  float behindA = bandIn * strokeCol.a * (1.0 - uFill.a);
+  float behindA = bandIn * strokeCol.a * (1.0 - fillCol.a);
   if (uDimShape > 0.5 && uLight.w > 0.0) {
     float ld = length(vPx - uLight.xy) / max(uLight.z, 1.0);
     float near = uLight.w * exp(-2.0 * ld * ld);
@@ -833,7 +846,7 @@ void main() {
   float rimA = rim * rimCol.a;
   float a = baseA + rimA;
   if (a < 0.004) discard;
-  vec3 baseRgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA + uJackBackdrop.rgb * holeA) / max(strokeA + plateA + holeA, 1e-4);
+  vec3 baseRgb = (strokeCol.rgb * strokeA + fillCol.rgb * plateA + uJackBackdrop.rgb * holeA) / max(strokeA + plateA + holeA, 1e-4);
   vec3 rgb = (baseRgb * baseA + rimCol.rgb * rimA) / a;
   gl_FragColor = vec4(rgb, a);
 }
@@ -893,6 +906,8 @@ void main() {
         outPlate: gl.getUniformLocation(outProgram, "uPlate"),
         outPlateColor: gl.getUniformLocation(outProgram, "uPlateColor"),
         outFill: gl.getUniformLocation(outProgram, "uFill"),
+        outStripY: gl.getUniformLocation(outProgram, "uStripY"),
+        outStripColor: gl.getUniformLocation(outProgram, "uStripColor"),
         outStroke: gl.getUniformLocation(outProgram, "uStroke"),
         outRound: gl.getUniformLocation(outProgram, "uRound"),
         outStrokeTop: gl.getUniformLocation(outProgram, "uStrokeTop"),
@@ -3741,7 +3756,7 @@ void main() {
     gl.disableVertexAttribArray(s.veilPx);
   }
 
-  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, cuts, round, nodeId, selected, dimShape, glow) {
+  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, cuts, round, nodeId, selected, dimShape, glow, strip) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
     const sx = x * k;
@@ -3762,6 +3777,8 @@ void main() {
     }
     const backdropJack = list.find((j) => j.backdrop);
     batch.outlines.push({
+      // [y0, y1, r, g, b, a]: a band of the plate in another fill (world y, scaled like the plate).
+      strip: Array.isArray(strip) && strip.length >= 6 ? [strip[0] * k, strip[1] * k, strip[2], strip[3], strip[4], strip[5]] : null,
       jackBackdrop: backdropJack ? backdropJack.backdrop : null,
       nodeId, selected: selected === true, dimShape: dimShape === true ? 1 : ([2, 3, 4, 5].includes(Number(dimShape)) ? Number(dimShape) : 0), glow: Number(glow) > 0 ? Number(glow) : 0, x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
       fill: fill || [0.09, 0.1, 0.12, 1],
@@ -3849,6 +3866,9 @@ void main() {
       gl.uniform4f(s.outPlateColor, pc[0], pc[1], pc[2], pc[3]);
       const fill = shape.fill || [0, 0, 0, 0];
       if (s.outFill) gl.uniform4f(s.outFill, fill[0], fill[1], fill[2], fill.length > 3 ? fill[3] : 1);
+      const strip = shape.strip;
+      if (s.outStripY) gl.uniform2f(s.outStripY, strip ? strip[0] : 0, strip ? strip[1] : 0);
+      if (s.outStripColor) gl.uniform4f(s.outStripColor, strip ? strip[2] : 0, strip ? strip[3] : 0, strip ? strip[4] : 0, strip ? strip[5] : 0);
       gl.uniform1f(s.outStroke, strokeW);
       if (s.outDimShape) {
         gl.uniform1f(s.outDimShape, shape.dimShape || 0);
