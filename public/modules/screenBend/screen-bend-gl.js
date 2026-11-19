@@ -1,5 +1,5 @@
 const NODE_GRAPH_SCREEN_BEND_GL_REV = 5;
-const NODE_GRAPH_SCREEN_BEND_MAX = 512;
+const NODE_GRAPH_SCREEN_BEND_MAX = 4096;
 
 (function initNodeGraphScreenBendGl(global) {
   const KEY = "_screenBendGl";
