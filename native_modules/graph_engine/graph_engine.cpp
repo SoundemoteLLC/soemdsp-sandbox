@@ -842,6 +842,7 @@ extern "C" int soemdsp_spectral_freeze_create();
 extern "C" int soemdsp_spectral_delay_create();
 extern "C" int soemdsp_material_resonator_create();
 extern "C" int soemdsp_dispersion_create();
+extern "C" int soemdsp_dispersion_configure(int h,int mode,int tuning,double low,double high,double fShape,double lowQ,double highQ,double qShape,int reference,double gainDb);
 extern "C" void soemdsp_dispersion_destroy(int h);
 extern "C" double soemdsp_dispersion_sample(int h,double l,double r,double f,double spread,double curve,double stereo,double mix,int count,int direction,double rate);
 extern "C" double soemdsp_dispersion_right(int h);
@@ -5085,7 +5086,9 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.timeNumerator,1,false);init_control(n.lpfFrequency,4000,false);init_control(n.shape,1,false);
     init_control(n.center,.31,false);init_control(n.pan,.6,false);init_control(n.gainDb,0,false);init_control(n.mix,1,false);
   }
-  if(typeId==kTypeDispersion){init_control(n.frequency,300,false);init_control(n.stages,32,true);init_control(n.width,2,false);init_control(n.shape,0,false);init_control(n.mode,0,true);init_control(n.pan,0,false);init_control(n.mix,1,false);}
+  if(typeId==kTypeDispersion){init_control(n.frequency,300,false);init_control(n.stages,50,true);init_control(n.width,2,false);init_control(n.shape,0,false);init_control(n.mode,0,true);init_control(n.pan,0,false);init_control(n.mix,1,false);
+   init_control(n.waveform,1,true);init_control(n.timingMode,1,true);init_control(n.center,15,false);init_control(n.lpfFrequency,8000,false);init_control(n.diffusionAmount,0,false);init_control(n.resonance,1,false);init_control(n.feedback,1,false);init_control(n.lfoVariation,0,false);init_control(n.gainDb,0,false);
+  }
   if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
     const bool gate = typeId == kTypeStftGate;
     init_control(n.shape, gate ? 0.5 : -0.35, false);
@@ -16040,6 +16043,7 @@ static void process_dispersion(Circuit& g,Node& node,int frames) {
  const StereoRoute route=stereo_route(probe_stereo_route_wiring(g,node));const bool liveF=mix_live_port(g,node,kPortF,frames,g.mixF);
  mix_node_inputs(g,node,frames);
  for(int f=0;f<frames;++f){control_frame(g,node,f);const double m=g.mixMono[f],l=g.mixLeft[f],r=g.mixRight[f];
+  soemdsp_dispersion_configure(node.nativeHandle,(int)control_audio(g,node.waveform,f),(int)control_audio(g,node.timingMode,f),control_audio(g,node.center,f),control_audio(g,node.lpfFrequency,f),control_audio(g,node.diffusionAmount,f),control_audio(g,node.resonance,f),control_audio(g,node.feedback,f),control_audio(g,node.lfoVariation,f),liveF?1:0,control_audio(g,node.gainDb,f));
   const double a=stereo_route_feed(route.runMono?route.feedMono:route.feedL,m,l,r),b=stereo_route_feed(route.feedR,m,l,r);
   const double y=soemdsp_dispersion_sample(node.nativeHandle,a,b,liveF?g.mixF[f]:control_audio(g,node.frequency,f),control_audio(g,node.width,f),control_audio(g,node.shape,f),control_audio(g,node.pan,f),control_audio(g,node.mix,f),(int)control_audio(g,node.stages,f),(int)control_audio(g,node.mode,f),g.sampleRate);
   const double yr=soemdsp_dispersion_right(node.nativeHandle);node.buf[kPortMono][f]=stereo_route_out(route.outMono,y,y,yr);node.buf[kPortLeft][f]=stereo_route_out(route.outLeft,y,y,yr);node.buf[kPortRight][f]=stereo_route_out(route.outRight,y,y,yr);node.buf[kPortIsIdle][f]=soemdsp_dispersion_error(node.nativeHandle);

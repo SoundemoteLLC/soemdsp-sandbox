@@ -3,7 +3,6 @@
 // true brings all of it back. presetMorph params stay defined either way, so saved
 // patches load unchanged.
 const NODE_GRAPH_MODULE_PRESETS_ENABLED = false;
-
 // Display name for the development reverb (key reverbEffect, grew out of Sabrina).
 // Change it here only -- labels and the module store read this constant.
 const nodeGraphCinematicReverbDisplayName = "Cinematic Reverb";
@@ -7554,16 +7553,151 @@ const nodeGraphModuleDefinitions = (
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
     displayType: "scope1dTrace",
     face: [
-      { kind: "cells", params: [["direction", "Direction", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["frequency", "Frequency"], ["stages", "Stages"]], h: 40 },
-      { kind: "cells", params: [["spreadOct", "Frequency Spread"], ["curve", "Distribution Curve"]], h: 40 },
-      { kind: "cells", params: [["stereoOct", "Stereo Offset"], ["mix", "Mix"]], h: 40 },
+      { kind: "cells", params: [["filterMode","Filter Mode","horizontal"], ["tuningMode","Tuning","horizontal"]], h: 26 },
+      { kind: "cells", params: [["direction","Direction","horizontal"]], h: 26 },
+      { kind: "cells", params: [["stages","Stages"], ["stereoOct","Stereo Offset"]], h: 40 },
+      { kind: "cells", params: [["lowFreq","Low Freq"], ["highFreq","High Freq"]], h: 40 },
+      { kind: "cells", params: [["freqShape","Freq Shape"], ["qShape","Q Shape"]], h: 40 },
+      { kind: "cells", params: [["lowQ","Low Q"], ["highQ","High Q"]], h: 40 },
+      { kind: "cells", params: [["frequency","Center Freq"], ["spreadOct","Center Spread"]], h: 40 },
+      { kind: "cells", params: [["curve","Center Curve"], ["outputGainDb","Output Gain"]], h: 40 },
+      { kind: "cells", params: [["mix","Mix"]], h: 40 },
     ],
-    parameters:
-    [
+    parameters: [
+      {
+        "key": "filterMode",
+        "label": "Filter Mode",
+        "kind": "choice",
+        "choices": [
+          "One-Pole",
+          "Biquad"
+        ],
+        "choiceKeys": [
+          "onePole",
+          "biquad"
+        ],
+        "choiceIds": [
+          0,
+          1
+        ],
+        "defaultValue": "biquad",
+        "min": "0",
+        "mid": ".5",
+        "max": "1",
+        "step": "1",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "One-Pole is the broad first-order disperser. Biquad uses Robin-compatible second-order allpasses with Q control for stronger focused chirps. Both use the same energy-preserving normalized lattice. Mode changes morph valid reflection coefficients over 10 ms."
+      },
+      {
+        "key": "tuningMode",
+        "label": "Tuning",
+        "kind": "choice",
+        "choices": [
+          "Center",
+          "Range"
+        ],
+        "choiceKeys": [
+          "center",
+          "range"
+        ],
+        "choiceIds": [
+          0,
+          1
+        ],
+        "defaultValue": "range",
+        "min": "0",
+        "mid": ".5",
+        "max": "1",
+        "step": "1",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "Center uses Center Freq, Center Spread and Center Curve. Range uses Low Freq, High Freq and Freq Shape, matching Robin's logarithmic stage distribution. Wired f sets the geometric center in either mode; Range endpoints are scaled together."
+      },
+      {
+        "key": "lowFreq",
+        "label": "Low Freq",
+        "kind": "frequency",
+        "defaultValue": "15",
+        "min": ".01",
+        "mid": "150",
+        "max": "20000",
+        "step": "any",
+        "unit": "Hz",
+        "nonlinearSlider": true,
+        "tooltip": "Range tuning only. Actual Hz of the first stage before stereo offset. Endpoints may be reversed. One stage uses Low Freq. Corner frequencies stay below Nyquist; f input retunes the range center."
+      },
+      {
+        "key": "highFreq",
+        "label": "High Freq",
+        "kind": "frequency",
+        "defaultValue": "8000",
+        "min": ".01",
+        "mid": "2000",
+        "max": "20000",
+        "step": "any",
+        "unit": "Hz",
+        "nonlinearSlider": true,
+        "tooltip": "Range tuning only. Actual Hz of the last stage before stereo offset. Endpoints may be reversed. One stage uses Low Freq. Corner frequencies stay below Nyquist; f input retunes the range center."
+      },
+      {
+        "key": "freqShape",
+        "label": "Freq Shape",
+        "defaultValue": "0",
+        "min": "-5",
+        "mid": "0",
+        "max": "5",
+        "step": "any",
+        "tooltip": "Range tuning only. Robin's stage-frequency distribution shape, not a normalized amount. Zero is uniform logarithmic spacing; positive and negative crowd stages toward opposite ends. Same mapping as Robin Sinepulse Allpass."
+      },
+      {
+        "key": "lowQ",
+        "label": "Low Q",
+        "defaultValue": "1",
+        "min": ".05",
+        "mid": "1",
+        "max": "20",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Biquad only. Dimensionless Q at the first stage. Higher values concentrate group delay and make longer, more tonal chirps without boosting static spectral magnitude. Q must be positive; no hidden 1000-Q ceiling in Dispersion."
+      },
+      {
+        "key": "highQ",
+        "label": "High Q",
+        "defaultValue": "1",
+        "min": ".05",
+        "mid": "1",
+        "max": "20",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Biquad only. Dimensionless Q at the last stage. Higher values concentrate group delay and make longer, more tonal chirps without boosting static spectral magnitude. Q must be positive; no hidden 1000-Q ceiling in Dispersion."
+      },
+      {
+        "key": "qShape",
+        "label": "Q Shape",
+        "defaultValue": "0",
+        "min": "-5",
+        "mid": "0",
+        "max": "5",
+        "step": "any",
+        "tooltip": "Biquad only. Robin-compatible logarithmic Q distribution contour between Low Q and High Q. Zero is uniform log spacing. One stage uses Low Q."
+      },
+      {
+        "key": "outputGainDb",
+        "label": "Output Gain",
+        "defaultValue": "0",
+        "min": "-24",
+        "mid": "0",
+        "max": "24",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Explicit final gain in dB after dry/wet Mix. Default 0 dB preserves the allpass level. No limiter, hidden clipping or automatic loudness matching."
+      },
       {
         "key": "frequency",
-        "label": "Frequency",
+        "label": "Center Freq",
         "kind": "frequency",
         "defaultValue": "300",
         "min": "10",
@@ -7572,39 +7706,39 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "Hz",
         "nonlinearSlider": true,
-        "tooltip": "Geometric center of allpass corner frequencies in Hz. Wired f replaces the knob, including zero; negative uses magnitude. Low Late concentrates delay toward DC; High Late mirrors the response toward Nyquist, so the corner is measured from that edge. Not a narrow resonant peak or a pitch detector."
+        "tooltip": "Center tuning only: geometric center in Hz. Wired f replaces this value in Center mode and sets the geometric center of Low/High Freq in Range mode. Zero f collapses corner tuning to DC. Negative f uses magnitude."
       },
       {
         "key": "stages",
         "label": "Stages",
-        "defaultValue": "32",
+        "defaultValue": "50",
         "min": "0",
         "mid": "32",
-        "max": "128",
+        "max": "256",
         "step": "1",
         "linearSmoothing": false,
-        "tooltip": "Number of normalized first-order allpass lattice stages, 0..128. Zero is a wire. More stages increase phase rotation and group delay, not gain. Count edits crossfade output taps over 50 ms; only removed stages are cleared after the fade. Fixed-count wet processing is allpass; tap fades and dry/wet mixes can comb-filter."
+        "tooltip": "Actual cascade depth, 0..256, matching Robin's structural limit. Zero is a wire. Biquad gives two poles per stage; One-Pole gives one. Count changes crossfade taps over 50 ms; removed states clear only after fading. More stages cost more CPU."
       },
       {
         "key": "spreadOct",
-        "label": "Frequency Spread",
+        "label": "Center Spread",
         "defaultValue": "2",
         "min": "0",
         "mid": "2",
         "max": "8",
         "step": "any",
         "unit": "oct",
-        "tooltip": "Total octave span of stage corner frequencies around Frequency. Zero tunes every stage alike; larger spans distribute frequency-dependent delay more broadly. No delay lines, FFT windows or IR samples."
+        "tooltip": "Center tuning only: total octave span around Center Freq. Range tuning instead uses Low/High Freq and Freq Shape."
       },
       {
         "key": "curve",
-        "label": "Distribution Curve",
+        "label": "Center Curve",
         "defaultValue": "0",
         "min": "-1",
         "mid": "0",
         "max": "1",
         "step": "any",
-        "tooltip": "Rational contour for distributing stage corners across Frequency Spread. Zero distributes uniformly in octaves; positive crowds corners toward the high end, negative toward the low end. Changes ramp geometry over 10 ms."
+        "tooltip": "Center tuning only: normalized rational contour for Center Spread. Range tuning instead uses Robin's Freq Shape."
       },
       {
         "key": "direction",

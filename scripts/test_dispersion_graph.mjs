@@ -7,7 +7,8 @@ for(const sides of [[0],[1],[2],[1,2],[0,1,2]]) {
  for(const[id,type]of [[1,132],[2,277],[3,6]])assert.equal(x.soemdsp_graph_add_node(g,id,type),0);
  for(const port of sides)x.soemdsp_graph_connect(g,1,port,2,port);x.soemdsp_graph_connect(g,1,3,2,16);
  for(const port of [1,2])x.soemdsp_graph_connect(g,2,port,3,port);
- for(const[id,v]of [[10,123],[22,32],[31,2],[13,.3],[21,0],[1,.5],[40,1]])x.soemdsp_graph_set_param(g,2,id,v);
+ for(const[id,v]of [[10,123],[22,32],[31,2],[13,.3],[21,0],[1,.5],[40,1],[11,1],[54,1],[30,15],[59,8000],[42,0],[20,2],[50,3],[47,0],[90,0]])x.soemdsp_graph_set_param(g,2,id,v);
+ x[p+'configure'](h,1,1,15,8000,0,2,3,0,1,0);
  x.soemdsp_graph_snap_controls(g);assert.equal(x.soemdsp_graph_compile(g),0);
  const buf=(id,port)=>new Float64Array(x.memory.buffer,x.soemdsp_graph_node_port_ptr(g,id,port),n);let energy=0;
  for(let b=0;b<250;++b){

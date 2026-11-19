@@ -45,6 +45,7 @@
 //     zeroed and processing stops until input or a Trigger arrives.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/filter/allpass_design.h>
 
 namespace {
 
@@ -53,7 +54,6 @@ using namespace soemdsp_maths;
 static const int kMaxInstances = 128;
 static const int kMaxStages = 256;          // rsFlatZapper::maxNumStages
 static const int kIdleSamples = 4096;
-static const double kLn2 = 0.6931471805599453;
 static const double kMinFreq = 1.0e-2;
 static const double kMaxFreqRatio = 0.4999;  // of the sample rate
 static const double kMinQ = 1.0e-3;
@@ -118,38 +118,22 @@ static void init_state(State& s) {
 
 // rsFlatZapper::updateCoeffs: the stage-index shape map.
 static double shape_map(double x, double shapeParam) {
-  const double sl = dsp_exp(kLn2 * shapeParam);   // rsPow(2, shapeParam)
-  const double a = (sl - 1.0) / (sl + 1.0);
-  return rational_curve01(x, a);                  // rsRationalMap_01(x, a)
+  return soemdsp::allpass::distribution(x, shapeParam);
 }
 
 static double clamp_freq(double f, double sr) {
   return clamp(f, kMinFreq, kMaxFreqRatio * sr);
 }
 
-// BiquadDesigner::calculateCookbookAllpassCoeffs, a-signs flipped for the cascade.
+// Shared Robin-compatible coefficient design; instrument states remain DF1.
 static void setup_biquad_stage(State& s, int i, double f, double q, double fsR) {
-  // sin / cos of omega = 2 pi f / fs from the half angle: the polynomial cos
-  // has ~7e-10 absolute error near 0, which is ~6 % of 1 - cos(omega) at 1 Hz
-  // (pole angle error); sin of a small angle is exact to rounding.
-  double sh, ch;
-  dsp_sin_cos_turns(0.5 * f * fsR, &sh, &ch);
-  const double sine = 2.0 * sh * ch;
-  const double cosine = 1.0 - 2.0 * sh * sh;
-  const double alpha = sine / (2.0 * q);
-  const double a0Rec = 1.0 / (1.0 + alpha);
-  s.b0[i] = (1.0 - alpha) * a0Rec;
-  s.b1[i] = (-2.0 * cosine) * a0Rec;
-  s.b2[i] = (1.0 + alpha) * a0Rec;
+  const auto c = soemdsp::allpass::biquad(f, q, 1.0 / fsR);
+  s.b0[i] = c.b0; s.b1[i] = c.b1; s.b2[i] = c.b2;
 }
 
-// BiquadDesigner::calculateFirstOrderAllpassCoeffs: x = (t - 1) / (t + 1).
 static void setup_one_pole_stage(State& s, int i, double f, double fsR) {
-  double sine, cosine;
-  dsp_sin_cos_turns(0.5 * f * fsR, &sine, &cosine);  // pi f / fs
-  s.b0[i] = (sine - cosine) / (sine + cosine);
-  s.b1[i] = 1.0;
-  s.b2[i] = 0.0;
+  const auto c = soemdsp::allpass::one_pole(f, 1.0 / fsR);
+  s.b0[i] = c.b0; s.b1[i] = c.b1; s.b2[i] = c.b2;
 }
 
 static void update_coeffs(State& s) {

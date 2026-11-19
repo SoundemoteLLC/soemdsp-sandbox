@@ -62,6 +62,10 @@ Goal: frequency-dependent arrival time for chirping, springy or smeared attacks.
   for flat static magnitude, live coefficient changes and no buffering latency.
 - [x] Low/High Late direction, octave distribution/curve, stereo offset and Mix.
   See [DISPERSION.md](DISPERSION.md). No lookahead or imported IR workflow.
+- [x] Consolidated stereo effect: Robin-compatible One-Pole/Biquad design,
+  frequency/Q endpoints and shapes, Center/Range tuning, 256 stages and explicit
+  output gain. Shared design helpers preserve Robin Sinepulse's instrument
+  processing; static WASM parity and modulation-energy checks pass.
 - [ ] Listening acceptance and further group-delay shaping as needed.
 
 Proof: plot group delay and magnitude; listen to impulses, kicks and pulse trains.

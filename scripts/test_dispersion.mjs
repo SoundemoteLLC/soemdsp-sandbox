@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import {performance} from 'node:perf_hooks';
 const x=(await WebAssembly.instantiate(fs.readFileSync(new URL('../native_modules/dispersion/dispersion.wasm',import.meta.url)),{})).instance.exports;
 const p='soemdsp_dispersion_',call=(name,...a)=>x[p+name](...a);
-const meta=JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,call('metadata_json'),call('metadata_json_size'))));assert.equal(meta.parameters.length,7);assert.ok(meta.parameters.every(p=>p.tooltip));assert.equal(call('latency'),0);
+const meta=JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,call('metadata_json'),call('metadata_json_size'))));assert.equal(meta.parameters.length,16);assert.ok(meta.parameters.every(p=>p.tooltip));assert.equal(call('latency'),0);
 function render(h,n,sr,options={},input=i=>[i===0?1:0,i===0?1:0]) {
  const a=new Float64Array(n),b=new Float64Array(n);let inputEnergy=0;
  for(let i=0;i<n;++i){const o=typeof options==='function'?options(i):options,[l,r]=input(i);inputEnergy+=l*l+r*r;

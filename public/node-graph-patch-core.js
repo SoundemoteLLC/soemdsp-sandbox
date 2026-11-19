@@ -283,7 +283,11 @@ function validateNodeGraphPatch(patch) {
     }
     const params = {};
     const paramMeta = {};
-    const rawParams = node.params && typeof node.params === "object" ? node.params : {};
+    let rawParams = node.params && typeof node.params === "object" ? node.params : {};
+    if (type === "dispersion" && !Object.hasOwn(rawParams, "filterMode")
+      && (Object.hasOwn(rawParams, "frequency") || Object.hasOwn(rawParams, "spreadOct"))) {
+      rawParams = { ...rawParams, filterMode: "onePole", tuningMode: "center" };
+    }
     const rawParamMeta = node.paramMeta && typeof node.paramMeta === "object" ? node.paramMeta : {};
     const fbmFieldFaceKeys = [
       "lacunarity",

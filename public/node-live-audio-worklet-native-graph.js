@@ -642,7 +642,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if(t==="dispersion") {
-    const ids={frequency:10,stages:22,spreadOct:31,curve:13,direction:21,stereoOct:1,mix:40};
+    const ids={frequency:10,stages:22,spreadOct:31,curve:13,direction:21,stereoOct:1,mix:40,filterMode:11,tuningMode:54,lowFreq:30,highFreq:59,freqShape:42,lowQ:20,highQ:50,qShape:47,outputGainDb:90};
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
   }
   if (t === "materialResonator") {
@@ -3748,6 +3748,8 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_DISCRETE_PARAMS = Object.freeze({
   reflectionOrder: true,
   material: true,
   modes: true,
+  filterMode: true,
+  tuningMode: true,
   freeze: true,
   fftSize: true,
   waveform: true,
@@ -6203,8 +6205,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if(type==="dispersion") {
-      push("stages",P.NATIVE_GRAPH_PARAM_STAGES,disc("stages",32));push("direction",P.NATIVE_GRAPH_PARAM_MODE,disc("direction",0));
-      for(const[key,value]of Object.entries({frequency:300,spreadOct:2,curve:0,stereoOct:0,mix:1}))push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
+      push("stages",P.NATIVE_GRAPH_PARAM_STAGES,disc("stages",50));push("direction",P.NATIVE_GRAPH_PARAM_MODE,disc("direction",0));
+      push("filterMode",P.NATIVE_GRAPH_PARAM_WAVEFORM,disc("filterMode",1));push("tuningMode",P.NATIVE_GRAPH_PARAM_TIMING_MODE,disc("tuningMode",1));
+      for(const[key,value]of Object.entries({frequency:300,spreadOct:2,curve:0,stereoOct:0,mix:1,lowFreq:15,highFreq:8000,freqShape:0,lowQ:1,highQ:1,qShape:0,outputGainDb:0}))push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
       continue;
     }
     if (type === "materialResonator") {
