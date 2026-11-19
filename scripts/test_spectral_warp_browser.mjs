@@ -42,7 +42,7 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum=function(...args){
  await page.evaluate(()=>setNodeGraphLiveOutputEnabled(true));
  await page.waitForFunction(()=>nodeGraphMvp.live.node&&nodeGraphMvp.live.outputLevelSmooth>1e-5,null,{timeout:30000});
  await page.evaluate(()=>{nodeGraphMvp.live.node.port.addEventListener('message',e=>{if(e.data?.type==='test-warp')window.testWarp=e.data;});nodeGraphMvp.live.node.port.start();});
- await page.waitForFunction(()=>window.testWarp?.fft===2048,null,{timeout:15000});
+ await page.waitForFunction(()=>window.testWarp?.fft===1024,null,{timeout:15000});
  await page.evaluate(id=>{
   for(const[key,value]of Object.entries({pitchSemitones:'12',stereoShiftHz:'80',shiftHz:'100',warp:'1.2'}))updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id,key),value);
  },id);

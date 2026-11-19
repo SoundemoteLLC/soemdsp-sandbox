@@ -3,7 +3,9 @@ import fs from 'node:fs';
 const x=(await WebAssembly.instantiate(fs.readFileSync(new URL('../native_modules/spectral_warp/spectral_warp.wasm',import.meta.url)),{env:{}})).instance.exports;
 const call=(s,...a)=>x['soemdsp_spectral_warp_'+s](...a);
 const meta=JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,call('metadata_json'),call('metadata_json_size'))));
-assert.equal(meta.parameters.length,8);assert.ok(meta.parameters.every(p=>p.tooltip));assert.equal(call('latency'),2048);
+assert.equal(meta.parameters.length,8);assert.ok(meta.parameters.every(p=>p.tooltip));assert.equal(call('latency'),1024);
+assert.equal(meta.parameters.find(p=>p.key==='fftSize').defaultValue,'1024');
+{const h=call('create');assert.equal(call('fft_size',h),1024);call('destroy',h);}
 for(const sr of [44100,48000,96000])for(const size of [512,1024,2048,4096,8192,16384]){
  const h=call('create');assert.equal(call('configure',h,size,0,1,1000,sr),0);let worst=0;
  const signal=i=>.08*Math.sin(i*.137)+.03*Math.cos(i*.41)+.01;

@@ -6227,7 +6227,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if(type==="spectralWarp") {
-      push("fftSize",P.NATIVE_GRAPH_PARAM_STAGES,disc("fftSize",2048));
+      push("fftSize",P.NATIVE_GRAPH_PARAM_STAGES,disc("fftSize",1024));
       for(const[key,value]of Object.entries({pitchSemitones:0,stereoShiftHz:0,shiftHz:0,warp:1,pivotHz:1000,mix:1,gainDb:0}))
         push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
       continue;

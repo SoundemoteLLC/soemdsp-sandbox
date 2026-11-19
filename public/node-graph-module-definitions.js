@@ -7590,7 +7590,7 @@ const nodeGraphModuleDefinitions = (
           8192,
           16384
         ],
-        "defaultValue": "2048",
+        "defaultValue": "1024",
         "min": "0",
         "mid": "2.5",
         "max": "5",

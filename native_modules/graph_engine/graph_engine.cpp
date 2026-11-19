@@ -5113,7 +5113,7 @@ static void init_node_defaults(Node& n, int typeId) {
   }
   if(typeId==kTypeSpectralWarp){
     init_control(n.frequency,0,false);init_control(n.width,0,false);
-    init_control(n.stages,2048,true);init_control(n.phaseParam,0,false);init_control(n.shape,1,false);
+    init_control(n.stages,1024,true);init_control(n.phaseParam,0,false);init_control(n.shape,1,false);
     init_control(n.center,1000,false);init_control(n.mix,1,false);init_control(n.gainDb,0,false);
   }
   if(typeId==kTypeDispersion){init_control(n.frequency,300,false);init_control(n.stages,50,true);init_control(n.width,2,false);init_control(n.shape,0,false);init_control(n.mode,0,true);init_control(n.pan,0,false);init_control(n.mix,1,false);

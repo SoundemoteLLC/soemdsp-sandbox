@@ -125,7 +125,7 @@ struct State{
     for(auto& c:dry)for(auto& v:c)v=0;
     current=warm=dryPosition=0;started=changing=false;fade=right=error=0;
   }
-  void initialize(){prepare();settings=Settings{};desired=2048;configError=0;reset();}
+  void initialize(){prepare();settings=Settings{};desired=1024;configError=0;reset();}
   double dryAt(int c,int delay)const{return dry[c][(dryPosition+maximum+1-delay)%(maximum+1)];}
   double tick(double l,double r,double mix,double gainDb){
     const double values[]={l,r,mix,gainDb};
@@ -202,7 +202,7 @@ const char metadata[]=R"json({
         8192,
         16384
       ],
-      "defaultValue": "2048",
+      "defaultValue": "1024",
       "min": "0",
       "mid": "2.5",
       "max": "5",
@@ -316,7 +316,7 @@ extern "C" double soemdsp_spectral_warp_sample(int h,double l,double r,double mi
 extern "C" double soemdsp_spectral_warp_right(int h){auto* s=get(h);return s?s->right:0;}
 extern "C" double soemdsp_spectral_warp_error(int h){auto* s=get(h);return s?s->error:1;}
 extern "C" int soemdsp_spectral_warp_fft_size(int h){auto* s=get(h);return s?(s->started?s->cores[s->current].size:s->desired):0;}
-extern "C" int soemdsp_spectral_warp_latency(){return 2048;}
+extern "C" int soemdsp_spectral_warp_latency(){return 1024;}
 extern "C" int soemdsp_spectral_warp_latency_for_handle(int h){return soemdsp_spectral_warp_fft_size(h);}
 extern "C" double soemdsp_spectral_warp_state_bytes(){return sizeof(State);}
 extern "C" int soemdsp_spectral_warp_version(){return 1;}

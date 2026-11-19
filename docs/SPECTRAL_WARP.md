@@ -7,7 +7,7 @@ Native stereo module `spectralWarp`, type ID 279, Space category, wave badge,
 
 Feed drums, speech or a harmonic oscillator into Mono or Left/Right.
 Defaults are neutral: Warp 1, Pitch 0 st, Shift 0 Hz, Stereo Shift 0 Hz,
-Pivot 1000 Hz, FFT Size 2048, Mix 100%, Gain 0 dB.
+Pivot 1000 Hz, FFT Size 1024, Mix 100%, Gain 0 dB.
 
 - Shift +100..500 Hz produces metallic, inharmonic translation.
 - Warp 2, Pivot 1000 Hz sends 500 -> 250 Hz and 2000 -> 4000 Hz.
@@ -61,7 +61,7 @@ low-buffering-latency linear-shift path without nonlinear Warp.
 
 FFT sizes 512, 1024, 2048, 4096, 8192, 16384; Hann analysis/synthesis with
 fourfold overlap and hop N/4. Stable reference delay equals N samples for both
-dry and wet. At 48 kHz this spans 10.67..341.33 ms; default 2048 is 42.67 ms.
+dry and wet. At 48 kHz this spans 10.67..341.33 ms; default 1024 is 21.33 ms.
 There is no new host delay-compensation system.
 
 Size changes warm the preallocated standby engine for N samples, then crossfade
