@@ -23,6 +23,8 @@ registerNodeGraphChromelessModule("sturmianGrid", {
     }],
     defaultWidthGu: 16,
     displayHeightGu: 8,
+    // Slider rows match the 40 px face cells (Circular Spectrogram Inner/Rotate, Blit Freq/Phase).
+    sliderRowHeightPx: 40,
     chrome: "LayoutA",
     customDisplayArea: true,
     digitalInputs: ["Restart", "Adv"],

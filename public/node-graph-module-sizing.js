@@ -711,8 +711,12 @@ function nodeGraphModuleSliderBodyHeightGu(type, ui = null, node = null) {
   if (rows <= 0) {
     return 0;
   }
+  // A module may set its own slider row height (sliderRowHeightPx) to match face cells; CSS sets the same
+  // --node-body-row-height on its body.
+  const rowPx = Number(nodeGraphModuleDefinitions[type]?.sliderRowHeightPx);
+  const rowGu = rowPx > 0 ? rowPx / 28 : nodeGraphModuleLayout.sliderRowHeightGu;
   return (
-    rows * nodeGraphModuleLayout.sliderRowHeightGu +
+    rows * rowGu +
     Math.max(0, rows - 1) * nodeGraphModuleLayout.bodyRowGapGu
   );
 }
