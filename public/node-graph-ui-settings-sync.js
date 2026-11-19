@@ -1051,28 +1051,33 @@ function syncNodeUiDevModuleLightGridControls() {
   const lightBrightEl = document.getElementById("nodeUiDevModuleLightBrightness");
   const lightSpreadEl = document.getElementById("nodeUiDevModuleLightSpread");
   const gridBrightEl = document.getElementById("nodeUiDevMinimumGridBrightness");
+  const gridDimEl = document.getElementById("nodeUiDevGridDimReflect");
   const gridSpreadEl = document.getElementById("nodeUiDevGridSpread");
   const lightBrightOut = document.getElementById("nodeUiDevModuleLightBrightnessValue");
   const lightSpreadOut = document.getElementById("nodeUiDevModuleLightSpreadValue");
   const gridBrightOut = document.getElementById("nodeUiDevMinimumGridBrightnessValue");
+  const gridDimOut = document.getElementById("nodeUiDevGridDimReflectValue");
   const gridSpreadOut = document.getElementById("nodeUiDevGridSpreadValue");
 
   // 100% is the default look; up to 300% for a much stronger module light.
   const lightBright = Math.max(0, Math.min(300, nodeGraphFiniteNumber(lightBrightEl?.value, 100)));
   // Module light spread: 10% (a tight rim) up to 220%.
   const lightSpread = Math.max(10, Math.min(220, nodeGraphFiniteNumber(lightSpreadEl?.value, 10)));
-  const gridBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridBrightEl?.value, 43)));
+  const gridBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridBrightEl?.value, 48)));
+  const gridDim = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridDimEl?.value, 40)));
   const gridSpread = Math.max(40, Math.min(220, nodeGraphFiniteNumber(gridSpreadEl?.value, 220)));
 
   if (lightBrightOut) lightBrightOut.textContent = `${lightBright}%`;
   if (lightSpreadOut) lightSpreadOut.textContent = `${lightSpread}%`;
   if (gridBrightOut) gridBrightOut.textContent = `${gridBright}%`;
+  if (gridDimOut) gridDimOut.textContent = `${gridDim}%`;
   if (gridSpreadOut) gridSpreadOut.textContent = `${gridSpread}%`;
 
   const ws = document.getElementById("nodeGraphWorkspace");
   ws?.style.setProperty("--node-module-light-brightness", String(lightBright / 100));
   ws?.style.setProperty("--node-module-light-spread", String(Math.max(0.1, Math.min(2.2, lightSpread / 100))));
   ws?.style.setProperty("--node-grid-line-alpha", String(gridBright / 100));
+  ws?.style.setProperty("--node-grid-line-alpha-dim", String(gridDim / 100));
   ws?.style.setProperty("--node-grid-reveal-spread", String(nodeUiDevSpreadRatioFromPercent(gridSpread)));
   // Never paint a full-workspace grid. Reveal is radius-around-modules only.
   ws?.style.setProperty("--node-min-grid-brightness-alpha", "0");
@@ -1090,6 +1095,7 @@ function bindNodeUiDevModuleLightGridControls() {
     "nodeUiDevModuleLightBrightness",
     "nodeUiDevModuleLightSpread",
     "nodeUiDevMinimumGridBrightness",
+    "nodeUiDevGridDimReflect",
     "nodeUiDevGridSpread",
   ]) {
     const input = document.getElementById(id);

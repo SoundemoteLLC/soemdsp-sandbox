@@ -98,19 +98,64 @@
       && nodeGraphModuleScopeConnectionsTo(nodeId, port).length > 0;
   }
 
-  /** Live state for a node: input rings (summed cables) -> engine gain law. */
+  /** The scope buffer for a port (chronological, newest last), or null. */
+  function buffer(nodeId, port) {
+    const scope = typeof nodeGraphModuleScopeState !== "undefined" ? nodeGraphModuleScopeState : null;
+    const buf = scope?.buffers?.get?.(`${nodeId}:${port}`);
+    return buf?.length ? buf : null;
+  }
+
+  // Time of the last paint per node, so the next paint covers every engine sample in between.
+  const lastPaintMs = new Map();
+
+  /**
+   * Live state for a node: input rings (summed cables) -> engine gain law.
+   *
+   * The gains are the PEAK each path reached since the last paint, not the value of the newest sample. A signal
+   * that moves faster than the frame rate used to be filled and emptied between two frames and never shown; now
+   * any path that fills for even one sample shows filled for at least that frame. The markers (position, digital
+   * index) stay on the newest sample.
+   */
   function nodeGraphTSeriesCrossfadeLiveState(nodeId, type) {
     const info = nodeGraphTSeriesCrossfadeKind(type);
     if (!info) return null;
     const hasAnalog = wired(nodeId, "Analog");
     const hasDigital = wired(nodeId, "Digital");
-    const state = nodeGraphTSeriesCrossfadeState(info.kind, info.lastIndex, {
-      hasAnalog,
-      hasDigital,
-      analog: hasAnalog ? latest(nodeId, "Analog") : 0,
-      digital: hasDigital ? latest(nodeId, "Digital") : 0,
-    });
-    return { ...info, ...state };
+    const aBuf = hasAnalog ? buffer(nodeId, "Analog") : null;
+    const dBuf = hasDigital ? buffer(nodeId, "Digital") : null;
+    const rate = (typeof nodeGraphMvp === "object" && Number(nodeGraphMvp?.sampleRate)) || 44100;
+    const now = typeof performance !== "undefined" ? performance.now() : 0;
+    const prev = lastPaintMs.get(nodeId);
+    lastPaintMs.set(nodeId, now);
+    // Samples since the last paint (a frame's worth when there is none), at least the newest one.
+    const since = prev != null ? Math.ceil(((now - prev) / 1000) * rate) + 1 : Math.ceil(rate / 60);
+    const available = Math.max(aBuf ? aBuf.length : 0, dBuf ? dBuf.length : 0, 1);
+    const count = Math.max(1, Math.min(since, available));
+    const at = (buf, back) => {
+      if (!buf) return 0;
+      for (let i = buf.length - 1 - back; i >= 0 && i >= buf.length - 1 - back - 4; i -= 1) {
+        const v = Number(buf[i]);
+        if (Number.isFinite(v)) return v;
+      }
+      return 0;
+    };
+    let peak = null;
+    let newest = null;
+    for (let back = count - 1; back >= 0; back -= 1) {
+      const s = nodeGraphTSeriesCrossfadeState(info.kind, info.lastIndex, {
+        hasAnalog,
+        hasDigital,
+        analog: hasAnalog ? at(aBuf, back) : 0,
+        digital: hasDigital ? at(dBuf, back) : 0,
+      });
+      if (!peak) {
+        peak = { ...s, gains: s.gains.slice() };
+      } else {
+        for (let i = 0; i < s.gains.length; i += 1) if (s.gains[i] > peak.gains[i]) peak.gains[i] = s.gains[i];
+      }
+      newest = s;
+    }
+    return { ...info, ...newest, gains: peak ? peak.gains : newest.gains };
   }
 
   // Palette: demux cool cyan, mux warm amber.

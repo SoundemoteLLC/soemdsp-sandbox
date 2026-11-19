@@ -114,6 +114,11 @@ function nodeGraphModuleLayoutBox(el, ancestor) {
   return { x, y, w: el.offsetWidth, h: el.offsetHeight };
 }
 
+/** LayoutB modules put every jack on the outer edge of the module stroke (the one way IO is drawn). */
+function nodeGraphModuleGeometryOuterEdgeIo(moduleEl) {
+  return Boolean(moduleEl?.classList?.contains("chrome-layout-b") || moduleEl?.classList?.contains("solid-module-layout"));
+}
+
 function nodeGraphModuleLayoutPatchPoint(el, moduleEl, origin, io) {
   const laid = nodeGraphModuleLayoutBox(el, moduleEl);
   if (!laid || !origin) return null;
@@ -127,7 +132,11 @@ function nodeGraphModuleLayoutPatchPoint(el, moduleEl, origin, io) {
         : laid.x + laid.w * 0.5;
     // Rail IO box (chip pin): the box runs through the module border, so the
     // wire meets its open side on the border's outer edge.
-    if (el.classList.contains("rail-patched") && side) {
+    if (nodeGraphModuleGeometryOuterEdgeIo(moduleEl) && side) {
+      // The module's own wall, not the jack's box (whose fractional size rounds in layout), plus the stroke.
+      const border = Number.parseFloat(getComputedStyle(moduleEl).getPropertyValue("--node-module-idle-stroke-width")) || 1;
+      localX = side === "right" ? origin.w + border : -border;
+    } else if (el.classList.contains("rail-patched") && side) {
       const border = Number.parseFloat(getComputedStyle(moduleEl).getPropertyValue("--node-module-idle-stroke-width")) || 1;
       localX += side === "right" ? border : -border;
     }
@@ -140,6 +149,11 @@ function nodeGraphModuleLayoutPatchPoint(el, moduleEl, origin, io) {
     localX = pixelMatch
       ? laid.x + Number(pixelMatch[1])
       : laid.x + laid.w * Math.max(0, Math.min(1, ratio));
+    // LayoutB: the jack's flat side is the outer edge of the module stroke, so the jack and the stroke touch.
+    if (nodeGraphModuleGeometryOuterEdgeIo(moduleEl) && !pixelMatch && (ratio <= 0 || ratio >= 1)) {
+      const border = Number.parseFloat(getComputedStyle(moduleEl).getPropertyValue("--node-module-idle-stroke-width")) || 1;
+      localX = ratio >= 1 ? origin.w + border : -border;
+    }
   }
   return {
     x: origin.x + localX,

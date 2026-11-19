@@ -5032,7 +5032,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  min-width: var(--node-unified-window-min-width, 24px);
+  /* The key column plus room for a description beside it. */
+  min-width: max(var(--node-unified-window-min-width, 24px), 360px);
   min-height: var(--node-unified-window-min-height, 120px);
   overflow: hidden;
   padding: 0;
@@ -5520,35 +5521,89 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  container-type: inline-size;
 }
 
 .node-hotkeys-row {
   display: grid;
-  grid-template-columns: 5.4rem minmax(0, 1fr);
+  /* The key column is as wide as its key; the description takes the rest and wraps. */
+  /* Two columns at every width: a key column just wide enough for the widest key, then the description. */
+  grid-template-columns: 7.4rem minmax(0, 1fr);
+  /* A row keeps its full height (the list scrolls); a flex item would otherwise shrink and overlap the next row. */
+  flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 0 8px;
+  gap: 4px 6px;
+  min-height: 34px;
+  padding: 6px 8px;
   border-bottom: 1px solid rgba(127, 199, 217, 0.12);
   color: rgba(243, 241, 236, 0.92);
   font: 650 0.78rem/1.2 "Cascadia Mono", Consolas, monospace;
 }
 
 .node-hotkeys-row kbd {
+  /* The key column: keycaps in a row (a combo is several keys). */
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
   justify-self: start;
+  gap: 3px;
   min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
-  color: rgba(226, 168, 109, 0.95);
-  font: 800 0.78rem/1 inherit;
-}
-
-.node-hotkeys-row span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: rgba(238, 190, 135, 1);
+  font: 800 0.9rem/1 "Cascadia Mono", Consolas, monospace;
   white-space: nowrap;
 }
+
+/* One key, the classic grey mechanical-keyboard cap: a darker grey base with a lighter dished top face, a dark legend,
+   and a front edge that stands up from the board. Sized by what the key is (below). */
+.node-hotkeys-row .keycap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 2.05em;
+  padding: 0 0.7em 0.2em;
+  border: 1px solid #5f5d58;
+  border-bottom-width: 4px;
+  border-bottom-color: #55534e;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #b7b3aa 0%, #a29e95 100%);
+  box-shadow: 0 2px 0 #3c3b37, 0 3px 5px rgba(0, 0, 0, 0.55);
+  color: #2a2926;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+/* The top face of the cap: lighter, inset from the base, slightly dished. */
+.node-hotkeys-row .keycap::before {
+  content: "";
+  position: absolute;
+  inset: 2px 2px 3px 2px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #e9e6df 0%, #d3cfc6 100%);
+  box-shadow: inset 0 1px 0 #fffdf8, inset 0 -2px 3px rgba(0, 0, 0, 0.12);
+  z-index: -1;
+}
+.node-hotkeys-row .key-char { min-width: 1.9em; padding: 0 0.3em; }
+.node-hotkeys-row .key-mod { min-width: 2.6em; }
+.node-hotkeys-row .key-wide { min-width: 3.1em; }
+/* The spacebar: as long as the key column allows. */
+.node-hotkeys-row .key-space { min-width: 6.2em; letter-spacing: 0.08em; }
+.node-hotkeys-row .key-sep { font-style: normal; font-weight: 600; opacity: 0.6; padding: 0 1px; }
+.node-hotkeys-row .keycap { isolation: isolate; }
+
+.node-hotkeys-row span {
+  /* Descriptions wrap (they used to be cut off with an ellipsis). */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 
 .node-visibility-menu .scene-context-heading {
   flex: 0 0 auto;
@@ -7509,9 +7564,14 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   --node-port-area-size: var(--node-grid-height);
   --node-port-size-ratio-max: 0.9;
   --node-port-size-ratio: 0.52;
-  --node-port-diameter: calc(
-    var(--node-port-area-size)
-    * min(var(--node-port-size-ratio, 0.52), var(--node-port-size-ratio-max, 0.9))
+  /* Whole pixels: jacks stack flush (row pitch = diameter), and layout offsets are integers, so a fractional diameter
+     (14.56) made the pitch alternate 15 / 14 px. */
+  --node-port-diameter: round(
+    calc(
+      var(--node-port-area-size)
+      * min(var(--node-port-size-ratio, 0.52), var(--node-port-size-ratio-max, 0.9))
+    ),
+    1px
   );
   /* One crescent ring for every inlet/outlet (I/O + param).
      World-space thickness (scales with zoom). UIDEV writes
@@ -26185,4 +26245,46 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+/* LayoutB (every module): the display runs the full module width and the jacks overlay its left/right edges, so the display never moves inward for IO. */
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+  position: relative;
+}
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column {
+  display: grid;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* Whole-pixel width: the wire dots are placed from integer layout offsets, so a fractional column width leaves them 1 px short of the module edge. */
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: none;
+  overflow: visible;
+}
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column.input { left: 0; }
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column.output { right: 0; }
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-solid-module-custom-ui { grid-column: 1 / -1; }
+
+/* IO view with collapseUnused (View A): unconnected jacks leave the rail so the connected ones sit at the top. Rows with a parameter jack stay. */
+body[data-io-collapse="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell .node-io-row:not(:has(.connected-port)):not(:has(.node-param-port)) {
+  display: none !important;
+}
+
+/* IO pill views (View A; disabled View C), pill slot "top": a strip one jack row tall between the title and the display (the shell track is one row
+   taller, see sizing, so the display keeps its height). */
+body[data-io-strip="1"][data-io-slot="top"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
+  padding-top: 15px;
+  box-sizing: border-box;
+}
+/* Slot "mid": a strip between the display and the sliders (the first row of the slider section). */
+body[data-io-strip="1"][data-io-slot="mid"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .dsp-node-body {
+  padding-top: 15px;
+}
+
+/* The IO strip (top slot) is the shell's padding. A jack column placed in a grid row is positioned in that grid area,
+   which starts below the padding; letting the row be automatic puts the first jack in the strip row. */
+body[data-io-strip="1"][data-io-slot="top"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column {
+  grid-row: auto !important;
 }

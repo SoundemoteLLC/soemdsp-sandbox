@@ -76,6 +76,10 @@ function setNodeGraphSelection(selection) {
   if (!selection || (selection.type !== "node" && selection.type !== "nodes")) {
     nodeGraphMvp.selectionOrder = [];
   }
+  // The module you just clicked is drawn in front of the others (a temporary order, not saved).
+  if (selection?.type === "node" && typeof nodeGraphModuleRaiseToFront === "function") {
+    nodeGraphModuleRaiseToFront(selection.id);
+  }
   const selectedNode = nodeGraphSingleSelectedNodeId(selection);
   if (selectedNode && nodeGraphPatchNode(selectedNode)) {
     nodeGraphMvp.lastModuleActionTargetNode = selectedNode;

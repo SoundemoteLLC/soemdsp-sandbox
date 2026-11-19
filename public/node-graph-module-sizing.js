@@ -711,8 +711,12 @@ function nodeGraphModuleSliderBodyHeightGu(type, ui = null, node = null) {
   if (rows <= 0) {
     return 0;
   }
+  // A module may set its own slider row height (sliderRowHeightPx) to match face cells; CSS sets the same
+  // --node-body-row-height on its body.
+  const rowPx = Number(nodeGraphModuleDefinitions[type]?.sliderRowHeightPx);
+  const rowGu = rowPx > 0 ? rowPx / 28 : nodeGraphModuleLayout.sliderRowHeightGu;
   return (
-    rows * nodeGraphModuleLayout.sliderRowHeightGu +
+    rows * rowGu +
     Math.max(0, rows - 1) * nodeGraphModuleLayout.bodyRowGapGu
   );
 }
@@ -881,7 +885,8 @@ function nodeGraphModuleIoSectionHeightGu(type, node = null) {
  * force the shell taller than the face (face can be 1gu with N ports).
  */
 function nodeGraphLayoutBPortBandGu(_type = null) {
-  return 1;
+  // One jack row = the whole-pixel jack pitch (ioRowHeightGu = 15 px), so a module with no display hugs its jacks.
+  return nodeGraphModuleLayout.ioRowHeightGu;
 }
 
 /** @deprecated alias — use nodeGraphLayoutBPortBandGu */
@@ -905,20 +910,26 @@ const nodeGraphSolidModuleIoColumnHeightGu = nodeGraphLayoutBIoColumnHeightGu;
  * They must never inflate shell above the face. When faceTrack is 0, shell
  * floors at the jack column (app-wide min 1gu plate).
  */
-function nodeGraphLayoutBShellHeightGu(type, ui = {}) {
+function nodeGraphLayoutBShellHeightGu(type, ui = {}, options = {}) {
+  // IO view C puts a one-row strip (the IO pills) at the top of the shell, between the title and the display. The
+  // shell track includes it; the module's outer height adds it after rounding (strip: false = without it).
+  const stripAll = typeof nodeGraphIoViewStripGu === "function" ? nodeGraphIoViewStripGu(type) : 0;
+  const stripGu = options.strip !== false ? stripAll : 0;
   const faceGu = nodeGraphModuleDisplayHeightUnits(type, ui);
   if (faceGu > 0) {
-    return faceGu;
+    return faceGu + stripGu;
   }
-  // No visible face (Hide / Off / Display Height 0): still need a 1gu plate
-  // (or jack-only floor). Jacks share the shell as 1fr bands, so they fit in
-  // the type's default face height — cap the floor there so hiding a display
-  // never makes the module taller than showing it (lone `t`: 3 jacks, 1gu face).
+  // No visible display: no reserved IO band. With the IO strip on, the shell is just that strip: the jacks start in
+  // it and the rest hang below the module in the always-open IO panel (View B), so a module with no screen is a
+  // title and a strip.
+  if (stripAll > 0) return stripGu;
+  // No strip: the jacks overlay the slider rows (the rail runs down the module side), so the shell is only as tall as
+  // the jacks need beyond the sliders, and 0 when the sliders are taller.
   const ioGu = nodeGraphLayoutBIoColumnHeightGu(type);
-  const defaultFaceGu = nodeGraphModuleHasFace(type)
-    ? nodeGraphModuleDefaultDisplayHeightUnits(type)
-    : ioGu;
-  return Math.max(nodeGraphModuleGuPolicy.minGu, Math.min(ioGu, Math.max(1, defaultFaceGu)));
+  const sliderGu = typeof nodeGraphModuleSliderBodyHeightGu === "function"
+    ? nodeGraphModuleSliderBodyHeightGu(type, ui, null)
+    : 0;
+  return Math.max(0, ioGu - Math.max(0, sliderGu)) + stripGu;
 }
 
 /** @deprecated use nodeGraphLayoutBShellHeightGu */
@@ -1104,7 +1115,7 @@ function nodeGraphModuleLayoutBands(type, ui = {}, node = null) {
     }
     bands.push({
       id: "shell",
-      heightGu: Math.max(1, nodeGraphFiniteNumber(shellGu, 1)),
+      heightGu: Math.max(0, nodeGraphFiniteNumber(shellGu, 0)),
       visible: true,
       // Display-only: the face is the plate. 1fr of the inset article box,
       // never a raw N×gridHeight track (that is taller than the plate).
@@ -1344,7 +1355,8 @@ function applyNodeGraphModuleLayout(article, patchNodeOrBands) {
       Array.isArray(patchNodeOrBands) ? null : patchNodeOrBands,
     );
   const visible = bands.filter((band) => (
-    band.visible && (band.heightGu > 0 || band.grow || band.id === "lip")
+    // The shell keeps its (possibly 0 px) track: its jack columns hang from the top of it over the sliders.
+    band.visible && (band.heightGu > 0 || band.grow || band.id === "lip" || band.id === "shell")
   ));
   // LayoutA / Metamodule omit the face track when Displays are off or Display
   // Height is 0. The face node stays mounted (keyboard remount bug) but must
@@ -1876,7 +1888,7 @@ function nodeGraphMetamoduleLayoutGridHeightUnits(type, ui = {}, node = null) {
  */
 function nodeGraphLayoutBContentHeightGu(type, ui = {}, { compact = false, node = null } = {}) {
   const headerGu = nodeGraphModuleHeaderHeightUnits(ui, type);
-  const shellGu = nodeGraphLayoutBShellHeightGu(type, ui);
+  const shellGu = nodeGraphLayoutBShellHeightGu(type, ui, { strip: false });
   const sliderGu = nodeGraphModuleSliderBodyHeightGu(type, ui, node);
   if (sliderGu <= 0) {
     return headerGu + shellGu;
@@ -1983,10 +1995,13 @@ function nodeGraphModuleOuterHeightGu(type, ui = {}, node = null) {
     return normalizeNodeGraphModuleHeightUnits(resolvedType, patchNode?.heightGu, resolvedUi);
   }
   // Face modules + content-sized modules: never honor freehand heightGu.
+  // IO view C stacks every jack at the bottom, so the module grows by the stack's height there.
+  const ioViewExtraGu = (typeof nodeGraphIoViewExtraHeightGu === "function" ? nodeGraphIoViewExtraHeightGu(resolvedType) : 0)
+    + (typeof nodeGraphIoViewStripGu === "function" ? nodeGraphIoViewStripGu(resolvedType) : 0);
   return Math.max(
     nodeGraphModuleGuPolicy.minGu,
     nodeGraphModuleGridHeightUnitsForUi(resolvedType, resolvedUi, patchNode),
-  );
+  ) + ioViewExtraGu;
 }
 
 function nodeGraphPatchNodeGridHeightUnits(node) {

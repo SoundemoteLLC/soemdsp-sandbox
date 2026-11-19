@@ -152,8 +152,7 @@ function nodeGraphModuleChromeLayoutForType(type) {
   const definition = typeof nodeGraphModuleDefinitions === "object"
     ? nodeGraphModuleDefinitions[normalizedType]
     : null;
-  return normalizeNodeGraphModuleChromeLayout(definition?.chrome)
-    || NodeGraphModuleChromeLayout.LayoutA;
+  return nodeGraphModuleChromeLayoutResolved(definition?.chrome);
 }
 
 /**
@@ -169,16 +168,25 @@ function nodeGraphModuleChromeLayoutForType(type) {
  * @param {Record<string, object>} entries
  * @returns {Readonly<Record<string, object>>}
  */
+/** One way to do IO: LayoutA is retired into LayoutB (jacks overlay the display edges, labels over the display). */
+function nodeGraphModuleChromeLayoutResolved(value) {
+  const layout = normalizeNodeGraphModuleChromeLayout(value);
+  return !layout || layout === NodeGraphModuleChromeLayout.LayoutA
+    ? NodeGraphModuleChromeLayout.LayoutB
+    : layout;
+}
+
 function finalizeNodeGraphModuleDefinitionsChrome(entries = {}) {
   const source = entries && typeof entries === "object" ? entries : {};
   const out = {};
   for (const type of Object.keys(source)) {
     const def = source[type] && typeof source[type] === "object" ? source[type] : {};
     const faceLayout = nodeGraphResolveFaceLayout(def);
-    // Layout 3 (rails only): title bar + input rail | output rail, no face.
+    // Layout 3 (rails only: ports, no params, no display) used its own title + port-list chrome. It is a LayoutB
+    // module now (a shell with just the IO strip), so it gets the same IO views as every other module.
     const chrome = faceLayout === NodeGraphFaceLayout.railsOnly
-      ? NodeGraphModuleChromeLayout.InletOutletLayout
-      : (normalizeNodeGraphModuleChromeLayout(def.chrome) || NodeGraphModuleChromeLayout.LayoutA);
+      ? NodeGraphModuleChromeLayout.LayoutB
+      : nodeGraphModuleChromeLayoutResolved(def.chrome);
     out[type] = Object.freeze({ ...def, chrome, faceLayout });
   }
   return Object.freeze(out);

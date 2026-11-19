@@ -509,7 +509,8 @@ function createNodeGraphLayoutBShell(node, type, customBody, registration, input
   // Layout B default: jacks only (labels-hidden). Modules with layoutBPortLabels
   // keep short labels (→ in / ← out, X/Y, G/T, …) in the side band beside each jack.
   // Empty placeholders stay node-layout-b-io-empty so the face claims that side.
-  const showPortLabels = Boolean(nodeGraphModuleDefinitions[type]?.layoutBPortLabels);
+  // IO overlays the display, so every module shows its jack labels there.
+  const showPortLabels = true;
   if (hasInputs && !showPortLabels) {
     inputColumn.classList.add("labels-hidden");
   }

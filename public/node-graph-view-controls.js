@@ -1451,11 +1451,47 @@ function applyNodeGraphHotkeysPageSize(size = {}, panelArg = null) {
   return { width, height };
 }
 
+/**
+ * Draw each hotkey as the key(s) it names: "Ctrl+Z" is two keycaps, "Space" a long spacebar, "Tab" / "Shift" / "Ctrl" /
+ * "Alt" / "Del" wide caps, a single character a square cap. The cap look and sizes are CSS (.keycap, .key-*).
+ */
+function nodeGraphHotkeysDrawKeycaps() {
+  const rows = document.querySelectorAll("#nodeHotkeysPage .node-hotkeys-row kbd");
+  for (const kbd of rows) {
+    if (kbd.dataset.keys) continue;
+    const raw = kbd.textContent.trim();
+    kbd.dataset.keys = raw;
+    kbd.setAttribute("aria-label", raw);
+    kbd.textContent = "";
+    // "+" joins keys pressed together, " / " separates alternatives.
+    for (const part of raw.split(/(\s\/\s|\+)/).filter((p) => p !== "")) {
+      if (part === "+" || part.trim() === "/") {
+        const sep = document.createElement("i");
+        sep.className = "key-sep";
+        sep.textContent = part.trim();
+        kbd.append(sep);
+        continue;
+      }
+      const label = part.trim();
+      const cap = document.createElement("span");
+      const name = label.toLowerCase();
+      const kind = name === "space"
+        ? "key-space"
+        : (name === "tab" || name === "shift" || name === "enter" ? "key-wide"
+          : (label.length > 1 ? "key-mod" : "key-char"));
+      cap.className = `keycap ${kind}`;
+      cap.textContent = label;
+      kbd.append(cap);
+    }
+  }
+}
+
 function setNodeGraphHotkeysPageOpen(open) {
   const panel = document.getElementById("nodeHotkeysPage");
   if (!panel) {
     return;
   }
+  nodeGraphHotkeysDrawKeycaps();
   const switching = Boolean(nodeGraphMvp?._unifiedWindowSwitching);
   if (open && !panel.hidden) {
     if (!switching && typeof openNodeGraphUnifiedWindowPage === "function") {

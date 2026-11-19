@@ -37,3 +37,9 @@
 .dsp-node > .dsp-node-body > .sturmian-param-row > .node-parameter-row {
   min-width: 0;
 }
+
+/* Slider rows are 40 px like face cells (Inner/Rotate, Blit Freq/Phase); sizing reads definition.sliderRowHeightPx. */
+.dsp-node[data-node-type="sturmianGrid"] > .dsp-node-body {
+  --node-body-row-height: 40px;
+  --node-slider-readout-height: 40px;
+}
