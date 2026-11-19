@@ -6,13 +6,16 @@ Native stereo module `spectralWarp`, type ID 279, Space category, wave badge,
 ## Listening
 
 Feed drums, speech or a harmonic oscillator into Mono or Left/Right.
-Defaults are neutral: Warp 1, Pitch 0 st, Shift 0 Hz, Stereo Shift 0 Hz,
+Defaults are neutral: Warp 1, Pitch 0 st, Shift 0 Hz, Stereo 0 Hz,
 Pivot 1000 Hz, FFT Size 1024, Mix 100%, Gain 0 dB.
+
+Face rows: FFT Size; Warp / Pivot; Pitch / Shift / Stereo; Mix / Gain.
+Stereo is the additive frequency-shift spread, not a panning control.
 
 - Shift +100..500 Hz produces metallic, inharmonic translation.
 - Warp 2, Pivot 1000 Hz sends 500 -> 250 Hz and 2000 -> 4000 Hz.
 - Pitch +/-12 st doubles/halves warped partial frequencies.
-- Stereo Shift 20..100 Hz spreads mono material in frequency. This is not panning.
+- Stereo 20..100 Hz spreads mono material in frequency. This is not panning.
 - Larger FFT windows separate nearby partials; smaller windows are tighter.
 
 The exact target for each detected partial is:

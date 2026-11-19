@@ -237,7 +237,7 @@ const char metadata[]=R"json({
     },
     {
       "key": "stereoShiftHz",
-      "label": "Stereo Shift",
+      "label": "Stereo",
       "defaultValue": "0",
       "min": "-1000",
       "mid": "0",
@@ -281,7 +281,7 @@ const char metadata[]=R"json({
     },
     {
       "key": "gainDb",
-      "label": "Output Gain",
+      "label": "Gain",
       "defaultValue": "0",
       "min": "-24",
       "mid": "0",

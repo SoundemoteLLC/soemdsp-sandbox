@@ -28,6 +28,8 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum=function(...args){
  await page.goto((process.env.SANDBOX_URL||'http://127.0.0.1:9447/')+'?mode=circuitbuilder',{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>document.body.dataset.nodeBootFinished==='interface-ready',null,{timeout:60000});await page.waitForTimeout(500);
  const id=await page.evaluate(()=>{
+  const rows=nodeGraphModuleDefinitions.spectralWarp.face.map(row=>row.params.map(p=>p[0]));
+  if(JSON.stringify(rows)!==JSON.stringify([['fftSize'],['warp','pivotHz'],['pitchSemitones','shiftHz','stereoShiftHz'],['mix','gainDb']]))throw Error('control row layout');
   const o={record:false,autosaveWorkingPatch:false,skipLivePlan:true},source=showNodeGraphModule('polyBlep',{x:20,y:40},o),warp=showNodeGraphModule('spectralWarp',{x:300,y:40},o);
   if(!source||!warp)throw Error('spawn failed');
   const patch=cloneNodeGraphPatch(nodeGraphMvp.patch);patch.nodes=patch.nodes.filter(n=>[source,warp].includes(n.id)||n.type==='output');

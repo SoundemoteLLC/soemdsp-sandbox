@@ -7556,10 +7556,9 @@ const nodeGraphModuleDefinitions = (
     displayType: "scope1dTrace",
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["shiftHz", "Shift"], ["warp", "Warp"]], h: 40 },
-      { kind: "cells", params: [["pitchSemitones", "Pitch"], ["stereoShiftHz", "Stereo Shift"]], h: 40 },
-      { kind: "cells", params: [["pivotHz", "Pivot"]], h: 40 },
-      { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Output Gain"]], h: 40 },
+      { kind: "cells", params: [["warp", "Warp"], ["pivotHz", "Pivot"]], h: 40 },
+      { kind: "cells", params: [["pitchSemitones", "Pitch"], ["shiftHz", "Shift"], ["stereoShiftHz", "Stereo"]], h: 40 },
+      { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Gain"]], h: 40 },
     ],
     parameters: [
       {
@@ -7625,7 +7624,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         "key": "stereoShiftHz",
-        "label": "Stereo Shift",
+        "label": "Stereo",
         "defaultValue": "0",
         "min": "-1000",
         "mid": "0",
@@ -7669,7 +7668,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         "key": "gainDb",
-        "label": "Output Gain",
+        "label": "Gain",
         "defaultValue": "0",
         "min": "-24",
         "mid": "0",
