@@ -686,8 +686,10 @@ async function nodeGraphAudioPlayerLibraryLoadPlaylist(nodeId) {
     // Online / no pasted OS path: Browse is the supported way to list files.
     return nodeGraphAudioPlayerLibraryBrowseFolder(nodeId);
   }
-  // Pasted file path → catalog the parent folder (Load File is for one track).
+  // Pasted file path → catalog the parent folder, then land on that track.
+  let wantedFile = "";
   if (nodeGraphAudioPlayerLibraryLooksLikeAudioFilePath(folder)) {
+    wantedFile = folder;
     const parent = nodeGraphAudioPlayerLibraryParentDir(folder);
     if (!parent) {
       nodeGraphAudioPlayerLibraryReport(nodeId, "Load Folder: could not resolve parent folder");
@@ -706,6 +708,19 @@ async function nodeGraphAudioPlayerLibraryLoadPlaylist(nodeId) {
     return pl;
   }
   const loaded = nodeGraphAudioPlayerPlaylistForNode(nodeId);
+  if (wantedFile && loaded?.items?.length) {
+    const norm = (s) => String(s || "").replace(/\/g, "/").toLowerCase();
+    const want = norm(wantedFile);
+    const at = loaded.items.findIndex((item) => norm(item.path || item.rel || item.name) === want
+      || want.endsWith("/" + norm(item.rel || item.name)));
+    if (at >= 0) {
+      loaded.index = at;
+      loaded.selectedIndex = at;
+      loaded.playing = loaded.items[at];
+      if (typeof nodeGraphAudioPlayerPlaylistRefreshUi === "function") nodeGraphAudioPlayerPlaylistRefreshUi(nodeId);
+      if (typeof nodeGraphAudioPlayerPlaylistPersist === "function") nodeGraphAudioPlayerPlaylistPersist(nodeId);
+    }
+  }
   if (pathBox && document.activeElement !== pathBox) {
     pathBox.value = loaded?.folderPath || folder;
   }
