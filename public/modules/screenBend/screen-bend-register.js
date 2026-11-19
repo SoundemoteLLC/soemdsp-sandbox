@@ -79,7 +79,7 @@ registerNodeGraphChromelessModule("screenBend", {
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Darkens the picture toward the edges of the glass. 0 is off.",
+        tooltip: "Darkens the picture toward the edges of the glass. 0 is off, 1 goes all the way to black at the glass edge.",
       },
       {
         bipolar: false,

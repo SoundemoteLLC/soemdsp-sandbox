@@ -1,4 +1,4 @@
-const NODE_GRAPH_SCREEN_BEND_GL_REV = 3;
+const NODE_GRAPH_SCREEN_BEND_GL_REV = 4;
 const NODE_GRAPH_SCREEN_BEND_MAX = 512;
 
 (function initNodeGraphScreenBendGl(global) {
@@ -59,9 +59,13 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
       float mask = 1.0 - smoothstep(0.985, 1.0, d);
       // Vignette: the edges of the glass fall away from the middle. Reach is how far in the dark starts, Curve is how sudden the
       // fall is (soft gradient ... a hard shadow edge); at full Vignette the outside goes fully black.
-      float vEdge = mix(1.3, 0.15, clamp(uVigReach, 0.0, 1.0));
-      float vSoft = mix(0.9, 0.02, pow(clamp(uVigCurve, 0.0, 1.0), 0.7));
-      col *= 1.0 - clamp(uVignette, 0.0, 1.0) * smoothstep(vEdge - vSoft, vEdge + vSoft, length(p));
+      // Dark starts at vStart (Reach) and is full at vEnd (Curve: soft = out at the corners, hard = right after the start). As
+      // Vignette comes up vEnd pulls in to the glass edge, so at full Vignette everything from the edge outward is pure black.
+      float vAmt = clamp(uVignette, 0.0, 1.0);
+      float vStart = mix(0.95, 0.0, clamp(uVigReach, 0.0, 1.0));
+      float vEnd = mix(1.4, vStart + 0.05, pow(clamp(uVigCurve, 0.0, 1.0), 0.7));
+      vEnd = mix(vEnd, min(vEnd, 1.0), vAmt);
+      col *= 1.0 - vAmt * smoothstep(vStart, max(vEnd, vStart + 0.02), length(p));
       // Glare: a soft window-like reflection where Glare X / Y put it (size from Glare Size), plus a faint sheen along the rim.
       vec2 g = (p - uGlarePos) * vec2(1.1, 1.7);
       float blob = exp(-dot(g, g) * mix(14.0, 1.2, clamp(uGlareSize, 0.0, 1.0)));
