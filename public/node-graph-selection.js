@@ -472,6 +472,8 @@ function setNodeGraphNodeSelection(ids) {
   nodeGraphMvp.selectionOrder = ordered;
   if (ordered.length === 1) {
     setNodeGraphSelection({ type: "node", id: ordered[0] });
+    // The module you just clicked is drawn in front.
+    if (typeof nodeGraphModuleRaiseToFront === "function") nodeGraphModuleRaiseToFront(ordered[0]);
     return;
   }
   setNodeGraphSelection({ type: "nodes", ids: ordered });

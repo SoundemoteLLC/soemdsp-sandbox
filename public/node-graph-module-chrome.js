@@ -182,9 +182,10 @@ function finalizeNodeGraphModuleDefinitionsChrome(entries = {}) {
   for (const type of Object.keys(source)) {
     const def = source[type] && typeof source[type] === "object" ? source[type] : {};
     const faceLayout = nodeGraphResolveFaceLayout(def);
-    // Layout 3 (rails only): title bar + input rail | output rail, no face.
+    // Layout 3 (rails only: ports, no params, no display) used its own title + port-list chrome. It is a LayoutB
+    // module now (a shell with just the IO strip), so it gets the same IO views as every other module.
     const chrome = faceLayout === NodeGraphFaceLayout.railsOnly
-      ? NodeGraphModuleChromeLayout.InletOutletLayout
+      ? NodeGraphModuleChromeLayout.LayoutB
       : nodeGraphModuleChromeLayoutResolved(def.chrome);
     out[type] = Object.freeze({ ...def, chrome, faceLayout });
   }

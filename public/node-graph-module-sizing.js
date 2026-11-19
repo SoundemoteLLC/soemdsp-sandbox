@@ -913,13 +913,18 @@ const nodeGraphSolidModuleIoColumnHeightGu = nodeGraphLayoutBIoColumnHeightGu;
 function nodeGraphLayoutBShellHeightGu(type, ui = {}, options = {}) {
   // IO view C puts a one-row strip (the IO pills) at the top of the shell, between the title and the display. The
   // shell track includes it; the module's outer height adds it after rounding (strip: false = without it).
-  const stripGu = options.strip !== false && typeof nodeGraphIoViewStripGu === "function" ? nodeGraphIoViewStripGu(type) : 0;
+  const stripAll = typeof nodeGraphIoViewStripGu === "function" ? nodeGraphIoViewStripGu(type) : 0;
+  const stripGu = options.strip !== false ? stripAll : 0;
   const faceGu = nodeGraphModuleDisplayHeightUnits(type, ui);
   if (faceGu > 0) {
     return faceGu + stripGu;
   }
-  // No visible display: no reserved IO band. The jacks overlay the slider rows (the rail runs down the module
-  // side), so the shell is only as tall as the jacks need beyond the sliders, and 0 when the sliders are taller.
+  // No visible display: no reserved IO band. With the IO strip on, the shell is just that strip: the jacks start in
+  // it and the rest hang below the module in the always-open IO panel (View B), so a module with no screen is a
+  // title and a strip.
+  if (stripAll > 0) return stripGu;
+  // No strip: the jacks overlay the slider rows (the rail runs down the module side), so the shell is only as tall as
+  // the jacks need beyond the sliders, and 0 when the sliders are taller.
   const ioGu = nodeGraphLayoutBIoColumnHeightGu(type);
   const sliderGu = typeof nodeGraphModuleSliderBodyHeightGu === "function"
     ? nodeGraphModuleSliderBodyHeightGu(type, ui, null)

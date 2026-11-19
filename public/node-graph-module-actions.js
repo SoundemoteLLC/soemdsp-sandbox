@@ -3586,7 +3586,33 @@ function nodeGraphModuleStackNodes(patch = nodeGraphMvp?.patch) {
   const rest = nodes.filter((node) => !Number.isFinite(node?.z));
   // Array sort is stable: equal z keep patch.nodes order.
   stored.sort((a, b) => a.z - b.z);
-  return stored.concat(rest);
+  const ordered = stored.concat(rest);
+  // The last module you clicked is drawn in front of the rest (so its IO panel never goes behind another module). It
+  // is only for the live patch on screen, never stored: the Layer buttons work on a copy and keep the saved order.
+  if (nodeGraphModuleRaisedId && patch === nodeGraphMvp?.patch) {
+    const at = ordered.findIndex((node) => String(node?.id || "") === nodeGraphModuleRaisedId);
+    if (at >= 0 && at < ordered.length - 1) ordered.push(ordered.splice(at, 1)[0]);
+  }
+  return ordered;
+}
+
+// The module drawn in front of the rest after a click ("" = none). Not saved with the patch.
+let nodeGraphModuleRaisedId = "";
+
+/** Draw this module in front of the others (not stored in the patch, no undo step). */
+function nodeGraphModuleRaiseToFront(id) {
+  const next = String(id || "");
+  if (next === nodeGraphModuleRaisedId) return;
+  nodeGraphModuleRaisedId = next;
+  if (typeof nodeGraphModuleStackSyncDom === "function") nodeGraphModuleStackSyncDom();
+  // The GL scene is built in stack order: rebuild it.
+  if (typeof drawNodeGraphWires === "function") {
+    try { drawNodeGraphWires(); } catch { /* wires not ready yet */ }
+  }
+  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) {
+    nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
+    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+  }
 }
 
 /** The stack of the scope on screen (Root, or the open Metamodule). */
