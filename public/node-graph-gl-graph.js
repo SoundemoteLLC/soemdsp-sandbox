@@ -1209,6 +1209,7 @@ function nodeGraphGlGraphIoOverflow(id) {
         pill: { x: ports[0].x, y: ports[shown].y, count: hidden.length },
         ports,
         pitch,
+        bottom,
       };
     }
   }
@@ -1219,10 +1220,33 @@ function nodeGraphGlGraphIoOverflow(id) {
 /** The expanded edge, if it is this one (null = none expanded, or another edge). */
 function nodeGraphGlGraphIoExpanded(id, io) {
   const ex = nodeGraphGlGraphState.ioExpanded;
-  if (!ex || ex.id !== id) return null;
-  // IO view C opens both sides of a module together ("both").
-  if (ex.io === "both") return ex;
-  return io && ex.io !== io ? null : ex;
+  if (ex && ex.id === id) {
+    // IO view C opens both sides of a module together ("both").
+    if (ex.io === "both") return ex;
+    if (!io || ex.io === io) return ex;
+  }
+  // View B shows every jack at once: a crowded edge is always open (no "+N" pill to click first).
+  const cfg = typeof nodeGraphIoViewConfig === "function" ? nodeGraphIoViewConfig() : null;
+  if (cfg && cfg.jacks && !cfg.panel && io && nodeGraphGlGraphIoOverflow(id)?.[io]) return { id, io, auto: true };
+  return null;
+}
+
+/** Every open IO list: the one opened by hand, and in View B every crowded edge. */
+function nodeGraphGlGraphIoActiveRegions() {
+  const out = nodeGraphGlGraphIoExpandedRegions(nodeGraphGlGraphState.ioExpanded).slice();
+  const cfg = typeof nodeGraphIoViewConfig === "function" ? nodeGraphIoViewConfig() : null;
+  if (cfg && cfg.jacks && !cfg.panel) {
+    for (const plate of nodeGraphGlGraphState.plates || []) {
+      const overflow = nodeGraphGlGraphIoOverflow(plate.id);
+      if (!overflow) continue;
+      for (const io of ["input", "output"]) {
+        if (!overflow[io] || out.some((r) => r.id === plate.id && r.io === io)) continue;
+        const reg = nodeGraphGlGraphIoExpandedRegion(plate.id, io);
+        if (reg) out.push({ ...reg, auto: true });
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -1296,7 +1320,7 @@ function nodeGraphGlGraphIoPillPoint(node, port, io) {
 function nodeGraphGlGraphIoExpandedRegion(id, io) {
   const panelSide = nodeGraphGlGraphIoPanel(id)?.[io];
   const edge = panelSide
-    ? { ports: panelSide.ports, pitch: panelSide.pitch, panel: panelSide }
+    ? { ports: panelSide.ports, pitch: panelSide.pitch, panel: panelSide, bottom: panelSide.bottom }
     : nodeGraphGlGraphIoOverflow(id)?.[io];
   if (!edge) return null;
   const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
@@ -1311,7 +1335,7 @@ function nodeGraphGlGraphIoExpandedRegion(id, io) {
   const wallX = edge.ports[0].x;
   const x0 = side > 0 ? wallX : wallX - width;
   return {
-    id, io, side, r, labels, ports: edge.ports, wallX, width,
+    id, io, side, r, labels, ports: edge.ports, wallX, width, bottom: edge.bottom,
     x0, x1: x0 + width,
     // A panel starts at the module's bottom edge (it never covers the module); an overflow list at its first jack.
     y0: edge.panel ? edge.panel.bottom : edge.ports[0].y - r,
@@ -1321,12 +1345,12 @@ function nodeGraphGlGraphIoExpandedRegion(id, io) {
 
 /** The top layer: every jack of the expanded edge with its full name, over everything (never behind a module). */
 function nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, zoom) {
-  const ex = nodeGraphGlGraphState.ioExpanded;
-  if (!ex) return;
+  const regions = nodeGraphGlGraphIoActiveRegions();
+  if (!regions.length) return;
   const layer = nodeGraphGlLinesLayer(batch);
   if (!layer) return;
-  const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(ex.id) : null;
-  for (const reg of nodeGraphGlGraphIoExpandedRegions(ex)) {
+  for (const reg of regions) {
+    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(reg.id) : null;
     nodeGraphGlGraphDrawIoRegion(layer, reg, el, toX, toY, zoom);
   }
 }
@@ -1339,9 +1363,13 @@ function nodeGraphGlGraphIoExpandedRegions(ex) {
 }
 
 function nodeGraphGlGraphDrawIoRegion(layer, reg, el, toX, toY, zoom) {
-  nodeGraphGlLinesRect(layer, toX(reg.x0), toY(reg.y0), reg.width * zoom, (reg.y1 - reg.y0) * zoom, [0.03, 0.04, 0.07, 0.96]);
+  // An always-open edge (View B) draws only what hangs below the module: the module draws its own jacks.
+  const top = reg.auto && Number.isFinite(reg.bottom) ? Math.max(reg.y0, reg.bottom) : reg.y0;
+  if (top >= reg.y1) return;
+  nodeGraphGlLinesRect(layer, toX(reg.x0), toY(top), reg.width * zoom, (reg.y1 - top) * zoom, [0.03, 0.04, 0.07, 0.96]);
   for (let i = 0; i < reg.ports.length; i += 1) {
     const p = reg.ports[i];
+    if (reg.auto && p.y < top + reg.r * 0.5) continue;
     const cx = toX(p.x);
     const cy = toY(p.y);
     const r = reg.r * zoom;
@@ -4239,9 +4267,7 @@ function nodeGraphGlHitCovered(id, x, y) {
 
 /** A jack of the expanded edge (top layer): hit before anything, even where another module covers it. */
 function nodeGraphGlHitExpandedJack(x, y) {
-  const ex = nodeGraphGlGraphState.ioExpanded;
-  if (!ex) return null;
-  for (const reg of nodeGraphGlGraphIoExpandedRegions(ex)) {
+  for (const reg of nodeGraphGlGraphIoActiveRegions()) {
     if (x < reg.x0 || x > reg.x1 || y < reg.y0 || y > reg.y1) continue;
     let best = null;
     let bestDist = Infinity;
@@ -4335,7 +4361,7 @@ function nodeGraphGlHitTest(x, y) {
  * so the click can be handed over as if it had landed on it. null when the point is not on an expanded panel jack.
  */
 function nodeGraphGlGraphIoPanelRemap(clientX, clientY) {
-  if (!nodeGraphGlGraphState.ioExpanded || typeof nodeGraphClientToZoomSurfacePoint !== "function") return null;
+  if (typeof nodeGraphClientToZoomSurfacePoint !== "function") return null;
   const p = nodeGraphClientToZoomSurfacePoint(clientX, clientY);
   if (!p) return null;
   const hit = nodeGraphGlHitExpandedJack(p.x, p.y);
