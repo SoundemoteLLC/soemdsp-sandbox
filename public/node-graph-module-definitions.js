@@ -22080,7 +22080,7 @@ const nodeGraphModuleDefinitions = (
   // Picture effect. Inputs beyond 📺 come from the node's GLSL uniforms (normalizeNodeGraphScreenSpaceShader).
   screenSpaceShader: {
     planRole: "monitor",
-    inputs: ["rgba", "Shake"],
+    inputs: ["rgba"],
     inputLabels: { rgba: "📺" },
     layout: "screenSpaceShader",
     outputs: ["rgba"],

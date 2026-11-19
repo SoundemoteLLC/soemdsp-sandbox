@@ -230,9 +230,19 @@ layer("a_buffer").opacity = 1.0;
 
 output = canvas;`;
 
-// The previous default (it shook by fractions of a pixel, so every frame was sampled between pixels and the whole screen went
-// soft). A node still carrying exactly this text is upgraded to the current default.
-const nodeGraphScreenSpaceShaderOldDefaultSource = `// Screen shake. Shake adds to a small base wobble.
+// The default is a plain pass-through: the circuit as it is, nothing moved or filtered. Earlier builds shipped a screen-shake test
+// as the default (the first one shook by fractions of a pixel, which softened the whole screen); a node still carrying exactly one
+// of those old texts is upgraded to this when it loads. Anything the user edited is left alone.
+const nodeGraphScreenSpaceShaderDefaultSource = `// Screen Space Shader. scene(uv) is the picture on the 📺 in (uv 0..1). Return the colour for each pixel.
+// uniform float Name;      adds a signal input (a patch value you can wire in)
+// uniform sampler2D Name;  adds another 📺 input, read with texture(Name, uv)
+// uResolution is the size in pixels and uTime the time in seconds.
+vec4 effect(vec2 uv) {
+  return scene(uv);
+}`;
+
+const nodeGraphScreenSpaceShaderLegacyDefaultSources = Object.freeze([
+  `// Screen shake. Shake adds to a small base wobble.
 uniform float Shake;
 
 vec4 effect(vec2 uv) {
@@ -240,9 +250,8 @@ vec4 effect(vec2 uv) {
   float t = uTime * 6.2831853 * 9.0;
   vec2 offset = vec2(sin(t * 1.31), cos(t * 1.73)) * amount;
   return scene(uv + offset);
-}`;
-
-const nodeGraphScreenSpaceShaderDefaultSource = `// Screen shake. Shake adds to a small base wobble.
+}`,
+  `// Screen shake. Shake adds to a small base wobble.
 // The shift is rounded to whole pixels: a fractional shift samples between pixels and blurs everything.
 uniform float Shake;
 
@@ -252,7 +261,8 @@ vec4 effect(vec2 uv) {
   vec2 offset = vec2(sin(t * 1.31), cos(t * 1.73)) * amount;
   offset = floor(offset * uResolution + 0.5) / uResolution;
   return scene(uv + offset);
-}`;
+}`,
+]);
 
 const nodeGraphScopeShaderModes = Object.freeze(["1d_full", "1d_scan", "x_y", "one_value"]);
 const nodeGraphScopeShaderBlendModes = Object.freeze(["laser", "led", "light", "paint", "solid", "heatmap"]);
@@ -572,7 +582,7 @@ function normalizeNodeGraphScreenSpaceShader(screenSpaceShader = {}) {
       ? screenSpaceShader.source
       : "";
   let normalizedSource = String(source || "").trim().slice(0, 100000) || nodeGraphScreenSpaceShaderDefaultSource;
-  if (normalizedSource === nodeGraphScreenSpaceShaderOldDefaultSource.trim()) normalizedSource = nodeGraphScreenSpaceShaderDefaultSource;
+  if (nodeGraphScreenSpaceShaderLegacyDefaultSources.some((legacy) => legacy.trim() === normalizedSource)) normalizedSource = nodeGraphScreenSpaceShaderDefaultSource;
   const { floats, samplers } = parseNodeGraphScreenSpaceShaderUniforms(normalizedSource);
   return {
     bufferSampleLimit: nodeGraphBufferedInputSampleLimit,

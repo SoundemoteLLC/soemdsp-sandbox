@@ -2682,7 +2682,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   screenSpaceShader: {
     category: "rgba",
     description: "GLSL picture effect: 📺 in, 📺 out. uniform float = signal in, uniform sampler2D = extra 📺 in.",
-    notes: ["screen space", "glsl", "picture", "shake", "feedback"],
+    notes: ["screen space", "glsl", "shader", "picture", "feedback"],
   },
   viewOut: {
     category: "rgba",

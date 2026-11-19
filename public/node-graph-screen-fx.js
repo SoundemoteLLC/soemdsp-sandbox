@@ -217,7 +217,8 @@ function nodeGraphScreenFxNodes() {
     const id = String(node.id);
     if (node.type === "screenSpaceShader") {
       const script = normalizeNodeGraphScreenSpaceShader(node.screenSpaceShader);
-      if (script.enabled) shaders.push({ id, script });
+      // A shader nothing reads (no cable leaves its 📺 out) does no work.
+      if (script.enabled && (typeof nodeGraphPictureHasConsumer !== "function" || nodeGraphPictureHasConsumer(id))) shaders.push({ id, script });
     } else if (node.type === "viewOut") viewOuts.push(id);
     else if (node.type === "screenOut") screenOuts.push(id);
   }
