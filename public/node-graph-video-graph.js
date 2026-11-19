@@ -153,7 +153,10 @@
       if (!id) continue;
       // Sinks: video nodes (own face) and any node a picture cable feeds.
       if (!VIDEO_TYPES.has(String(nodes[i]?.type || "")) && !upstream.has(id)) continue;
-      if (sinkVisible(id)) { set.add(id); walk.push(id); }
+      // Screen Space Out is the screen itself: it is always a visible sink (while it is not bypassed), wherever its own little
+      // module sits, so the effects feeding it run every frame and do not freeze when that module is scrolled or zoomed out of view.
+      const screenSink = String(nodes[i]?.type || "") === "screenOut" && !(typeof global.nodeGraphNodeIsBypassed === "function" && global.nodeGraphNodeIsBypassed(id));
+      if (screenSink || sinkVisible(id)) { set.add(id); walk.push(id); }
     }
     while (walk.length) {
       const srcs = upstream.get(walk.pop());
