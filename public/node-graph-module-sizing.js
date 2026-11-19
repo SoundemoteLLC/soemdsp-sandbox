@@ -910,10 +910,13 @@ const nodeGraphSolidModuleIoColumnHeightGu = nodeGraphLayoutBIoColumnHeightGu;
  * They must never inflate shell above the face. When faceTrack is 0, shell
  * floors at the jack column (app-wide min 1gu plate).
  */
-function nodeGraphLayoutBShellHeightGu(type, ui = {}) {
+function nodeGraphLayoutBShellHeightGu(type, ui = {}, options = {}) {
+  // IO view C puts a one-row strip (the IO pills) at the top of the shell, between the title and the display. The
+  // shell track includes it; the module's outer height adds it after rounding (strip: false = without it).
+  const stripGu = options.strip !== false && typeof nodeGraphIoViewStripGu === "function" ? nodeGraphIoViewStripGu(type) : 0;
   const faceGu = nodeGraphModuleDisplayHeightUnits(type, ui);
   if (faceGu > 0) {
-    return faceGu;
+    return faceGu + stripGu;
   }
   // No visible display: no reserved IO band. The jacks overlay the slider rows (the rail runs down the module
   // side), so the shell is only as tall as the jacks need beyond the sliders, and 0 when the sliders are taller.
@@ -921,7 +924,7 @@ function nodeGraphLayoutBShellHeightGu(type, ui = {}) {
   const sliderGu = typeof nodeGraphModuleSliderBodyHeightGu === "function"
     ? nodeGraphModuleSliderBodyHeightGu(type, ui, null)
     : 0;
-  return Math.max(0, ioGu - Math.max(0, sliderGu));
+  return Math.max(0, ioGu - Math.max(0, sliderGu)) + stripGu;
 }
 
 /** @deprecated use nodeGraphLayoutBShellHeightGu */
@@ -1880,7 +1883,7 @@ function nodeGraphMetamoduleLayoutGridHeightUnits(type, ui = {}, node = null) {
  */
 function nodeGraphLayoutBContentHeightGu(type, ui = {}, { compact = false, node = null } = {}) {
   const headerGu = nodeGraphModuleHeaderHeightUnits(ui, type);
-  const shellGu = nodeGraphLayoutBShellHeightGu(type, ui);
+  const shellGu = nodeGraphLayoutBShellHeightGu(type, ui, { strip: false });
   const sliderGu = nodeGraphModuleSliderBodyHeightGu(type, ui, node);
   if (sliderGu <= 0) {
     return headerGu + shellGu;
@@ -1988,7 +1991,8 @@ function nodeGraphModuleOuterHeightGu(type, ui = {}, node = null) {
   }
   // Face modules + content-sized modules: never honor freehand heightGu.
   // IO view C stacks every jack at the bottom, so the module grows by the stack's height there.
-  const ioViewExtraGu = typeof nodeGraphIoViewExtraHeightGu === "function" ? nodeGraphIoViewExtraHeightGu(resolvedType) : 0;
+  const ioViewExtraGu = (typeof nodeGraphIoViewExtraHeightGu === "function" ? nodeGraphIoViewExtraHeightGu(resolvedType) : 0)
+    + (typeof nodeGraphIoViewStripGu === "function" ? nodeGraphIoViewStripGu(resolvedType) : 0);
   return Math.max(
     nodeGraphModuleGuPolicy.minGu,
     nodeGraphModuleGridHeightUnitsForUi(resolvedType, resolvedUi, patchNode),

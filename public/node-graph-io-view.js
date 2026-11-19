@@ -105,11 +105,11 @@
   window.nodeGraphIoView = () => state.view;
   window.nodeGraphIoViewConfig = () => VIEWS[state.view];
   /** Extra module height (grid cells) the view needs: View C reserves the jack stack at the bottom. */
-  window.nodeGraphIoViewExtraHeightGu = (type) => {
+  window.nodeGraphIoViewExtraHeightGu = () => 0;
+  /** IO view C: the strip (grid cells) at the top of each module's shell, between the title and the display. */
+  window.nodeGraphIoViewStripGu = (type) => {
     if (!VIEWS[state.view].panel) return 0;
-    if (typeof nodeGraphModuleUsesLayoutB !== "function" || !nodeGraphModuleUsesLayoutB(type)) return 0;
-    const sliders = typeof nodeGraphModuleSliderBodyHeightGu === "function" ? nodeGraphModuleSliderBodyHeightGu(type, null, null) : 0;
-    return sliders > 0 ? 15 / 28 : 0;
+    return typeof nodeGraphModuleUsesLayoutB === "function" && nodeGraphModuleUsesLayoutB(type) ? 15 / 28 : 0;
   };
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");

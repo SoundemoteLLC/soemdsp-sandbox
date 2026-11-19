@@ -26217,7 +26217,9 @@ body[data-io-collapse="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) 
   display: none !important;
 }
 
-/* IO view C: a dedicated strip, one jack row tall, between the display and the sliders. The IO pills sit in it. */
-body[data-io-view="C"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .dsp-node-body {
+/* IO view C: a dedicated strip, one jack row tall, between the title and the display. The IO pills sit in it; the
+   shell track is one row taller (sizing), so the display keeps its height. */
+body[data-io-view="C"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
   padding-top: 15px;
+  box-sizing: border-box;
 }

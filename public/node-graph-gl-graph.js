@@ -1203,12 +1203,11 @@ function nodeGraphGlGraphIoPanel(id) {
   if (geo?.box && Array.isArray(geo.ports)) {
     const pitch = nodeGraphGlGraphJackDiameter();
     const bottom = geo.box.y + geo.box.h;
-    // The dedicated IO strip: the first row of the slider section (View C pads it), between the display and the
-    // sliders. A module with no slider section keeps the pill in its bottom slot.
+    // The dedicated IO strip: the first row of the shell (View C pads it), between the title and the display.
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
-    const body = el?.querySelector(":scope > .dsp-node-body");
-    const bodyBox = body && !body.hidden ? nodeGraphGlGraphWorldBox(body) : null;
-    const pillY = bodyBox && bodyBox.h > pitch ? bodyBox.y + pitch / 2 : bottom - pitch / 2;
+    const shell = el?.querySelector(":scope > .node-solid-module-shell");
+    const shellBox = shell && !shell.hidden ? nodeGraphGlGraphWorldBox(shell) : null;
+    const pillY = shellBox && shellBox.h >= pitch ? shellBox.y + pitch / 2 : bottom - pitch / 2;
     for (const io of ["input", "output"]) {
       const ports = geo.ports.filter((p) => p.visible !== false && p.io === io).sort((a, b) => a.y - b.y);
       if (!ports.length) continue;
