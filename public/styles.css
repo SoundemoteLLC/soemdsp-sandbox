@@ -7509,9 +7509,14 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   --node-port-area-size: var(--node-grid-height);
   --node-port-size-ratio-max: 0.9;
   --node-port-size-ratio: 0.52;
-  --node-port-diameter: calc(
-    var(--node-port-area-size)
-    * min(var(--node-port-size-ratio, 0.52), var(--node-port-size-ratio-max, 0.9))
+  /* Whole pixels: jacks stack flush (row pitch = diameter), and layout offsets are integers, so a fractional diameter
+     (14.56) made the pitch alternate 15 / 14 px. */
+  --node-port-diameter: round(
+    calc(
+      var(--node-port-area-size)
+      * min(var(--node-port-size-ratio, 0.52), var(--node-port-size-ratio-max, 0.9))
+    ),
+    1px
   );
   /* One crescent ring for every inlet/outlet (I/O + param).
      World-space thickness (scales with zoom). UIDEV writes

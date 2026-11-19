@@ -25308,9 +25308,9 @@ const nodeGraphModuleLayout = Object.freeze({
      jack ran ~1-2 px into the display, which composites over the plate pass and clipped it. */
   ioPaddingYGu: 2 / 28,
   ioRowGapGu: 0,
-  /* Match --node-signal-port-height = --node-port-diameter at size ratio 0.52. */
-  ioRowHeightGu: 0.52,
-  ioSectionMinHeightGu: 0.52,
+  /* Match --node-signal-port-height = --node-port-diameter: 0.52 of the grid cell, rounded to a whole 15 px. */
+  ioRowHeightGu: 15 / 28,
+  ioSectionMinHeightGu: 15 / 28,
   /* Side/top plate air vs grid (CSS --node-module-grid-inset). Bottom is half. */
   moduleGridInsetGu: 6 / 28,
   moduleScopeHeightGu: 2,

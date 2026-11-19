@@ -362,9 +362,20 @@ function nodeGraphGlGraphRebuildChrome() {
   const graphs = [];
   const headerButtons = [];
   const host = document.getElementById("nodeGraphWorkspace");
-  const diameter = Number.parseFloat(
-    host ? getComputedStyle(host).getPropertyValue("--node-port-diameter") : "",
-  ) || 14;
+  // --node-port-diameter is a calc()/round() expression, so read the resolved pixel size from a probe element.
+  let diameter = 0;
+  if (host) {
+    let probe = host.querySelector(":scope > .node-port-diameter-probe");
+    if (!probe) {
+      probe = document.createElement("div");
+      probe.className = "node-port-diameter-probe";
+      probe.setAttribute("aria-hidden", "true");
+      probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:var(--node-port-diameter);height:0;";
+      host.append(probe);
+    }
+    diameter = Number.parseFloat(getComputedStyle(probe).width) || 0;
+  }
+  diameter = diameter || 14;
   const radius = diameter * 0.5;
   // Back to front, like the plates: the hit test walks each list from the end.
   const nodes = nodeGraphModuleStackNodes(nodeGraphMvp?.patch);

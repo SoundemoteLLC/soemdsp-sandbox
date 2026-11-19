@@ -332,17 +332,23 @@ uniform vec4 uLamp;
 // side is +1 where the module's inside is to the right of the jack, -1 to the left. Hard edged.
 uniform int uHoleCount;
 uniform highp vec4 uHoles[16];
+// One screen pixel in world units: the width of the hole's anti-aliased edge.
+uniform highp float uHoleAA;
 varying vec2 vUv;
 varying vec4 vTint;
 varying highp vec2 vWorld;
 void main() {
+  highp float keepPx = 1.0;
   for (int i = 0; i < 16; i++) {
     if (i >= uHoleCount) break;
     highp vec4 h = uHoles[i];
     highp vec2 d = vWorld - h.xy;
     highp float dist = h.z < 0.0 ? max(abs(d.x), abs(d.y)) : length(d);
-    if (dist <= abs(h.z) && d.x * h.w >= 0.0) discard;
+    highp float aa = max(uHoleAA, 1e-4);
+    highp float cov = clamp((abs(h.z) - dist) / aa + 0.5, 0.0, 1.0) * clamp(d.x * h.w / aa + 0.5, 0.0, 1.0);
+    keepPx = min(keepPx, 1.0 - cov);
   }
+  if (keepPx <= 0.0) discard;
   vec4 c = texture2D(tex, vUv);
   if (mode > 2.5) {
     // Premultiplied colour emoji x tint alpha.
@@ -362,7 +368,7 @@ void main() {
     }
     gl_FragColor = vec4(textRgb, vTint.a * c.a * textF);
   } else {
-    gl_FragColor = vec4(c.rgb, c.a * alpha);
+    gl_FragColor = vec4(c.rgb, c.a * alpha * keepPx);
   }
 }
 `;
@@ -686,25 +692,29 @@ void main() {
     vec2 dv = px - jack;
     float dist = square > 0.5 ? max(abs(dv.x), abs(dv.y)) : length(dv);
     float side = jack.x < c.x ? 1.0 : -1.0;
-    if (dist <= radius) {
-      wallClear = 1.0;
-      if (dv.x * side >= 0.0) {
-        if (dist <= radius - jackRimW) {
-          hole = 1.0;
-        } else {
-          rim = 1.0;
-          rimCol = uJackColor[i];
-        }
-      }
+    // One pixel of coverage on every edge (distance slope is 1), no feather beyond it.
+    float jaa = max(fwidth(dist), uPixel > 0.5 ? 1.0 : 1e-4);
+    float inDisc = clamp((radius - dist) / jaa + 0.5, 0.0, 1.0);
+    float inHole = clamp((radius - jackRimW - dist) / jaa + 0.5, 0.0, 1.0);
+    float onInside = clamp(dv.x * side / jaa + 0.5, 0.0, 1.0);
+    wallClear = max(wallClear, inDisc);
+    float holeI = inHole * onInside;
+    float rimI = max(inDisc - inHole, 0.0) * onInside;
+    if (holeI > hole) hole = holeI;
+    if (rimI > rim) {
+      rim = rimI;
+      rimCol = uJackColor[i];
     }
   }
   // Rim-only pass (uDimShape 5): drawn over the display, so only the rim.
   if (uDimShape > 4.5) {
-    if (rim < 0.5) discard;
-    gl_FragColor = rimCol;
+    if (rim < 0.004) discard;
+    gl_FragColor = vec4(rimCol.rgb, rimCol.a * rim);
     return;
   }
-  if (hole > 0.5) discard;
+  if (hole > 0.999) discard;
+  // Plate and its stroke show through where neither the hole nor the rim covers the pixel.
+  float keep = max(1.0 - hole - rim, 0.0);
   // Stroke glow (uDimShape 4): one smooth exponential falloff outside the plate, radius uStroke, in
   // the plate colour. The stroke is a light source: this does not depend on the mouse lamp.
   if (uDimShape > 3.5) {
@@ -782,12 +792,8 @@ void main() {
     if (wall && px.y >= cy0 && px.y < cy1) { band = 0.0; bandOut = 0.0; bandIn = 0.0; }
   }
   // Stroke and fill cover disjoint parts of the pixel, so they add.
-  if (rim > 0.5) {
-    if (uDimShape > 0.5) discard;
-    gl_FragColor = rimCol;
-    return;
-  }
   // The module stroke stops at the rim.
+  if (uDimShape > 0.5) rim = 0.0;
   bandOut *= 1.0 - wallClear;
   bandIn *= 1.0 - wallClear;
   float strokeA = bandOut * strokeCol.a;
@@ -813,9 +819,12 @@ void main() {
   // so the module's stroke light (it follows loudness) does not show through the jack.
   float holeA = 0.0;
   strokeA += behindA;
-  float a = strokeA + plateA + holeA;
+  float baseA = (strokeA + plateA + holeA) * keep;
+  float rimA = rim * rimCol.a;
+  float a = baseA + rimA;
   if (a < 0.004) discard;
-  vec3 rgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA + uJackBackdrop.rgb * holeA) / a;
+  vec3 baseRgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA + uJackBackdrop.rgb * holeA) / max(strokeA + plateA + holeA, 1e-4);
+  vec3 rgb = (baseRgb * baseA + rimCol.rgb * rimA) / a;
   gl_FragColor = vec4(rgb, a);
 }
 `;
@@ -947,6 +956,7 @@ void main() {
         imgModeLoc: gl.getUniformLocation(imgProgram, "mode"),
         imgHoleCount: gl.getUniformLocation(imgProgram, "uHoleCount"),
         imgHoles: gl.getUniformLocation(imgProgram, "uHoles"),
+        imgHoleAA: gl.getUniformLocation(imgProgram, "uHoleAA"),
         imgCamPixel: gl.getUniformLocation(imgProgram, "uPixel"),
         imgCamCam: gl.getUniformLocation(imgProgram, "uCam"),
         imgCamVp: gl.getUniformLocation(imgProgram, "uVp"),
@@ -2725,6 +2735,8 @@ void main() {
           hd[hi * 4 + 3] = holes[hi].side;
         }
         gl.uniform4fv(s.imgHoles, hd);
+        const cam = batch.camera;
+        if (s.imgHoleAA) gl.uniform1f(s.imgHoleAA, 1 / Math.max(0.0001, (cam.zoom > 0 ? cam.zoom : 1) * (batch.scale > 0 ? batch.scale : 1)));
       }
       const snapped = nodeGraphGlLinesSnapImageQuad(batch, im);
       const x0 = snapped.x0; const x1 = snapped.x1; const y0 = snapped.y0; const y1 = snapped.y1;
