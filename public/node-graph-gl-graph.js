@@ -469,18 +469,27 @@ function nodeGraphGlGraphRebuildChrome() {
         rgba,
       });
     }
+    // A pill is drawn like a jack: a cutout with a dot in it and its count beside it. The pseudo-jack gives the cutout.
+    const pushPill = (pill) => {
+      pills.push(pill);
+      jacks.push({
+        key: `pill:${id}:${pill.io}`, id, port: "__pill", io: pill.io, kind: "pill", signal: false,
+        x: pill.x, y: pill.y, r: radius, square: false, rail: false, inwardRight: pill.io !== "output",
+        inlet: true, lit: true, pill: true, rgba: [0.45, 0.62, 1, 1],
+      });
+    };
     const panel = nodeGraphGlGraphIoPanel(id);
     if (panel) {
       for (const io of ["input", "output"]) {
         const side = panel[io];
-        if (side && !nodeGraphGlGraphIoExpanded(id, io)) pills.push({ id, io, panel: true, x: side.pill.x, y: side.pill.y, r: radius, count: side.pill.count });
+        if (side && !nodeGraphGlGraphIoExpanded(id, io)) pushPill({ id, io, panel: true, x: side.pill.x, y: side.pill.y, r: radius, count: side.pill.count });
       }
     }
     const overflow = panel ? null : nodeGraphGlGraphIoOverflow(id);
     if (overflow) {
       for (const io of ["input", "output"]) {
         const edge = overflow[io];
-        if (edge && !nodeGraphGlGraphIoExpanded(id, io)) pills.push({ id, io, x: edge.pill.x, y: edge.pill.y, r: radius, count: edge.pill.count });
+        if (edge && !nodeGraphGlGraphIoExpanded(id, io)) pushPill({ id, io, x: edge.pill.x, y: edge.pill.y, r: radius, count: edge.pill.count });
       }
     }
     const readouts = el.querySelectorAll(".node-slider-readout");
@@ -1109,7 +1118,7 @@ function nodeGraphGlGraphJackHoles(jacks, plate, plateStyle, camera, device) {
   const holes = [];
   for (let i = 0; i < jacks.length && holes.length < 16; i += 1) {
     const jack = jacks[i];
-    if (jack.rail) continue;
+    if (jack.rail || !nodeGraphGlGraphIoJackShown(jack)) continue;
     const r = Math.max(0, jack.r - rimWorld);
     if (!(r > 0)) continue;
     const side = jack.io === "output" ? -1 : 1;
@@ -1121,6 +1130,11 @@ function nodeGraphGlGraphJackHoles(jacks, plate, plateStyle, camera, device) {
     holes.push({ x, y: jack.y, r: jack.square ? -r : r, side });
   }
   return holes;
+}
+
+/** A jack is drawn unless the IO view has jacks off; the pills (pseudo-jacks) are always drawn as cutouts. */
+function nodeGraphGlGraphIoJackShown(jack) {
+  return Boolean(jack && (jack.pill || !nodeGraphGlGraphIoJacksOff()));
 }
 
 /** The IO view has the jack cutouts switched off (View A). */
@@ -1203,11 +1217,20 @@ function nodeGraphGlGraphIoPanel(id) {
   if (geo?.box && Array.isArray(geo.ports)) {
     const pitch = nodeGraphGlGraphJackDiameter();
     const bottom = geo.box.y + geo.box.h;
-    // The dedicated IO strip: the first row of the shell (View C pads it), between the title and the display.
+    // Where the pills sit (IO view C, Shift+Tab cycles it): the bottom of the wall, a strip between the display and
+    // the sliders ("mid"), or a strip between the title and the display ("top").
+    const slot = typeof nodeGraphIoViewPillSlot === "function" ? nodeGraphIoViewPillSlot() : "top";
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
-    const shell = el?.querySelector(":scope > .node-solid-module-shell");
-    const shellBox = shell && !shell.hidden ? nodeGraphGlGraphWorldBox(shell) : null;
-    const pillY = shellBox && shellBox.h >= pitch ? shellBox.y + pitch / 2 : bottom - pitch / 2;
+    let pillY = bottom - pitch / 2;
+    if (slot === "top") {
+      const shell = el?.querySelector(":scope > .node-solid-module-shell");
+      const shellBox = shell && !shell.hidden ? nodeGraphGlGraphWorldBox(shell) : null;
+      if (shellBox && shellBox.h >= pitch) pillY = shellBox.y + pitch / 2;
+    } else if (slot === "mid") {
+      const body = el?.querySelector(":scope > .dsp-node-body");
+      const bodyBox = body && !body.hidden ? nodeGraphGlGraphWorldBox(body) : null;
+      if (bodyBox && bodyBox.h > pitch) pillY = bodyBox.y + pitch / 2;
+    }
     for (const io of ["input", "output"]) {
       const ports = geo.ports.filter((p) => p.visible !== false && p.io === io).sort((a, b) => a.y - b.y);
       if (!ports.length) continue;
@@ -1321,23 +1344,19 @@ function nodeGraphGlGraphDrawIoRegion(layer, reg, el, toX, toY, zoom) {
   }
 }
 
-/** The pill that stands for the jacks that do not fit: an accent capsule from the wall, "+N" inside. */
+/** The pill's contents: a dot inside its jack cutout (the cutout itself is a pseudo-jack) and the count beside it. */
 function nodeGraphGlGraphDrawPill(batch, pill, toX, toY, zoom) {
   const side = pill.io === "output" ? -1 : 1;
   const cx = toX(pill.x);
   const cy = toY(pill.y);
   const r = pill.r * zoom;
-  const w = r * 3.4;
-  const half = Math.max(1, r - 1);
   const accent = [0.45, 0.62, 1, 1];
-  const xa = side > 0 ? cx : cx - (w - r);
-  nodeGraphGlLinesRect(batch, xa, cy - half, w - r, half * 2, accent);
-  nodeGraphGlLinesDot(batch, cx + side * (w - r), cy, half, 0.75, accent);
+  nodeGraphGlLinesDot(batch, cx, cy, r * 0.42, 0.75, accent);
   if (typeof nodeGraphGlLinesText === "function") {
-    nodeGraphGlLinesText(batch, (pill.panel ? "" : "+") + pill.count, cx + side * (w - r) * 0.55, cy, nodeGraphGlGraphTextOpts({
+    nodeGraphGlLinesText(batch, (pill.panel ? "" : "+") + pill.count, cx + side * (r + 3 * zoom), cy, nodeGraphGlGraphTextOpts({
       px: Math.max(1, 11 * zoom),
-      rgba: [0.03, 0.04, 0.08, 1],
-      align: "center",
+      rgba: [0.78, 0.86, 1, 1],
+      align: side > 0 ? "left" : "right",
       baseline: "middle",
       weight: 600,
     }));
@@ -1379,7 +1398,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     if (jack.id !== plate.id || jack.rail) continue;
     // The plate keeps its jack notches, so its stroke wraps each jack instead of crossing it; the display is
     // cut the same way afterwards (nodeGraphGlGraphDrawJackHalves). The IO view can switch jacks off.
-    if (mode === "" && nodeGraphGlGraphIoJacksOff()) continue;
+    if (!nodeGraphGlGraphIoJackShown(jack)) continue;
     // Connected, or a wire is being dragged out of it right now.
     const lit = jack.lit || nodeGraphGlGraphJackDragging(jack);
     plateJacks.push({
@@ -3445,7 +3464,7 @@ function nodeGraphGlGraphPresent(options = {}) {
           });
           if (picture) {
             picture.pin = pin;
-            picture.holes = nodeGraphGlGraphIoJacksOff() ? [] : nodeGraphGlGraphJackHoles(
+            picture.holes = nodeGraphGlGraphJackHoles(
               chromeById?.get(face.id)?.jacks || [],
               group.plates.find((p) => p.id === face.id) || null,
               plateStyle,
@@ -3479,9 +3498,7 @@ function nodeGraphGlGraphPresent(options = {}) {
         ioLayer = ioLayer || nodeGraphGlLinesLayer(batch);
         if (!ioLayer) break;
         nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
-        if (!nodeGraphGlGraphIoJacksOff()) {
-          nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "rim");
-        }
+        nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "rim");
         nodeGraphGlGraphDrawLabels(ioLayer, toX, toY, layoutZoom, cssW, cssH);
         for (const pill of nodeGraphGlGraphState.chrome?.pills || []) {
           nodeGraphGlGraphDrawPill(ioLayer, pill, toX, toY, layoutZoom);
@@ -4225,6 +4242,7 @@ function nodeGraphGlHitTest(x, y) {
     : 8;
   for (let i = 0; i < jacks.length; i += 1) {
     const jack = jacks[i];
+    if (jack.pill) continue;
     const reach = Math.max(jack.r || 0, jackRadius);
     const dx = jack.x - x;
     const dy = jack.y - y;

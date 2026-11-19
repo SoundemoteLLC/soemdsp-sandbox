@@ -31,17 +31,22 @@
   };
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
-  const state = { view: "A", hover: "" };
+  const SLOT_KEY = "soemdsp-sandbox.ioPillSlot.v1";
+  const SLOTS = ["bottom", "mid", "top"];
+  const state = { view: "A", hover: "", slot: "top" };
 
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved === "A" || saved === "B" || saved === "C") state.view = saved;
+    const slot = window.localStorage.getItem(SLOT_KEY);
+    if (SLOTS.includes(slot)) state.slot = slot;
   } catch { /* storage unavailable: keep the default */ }
 
   function applyBodyState() {
     const body = document.body;
     if (!body) return;
     body.setAttribute("data-io-view", state.view);
+    body.setAttribute("data-io-slot", state.slot);
     body.setAttribute("data-io-collapse", VIEWS[state.view].collapseUnused ? "1" : "0");
   }
 
@@ -105,16 +110,48 @@
   window.nodeGraphIoView = () => state.view;
   window.nodeGraphIoViewConfig = () => VIEWS[state.view];
   /** Extra module height (grid cells) the view needs: View C reserves the jack stack at the bottom. */
-  window.nodeGraphIoViewExtraHeightGu = () => 0;
-  /** IO view C: the strip (grid cells) at the top of each module's shell, between the title and the display. */
-  window.nodeGraphIoViewStripGu = (type) => {
-    if (!VIEWS[state.view].panel) return 0;
-    return typeof nodeGraphModuleUsesLayoutB === "function" && nodeGraphModuleUsesLayoutB(type) ? 15 / 28 : 0;
+  const usesLayoutB = (type) => typeof nodeGraphModuleUsesLayoutB === "function" && nodeGraphModuleUsesLayoutB(type);
+  /** IO view C, "mid": a strip (grid cells) between the display and the sliders, only where there are sliders. */
+  window.nodeGraphIoViewExtraHeightGu = (type) => {
+    if (!VIEWS[state.view].panel || state.slot !== "mid" || !usesLayoutB(type)) return 0;
+    const sliders = typeof nodeGraphModuleSliderBodyHeightGu === "function" ? nodeGraphModuleSliderBodyHeightGu(type, null, null) : 0;
+    return sliders > 0 ? 15 / 28 : 0;
   };
+  /** IO view C, "top": a strip (grid cells) at the top of each module's shell, between the title and the display. */
+  window.nodeGraphIoViewStripGu = (type) => (
+    VIEWS[state.view].panel && state.slot === "top" && usesLayoutB(type) ? 15 / 28 : 0
+  );
+  /** Where View C puts the pills: "bottom" | "mid" | "top". */
+  window.nodeGraphIoViewPillSlot = () => state.slot;
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
-  /** Shift+Tab: View C, and back to A. */
-  window.toggleNodeGraphIoViewC = () => setView(state.view === "C" ? "A" : "C");
+  /** Shift+Tab: enter View C; in View C it cycles the pill slot (bottom, mid, top). Tab leaves C. */
+  window.toggleNodeGraphIoViewC = () => {
+    if (state.view !== "C") return setView("C");
+    state.slot = SLOTS[(SLOTS.indexOf(state.slot) + 1) % SLOTS.length];
+    try { window.localStorage.setItem(SLOT_KEY, state.slot); } catch { /* ignore */ }
+    state.hover = "";
+    pinned = false;
+    if (typeof nodeGraphGlGraphState === "object") nodeGraphGlGraphState.ioExpanded = null;
+    applyBodyState();
+    resyncModuleSizes();
+    refreshGeometry();
+    redraw();
+    return state.view;
+  };
+  window.setNodeGraphIoPillSlot = (slot) => {
+    if (!SLOTS.includes(slot)) return state.slot;
+    state.slot = slot;
+    try { window.localStorage.setItem(SLOT_KEY, slot); } catch { /* ignore */ }
+    state.hover = "";
+    pinned = false;
+    if (typeof nodeGraphGlGraphState === "object") nodeGraphGlGraphState.ioExpanded = null;
+    applyBodyState();
+    resyncModuleSizes();
+    refreshGeometry();
+    redraw();
+    return slot;
+  };
 
   /** A cable is hidden (its jack dots stay) per the view's `wires` setting. */
   window.nodeGraphIoViewHidesWire = (sourceNode, destinationNode) => {
