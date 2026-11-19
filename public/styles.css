@@ -26211,3 +26211,8 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
 .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column.input { left: 0; }
 .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column.output { right: 0; }
 .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-solid-module-custom-ui { grid-column: 1 / -1; }
+
+/* IO view with collapseUnused (View A): unconnected jacks leave the rail so the connected ones sit at the top. Rows with a parameter jack stay. */
+body[data-io-collapse="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell .node-io-row:not(:has(.connected-port)):not(:has(.node-param-port)) {
+  display: none !important;
+}

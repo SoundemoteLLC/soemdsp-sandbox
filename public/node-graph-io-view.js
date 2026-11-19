@@ -17,9 +17,11 @@
   //   dots    the wire end dots (always drawn where a cable ends)
   //   wires   "all" | "hover" (only cables at the hovered module) | "none"
   //   veil    alpha of the dark veil over each module under its IO (0 = none)
+  //   collapseUnused  unconnected jacks leave the rail, so the connected ones stack up from the top
+  //                   (module sizes do not change: that is only where the jacks sit)
   const VIEWS = {
-    A: { jacks: false, labels: "off", wires: "all", veil: 0 },
-    B: { jacks: true, labels: "full", wires: "all", veil: 0.55 },
+    A: { jacks: false, labels: "off", wires: "all", veil: 0, collapseUnused: true },
+    B: { jacks: true, labels: "full", wires: "all", veil: 0.55, collapseUnused: false },
   };
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
@@ -29,6 +31,19 @@
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved === "A" || saved === "B") state.view = saved;
   } catch { /* storage unavailable: keep the default */ }
+
+  function applyBodyState() {
+    const body = document.body;
+    if (!body) return;
+    body.setAttribute("data-io-view", state.view);
+    body.setAttribute("data-io-collapse", VIEWS[state.view].collapseUnused ? "1" : "0");
+  }
+
+  /** Jack positions follow the rows, so they are read again from the DOM after the view changes the rows. */
+  function refreshGeometry() {
+    if (typeof nodeGraphModuleGeometryInvalidateAll === "function") nodeGraphModuleGeometryInvalidateAll();
+    if (typeof nodeGraphModuleGeometryPublishVisible === "function") nodeGraphModuleGeometryPublishVisible();
+  }
 
   function redraw() {
     if (typeof drawNodeGraphWires === "function") {
@@ -46,7 +61,8 @@
     state.view = next;
     state.hover = "";
     try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
-    document.body?.setAttribute("data-io-view", next);
+    applyBodyState();
+    refreshGeometry();
     redraw();
     return state.view;
   }
@@ -104,5 +120,6 @@
     window.toggleNodeGraphIoView();
   }, true);
 
-  document.addEventListener("DOMContentLoaded", () => document.body?.setAttribute("data-io-view", state.view), { once: true });
+  if (document.body) applyBodyState();
+  else document.addEventListener("DOMContentLoaded", applyBodyState, { once: true });
 })();
