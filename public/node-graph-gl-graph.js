@@ -1063,50 +1063,22 @@ function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, b
 }
 
 /**
- * Every IO jack is a cutout: a hard-edged half disc through the module, its inner half, showing the workspace
- * behind. The plate cut its own notch (stroke wraps it); this cuts the display too and draws the rim over it.
- * Plain geometry, no feather, so it never reads as a sticker.
+ * Jack cutouts through a module's display picture, in world units: the same hole the plate shader cuts
+ * (radius minus the rim width, inner half only), so the display, plate and stroke are cut by one shape.
  */
-function nodeGraphGlGraphDrawJackHalves(batch, plate, toX, toY, zoom, plateStyle) {
-  const jacks = nodeGraphGlGraphState.chrome?.jacks || [];
-  const strokeW = Number.parseFloat(plateStyle.getPropertyValue("--node-module-idle-stroke-width")) || 1;
-  const rim = Math.max(1, strokeW * zoom);
-  const bg = nodeGraphGlGraphJackBackdrop();
-  const hole = [bg[0], bg[1], bg[2], 1];
-  for (let i = 0; i < jacks.length; i += 1) {
+function nodeGraphGlGraphJackHoles(jacks, plateStyle, cameraZoom, device) {
+  const strokeCss = Number.parseFloat(plateStyle.getPropertyValue("--node-module-idle-stroke-width")) || 1;
+  const k = Math.max(0.0001, cameraZoom * device);
+  const rimWorld = Math.max(1, Math.floor(strokeCss * k + 0.5)) / k;
+  const holes = [];
+  for (let i = 0; i < jacks.length && holes.length < 16; i += 1) {
     const jack = jacks[i];
-    if (jack.id !== plate.id || jack.rail) continue;
-    const lit = jack.lit || nodeGraphGlGraphJackDragging(jack);
-    const rgba = lit ? nodeGraphGlGraphLitStroke(jack.rgba) : nodeGraphGlGraphUnlitStroke(jack.rgba);
-    const cx = toX(jack.x);
-    const cy = toY(jack.y);
-    const r = jack.r * zoom;
-    const sign = jack.io === "output" ? -1 : 1;
-    if (jack.square) {
-      nodeGraphGlLinesRect(batch, sign > 0 ? cx : cx - r, cy - r, r, 2 * r, hole);
-      const outline = [cx, cy - r + rim * 0.5, cx + sign * (r - rim * 0.5), cy - r + rim * 0.5, cx + sign * (r - rim * 0.5), cy + r - rim * 0.5, cx, cy + r - rim * 0.5];
-      nodeGraphGlLinesPolyline(batch, outline, rim * 0.5, 0, rgba, "square");
-      continue;
-    }
-    const n = 40;
-    let px = cx;
-    let py = cy - r;
-    for (let s = 1; s <= n; s += 1) {
-      const a = -Math.PI / 2 + (Math.PI * s) / n;
-      const x = cx + sign * r * Math.cos(a);
-      const y = cy + r * Math.sin(a);
-      nodeGraphGlLinesTriangle(batch, cx, cy, px, py, x, y, hole);
-      px = x;
-      py = y;
-    }
-    const arc = [];
-    const rr = r - rim * 0.5;
-    for (let s = 0; s <= n; s += 1) {
-      const a = -Math.PI / 2 + (Math.PI * s) / n;
-      arc.push(cx + sign * rr * Math.cos(a), cy + rr * Math.sin(a));
-    }
-    nodeGraphGlLinesPolyline(batch, arc, rim * 0.5, 0, rgba);
+    if (jack.rail) continue;
+    const r = Math.max(0, jack.r - rimWorld);
+    if (!(r > 0)) continue;
+    holes.push({ x: jack.x, y: jack.y, r: jack.square ? -r : r, side: jack.io === "output" ? -1 : 1 });
   }
+  return holes;
 }
 
 /** Module opted in to drawing its jacks and labels over its display (definition.ioOverlay). */
@@ -1134,7 +1106,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   let color = selected ? borderOn : borderIdle;
   // The dim covers the body only. Its stroke is transparent: darkening the stroke band and then
   // redrawing a translucent stroke over it left the (loudness-animated) stroke dimmed by the room.
-  if (mode === "dim") color = [0, 0, 0, 0];
+  if (mode === "dim" || mode === "rim") color = [0, 0, 0, 0];
   // "shine": the module reflecting the mouse lamp, in its own stroke colour (strongest near the lamp).
   if (mode === "shine") color = [color[0], color[1], color[2], 0.5];
   const plateJacks = [];
@@ -1169,10 +1141,10 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     const round = look
       ? [look.topRadius * zoom, look.topShape, look.bottomRadius * zoom, look.bottomShape, (look.strokeTopRadius ?? look.topRadius) * zoom]
       : null;
-    const fill = mode === "dim" ? [0, 0, 0, dark]
+    const fill = mode === "rim" ? [0, 0, 0, 0] : mode === "dim" ? [0, 0, 0, dark]
       : (mode === "emit" ? [0, 0, 0, 0]
         : (mode === "shine" ? [color[0], color[1], color[2], 0.28] : plate.fill));
-    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, fill, cuts, round, mode === "dim" || mode === "shine" ? "" : plate.id, selected === true, mode === "dim" ? true : (mode === "shine" ? 2 : false));
+    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, fill, cuts, round, mode === "dim" || mode === "shine" ? "" : plate.id, selected === true, mode === "dim" ? true : (mode === "shine" ? 2 : (mode === "rim" ? 5 : false)));
   }
 }
 
@@ -3201,6 +3173,7 @@ function nodeGraphGlGraphPresent(options = {}) {
           });
           if (picture) {
             picture.pin = pin;
+            picture.holes = nodeGraphGlGraphJackHoles(chromeById?.get(face.id)?.jacks || [], plateStyle, frameCamera?.zoom || layoutZoom, batch.scale || 1);
             pictures.push(picture);
           }
         }
@@ -3216,7 +3189,7 @@ function nodeGraphGlGraphPresent(options = {}) {
         ioLayer = ioLayer || nodeGraphGlLinesLayer(batch);
         if (!ioLayer) break;
         nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
-        nodeGraphGlGraphDrawJackHalves(ioLayer, plate, toX, toY, layoutZoom, plateStyle);
+        nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "rim");
         nodeGraphGlGraphDrawLabels(ioLayer, toX, toY, layoutZoom, cssW, cssH);
         nodeGraphGlGraphState.chrome = chromeAll;
       }

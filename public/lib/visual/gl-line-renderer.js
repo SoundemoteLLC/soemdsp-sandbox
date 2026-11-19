@@ -304,7 +304,7 @@ uniform vec2 uVp;
 uniform float uDevice;
 varying vec2 vUv;
 varying vec4 vTint;
-varying vec2 vWorld;
+varying highp vec2 vWorld;
 void main() {
   vWorld = position;
   if (uPixel > 0.5) {
@@ -328,10 +328,21 @@ uniform float mode;
 // (x, y, radius, strength) lifts that dimming around the cursor, so text near it gets brighter.
 uniform float uTextDark;
 uniform vec4 uLamp;
+// Jack cutouts through a picture (camera mode, world units): (x, y, radius, side). Radius < 0 = square jack.
+// side is +1 where the module's inside is to the right of the jack, -1 to the left. Hard edged.
+uniform int uHoleCount;
+uniform highp vec4 uHoles[16];
 varying vec2 vUv;
 varying vec4 vTint;
-varying vec2 vWorld;
+varying highp vec2 vWorld;
 void main() {
+  for (int i = 0; i < 16; i++) {
+    if (i >= uHoleCount) break;
+    highp vec4 h = uHoles[i];
+    highp vec2 d = vWorld - h.xy;
+    highp float dist = h.z < 0.0 ? max(abs(d.x), abs(d.y)) : length(d);
+    if (dist <= abs(h.z) && d.x * h.w >= 0.0) discard;
+  }
   vec4 c = texture2D(tex, vUv);
   if (mode > 2.5) {
     // Premultiplied colour emoji x tint alpha.
@@ -645,15 +656,22 @@ void main() {
     }
     sdStroke = sLen + min(max(sq.x, sq.y), 0.0) - sR;
   }
-  // The plate is the rectangle minus the inside half of every jack (a disk,
-  // or a square for param jacks, centred on the wall). sd > 0 is outside it.
-  // Param and signal jacks take this one path.
+  // Jacks are cutouts, defined by distance from the jack centre (on the wall). Radius R = the jack's radius;
+  // strokePx is the rim width.
+  //   hole: the inner half within R - rim of the centre. Nothing is drawn there: no plate, no stroke.
+  //   rim:  the inner half from R - rim to R, in the jack colour, hard edged (no smoothing).
+  //   wall: the module stroke is removed inside R on both sides of the wall, so it ends at the rim and never
+  //         overlaps or cuts it.
+  // The plate itself stays the plain rectangle. A square (param) jack uses the same rule with a square distance.
   float sd = sdRect;
   vec4 strokeCol = uPlateColor;
-  // True where a round jack shapes the edge (its curve), not the wall.
   float jackEdge = 0.0;
-  // 1 where the jack shaping this pixel fills its hole with uJackBackdrop.
   float jackHole = 0.0;
+  float jackRimW = uPixel > 0.5 ? strokeW : max(1.0, floor(strokeW + 0.5));
+  float hole = 0.0;
+  float rim = 0.0;
+  float wallClear = 0.0;
+  vec4 rimCol = vec4(0.0);
   for (int i = 0; i < 24; i++) {
     if (i >= uCount) break;
     vec2 jack = uJack[i].xy;
@@ -665,17 +683,28 @@ void main() {
     }
     float square = radius < 0.0 ? 1.0 : 0.0;
     radius = abs(radius);
-    float d = square > 0.5
-      ? max(abs(px.x - jack.x), abs(px.y - jack.y)) - radius
-      : length(px - jack) - radius;
-    sdStroke = max(sdStroke, -d);
-    if (-d > sd) {
-      sd = -d;
-      strokeCol = vec4(uJackColor[i].rgb, uJackColor[i].a); // the plate passes each jack stroke its own alpha (lit jacks: 1)
-      jackEdge = 1.0 - square;
-      jackHole = uJack[i].w > 1.5 ? 1.0 : 0.0;
+    vec2 dv = px - jack;
+    float dist = square > 0.5 ? max(abs(dv.x), abs(dv.y)) : length(dv);
+    float side = jack.x < c.x ? 1.0 : -1.0;
+    if (dist <= radius) {
+      wallClear = 1.0;
+      if (dv.x * side >= 0.0) {
+        if (dist <= radius - jackRimW) {
+          hole = 1.0;
+        } else {
+          rim = 1.0;
+          rimCol = uJackColor[i];
+        }
+      }
     }
   }
+  // Rim-only pass (uDimShape 5): drawn over the display, so only the rim.
+  if (uDimShape > 4.5) {
+    if (rim < 0.5) discard;
+    gl_FragColor = rimCol;
+    return;
+  }
+  if (hole > 0.5) discard;
   // Stroke glow (uDimShape 4): one smooth exponential falloff outside the plate, radius uStroke, in
   // the plate colour. The stroke is a light source: this does not depend on the mouse lamp.
   if (uDimShape > 3.5) {
@@ -753,6 +782,14 @@ void main() {
     if (wall && px.y >= cy0 && px.y < cy1) { band = 0.0; bandOut = 0.0; bandIn = 0.0; }
   }
   // Stroke and fill cover disjoint parts of the pixel, so they add.
+  if (rim > 0.5) {
+    if (uDimShape > 0.5) discard;
+    gl_FragColor = rimCol;
+    return;
+  }
+  // The module stroke stops at the rim.
+  bandOut *= 1.0 - wallClear;
+  bandIn *= 1.0 - wallClear;
   float strokeA = bandOut * strokeCol.a;
   float plateA = (1.0 - inner) * uFill.a;
   // Behind the fill: what the fill lets through (fill alpha is per covered area, so the hidden band
@@ -775,10 +812,6 @@ void main() {
   // A flagged jack's hole inside the plate rectangle: the workspace background under its ring, opaque,
   // so the module's stroke light (it follows loudness) does not show through the jack.
   float holeA = 0.0;
-  if (jackHole > 0.5 && uDimShape < 0.5) {
-    float inRect = clamp(-sdRect / aa + 0.5, 0.0, 1.0);
-    holeA = max(0.0, inRect - strokeA - plateA - behindA);
-  }
   strokeA += behindA;
   float a = strokeA + plateA + holeA;
   if (a < 0.004) discard;
@@ -912,6 +945,8 @@ void main() {
         imgTextDark: gl.getUniformLocation(imgProgram, "uTextDark"),
         imgLamp: gl.getUniformLocation(imgProgram, "uLamp"),
         imgModeLoc: gl.getUniformLocation(imgProgram, "mode"),
+        imgHoleCount: gl.getUniformLocation(imgProgram, "uHoleCount"),
+        imgHoles: gl.getUniformLocation(imgProgram, "uHoles"),
         imgCamPixel: gl.getUniformLocation(imgProgram, "uPixel"),
         imgCamCam: gl.getUniformLocation(imgProgram, "uCam"),
         imgCamVp: gl.getUniformLocation(imgProgram, "uVp"),
@@ -2587,6 +2622,8 @@ void main() {
     gl.useProgram(s.imgProgram);
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform1i(s.imgTexLoc, 0);
+    // Jack holes are per picture (drawImages sets them); every other textured draw has none.
+    if (s.imgHoleCount) gl.uniform1i(s.imgHoleCount, 0);
   }
 
   function nodeGraphGlLinesSnapImageQuad(batch, im) {
@@ -2676,6 +2713,19 @@ void main() {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.uniform1f(s.imgAlphaLoc, im.alpha);
+      // Jack cutouts through this picture (camera mode only: they are in world units).
+      const holes = batch.camera && Array.isArray(im.holes) ? im.holes.slice(0, 16) : [];
+      if (s.imgHoleCount) gl.uniform1i(s.imgHoleCount, holes.length);
+      if (holes.length && s.imgHoles) {
+        const hd = new Float32Array(64);
+        for (let hi = 0; hi < holes.length; hi += 1) {
+          hd[hi * 4] = holes[hi].x;
+          hd[hi * 4 + 1] = holes[hi].y;
+          hd[hi * 4 + 2] = holes[hi].r;
+          hd[hi * 4 + 3] = holes[hi].side;
+        }
+        gl.uniform4fv(s.imgHoles, hd);
+      }
       const snapped = nodeGraphGlLinesSnapImageQuad(batch, im);
       const x0 = snapped.x0; const x1 = snapped.x1; const y0 = snapped.y0; const y1 = snapped.y1;
       if (im.tint) {
@@ -3691,7 +3741,7 @@ void main() {
     const backdropJack = list.find((j) => j.backdrop);
     batch.outlines.push({
       jackBackdrop: backdropJack ? backdropJack.backdrop : null,
-      nodeId, selected: selected === true, dimShape: dimShape === true ? 1 : ([2, 3, 4].includes(Number(dimShape)) ? Number(dimShape) : 0), glow: Number(glow) > 0 ? Number(glow) : 0, x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
+      nodeId, selected: selected === true, dimShape: dimShape === true ? 1 : ([2, 3, 4, 5].includes(Number(dimShape)) ? Number(dimShape) : 0), glow: Number(glow) > 0 ? Number(glow) : 0, x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
       fill: fill || [0.09, 0.1, 0.12, 1],
       jacks: list,
       cuts: (Array.isArray(cuts) ? cuts : []).slice(0, CUT_MAX).map((c) => [c.y0 * k, c.y1 * k, c.side < 0 ? -1 : 1, 0]),
