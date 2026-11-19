@@ -2686,12 +2686,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   viewOut: {
     category: "rgba",
-    description: "The circuit view as a picture on 📺 (last frame on screen). Into effects, then Screen Out for feedback.",
+    description: "Screen Space In: the circuit view as a picture on 📺 (last frame on screen). Into effects, then Screen Space Out for feedback.",
     notes: ["screen space", "view", "feedback", "picture"],
   },
   screenOut: {
     category: "rgba",
-    description: "Its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
+    description: "Screen Space Out: its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
     notes: ["screen space", "screen", "feedback", "picture"],
   },
   bloomGlow: {

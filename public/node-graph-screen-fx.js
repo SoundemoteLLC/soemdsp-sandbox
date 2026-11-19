@@ -1,11 +1,11 @@
 // Circuit view on the 📺 picture pipeline (one path):
-//   View Out     source: last frame's on-screen circuit view on its 📺 out.
-//   Screen Out   sink: its 📺 in replaces the circuit area on screen.
+//   Screen Space In     source: last frame's on-screen circuit view on its 📺 out.
+//   Screen Space Out   sink: its 📺 in replaces the circuit area on screen.
 //   Screen Space Shader  picture effect: 📺 in -> GLSL -> 📺 out, like Aberration.
 // Each frame: the GL graph's workspace canvases (plates, cables, dots, faces)
-// composite into one scene texture; the screen is Screen Out's picture, or the
+// composite into one scene texture; the screen is Screen Space Out's picture, or the
 // scene when there is none; that final picture lands on #nodeScreenFxCanvas and
-// is copied into View Out's ping-pong pair for the next frame. Every texture is
+// is copied into Screen Space In's ping-pong pair for the next frame. Every texture is
 // double-buffered: nothing is read and written in the same frame.
 
 const NODE_GRAPH_SCREEN_FX_MAX = 4096;
@@ -376,7 +376,7 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
       if (face?.texture) nodeGraphScreenFxDraw(kit, st.scene, kit.layer, [face.texture]);
     }
     gl.disable(gl.BLEND);
-    // 3. Screen: Screen Out's picture, else the plain scene.
+    // 3. Screen: Screen Space Out's picture, else the plain scene.
     let screen = null;
     for (const id of nodes.screenOuts) {
       screen = typeof nodeGraphPictureRead === "function" ? nodeGraphPictureRead(id, "rgba") : null;
@@ -390,7 +390,7 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
       nodeGraphScreenFxDraw(kit, st.screen, kit.copy, [screen.texture]);
       final = st.screen;
     }
-    // 4. View Out: this frame's screen into the view texture nobody reads now, published for the next frame.
+    // 4. Screen Space In: this frame's screen into the view texture nobody reads now, published for the next frame.
     if (nodes.viewOuts.length) {
       st.views[0] = nodeGraphScreenFxSurface(gl, w, h, st.views[0]);
       st.views[1] = nodeGraphScreenFxSurface(gl, w, h, st.views[1]);
@@ -420,7 +420,7 @@ function nodeGraphScreenFxTick() {
   const host = document.getElementById("nodeGraphWorkspace");
   if (!host) return;
   const nodes = nodeGraphScreenFxNodes();
-  // The circuit view is a picture only while View Out or Screen Out is in the patch.
+  // The circuit view is a picture only while Screen Space In or Screen Space Out is in the patch.
   const onScreen = (nodes.viewOuts.length > 0 || nodes.screenOuts.length > 0)
     && host.classList.contains("gl-graph-on") && host.clientWidth > 0;
   nodeGraphScreenFxSetActive(host, onScreen);
