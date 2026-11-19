@@ -72,7 +72,8 @@ function drawNodeGraphScreenBendFaceItem(_renderer, item) {
     nodeGraphGlLinesFillBlack(canvas);
     return;
   }
-  const renderer = nodeGraphScreenBendGlEnsure(canvas, canvas.width, canvas.height);
+  // Render at the size of the picture coming in (the whole screen for Screen Space In), not the small face; the face shows it scaled down.
+  const renderer = nodeGraphScreenBendGlEnsure(canvas, picture?.width > 0 ? picture.width : canvas.width, picture?.height > 0 ? picture.height : canvas.height);
   if (!renderer) {
     nodeGraphGlLinesFillBlack(canvas);
     return;
