@@ -40,15 +40,6 @@
       "folder": "bugs"
     },
     {
-      "slug": "bugs/final out test",
-      "label": "final out test",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/final%20out%20test.json",
-      "author": "",
-      "emoji": "",
-      "folder": "bugs"
-    },
-    {
       "slug": "bugs/jittery plot",
       "label": "jittery plot",
       "name": "",
@@ -98,15 +89,6 @@
       "label": "scangrid",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/scangrid.json",
-      "author": "",
-      "emoji": "",
-      "folder": "bugs"
-    },
-    {
-      "slug": "bugs/stroke animation not working per module",
-      "label": "stroke animation not working per module",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/stroke%20animation%20not%20working%20per%20module.json",
       "author": "",
       "emoji": "",
       "folder": "bugs"
@@ -215,6 +197,15 @@
       "label": "DSF_brightness_pluck",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/DSF_brightness_pluck.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/generationloss",
+      "label": "generationloss",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/generationloss.json",
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
@@ -877,14 +868,6 @@
       "emoji": ""
     },
     {
-      "slug": "final out test",
-      "label": "final out test",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/final%20out%20test.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
       "slug": "flowerchild",
       "label": "flowerchild",
       "name": "",
@@ -913,6 +896,14 @@
       "label": "frequencysweep",
       "name": "",
       "url": "/soemdsp-sandbox/patches/frequencysweep.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "generationloss",
+      "label": "generationloss",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/generationloss.json",
       "author": "",
       "emoji": ""
     },
@@ -1545,14 +1536,6 @@
       "label": "stepregister",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/stepregister.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
-      "slug": "stroke animation not working per module",
-      "label": "stroke animation not working per module",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/stroke%20animation%20not%20working%20per%20module.json",
       "author": "",
       "emoji": ""
     },
