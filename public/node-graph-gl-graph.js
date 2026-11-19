@@ -4513,6 +4513,14 @@ function nodeGraphGlHitPointerDown(event) {
     }
     return;
   }
+  // Any press on a module (title, plate, jack, label or slider) draws it in front, selected or not, dragged or not.
+  if (typeof nodeGraphModuleRaiseToFront === "function") {
+    const hitModule = hit.id
+      || hit.jack?.id
+      || (hit.el || hit.readout)?.closest?.(".dsp-node")?.dataset?.node
+      || "";
+    if (hitModule) nodeGraphModuleRaiseToFront(hitModule);
+  }
   if (hit.kind === "slider" && hit.readout) {
     const row = hit.readout.closest?.(".node-parameter-row")
       || hit.readout.closest?.("label")?.closest?.(".node-parameter-row");

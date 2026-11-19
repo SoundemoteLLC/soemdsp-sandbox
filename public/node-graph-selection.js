@@ -76,6 +76,10 @@ function setNodeGraphSelection(selection) {
   if (!selection || (selection.type !== "node" && selection.type !== "nodes")) {
     nodeGraphMvp.selectionOrder = [];
   }
+  // The module you just clicked is drawn in front of the others (a temporary order, not saved).
+  if (selection?.type === "node" && typeof nodeGraphModuleRaiseToFront === "function") {
+    nodeGraphModuleRaiseToFront(selection.id);
+  }
   const selectedNode = nodeGraphSingleSelectedNodeId(selection);
   if (selectedNode && nodeGraphPatchNode(selectedNode)) {
     nodeGraphMvp.lastModuleActionTargetNode = selectedNode;
@@ -472,8 +476,6 @@ function setNodeGraphNodeSelection(ids) {
   nodeGraphMvp.selectionOrder = ordered;
   if (ordered.length === 1) {
     setNodeGraphSelection({ type: "node", id: ordered[0] });
-    // The module you just clicked is drawn in front.
-    if (typeof nodeGraphModuleRaiseToFront === "function") nodeGraphModuleRaiseToFront(ordered[0]);
     return;
   }
   setNodeGraphSelection({ type: "nodes", ids: ordered });
