@@ -1,4 +1,4 @@
-const NODE_GRAPH_SCREEN_BEND_GL_REV = 1;
+const NODE_GRAPH_SCREEN_BEND_GL_REV = 2;
 const NODE_GRAPH_SCREEN_BEND_MAX = 512;
 
 (function initNodeGraphScreenBendGl(global) {
@@ -19,16 +19,20 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
     }
   `;
 
-  // Width bows the sides (x grows with y²). Height bows the top and bottom.
-  // Positive is outer, like a CRT glass. Negative pinches inward.
-  // Full knob throw is 0.42, strong without folding the picture over itself.
+  // Screen Glass. Width bows the sides (x grows with y²), Height bows the top and bottom. Positive is outer, like a CRT glass,
+  // negative pinches inward. Full knob throw is 0.42, strong without folding the picture over itself.
+  // Then the glass itself: Roundness shapes the screen edge as a squircle (a superellipse, |x|^n + |y|^n = 1: n 40 is a
+  // plain rectangle, n 4 a squircle, n 2 an ellipse), Vignette darkens toward the edges, Glare is a soft reflection on the glass.
   const FRAG = `
-    precision mediump float;
+    precision highp float;
     varying vec2 vUv;
     uniform sampler2D uPic;
     uniform float uHasPic;
     uniform float uWidth;
     uniform float uHeight;
+    uniform float uRound;
+    uniform float uVignette;
+    uniform float uGlare;
 
     void main() {
       vec2 p = vUv * 2.0 - 1.0;
@@ -36,13 +40,27 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
       q.x *= 1.0 + uWidth * 0.42 * p.y * p.y;
       q.y *= 1.0 + uHeight * 0.42 * p.x * p.x;
       vec2 uv = q * 0.5 + 0.5;
-      float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+      vec2 e = vec2(0.003);
+      float inside = smoothstep(0.0, e.x, uv.x) * smoothstep(0.0, e.x, 1.0 - uv.x)
+                   * smoothstep(0.0, e.y, uv.y) * smoothstep(0.0, e.y, 1.0 - uv.y);
       vec3 col = vec3(0.0);
-      if (uHasPic > 0.5 && inside > 0.5) {
+      if (uHasPic > 0.5 && inside > 0.0) {
         vec4 t = texture2D(uPic, uv);
-        col = t.a > 1e-4 ? t.rgb / t.a : vec3(0.0);
+        col = (t.a > 1e-4 ? t.rgb / t.a : vec3(0.0)) * inside;
       }
-      gl_FragColor = vec4(col, 1.0);
+      // Glass edge: superellipse exponent from Roundness (0 = square corners, 1 = ellipse).
+      float n = 2.0 + 38.0 * pow(1.0 - clamp(uRound, 0.0, 1.0), 2.0);
+      vec2 a = pow(abs(p), vec2(n));
+      float d = pow(a.x + a.y, 1.0 / n);
+      float mask = 1.0 - smoothstep(0.985, 1.0, d);
+      // Vignette: the edges of the glass fall away from the middle.
+      col *= 1.0 - clamp(uVignette, 0.0, 1.0) * smoothstep(0.3, 1.15, length(p));
+      // Glare: a soft window-like reflection up in the corner, plus a faint sheen along the rim.
+      vec2 g = (p - vec2(-0.42, 0.5)) * vec2(1.1, 1.7);
+      float blob = exp(-dot(g, g) * 2.6);
+      float rim = smoothstep(0.84, 0.985, d);
+      col += clamp(uGlare, 0.0, 1.0) * (0.32 * blob + 0.07 * rim) * vec3(1.0);
+      gl_FragColor = vec4(col * mask, 1.0);
     }
   `;
 
@@ -103,6 +121,9 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
       uHasPic: gl.getUniformLocation(program, "uHasPic"),
       uWidth: gl.getUniformLocation(program, "uWidth"),
       uHeight: gl.getUniformLocation(program, "uHeight"),
+      uRound: gl.getUniformLocation(program, "uRound"),
+      uVignette: gl.getUniformLocation(program, "uVignette"),
+      uGlare: gl.getUniformLocation(program, "uGlare"),
     };
     return sharedDevice;
   }
@@ -204,6 +225,9 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
     gl.uniform1f(device.uHasPic, options.picture?.texture ? 1 : 0);
     gl.uniform1f(device.uWidth, Number(options.width) || 0);
     gl.uniform1f(device.uHeight, Number(options.height) || 0);
+    gl.uniform1f(device.uRound, Number(options.round) || 0);
+    gl.uniform1f(device.uVignette, Number(options.vignette) || 0);
+    gl.uniform1f(device.uGlare, Number(options.glare) || 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, null);

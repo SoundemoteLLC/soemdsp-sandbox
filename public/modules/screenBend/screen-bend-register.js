@@ -1,6 +1,6 @@
-// Screen Bend — bow a picture like a curved tube. Width and Height are bipolar.
+// Screen Glass (type id screenBend) — a picture seen through curved glass: bow, squircle edge, vignette, glare.
 registerNodeGraphChromelessModule("screenBend", {
-  label: "Screen Bend",
+  label: "Screen Glass",
   solidModule: false,
   customDisplayArea: true,
   definition: {
@@ -28,7 +28,7 @@ registerNodeGraphChromelessModule("screenBend", {
     outputs: ["rgba"],
     outputLabels: { rgba: "📺" },
     outputTooltips: {
-      rgba: "Picture out, bowed as if on a curved screen.",
+      rgba: "Picture out, seen through curved glass.",
     },
     parameters: [
       {
@@ -57,14 +57,50 @@ registerNodeGraphChromelessModule("screenBend", {
         step: "any",
         tooltip: "Vertical bow. 0 is flat. Positive bows the top and bottom outward. Negative bows them inward.",
       },
+      {
+        bipolar: false,
+        defaultValue: "0.4",
+        key: "round",
+        label: "Roundness",
+        linearSmoothing: false,
+        max: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Squircle screen edge. 0 is a sharp rectangle, around 0.7 a squircle, 1 an ellipse.",
+      },
+      {
+        bipolar: false,
+        defaultValue: "0.35",
+        key: "vignette",
+        label: "Vignette",
+        linearSmoothing: false,
+        max: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Darkens the picture toward the edges of the glass. 0 is off.",
+      },
+      {
+        bipolar: false,
+        defaultValue: "0.15",
+        key: "glare",
+        label: "Glare",
+        linearSmoothing: false,
+        max: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "A soft reflection on the glass and a faint sheen along its rim. 0 is off.",
+      },
     ],
     visualSink: true,
   },
   catalog: {
     category: "rgba",
     description:
-      "Bows a picture onto a curved screen. Width bows the sides, Height bows the top and bottom. "
-      + "Positive is an outer CRT bend. Negative is an inner bend.",
-    notes: ["screen bend", "crt", "curve", "barrel", "pincushion", "picture", "shader", "LayoutA"],
+      "Screen Glass: a picture seen through curved glass. Width and Height bow it (positive is an outer CRT bend, negative inner), "
+      + "Roundness shapes the screen edge as a squircle, Vignette darkens the edges, Glare adds a reflection.",
+    notes: ["screen glass", "screen bend", "crt", "curve", "barrel", "pincushion", "squircle", "vignette", "glare", "picture", "shader", "LayoutA"],
   },
 });

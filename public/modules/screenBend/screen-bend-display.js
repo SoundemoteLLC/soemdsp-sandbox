@@ -83,6 +83,9 @@ function drawNodeGraphScreenBendFaceItem(_renderer, item) {
       nodeId,
       width: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "width", 0.55), -1, 1),
       height: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "height", 0.55), -1, 1),
+      round: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "round", 0.4), 0, 1),
+      vignette: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vignette", 0.35), 0, 1),
+      glare: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glare", 0.15), 0, 1),
       picture,
     });
   }

@@ -3062,7 +3062,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   rgbPictureFace: "Picture",
   imageBurnFace: "Image Ghost",
   aberrationFace: "Aberration",
-  screenBendFace: "Screen Bend",
+  screenBendFace: "Screen Glass",
   placeFace: "Place",
   videoFeedbackFace: "Spectrum Circle",
   rgbFractalFace: "Soft Fractal",
