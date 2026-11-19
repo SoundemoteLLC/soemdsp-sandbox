@@ -26187,12 +26187,12 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
   height: 100%;
 }
 
-/* fBf (fbmField), LayoutB: the display runs the full module width and the jacks overlay its left/right edges, so the display never moves inward for IO. */
-.dsp-node[data-node-type="fbmField"] > .node-solid-module-shell {
+/* LayoutB (every module): the display runs the full module width and the jacks overlay its left/right edges, so the display never moves inward for IO. */
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
   grid-template-columns: 0 minmax(0, 1fr) 0;
   position: relative;
 }
-.dsp-node[data-node-type="fbmField"] > .node-solid-module-shell > .node-io-column {
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column {
   display: grid;
   position: absolute;
   top: 0;
@@ -26203,6 +26203,6 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
   max-width: none;
   overflow: visible;
 }
-.dsp-node[data-node-type="fbmField"] > .node-solid-module-shell > .node-io-column.input { left: 0; }
-.dsp-node[data-node-type="fbmField"] > .node-solid-module-shell > .node-io-column.output { right: 0; }
-.dsp-node[data-node-type="fbmField"] > .node-solid-module-shell > .node-solid-module-custom-ui { grid-column: 1 / -1; }
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column.input { left: 0; }
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column.output { right: 0; }
+.dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-solid-module-custom-ui { grid-column: 1 / -1; }

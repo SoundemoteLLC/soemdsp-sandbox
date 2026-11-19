@@ -1062,10 +1062,41 @@ function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, b
   }
 }
 
+/**
+ * Every IO jack as a plain half circle centred on the module edge: the inner half, a stroked arc, drawn whole
+ * (a square half for square jacks). Nothing is cut out of the plate or its stroke.
+ */
+function nodeGraphGlGraphDrawJackHalves(batch, plate, toX, toY, zoom, plateStyle) {
+  const jacks = nodeGraphGlGraphState.chrome?.jacks || [];
+  const strokeW = Number.parseFloat(plateStyle.getPropertyValue("--node-module-idle-stroke-width")) || 1;
+  const half = Math.max(0.5, strokeW * zoom * 0.5);
+  for (let i = 0; i < jacks.length; i += 1) {
+    const jack = jacks[i];
+    if (jack.id !== plate.id || jack.rail) continue;
+    const lit = jack.lit || nodeGraphGlGraphJackDragging(jack);
+    const rgba = lit ? nodeGraphGlGraphLitStroke(jack.rgba) : nodeGraphGlGraphUnlitStroke(jack.rgba);
+    const cx = toX(jack.x);
+    const cy = toY(jack.y);
+    const r = jack.r * zoom;
+    const sign = jack.io === "output" ? -1 : 1;
+    const pts = [];
+    if (jack.square) {
+      pts.push(cx, cy - r, cx + sign * r, cy - r, cx + sign * r, cy + r, cx, cy + r);
+    } else {
+      const n = 20;
+      for (let s = 0; s <= n; s += 1) {
+        const a = -Math.PI / 2 + (Math.PI * s) / n;
+        pts.push(cx + sign * r * Math.cos(a), cy + r * Math.sin(a));
+      }
+    }
+    nodeGraphGlLinesPolyline(batch, pts, half, 0.75, rgba);
+  }
+}
+
 /** Module opted in to drawing its jacks and labels over its display (definition.ioOverlay). */
 function nodeGraphGlGraphIoOverlay(id) {
   const type = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id)?.type : "";
-  return Boolean(type && nodeGraphModuleDefinitions[type]?.ioOverlay);
+  return Boolean(type && typeof nodeGraphModuleUsesLayoutB === "function" && nodeGraphModuleUsesLayoutB(type));
 }
 
 function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, plateStyle, borderOn, borderIdle, mode = "", dark = 0) {
@@ -1087,7 +1118,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   let color = selected ? borderOn : borderIdle;
   // The dim covers the body only. Its stroke is transparent: darkening the stroke band and then
   // redrawing a translucent stroke over it left the (loudness-animated) stroke dimmed by the room.
-  if (mode === "dim" || mode === "jacks") color = [0, 0, 0, 0];
+  if (mode === "dim") color = [0, 0, 0, 0];
   // "shine": the module reflecting the mouse lamp, in its own stroke colour (strongest near the lamp).
   if (mode === "shine") color = [color[0], color[1], color[2], 0.5];
   const plateJacks = [];
@@ -1095,7 +1126,8 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   for (let j = 0; j < allJacks.length; j += 1) {
     const jack = allJacks[j];
     if (jack.id !== plate.id || jack.rail) continue;
-    // IO-overlay modules draw their jacks again after the display (mode "jacks"), not under it.
+    // IO overlay modules draw plain half circles over the display (nodeGraphGlGraphDrawJackHalves), with no
+    // notch cut in the plate or its stroke.
     if (mode === "" && nodeGraphGlGraphIoOverlay(plate.id)) continue;
     // Connected, or a wire is being dragged out of it right now.
     const lit = jack.lit || nodeGraphGlGraphJackDragging(jack);
@@ -1122,7 +1154,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     const round = look
       ? [look.topRadius * zoom, look.topShape, look.bottomRadius * zoom, look.bottomShape, (look.strokeTopRadius ?? look.topRadius) * zoom]
       : null;
-    const fill = mode === "jacks" ? [0, 0, 0, 0] : mode === "dim" ? [0, 0, 0, dark]
+    const fill = mode === "dim" ? [0, 0, 0, dark]
       : (mode === "emit" ? [0, 0, 0, 0]
         : (mode === "shine" ? [color[0], color[1], color[2], 0.28] : plate.fill));
     nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, fill, cuts, round, mode === "dim" || mode === "shine" ? "" : plate.id, selected === true, mode === "dim" ? true : (mode === "shine" ? 2 : false));
@@ -3169,7 +3201,7 @@ function nodeGraphGlGraphPresent(options = {}) {
         ioLayer = ioLayer || nodeGraphGlLinesLayer(batch);
         if (!ioLayer) break;
         nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
-        nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "jacks");
+        nodeGraphGlGraphDrawJackHalves(ioLayer, plate, toX, toY, layoutZoom, plateStyle);
         nodeGraphGlGraphDrawLabels(ioLayer, toX, toY, layoutZoom, cssW, cssH);
         nodeGraphGlGraphState.chrome = chromeAll;
       }

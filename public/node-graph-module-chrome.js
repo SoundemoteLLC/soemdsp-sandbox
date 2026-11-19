@@ -152,8 +152,7 @@ function nodeGraphModuleChromeLayoutForType(type) {
   const definition = typeof nodeGraphModuleDefinitions === "object"
     ? nodeGraphModuleDefinitions[normalizedType]
     : null;
-  return normalizeNodeGraphModuleChromeLayout(definition?.chrome)
-    || NodeGraphModuleChromeLayout.LayoutA;
+  return nodeGraphModuleChromeLayoutResolved(definition?.chrome);
 }
 
 /**
@@ -169,6 +168,14 @@ function nodeGraphModuleChromeLayoutForType(type) {
  * @param {Record<string, object>} entries
  * @returns {Readonly<Record<string, object>>}
  */
+/** One way to do IO: LayoutA is retired into LayoutB (jacks overlay the display edges, labels over the display). */
+function nodeGraphModuleChromeLayoutResolved(value) {
+  const layout = normalizeNodeGraphModuleChromeLayout(value);
+  return !layout || layout === NodeGraphModuleChromeLayout.LayoutA
+    ? NodeGraphModuleChromeLayout.LayoutB
+    : layout;
+}
+
 function finalizeNodeGraphModuleDefinitionsChrome(entries = {}) {
   const source = entries && typeof entries === "object" ? entries : {};
   const out = {};
@@ -178,7 +185,7 @@ function finalizeNodeGraphModuleDefinitionsChrome(entries = {}) {
     // Layout 3 (rails only): title bar + input rail | output rail, no face.
     const chrome = faceLayout === NodeGraphFaceLayout.railsOnly
       ? NodeGraphModuleChromeLayout.InletOutletLayout
-      : (normalizeNodeGraphModuleChromeLayout(def.chrome) || NodeGraphModuleChromeLayout.LayoutA);
+      : nodeGraphModuleChromeLayoutResolved(def.chrome);
     out[type] = Object.freeze({ ...def, chrome, faceLayout });
   }
   return Object.freeze(out);
