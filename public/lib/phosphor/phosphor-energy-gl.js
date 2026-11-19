@@ -104,8 +104,16 @@
       float keepFast = clamp(uKeep, 0.0, 1.0);
       float keepSlow = max(keepFast, clamp(uKeepSlow, 0.0, 0.9998));
       float e01 = clamp(e, 0.0, 1.0);
-      float keep = mix(keepSlow, keepFast, pow(e01, 12.0)); // RESIDUAL_KNEE_POWER
-      e = e01 * pow(keep, max(uFrames, 0.0));
+      // Two components (monotone: a brighter pixel never ends up darker than a dimmer one). The first 0.5 of energy
+      // is the dim tail and decays at the Ghost rate; only the energy above it is hot and decays at the Trail rate.
+      // The old per-pixel blend of the two rates made a full-energy pixel decay at the Trail rate alone, so with
+      // Trail below Ghost (e.g. Trail 0) hot pixels vanished while dimmer neighbours kept their tail: black holes
+      // inside bright areas, worse with more Bright / Build up. With Trail >= Ghost the two rates are equal and this
+      // is exactly e * keep^frames as before.
+      float frames = max(uFrames, 0.0);
+      float tailDecay = frames > 0.0 ? pow(keepSlow, frames) : 1.0;
+      float hotDecay = frames > 0.0 ? pow(keepFast, frames) : 1.0;
+      e = min(e01, 0.5) * tailDecay + max(e01 - 0.5, 0.0) * hotDecay;
       // Break 8-bit banding on long slow decays (1 LSB of UNORM8 ≈ 1/255).
       if (uQuantizeBits > 0.5) {
         float n = hash21(vUv * 1.017 + vec2(uFrame * 0.137, uFrame * 0.091));
@@ -226,6 +234,9 @@
     attribute float aCorner;
     uniform mediump vec2 uCanvasSize;
     uniform mediump float uRadius;
+    uniform mediump float uBlur;
+    uniform mediump float uGlowReach;
+    uniform mediump float uAaPx;
     varying vec2 vStart;
     varying vec2 vEnd;
     varying vec2 vPosition;
@@ -237,8 +248,9 @@
       float side = (aCorner == 0.0 || aCorner == 2.0) ? 1.0 : -1.0;
       float endpointMix = aCorner < 2.0 ? 0.0 : 1.0;
       float cap = aCorner < 2.0 ? -1.0 : 1.0;
-      // Profile reaches zero at uRadius (+ <1px AA), so a pixel past it is enough.
-      float padding = max(uRadius, 0.5) + 2.0;
+      // Profile reaches zero at the radius plus the Blur feather (soft * 3 * radius) + AA.
+      float bsoft = clamp(uBlur, 0.0, 1.0);
+      float padding = max(uRadius, 0.05) + uGlowReach * bsoft * bsoft + 2.0 + uAaPx;
       vec2 endpoint = mix(aStart, aEnd, endpointMix);
       vec2 position = endpoint + normal * side * padding + tangent * cap * padding;
       vStart = aStart;
@@ -256,23 +268,41 @@
     precision mediump float;
     uniform mediump float uBrightness;
     uniform mediump float uBlur;
+    // Glow shape (Display Settings): core = fraction of R the hot core shrinks to at Glow 1; reach = halo
+    // reach in PIXELS (a share of the display, independent of the dot radius); strength = halo peak.
+    uniform mediump float uGlowCore;
+    uniform mediump float uGlowReach;
+    uniform mediump float uGlowStrength;
+    uniform mediump float uAaPx;
     uniform mediump float uRadius;
     varying vec2 vStart;
     varying vec2 vEnd;
     varying vec2 vPosition;
     float phosphorShoulder(float d, float R, float aa, float soft) {
-      float inner = mix(R - aa, 0.0, soft);
-      float outer = mix(R + aa * 0.35, R, soft);
-      float t = clamp((d - inner) / max(outer - inner, 1e-4), 0.0, 1.0);
-      // App Expo curve (APP_POLICY section 3), still exactly zero at outer.
-      return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+      // Glow (the Blur knob), a beam profile (APP_POLICY exempts phosphor beams from the edge rule).
+      // Two uses of the same Expo curve: a hot PINPOINT core that shrinks to 8% of R as Glow rises, plus a wide,
+      // dimmer HALO that grows outward (Glow core / reach / strength settings). Glow 0 = the ~1px AA edge at R (halo off).
+      float coreEdge = mix(R, R * uGlowCore, soft);
+      // The app edge rule (APP_POLICY): solid up to the edge, then the Expo feather (uAaPx px) outside it.
+      float tc = clamp((d - coreEdge) / max(uAaPx, 0.05), 0.0, 1.0);
+      float core = 1.0 - (1.0 - exp(-3.0 * tc)) / 0.95021293163;
+      float haloW = soft * uGlowReach;
+      if (haloW < 0.01) return core;
+      float th = clamp((d - coreEdge) / haloW, 0.0, 1.0);
+      float halo = uGlowStrength * sqrt(soft) * (1.0 - (1.0 - exp(-3.0 * th)) / 0.95021293163);
+      // The core over the halo: the feather runs the whole way from the core down to the halo (max() with a ramp
+      // that ends at 0 dropped from the core to the halo level in under a pixel, which read as a hard edge).
+      return halo + (1.0 - halo) * core;
     }
     void main() {
       vec2 segment = vEnd - vStart;
       // Blur²: the low end changes the look most, so give it more of the knob.
       float soft = clamp(uBlur, 0.0, 1.0);
       soft *= soft;
-      float R = max(uRadius, 0.5);
+      // No half-pixel floor: a dot smaller than a pixel gets proportionally dimmer (its area), so Size runs smoothly
+      // from a full 1px dot down to a pinpoint and to nothing at 0.
+      float R = max(uRadius, 0.05);
+      float area = min(1.0, 4.0 * R * R);
       float segmentLengthSquared = dot(segment, segment);
       float t = segmentLengthSquared > 0.000001
         ? clamp(dot(vPosition - vStart, segment) / segmentLengthSquared, 0.0, 1.0)
@@ -283,9 +313,10 @@
       // Flat core, Expo shoulder, exactly zero at R (no gaussian skirt).
       // Blur 0: ~1px shoulder at the edge; Blur 1: shoulder spans the whole radius (dome).
       float aa = max(0.65, min(1.6, R * 0.08));
-      float profile = phosphorShoulder(d, R, aa, soft) * mix(0.88, 0.78, soft);
+      // The dab centre is full strength at any Blur: Bright is the peak one stamp can reach.
+      float profile = phosphorShoulder(d, R, aa, soft);
 
-      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
+      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area;
       // Monochrome energy (R=G=B); additive blend accumulates trail.
       gl_FragColor = vec4(e, e, e, e);
     }
@@ -303,6 +334,9 @@
     uniform vec2 uCanvasSize;
     uniform float uRadius;
     uniform float uBlur;
+    uniform float uStampCustom;
+    uniform float uGlowReach;
+    uniform float uAaPx;
     varying vec2 vOffset;
     varying vec2 vUv;
     varying float vRadius;
@@ -310,7 +344,9 @@
     void main() {
       float softAmt = clamp(uBlur, 0.0, 1.0);
       // Built-in profile ends at uRadius (+ <1px AA); custom stamps fill the quad.
-      float pad = max(uRadius, 0.5) + 2.0;
+      float pad = max(uRadius, 0.05) + 2.0;
+      // Built-in dabs hold the Blur feather too; custom art keeps its own footprint.
+      if (uStampCustom < 0.5) pad += softAmt * softAmt * uGlowReach + uAaPx;
       vec2 cornerOffset = vec2(
         (aCorner == 0.0 || aCorner == 2.0) ? -1.0 : 1.0,
         (aCorner < 2.0) ? -1.0 : 1.0
@@ -318,7 +354,7 @@
       vec2 position = aCenter + cornerOffset * pad;
       vOffset = position - aCenter;
       vUv = cornerOffset * 0.5 + 0.5;
-      vRadius = max(uRadius, 0.5);
+      vRadius = max(uRadius, 0.05);
       vBlur = softAmt;
       vec2 clip = vec2(
         (position.x / uCanvasSize.x) * 2.0 - 1.0,
@@ -332,23 +368,37 @@
     precision highp float;
     uniform float uBrightness;
     uniform float uStampCustom;
+    uniform float uGlowCore;
+    uniform float uGlowReach;
+    uniform float uGlowStrength;
+    uniform float uAaPx;
     uniform sampler2D uStamp;
     varying vec2 vOffset;
     varying vec2 vUv;
     varying float vRadius;
     varying float vBlur;
     float phosphorShoulder(float d, float R, float aa, float soft) {
-      float inner = mix(R - aa, 0.0, soft);
-      float outer = mix(R + aa * 0.35, R, soft);
-      float t = clamp((d - inner) / max(outer - inner, 1e-4), 0.0, 1.0);
-      // App Expo curve (APP_POLICY section 3), still exactly zero at outer.
-      return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+      // Glow (the Blur knob), a beam profile (APP_POLICY exempts phosphor beams from the edge rule).
+      // Two uses of the same Expo curve: a hot PINPOINT core that shrinks to 8% of R as Glow rises, plus a wide,
+      // dimmer HALO that grows outward (Glow core / reach / strength settings). Glow 0 = the ~1px AA edge at R (halo off).
+      float coreEdge = mix(R, R * uGlowCore, soft);
+      // The app edge rule (APP_POLICY): solid up to the edge, then the Expo feather (uAaPx px) outside it.
+      float tc = clamp((d - coreEdge) / max(uAaPx, 0.05), 0.0, 1.0);
+      float core = 1.0 - (1.0 - exp(-3.0 * tc)) / 0.95021293163;
+      float haloW = soft * uGlowReach;
+      if (haloW < 0.01) return core;
+      float th = clamp((d - coreEdge) / haloW, 0.0, 1.0);
+      float halo = uGlowStrength * sqrt(soft) * (1.0 - (1.0 - exp(-3.0 * th)) / 0.95021293163);
+      // The core over the halo: the feather runs the whole way from the core down to the halo (max() with a ramp
+      // that ends at 0 dropped from the core to the halo level in under a pixel, which read as a hard edge).
+      return halo + (1.0 - halo) * core;
     }
     void main() {
       // Blur² (same curve as the ribbon).
       float soft = clamp(vBlur, 0.0, 1.0);
       soft *= soft;
-      float R = max(vRadius, 0.5);
+      float R = max(vRadius, 0.05);
+      float area = min(1.0, 4.0 * R * R);
       float r = length(vOffset);
       vec4 stamp = texture2D(uStamp, vUv);
       float tex = max(stamp.r, max(stamp.g, stamp.b)) * stamp.a;
@@ -363,8 +413,8 @@
       }
       // Built-in: same flat core + Expo shoulder as the ribbon, zero at R.
       float aa = max(0.55, min(1.25, R * 0.06));
-      float profile = phosphorShoulder(r, R, aa, soft) * mix(0.92, 0.78, soft);
-      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
+      float profile = phosphorShoulder(r, R, aa, soft);
+      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area;
       gl_FragColor = vec4(e, e, e, e);
     }
   `;
@@ -652,6 +702,10 @@
         uRadius: gl.getUniformLocation(beamProgram, "uRadius"),
         uBrightness: gl.getUniformLocation(beamProgram, "uBrightness"),
         uBlur: gl.getUniformLocation(beamProgram, "uBlur"),
+        uGlowCore: gl.getUniformLocation(beamProgram, "uGlowCore"),
+        uGlowReach: gl.getUniformLocation(beamProgram, "uGlowReach"),
+        uGlowStrength: gl.getUniformLocation(beamProgram, "uGlowStrength"),
+        uAaPx: gl.getUniformLocation(beamProgram, "uAaPx"),
       };
     }
     let dot = null;
@@ -664,6 +718,10 @@
         uRadius: gl.getUniformLocation(dotProgram, "uRadius"),
         uBrightness: gl.getUniformLocation(dotProgram, "uBrightness"),
         uBlur: gl.getUniformLocation(dotProgram, "uBlur"),
+        uGlowCore: gl.getUniformLocation(dotProgram, "uGlowCore"),
+        uGlowReach: gl.getUniformLocation(dotProgram, "uGlowReach"),
+        uGlowStrength: gl.getUniformLocation(dotProgram, "uGlowStrength"),
+        uAaPx: gl.getUniformLocation(dotProgram, "uAaPx"),
         uStamp: gl.getUniformLocation(dotProgram, "uStamp"),
         uStampCustom: gl.getUniformLocation(dotProgram, "uStampCustom"),
       };
@@ -849,7 +907,7 @@
    */
   function buildDotVertices(pathPoints, options = {}) {
     const points = Array.isArray(pathPoints) ? pathPoints : [];
-    const radius = Math.max(0.5, nodeGraphFiniteNumber(options.radius, 2));
+    const radius = Math.max(0.05, nodeGraphFiniteNumber(options.radius, 2));
     // Blur 0..1; denser packing at hard end so discs fuse without soft skirts.
     const blur = Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.blur)));
     const maxDots = Math.max(16, Math.floor(nodeGraphFiniteNumber(options.maxDots, 2048)));
@@ -1044,6 +1102,29 @@
    * Additive gaussian segment ribbons into current energy (read surface).
    * Same continuous beams as Lorenz — monochrome energy only.
    */
+  // Glow shape from a display's settings (unit 0..1 each; reach unit * 12 = multiples of the radius).
+  function setGlowUniforms(gl, prog, options) {
+    const unit = (v, d) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : d;
+    };
+    if (prog.uGlowCore) gl.uniform1f(prog.uGlowCore, unit(options.glowCore, 0.08));
+    // Reach is in pixels: options.glowReachPx (a share of the display, set by the caller). Without it, fall back to
+    // the old multiple of the dot radius (12 x radius at reach 1).
+    const reachPxOpt = Number(options.glowReachPx);
+    const reachPx = Number.isFinite(reachPxOpt)
+      ? Math.max(0, reachPxOpt)
+      : unit(options.glowReach, 0.5) * 12 * Math.max(0.05, Number(options.radius) || 0.5);
+    if (prog.uGlowReach) gl.uniform1f(prog.uGlowReach, reachPx);
+    if (prog.uGlowStrength) gl.uniform1f(prog.uGlowStrength, unit(options.glowStrength, 0.7));
+    // Edge antialiasing feather in px (UI Dev graphics, app-wide: the one universal edge rule).
+    // options.aaPx overrides it: the Display Settings preview magnifies the dot, so it passes the feather scaled by the
+    // same factor (the real dot is a couple of pixels, so its feather is most of its edge).
+    const aaOpt = Number(options.aaPx);
+    const aa = Number.isFinite(aaOpt) ? aaOpt : Number(global.nodeGraphDotCoreAaPx);
+    if (prog.uAaPx) gl.uniform1f(prog.uAaPx, Number.isFinite(aa) ? Math.max(0.05, Math.min(400, aa)) : 1.5);
+  }
+
   function depositBeamSegments(renderer, options = {}) {
     if (!isRendererLive(renderer) || !renderer.beam?.program) {
       return 0;
@@ -1056,7 +1137,7 @@
     if (vertexCount <= 0) {
       return 0;
     }
-    const radius = Math.max(0.5, nodeGraphFiniteNumber(options.radius, 2));
+    const radius = Math.max(0.05, nodeGraphFiniteNumber(options.radius, 2));
     const brightness = Math.max(0, nodeGraphFiniteNumber(options.brightness));
     if (brightness < 1e-6) {
       return 0;
@@ -1069,11 +1150,20 @@
     }
     renderer.segmentScratch.set(vertices);
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.read.framebuffer);
+    // accumulate: this frame's stamps are drawn (MAX, so packed stamps never pile up within the frame)
+    // into the free write surface, then ADDED onto the stored energy: a pixel that is hit again frame
+    // after frame builds up toward full brightness while Trail lets it hang, instead of stopping at the
+    // peak of one stamp.
+    const accum = options.accumulate === true && renderer.write?.framebuffer && renderer.copy?.program;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, accum ? renderer.write.framebuffer : renderer.read.framebuffer);
     gl.viewport(0, 0, renderer.width, renderer.height);
+    if (accum) {
+      gl.disable(gl.SCISSOR_TEST);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
     gl.enable(gl.BLEND);
-    // MAX, not add: peak stored energy = stroke brightness (<= 1); packed
-    // overlapping stamps and re-strokes can't pile past it.
+    // MAX, not add within a frame: packed overlapping stamps can't pile past the stamp's peak.
     gl.blendEquation(gl.MAX);
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.useProgram(renderer.beam.program);
@@ -1094,7 +1184,23 @@
     gl.uniform1f(renderer.beam.uRadius, radius);
     gl.uniform1f(renderer.beam.uBrightness, brightness);
     gl.uniform1f(renderer.beam.uBlur, blur);
+    setGlowUniforms(gl, renderer.beam, options);
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
+    if (accum) {
+      // Add the frame's deposit onto the stored energy.
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.read.framebuffer);
+      gl.viewport(0, 0, renderer.width, renderer.height);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(renderer.copy.program);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, renderer.write.texture);
+      gl.uniform1i(renderer.copy.uTexture, 0);
+      if (renderer.copy.uUvOffset) gl.uniform2f(renderer.copy.uUvOffset, 0, 0);
+      drawFullScreen(renderer, renderer.copy);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
     gl.blendEquation(gl.FUNC_ADD);
     gl.disable(gl.BLEND);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1117,7 +1223,7 @@
     if (vertexCount <= 0) {
       return 0;
     }
-    const radius = Math.max(0.5, nodeGraphFiniteNumber(options.radius, 2));
+    const radius = Math.max(0.05, nodeGraphFiniteNumber(options.radius, 2));
     const brightness = Math.max(0, nodeGraphFiniteNumber(options.brightness));
     if (brightness < 1e-6) {
       return 0;
@@ -1131,8 +1237,18 @@
     }
     renderer.segmentScratch.set(vertices);
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.read.framebuffer);
+    // accumulate: this frame's stamps are drawn (MAX, so packed stamps never pile up within the frame)
+    // into the free write surface, then ADDED onto the stored energy: a pixel that is hit again frame
+    // after frame builds up toward full brightness while Trail lets it hang, instead of stopping at the
+    // peak of one stamp.
+    const accum = options.accumulate === true && renderer.write?.framebuffer && renderer.copy?.program;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, accum ? renderer.write.framebuffer : renderer.read.framebuffer);
     gl.viewport(0, 0, renderer.width, renderer.height);
+    if (accum) {
+      gl.disable(gl.SCISSOR_TEST);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
     gl.enable(gl.BLEND);
     gl.blendEquation(gl.MAX); // see depositBeamSegments
     gl.blendFunc(gl.ONE, gl.ONE);
@@ -1152,6 +1268,7 @@
     gl.uniform1f(renderer.dot.uRadius, radius);
     gl.uniform1f(renderer.dot.uBrightness, brightness);
     gl.uniform1f(renderer.dot.uBlur, blur);
+    setGlowUniforms(gl, renderer.dot, options);
     const device = renderer.device || sharedDevice;
     const stamp = device?.stampTexture || null;
     gl.activeTexture(gl.TEXTURE0);
@@ -1164,6 +1281,21 @@
     }
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
     gl.bindTexture(gl.TEXTURE_2D, null);
+    if (accum) {
+      // Add the frame's deposit onto the stored energy.
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.read.framebuffer);
+      gl.viewport(0, 0, renderer.width, renderer.height);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(renderer.copy.program);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, renderer.write.texture);
+      gl.uniform1i(renderer.copy.uTexture, 0);
+      if (renderer.copy.uUvOffset) gl.uniform2f(renderer.copy.uUvOffset, 0, 0);
+      drawFullScreen(renderer, renderer.copy);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
     gl.blendEquation(gl.FUNC_ADD);
     gl.disable(gl.BLEND);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1613,12 +1745,24 @@
           radius,
           brightness,
           blur,
+          glowCore: options.glowCore,
+          glowReach: options.glowReach,
+          glowReachPx: options.glowReachPx,
+          glowStrength: options.glowStrength,
+          aaPx: options.aaPx,
+          accumulate: options.accumulate === true,
         })
         : depositBeamSegments(renderer, {
           vertices: depositVertices,
           radius,
           brightness,
           blur,
+          glowCore: options.glowCore,
+          glowReach: options.glowReach,
+          glowReachPx: options.glowReachPx,
+          glowStrength: options.glowStrength,
+          aaPx: options.aaPx,
+          accumulate: options.accumulate === true,
         });
       if (count > 0) {
         renderer.energyActive = true;

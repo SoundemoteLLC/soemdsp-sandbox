@@ -1,5 +1,5 @@
 const NODE_GRAPH_ABERRATION_GL_REV = 1;
-const NODE_GRAPH_ABERRATION_MAX = 512;
+const NODE_GRAPH_ABERRATION_MAX = 4096;
 
 (function initNodeGraphAberrationGl(global) {
   const KEY = "_aberrationGl";

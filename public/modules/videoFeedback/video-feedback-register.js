@@ -26,13 +26,13 @@ registerNodeGraphChromelessModule("videoFeedback", {
     ],
     defaultDisplayMode: "face",
     inputs: ["A", "B"],
-    inputLabels: { A: "In", B: "Spin" },
+    inputLabels: { A: "→", B: "Spin" },
     inputTooltips: {
-      A: "Audio in. FFT drives the spectrum circle.",
+      A: "Audio in (→). FFT drives the spectrum circle; passes straight to Thru (←).",
       B: "Spin. Adds to Twist.",
     },
-    outputs: ["rgba"],
-    outputLabels: { rgba: "📺" },
+    outputs: ["Thru", "rgba"],
+    outputLabels: { Thru: "←", rgba: "📺" },
     outputTooltips: {
       rgba: "Circle plate out. Cable into Video Delay 📺 to recapture it.",
     },

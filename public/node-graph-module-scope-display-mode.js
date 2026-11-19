@@ -256,6 +256,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "aberrationFace",
     "screenBendFace",
     "placeFace",
+    "screenShakeFace",
     "keyboardFace",
     // Pitch Quantizer: enabled / playing / natural / sharp colors.
     "pitchQuantizerFace",

@@ -328,8 +328,8 @@ const nodeGraphNodeLabels = Object.freeze({
   vactrol: "Vactrol",
   sandboxVisuals: "Screen Visuals",
   screenSpaceShader: "Screen Space Shader",
-  viewOut: "View Out",
-  screenOut: "Screen Out",
+  viewOut: "Screen Space In",
+  screenOut: "Screen Space Out",
   bloomGlow: "Bloom & Glow",
   rgbaHsla: "RGBA / HSLA",
   chromaColor: "Chroma Color",
@@ -9090,6 +9090,10 @@ const nodeGraphModuleDefinitions = (
     ],
     planRole: "processor",
     planFreeRun: true,
+    // Face: IR amplitude envelope + spectral wash (node-graph-noise-conv-display.js).
+    // Same default height as Dark Velvet Reverb's taps face.
+    layout: "pulseCurve",
+    displayHeightGu: 2,
     spectrumCompanion: false,
     inputs: ["In", "Left", "Right"],
     inputLabels: { In: "Mono" },
@@ -23486,7 +23490,7 @@ const nodeGraphModuleDefinitions = (
   // Picture effect. Inputs beyond 📺 come from the node's GLSL uniforms (normalizeNodeGraphScreenSpaceShader).
   screenSpaceShader: {
     planRole: "monitor",
-    inputs: ["rgba", "Shake"],
+    inputs: ["rgba"],
     inputLabels: { rgba: "📺" },
     layout: "screenSpaceShader",
     outputs: ["rgba"],
@@ -23965,8 +23969,10 @@ const nodeGraphModuleDefinitions = (
     displayType: "spectrumLine",
     inputs: ["In"],
     layout: "scopeFace",
-    // Single In / Thru pair: → / ← come from nodeGraphThruPairPortDisplayLabel.
+    // Two outs (Thru + rgba) so the auto In/Thru arrows don't apply: label them explicitly.
+    inputLabels: { In: "→" },
     outputs: ["Thru", "rgba"],
+    outputLabels: { Thru: "←", rgba: "📺" },
     parameters: [
       {
         key: "minFreq",
@@ -24023,8 +24029,10 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 12,
     inputs: ["In"],
     layout: "scopeFace",
-    // Single In / Thru pair: → / ← come from nodeGraphThruPairPortDisplayLabel.
+    // Two outs (Thru + rgba) so the auto In/Thru arrows don't apply: label them explicitly.
+    inputLabels: { In: "→" },
     outputs: ["Thru", "rgba"],
+    outputLabels: { Thru: "←", rgba: "📺" },
     parameters: [
       {
         bipolar: true,
@@ -24786,8 +24794,9 @@ const nodeGraphModuleDefinitions = (
     layout: "scopeFace",
     // Dry same-name thru (X→X … B→B) so the face can sit in-line. Efficient
     // Live resolves these past the observer at native compile time.
-    outputs: ["X", "Y", "R", "G", "B"],
-    outputLabels: { X: "X", Y: "Y", R: "R", G: "G", B: "B" },
+    // rgba: the drawn picture (premultiplied RGBA on the picture device), only produced while a cable leaves it.
+    outputs: ["X", "Y", "R", "G", "B", "rgba"],
+    outputLabels: { X: "X", Y: "Y", R: "R", G: "G", B: "B", rgba: "📺" },
     parameters: [],
     visualInputs: [
       { key: "vectorRgbX", label: "X", port: "X" },

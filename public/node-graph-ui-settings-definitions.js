@@ -83,7 +83,7 @@ const nodeUiDevSettingControls = Object.freeze([
   // Floor for fit-to-box tip text. The fitter never goes below this; longer tips clip.
   { defaultValue: 12, id: "nodeUiDevTooltipTextSize", key: "tooltipTextSize", max: 96, min: 12, type: "number" },
   { defaultValue: 100, id: "nodeUiDevModuleLightBrightness", key: "moduleLightBrightness", max: 300, min: 0, type: "number" },
-  { defaultValue: 43, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, type: "number" },
+  { defaultValue: 34.5, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, step: 0.5, type: "number" },
   {
     defaultValue: 220,
     id: "nodeUiDevGridSpread",
@@ -93,7 +93,7 @@ const nodeUiDevSettingControls = Object.freeze([
     type: "number",
   },
   {
-    defaultValue: 16,
+    defaultValue: 32,
     exposeDefault: true,
     id: "nodeUiDevGridDivisionMultiply",
     key: "gridDivisionMultiply",
@@ -175,8 +175,8 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: 1, id: "nodeUiDevModuleTopShape", key: "moduleTopShape", max: 2, min: 0, step: 1, type: "number" },
   { defaultValue: 6, id: "nodeUiDevModuleTopRadius", key: "moduleTopRadius", max: 60, min: 0, step: 1, type: "number" },
   // The stroke's own top corner radius (the plate fill keeps Module Top Radius). Rounder than the
-  // plate, its curve sits behind the plate's corners. Saved settings without it take moduleTopRadius.
-  { defaultFromKey: "moduleTopRadius", defaultValue: 6, id: "nodeUiDevModuleStrokeTopRadius", key: "moduleStrokeTopRadius", max: 60, min: 0, step: 1, type: "number" },
+  // plate, its curve sits behind the plate's corners. Saved settings without it take moduleTopRadius; with no saved top radius either the default is 22.
+  { defaultFromKey: "moduleTopRadius", defaultValue: 22, id: "nodeUiDevModuleStrokeTopRadius", key: "moduleStrokeTopRadius", max: 60, min: 0, step: 1, type: "number" },
   { defaultValue: 1, id: "nodeUiDevModuleBottomShape", key: "moduleBottomShape", max: 2, min: 0, step: 1, type: "number" },
   { defaultValue: 6, id: "nodeUiDevModuleBottomRadius", key: "moduleBottomRadius", max: 60, min: 0, step: 1, type: "number" },
   // How much the module strokes animate with their output, 0 (off) to 100.

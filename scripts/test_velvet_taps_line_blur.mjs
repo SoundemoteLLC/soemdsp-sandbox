@@ -2,19 +2,18 @@
 // Dark Velvet Reverb: optional time-axis-only line blur (tapLineBlur).
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+const lines = require(path.join(root, "public/lib/visual/gl-line-renderer.js"));
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-function expoCoverage(t) {
-  if (t <= 0) return 1;
-  if (t >= 1) return 0;
-  return 1 - (1 - Math.exp(-3 * t)) / 0.95021293163;
-}
+const expoCoverage = lines.nodeGraphGlLinesExpoSkirt;
 
 function xCov(pxCenter, x0, x1, feather) {
   let acc = 0;
@@ -51,10 +50,16 @@ assert(Math.abs(left - right) < 1e-9, "left and right skirts match");
 assert(xCov(10.5, 10, 11, 8) === 1, "Y is not part of the X kernel");
 
 const display = fs.readFileSync(path.join(root, "public/node-graph-velvet-taps-display.js"), "utf8");
-assert(display.includes("nodeGraphVelvetTapsExpoCoverage"), "display uses the Expo skirt");
-assert(display.includes("0.95021293163"), "same Expo constant as gl-line-renderer");
+assert(typeof expoCoverage === "function", "renderer exports nodeGraphGlLinesExpoSkirt");
+assert(display.includes("nodeGraphGlLinesExpoSkirt"), "display calls the shared Expo skirt");
+assert(!display.includes("nodeGraphVelvetTapsExpoCoverage"), "no local Expo duplicate");
+assert(!display.includes("0.95021293163"), "Expo constant lives only in the shared renderer");
 assert(display.includes("nodeGraphVelvetTapsXBlurSpans"), "horizontal-only blur spans");
 assert(display.includes("look.tapLineBlur"), "reads tapLineBlur");
+const renderer = fs.readFileSync(path.join(root, "public/lib/visual/gl-line-renderer.js"), "utf8");
+assert(renderer.includes('NODE_GRAPH_GL_LINES_EXPO_SKIRT_GLSL = "1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163"'), "one GLSL source string");
+assert(renderer.includes("return ${NODE_GRAPH_GL_LINES_EXPO_SKIRT_GLSL};"), "GLSL edgeCurve uses the shared source");
+assert(Math.abs(expoCoverage(0) - 1) < 1e-12 && Math.abs(expoCoverage(1)) < 1e-12, "shared skirt still 1 at 0 and 0 at 1");
 assert(!/featherCss[\s\S]{0,200}AxisSpans\(ya/.test(display.replace("nodeGraphVelvetTapsAxisSpans(ya * k, (ya + ha) * k)", "YSPANS")), "sanity");
 // Height path still uses coverage AA with no vertical feather argument.
 assert(display.includes("nodeGraphVelvetTapsAxisSpans(ya * k, (ya + ha) * k)"), "Y stays sharp coverage AA");

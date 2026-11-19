@@ -818,6 +818,15 @@ function nodeGraphModuleLightGradient(radiusX, radiusY, cx, cy, colorAt, peak) {
 
 // How much of the grid reveal / module light stays in a fully dark room (0..1).
 var NODE_GRID_DARK_FLOOR = 0.75;
+// The mouse is a light like a module: it reveals the grid with the same falloff a module does, wherever it is, in a lit room or a
+// dark one. Dialled in by Elan (UI Dev, since removed):
+//   NODE_GRID_LAMP_REVEAL  how strongly the mouse reveals the lines (1 = the same as a module)
+//   NODE_GRID_LAMP_BRIGHT  how far the lines right at the mouse are pushed toward full white, past what a module shows (0..1)
+//   NODE_GRID_LAMP_REACH   how far the light reaches around the mouse, as a share of a module's reach; it is sized in SCREEN px,
+//                          so it does not change with the zoom
+var NODE_GRID_LAMP_REVEAL = 1.727; // 172.7%
+var NODE_GRID_LAMP_BRIGHT = 0.151; // 15.1%
+var NODE_GRID_LAMP_REACH = 1.256; // 125.6%
 // Grid for the GPU lights pass, or null when the grid is off. World-space cell (the grid is anchored at
 // the world origin), line colour + alpha, how far modules reveal it, and the mouse reveal.
 var nodeGridParamsCache = { at: 0, base: null };
@@ -856,6 +865,10 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
     spread: b.spread,
     moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
     mouse: active ? mouse : null,
+    // The mouse is a light like a module (see NODE_GRID_LAMP_REVEAL).
+    reflect: NODE_GRID_LAMP_REVEAL,
+    lampBright: NODE_GRID_LAMP_BRIGHT,
+    lampReach: NODE_GRID_LAMP_REACH,
     mouseRadius: Math.max(nodeGraphGridWidth(), nodeGraphGridHeight()) * (3 + 10.5 * b.mouseSpread),
     mouseAmount: 0.92 * mouseAmount,
   };

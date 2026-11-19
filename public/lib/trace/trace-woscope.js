@@ -15,6 +15,8 @@
   const VERTS_PER_SEG = 4;
   const FLOATS_PER_VERT = 7;
   const LUT_WIDTH = 256;
+  /** Smallest half-width (px) of a 2D Trace beam: sigma = this / 4 = 0.5px, so small sizes stay smooth. */
+  const TRACE_MIN_HALF_WIDTH_2D = 2;
 
   const VS_LINE = `
 precision highp float;
@@ -489,6 +491,83 @@ void main() {
 }
 `;
 
+  // Decay blur (bleed): the hot fade and the ghost fade also diffuse the stored brightness a little every frame (3x3, same
+  // weights as the phosphor energy pass). These are SEPARATE programs, compiled the first time a face asks for a bleed and
+  // used only while it is above 0, so Decay 0 (the default) costs nothing: no extra program, no extra texture taps.
+  const FS_TRACE_FADE_BLEED = `
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D uSrc;
+uniform float uErase;
+uniform vec2 uTexel;
+uniform float uBleed;
+void main() {
+    float e0 = texture2D(uSrc, vUv).r;
+    float s = texture2D(uSrc, vUv + vec2( uTexel.x, 0.0)).r + texture2D(uSrc, vUv + vec2(-uTexel.x, 0.0)).r
+            + texture2D(uSrc, vUv + vec2(0.0,  uTexel.y)).r + texture2D(uSrc, vUv + vec2(0.0, -uTexel.y)).r;
+    float c = texture2D(uSrc, vUv + vec2( uTexel.x,  uTexel.y)).r + texture2D(uSrc, vUv + vec2(-uTexel.x,  uTexel.y)).r
+            + texture2D(uSrc, vUv + vec2( uTexel.x, -uTexel.y)).r + texture2D(uSrc, vUv + vec2(-uTexel.x, -uTexel.y)).r;
+    float blur = (e0 * 4.0 + s * 2.0 + c) / 16.0;
+    float b = mix(e0, blur, clamp(uBleed, 0.0, 1.0)) * (1.0 - clamp(uErase, 0.0, 1.0));
+    gl_FragColor = vec4(b, b, b, 1.0);
+}
+`;
+
+  const FS_TRACE_GHOST_BLEED = `
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D uGhost;
+uniform sampler2D uHot;
+uniform float uErase;
+uniform float uDeposit;
+uniform vec2 uTexel;
+uniform float uBleed;
+void main() {
+    float e0 = texture2D(uGhost, vUv).r;
+    float s = texture2D(uGhost, vUv + vec2( uTexel.x, 0.0)).r + texture2D(uGhost, vUv + vec2(-uTexel.x, 0.0)).r
+            + texture2D(uGhost, vUv + vec2(0.0,  uTexel.y)).r + texture2D(uGhost, vUv + vec2(0.0, -uTexel.y)).r;
+    float c = texture2D(uGhost, vUv + vec2( uTexel.x,  uTexel.y)).r + texture2D(uGhost, vUv + vec2(-uTexel.x,  uTexel.y)).r
+            + texture2D(uGhost, vUv + vec2( uTexel.x, -uTexel.y)).r + texture2D(uGhost, vUv + vec2(-uTexel.x, -uTexel.y)).r;
+    float blur = (e0 * 4.0 + s * 2.0 + c) / 16.0;
+    float g = mix(e0, blur, clamp(uBleed, 0.0, 1.0)) * (1.0 - clamp(uErase, 0.0, 1.0));
+    float hot = texture2D(uHot, vUv).r;
+    g = max(g, hot * clamp(uDeposit, 0.0, 1.0));
+    gl_FragColor = vec4(g, g, g, 1.0);
+}
+`;
+
+  function ensureTraceBleed(glDevice, gl) {
+    if (glDevice.traceBleed) {
+      return glDevice.traceBleed;
+    }
+    const fade = linkProgram(gl, VS_QUAD, FS_TRACE_FADE_BLEED);
+    const ghost = linkProgram(gl, VS_QUAD, FS_TRACE_GHOST_BLEED);
+    if (!fade || !ghost) {
+      return null;
+    }
+    glDevice.traceBleed = {
+      fade: {
+        program: fade,
+        aPos: gl.getAttribLocation(fade, "aPos"),
+        uSrc: gl.getUniformLocation(fade, "uSrc"),
+        uErase: gl.getUniformLocation(fade, "uErase"),
+        uTexel: gl.getUniformLocation(fade, "uTexel"),
+        uBleed: gl.getUniformLocation(fade, "uBleed"),
+      },
+      ghost: {
+        program: ghost,
+        aPos: gl.getAttribLocation(ghost, "aPos"),
+        uGhost: gl.getUniformLocation(ghost, "uGhost"),
+        uHot: gl.getUniformLocation(ghost, "uHot"),
+        uErase: gl.getUniformLocation(ghost, "uErase"),
+        uDeposit: gl.getUniformLocation(ghost, "uDeposit"),
+        uTexel: gl.getUniformLocation(ghost, "uTexel"),
+        uBleed: gl.getUniformLocation(ghost, "uBleed"),
+      },
+    };
+    return glDevice.traceBleed;
+  }
+
   const traceByDest = new WeakMap();
 
   function linkProgram(gl, vsSrc, fsSrc) {
@@ -739,9 +818,11 @@ void main() {
       gl.scissor(0, 0, width, height);
       gl.viewport(0, 0, width, height);
     }
-    // Half-width in px. 0.5px floor only keeps the beam from vanishing.
-    const uSize = Math.max(0.5, diameter * 0.5);
+    // Half-width in px. 1D (solid core) keeps its 0.5px floor. 2D Trace has sigma = uSize / 4, so a 0.5px half-width was a
+    // 0.125px sigma: sub-pixel, aliased and pixelated at small sizes. Floor it at 2px (sigma 0.5px) so the beam always has a
+    // smooth edge; the ridge keeps full brightness (cover is normalised to the peak), only the edge softens.
     const solidCore = options.solidCore === true;
+    const uSize = Math.max(solidCore ? 0.5 : TRACE_MIN_HALF_WIDTH_2D, diameter * 0.5);
     const useLut = (Array.isArray(options.gradientStops) && options.gradientStops.length >= 2)
       || typeof options.sampleRgb === "function";
     if (useLut) {
@@ -755,22 +836,31 @@ void main() {
       return 0;
     }
     const cont = options.traceContinue === true;
+    // Decay blur: 0 (default) takes the plain fade and ghost passes below, untouched.
+    const bleedOpt = Number(options.bleed);
+    const bleed = Number.isFinite(bleedOpt) ? Math.max(0, Math.min(1, bleedOpt)) : 0;
+    const bleedApi = bleed > 0.0001 ? ensureTraceBleed(glDevice, gl) : null;
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
     gl.disable(gl.SCISSOR_TEST);
     gl.disable(gl.BLEND);
     gl.viewport(0, 0, width, height);
     if (!cont) {
+      const fadeProg = bleedApi ? bleedApi.fade : presentApi.fade;
       gl.bindFramebuffer(gl.FRAMEBUFFER, st.write.fbo);
-      gl.useProgram(presentApi.fade.program);
+      gl.useProgram(fadeProg.program);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, st.read.tex);
-      gl.uniform1i(presentApi.fade.uSrc, 0);
+      gl.uniform1i(fadeProg.uSrc, 0);
       st.fadeFrames = traceFadeFrames(st);
-      gl.uniform1f(presentApi.fade.uErase, traceEraseForFrames(traceTrailErase(options), st.fadeFrames));
+      gl.uniform1f(fadeProg.uErase, traceEraseForFrames(traceTrailErase(options), st.fadeFrames));
+      if (bleedApi) {
+        gl.uniform2f(fadeProg.uTexel, 1 / width, 1 / height);
+        gl.uniform1f(fadeProg.uBleed, bleed);
+      }
       gl.bindBuffer(gl.ARRAY_BUFFER, presentApi.quad);
-      gl.enableVertexAttribArray(presentApi.fade.aPos);
-      gl.vertexAttribPointer(presentApi.fade.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(fadeProg.aPos);
+      gl.vertexAttribPointer(fadeProg.aPos, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       clearTraceTarget(gl, st.live, width, height);
     }
@@ -813,19 +903,24 @@ void main() {
         : 1;
       const gDeposit = ghostOn ? 1 : 0;
       gl.disable(gl.BLEND);
+      const ghostProg = bleedApi ? bleedApi.ghost : presentApi.ghost;
       gl.bindFramebuffer(gl.FRAMEBUFFER, st.ghostWrite.fbo);
-      gl.useProgram(presentApi.ghost.program);
+      gl.useProgram(ghostProg.program);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, st.ghostRead.tex);
-      gl.uniform1i(presentApi.ghost.uGhost, 0);
+      gl.uniform1i(ghostProg.uGhost, 0);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, st.write.tex);
-      gl.uniform1i(presentApi.ghost.uHot, 1);
-      gl.uniform1f(presentApi.ghost.uErase, traceUnit(gErase, 1));
-      gl.uniform1f(presentApi.ghost.uDeposit, traceUnit(gDeposit, 0));
+      gl.uniform1i(ghostProg.uHot, 1);
+      gl.uniform1f(ghostProg.uErase, traceUnit(gErase, 1));
+      gl.uniform1f(ghostProg.uDeposit, traceUnit(gDeposit, 0));
+      if (bleedApi) {
+        gl.uniform2f(ghostProg.uTexel, 1 / width, 1 / height);
+        gl.uniform1f(ghostProg.uBleed, bleed);
+      }
       gl.bindBuffer(gl.ARRAY_BUFFER, presentApi.quad);
-      gl.enableVertexAttribArray(presentApi.ghost.aPos);
-      gl.vertexAttribPointer(presentApi.ghost.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(ghostProg.aPos);
+      gl.vertexAttribPointer(ghostProg.aPos, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       const ghostTmp = st.ghostRead;
       st.ghostRead = st.ghostWrite;

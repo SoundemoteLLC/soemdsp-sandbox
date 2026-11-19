@@ -20,6 +20,19 @@ registerNodeGraphChromelessModule("aberration", {
         settingsSchema: "aberrationFace",
       },
     ],
+    // The shared face (node-graph-module-face.js): choices, a hue slider, then per channel an XY pad (Ch X / Y) with Bright beside it
+    // and Blur under it.
+    face: [
+      { kind: "choices", param: "mode", labels: ["RGB", "CMY"], h: 26 },
+      { kind: "choices", param: "blend", labels: ["Additive", "Over"], h: 26 },
+      { kind: "cells", params: [["hue", "Hue"]], horizontal: true },
+      { kind: "xy", x: "ch1X", y: "ch1Y", label: "Ch1", cell: ["ch1Bright", "Bright"], h: 124 },
+      { kind: "cells", params: [["ch1Blur", "Ch1 Blur"]], horizontal: true },
+      { kind: "xy", x: "ch2X", y: "ch2Y", label: "Ch2", cell: ["ch2Bright", "Bright"], h: 124 },
+      { kind: "cells", params: [["ch2Blur", "Ch2 Blur"]], horizontal: true },
+      { kind: "xy", x: "ch3X", y: "ch3Y", label: "Ch3", cell: ["ch3Bright", "Bright"], h: 124 },
+      { kind: "cells", params: [["ch3Blur", "Ch3 Blur"]], horizontal: true },
+    ],
     defaultDisplayMode: "face",
     inputs: ["rgba"],
     inputLabels: { rgba: "📺" },
@@ -93,18 +106,6 @@ registerNodeGraphChromelessModule("aberration", {
 function nodeGraphAberrationChannelParams(key, label) {
   return [
     {
-      defaultValue: "1",
-      key: key + "Bright",
-      label: label + " Bright",
-      linearSmoothing: false,
-      max: "1",
-      mid: "0.5",
-      min: "0",
-      nonlinearSlider: false,
-      step: "any",
-      tooltip: label + " plate level. 0 is off, 1 is full. Read once per simulation frame.",
-    },
-    {
       bipolar: true,
       defaultValue: "0",
       key: key + "X",
@@ -129,6 +130,18 @@ function nodeGraphAberrationChannelParams(key, label) {
       nonlinearSlider: false,
       step: "any",
       tooltip: label + " vertical shift. ±1 is 12% of the face. Positive moves up.",
+    },
+    {
+      defaultValue: "1",
+      key: key + "Bright",
+      label: label + " Bright",
+      linearSmoothing: false,
+      max: "1",
+      mid: "0.5",
+      min: "0",
+      nonlinearSlider: false,
+      step: "any",
+      tooltip: label + " plate level. 0 is off, 1 is full. Read once per simulation frame.",
     },
     {
       defaultValue: "0",

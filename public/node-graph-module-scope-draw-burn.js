@@ -21,7 +21,8 @@ function nodeGraphScope2dBurnLayers(settings, dotSpace) {
       radius,
     });
   }
-  // Size 0 is valid (1px floor) — only brightness gates the layer.
+  // Sizes below a 1 px dot are drawn smaller and dimmer (by area) down to a pinpoint, not floored at 1 px; only
+  // Size 0 (radius 0) draws nothing.
   return layers.filter((layer) => layer.brightness > 0 && layer.radius > 0);
 }
 
@@ -174,11 +175,25 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
       layer.brightness * burnAmount,
       sizeForGain,
     );
+    // Decay blur (0..1 in the UI) is the per-frame diffusion of the stored picture.
+    const decayBleed = Number.isFinite(Number(settings?.decayBlur))
+      ? Math.max(0, Math.min(1, Number(settings.decayBlur))) * 0.25
+      : undefined;
     const beamOptions = {
       trail,
       ghost,
+      bleed: decayBleed,
+      glowCore: settings?.glowCore,
+      glowReach: settings?.glowReach,
+      glowStrength: settings?.glowStrength,
+      // Glow reach is a share of the display (0.25 x its shorter side at reach 1), independent of the dot radius, so the
+      // glow stays visible on a tiny dot.
+      glowReachPx: Math.max(0, Math.min(1, Number.isFinite(Number(settings?.glowReach)) ? Number(settings.glowReach) : 0.5)) * 0.25 * dotSpace,
+      // The burn layer builds up frame after frame (Trail/Burn); the live layer below stays at Bright.
+      // Build up off = MAX deposit onto the stored energy (a pixel never exceeds one dab's peak).
+      accumulate: settings?.buildUp !== false,
       pathPoints: points,
-      radius: Math.max(0.35, layer.radius),
+      radius: Math.max(0.05, layer.radius),
       brightness: beamBrightness,
       blur: nodeGraphTraceDisplayClampStampBlur(layer.blur),
       mode: String(settings?.drawMode || "") === "lines" ? "segments" : "dots",
@@ -203,7 +218,7 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
     const stepped = nodeGraphPhosphorEnergyGlStepBeams(energyGl, beamOptions);
     void stepped;
     if (liveGl) {
-      nodeGraphPhosphorEnergyGlStepBeams(liveGl, { ...beamOptions, ghost: 0, brightness: liveBrightness });
+      nodeGraphPhosphorEnergyGlStepBeams(liveGl, { ...beamOptions, ghost: 0, brightness: liveBrightness, accumulate: false });
     }
     if (!frozen && Number.isFinite(endFrame)) {
       const stats = energyGl.lastPathStats;
@@ -228,9 +243,12 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
     }
   } else if (typeof nodeGraphPhosphorEnergyGlStep === "function") {
     // Fade + bleed when no drawable layer (trail still softens outward).
-    nodeGraphPhosphorEnergyGlStep(energyGl, { trail, ghost, depositGain: 0, bleed: 0.1 });
+    const idleBleed = Number.isFinite(Number(settings?.decayBlur))
+      ? Math.max(0, Math.min(1, Number(settings.decayBlur))) * 0.25
+      : 0.1;
+    nodeGraphPhosphorEnergyGlStep(energyGl, { trail, ghost, depositGain: 0, bleed: idleBleed });
     if (liveGl) {
-      nodeGraphPhosphorEnergyGlStep(liveGl, { trail, ghost: 0, depositGain: 0, bleed: 0.1 });
+      nodeGraphPhosphorEnergyGlStep(liveGl, { trail, ghost: 0, depositGain: 0, bleed: idleBleed });
     }
   }
 
@@ -762,6 +780,8 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
       trail: settings.trail,
       ghost: settings.ghost,
       burnAmount: settings.burnAmount,
+      // Decay blur (0 by default = no diffusion pass at all), the same 0..0.25 per-frame bleed scale as phosphor.
+      bleed: Number.isFinite(Number(settings.decayBlur)) ? Math.max(0, Math.min(1, Number(settings.decayBlur))) * 0.25 : 0,
       tracePresent: true,
     });
     if (count > 0) {

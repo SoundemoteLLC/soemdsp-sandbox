@@ -2749,16 +2749,16 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   screenSpaceShader: {
     category: "rgba",
     description: "GLSL picture effect: 📺 in, 📺 out. uniform float = signal in, uniform sampler2D = extra 📺 in.",
-    notes: ["screen space", "glsl", "picture", "shake", "feedback"],
+    notes: ["screen space", "glsl", "shader", "picture", "feedback"],
   },
   viewOut: {
     category: "rgba",
-    description: "The circuit view as a picture on 📺 (last frame on screen). Into effects, then Screen Out for feedback.",
+    description: "Screen Space In: the circuit view as a picture on 📺 (one frame behind). Wire it through effects into Screen Space Out; straight In to Out changes nothing.",
     notes: ["screen space", "view", "feedback", "picture"],
   },
   screenOut: {
     category: "rgba",
-    description: "Its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
+    description: "Screen Space Out: its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
     notes: ["screen space", "screen", "feedback", "picture"],
   },
   bloomGlow: {

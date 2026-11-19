@@ -2307,6 +2307,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphObserverThruInPort = function native
   if (o === "rgba" || o === "📺") return null;
   // Analyzer Thru jack (spectrogram, customDisplay, …).
   if (o === "Thru" || o === "←") {
+    if (t === "videoFeedback") return "A";
     if (t === "waterfall") return "In";
     return "In";
   }
