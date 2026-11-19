@@ -254,6 +254,61 @@ function nodeGraphGhostSliderControllerOutSample(nodeId, port) {
   return domain;
 }
 
+/**
+ * The range a modulation source covered since the ghost was last read: the lowest and highest sample the scope buffer holds
+ * for that stretch of time, and the newest. One frame's worth of a fast signal becomes a span instead of one jittery point.
+ * Cached for a few ms so every ghost fed by the same source in one sync shares the scan. null when the source has no buffer.
+ */
+const nodeGraphGhostSliderRangeCache = new Map();
+function nodeGraphGhostSliderScopeRange(nodeId, port) {
+  const id = String(nodeId || "").trim();
+  const name = String(port || "").trim();
+  if (!id || !name || typeof nodeGraphModuleScopeState === "undefined") {
+    return null;
+  }
+  const buffer = nodeGraphModuleScopeState?.buffers?.get?.(`${id}:${name}`);
+  if (!buffer?.length) {
+    return null;
+  }
+  const key = `${id}:${name}`;
+  const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+  const cached = nodeGraphGhostSliderRangeCache.get(key);
+  if (cached && now - cached.t < 6) {
+    return cached;
+  }
+  const rate = Number(nodeGraphMvp?.sampleRate) > 0 ? Number(nodeGraphMvp.sampleRate) : 44100;
+  // The time since this source was last scanned (a frame at ~30 Hz when it never was), as samples, and at least the newest.
+  const elapsedMs = cached ? Math.min(250, now - cached.t) : 1000 / 30;
+  const count = Math.max(1, Math.min(buffer.length, Math.ceil((elapsedMs / 1000) * rate) + 1));
+  let lo = Infinity;
+  let hi = -Infinity;
+  let latest = null;
+  for (let i = buffer.length - 1, seen = 0; i >= 0 && seen < count; i -= 1, seen += 1) {
+    const v = Number(buffer[i]);
+    if (!Number.isFinite(v)) continue;
+    if (latest === null) latest = v;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  if (latest === null) {
+    return null;
+  }
+  const entry = { t: now, lo, hi, latest };
+  nodeGraphGhostSliderRangeCache.set(key, entry);
+  return entry;
+}
+
+/** { lo, hi, latest } of a modulation source (a span when its scope buffer is there, else the one sample it gives). */
+function nodeGraphGhostSliderModRange(sourceNode, sourcePort) {
+  const scoped = nodeGraphGhostSliderScopeRange(sourceNode, String(sourcePort || "").trim());
+  if (scoped) {
+    return scoped;
+  }
+  const sample = nodeGraphGhostSliderModSample(sourceNode, sourcePort);
+  const n = sample == null ? NaN : Number(sample);
+  return Number.isFinite(n) ? { lo: n, hi: n, latest: n } : null;
+}
+
 function nodeGraphGhostSliderModSample(sourceNode, sourcePort, depth = 0) {
   const port = String(sourcePort || "").trim();
   const scoped = nodeGraphGhostSliderScopeSample(sourceNode, port);
@@ -434,23 +489,15 @@ function nodeGraphParameterGhostSignal(node, key, sliderHint = null) {
     ? nodeGraphReadNodeNumber(node, key)
     : nodeGraphReadPatchParameterValue(patchNode, key);
   const sources = [];
+  const sourcesLo = [];
+  const sourcesHi = [];
   for (const modulation of nodeGraphMvp.patch.modulations || []) {
     if (!nodeGraphParameterGhostModulationMatches(modulation, patchNode, key)) {
       continue;
     }
-    const sample = nodeGraphGhostSliderModSample(
-      modulation.sourceNode,
-      modulation.sourcePort,
-    );
-    if (sample == null) {
+    const span = nodeGraphGhostSliderModRange(modulation.sourceNode, modulation.sourcePort);
+    if (span == null) {
       continue;
-    }
-    let normalized;
-    if (typeof nodeGraphParamNormalizeModInput === "function") {
-      normalized = nodeGraphParamNormalizeModInput(sample, metadata);
-    } else {
-      const n = Number(sample);
-      normalized = Number.isFinite(n) ? n : 0;
     }
     // Range Out is unit CV. Native ParamModEdge maps it across the
     // destination param min/max. Tagging every Range as domain made a
@@ -458,46 +505,77 @@ function nodeGraphParameterGhostSignal(node, key, sliderHint = null) {
     // A parameter-out is a thru with no units of its own; destination
     // outputDomain still means real units.
     const taggedDomain = metadata.outputDomain === true;
-    sources.push(taggedDomain ? { value: Number(normalized), domain: true } : normalized);
+    const addSource = (list, sample) => {
+      let normalized;
+      if (typeof nodeGraphParamNormalizeModInput === "function") {
+        normalized = nodeGraphParamNormalizeModInput(sample, metadata);
+      } else {
+        const n = Number(sample);
+        normalized = Number.isFinite(n) ? n : 0;
+      }
+      list.push(taggedDomain ? { value: Number(normalized), domain: true } : normalized);
+    };
+    addSource(sources, span.latest);
+    addSource(sourcesLo, span.lo);
+    addSource(sourcesHi, span.hi);
   }
   if (!sources.length) {
     return null;
   }
-  let effective = nodeGraphFiniteNumber(baseDomain);
-  if (typeof nodeGraphParamFoldModSources === "function") {
-    effective = nodeGraphParamFoldModSources(effective, sources, metadata);
-  } else if (typeof nodeGraphApplyParameterModulation === "function") {
-    const modSum = sources.reduce((sum, value) => {
-      const n = Number(value && typeof value === "object" ? value.value : value);
-      return sum + (Number.isFinite(n) ? n : 0);
-    }, 0);
-    effective = nodeGraphApplyParameterModulation(effective, modSum, metadata);
-  } else {
-    const baseUnit = nodeGraphParameterValueToNormalizedSignal(effective, metadata);
-    const contrib = sources.reduce((sum, value) => {
-      const n = Number(value && typeof value === "object" ? value.value : value);
-      return sum + (Number.isFinite(n) ? n : 0);
-    }, 0);
-    return {
-      signal: nodeGraphNormalizedParameterSignalBounds(baseUnit + contrib, metadata),
-      effectiveDomain: effective,
-    };
+  // The same fold for the newest samples and for the lowest / highest of the frame.
+  const fold = (list) => {
+    let effective = nodeGraphFiniteNumber(baseDomain);
+    if (typeof nodeGraphParamFoldModSources === "function") {
+      effective = nodeGraphParamFoldModSources(effective, list, metadata);
+    } else if (typeof nodeGraphApplyParameterModulation === "function") {
+      const modSum = list.reduce((sum, value) => {
+        const n = Number(value && typeof value === "object" ? value.value : value);
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
+      effective = nodeGraphApplyParameterModulation(effective, modSum, metadata);
+    } else {
+      const baseUnit = nodeGraphParameterValueToNormalizedSignal(effective, metadata);
+      const contrib = list.reduce((sum, value) => {
+        const n = Number(value && typeof value === "object" ? value.value : value);
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
+      return {
+        signal: nodeGraphNormalizedParameterSignalBounds(baseUnit + contrib, metadata),
+        effectiveDomain: effective,
+      };
+    }
+    // Ghost position uses unit mapped into min/max zoom window (may clip visually).
+    // effectiveDomain is the value actually sent (unclipped under domain REPLACE).
+    let signal;
+    if (typeof nodeGraphParamDomainToUnit === "function") {
+      signal = nodeGraphNormalizedParameterSignalBounds(
+        nodeGraphParamDomainToUnit(effective, metadata),
+        metadata,
+      );
+    } else {
+      signal = nodeGraphNormalizedParameterSignalBounds(
+        nodeGraphParameterValueToNormalizedSignal(effective, metadata),
+        metadata,
+      );
+    }
+    return { signal, effectiveDomain: effective };
+  };
+  const main = fold(sources);
+  if (!main || typeof main !== "object") {
+    return main;
   }
-  // Ghost position uses unit mapped into min/max zoom window (may clip visually).
-  // effectiveDomain is the value actually sent (unclipped under domain REPLACE).
-  let signal;
-  if (typeof nodeGraphParamDomainToUnit === "function") {
-    signal = nodeGraphNormalizedParameterSignalBounds(
-      nodeGraphParamDomainToUnit(effective, metadata),
-      metadata,
-    );
-  } else {
-    signal = nodeGraphNormalizedParameterSignalBounds(
-      nodeGraphParameterValueToNormalizedSignal(effective, metadata),
-      metadata,
-    );
+  const low = fold(sourcesLo);
+  const high = fold(sourcesHi);
+  const signals = [main.signal, low?.signal, high?.signal].filter((v) => Number.isFinite(Number(v))).map(Number);
+  const domains = [main.effectiveDomain, low?.effectiveDomain, high?.effectiveDomain].filter((v) => Number.isFinite(Number(v))).map(Number);
+  // The span the value covered this frame (the ghost draws it as a rectangle).
+  main.signalMin = Math.min(...signals);
+  main.signalMax = Math.max(...signals);
+  if (domains.length) {
+    main.domainMin = Math.min(...domains);
+    main.domainMax = Math.max(...domains);
   }
-  return { signal, effectiveDomain: effective };
+  return main;
 }
 
 let nodeGraphGhostSliderLiveFrame = 0;
@@ -514,6 +592,8 @@ function nodeGraphGhostSliderClearEntry(slider, readout) {
   readout.classList.toggle("has-ghost-slider", false);
   readout.style.removeProperty("--ghost-start");
   readout.style.removeProperty("--ghost-end");
+  delete slider.dataset.ghostDomainMin;
+  delete slider.dataset.ghostDomainMax;
   if (Object.hasOwn(slider.dataset, "sentDomainValue")) {
     delete slider.dataset.sentDomainValue;
     // Restore in-slider number to editable base (no ghost target).
@@ -600,11 +680,24 @@ function syncNodeGraphGhostSliders() {
     const effective = ghost && typeof ghost === "object" && Number.isFinite(Number(ghost.effectiveDomain))
       ? String(ghost.effectiveDomain)
       : null;
-    const range = nodeSliderHandleRangeFromTravel(
+    let range = nodeSliderHandleRangeFromTravel(
       slider,
       readout,
       clampNodeSliderValue(ghostSignal, 0, 1),
     );
+    // The value moved this frame: the ghost is the rectangle it covered, not the point it ended on.
+    let spanLo = null;
+    let spanHi = null;
+    if (ghost && typeof ghost === "object" && Number.isFinite(ghost.signalMin) && Number.isFinite(ghost.signalMax)
+      && ghost.signalMax - ghost.signalMin > 1e-6) {
+      const lo = nodeSliderHandleRangeFromTravel(slider, readout, clampNodeSliderValue(ghost.signalMin, 0, 1));
+      const hi = nodeSliderHandleRangeFromTravel(slider, readout, clampNodeSliderValue(ghost.signalMax, 0, 1));
+      range = { ...range, start: Math.min(lo.start, hi.start, range.start), end: Math.max(lo.end, hi.end, range.end) };
+      if (Number.isFinite(ghost.domainMin) && Number.isFinite(ghost.domainMax)) {
+        spanLo = String(ghost.domainMin);
+        spanHi = String(ghost.domainMax);
+      }
+    }
     // Skip unchanged: same ghost range, same target number, same base value
     // and the readout still carries the ghost (a re-render would drop it).
     const last = slider._nodeGraphGhostLast;
@@ -625,6 +718,14 @@ function syncNodeGraphGhostSliders() {
     readout.classList.toggle("has-ghost-slider", true);
     if (effective !== null) {
       slider.dataset.sentDomainValue = effective;
+    }
+    // The span in the parameter's own units, for the vertical sliders (they draw the ghost from values, not pixels).
+    if (spanLo !== null) {
+      slider.dataset.ghostDomainMin = spanLo;
+      slider.dataset.ghostDomainMax = spanHi;
+    } else {
+      delete slider.dataset.ghostDomainMin;
+      delete slider.dataset.ghostDomainMax;
     }
     readout.style.setProperty("--ghost-start", `${range.start}px`);
     readout.style.setProperty("--ghost-end", `${range.end}px`);

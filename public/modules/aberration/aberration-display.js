@@ -61,10 +61,14 @@ function nodeGraphAberrationCircuitLive() {
 }
 
 function nodeGraphAberrationChannel(nodeId, key) {
+  // Range scales the reach of the XY pads: 1 is the full ±12% of the face, below that it falls off with the square, so a subtle
+  // fringe sits in the middle of the slider.
+  const range = nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, "range", 1), 0, 1);
+  const reach = 0.12 * range * range;
   return {
     bright: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "Bright", 1), 0, 1),
-    x: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "X", 0), -1, 1) * 0.12,
-    y: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "Y", 0), -1, 1) * 0.12,
+    x: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "X", 0), -1, 1) * reach,
+    y: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "Y", 0), -1, 1) * reach,
     blur: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "Blur", 0), 0, 1),
   };
 }

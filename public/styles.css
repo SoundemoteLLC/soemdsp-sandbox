@@ -5528,7 +5528,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   display: grid;
   /* The key column is as wide as its key; the description takes the rest and wraps. */
   /* Two columns at every width: a key column just wide enough for the widest key, then the description. */
-  grid-template-columns: 9.2rem minmax(0, 1fr);
+  grid-template-columns: 11.4rem minmax(0, 1fr);
   /* A row keeps its full height (the list scrolls); a flex item would otherwise shrink and overlap the next row. */
   flex: 0 0 auto;
   align-items: center;
@@ -5536,8 +5536,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   min-height: 34px;
   padding: 6px 8px;
   border-bottom: 1px solid rgba(127, 199, 217, 0.12);
-  color: rgba(243, 241, 236, 0.92);
-  font: 650 0.78rem/1.2 "Cascadia Mono", Consolas, monospace;
+  color: rgba(243, 241, 236, 0.82);
+  font: 300 0.98rem/1.3 "Cascadia Mono", Consolas, monospace;
 }
 
 .node-hotkeys-row kbd {
@@ -5552,7 +5552,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   border: 0;
   background: transparent;
   color: rgba(238, 190, 135, 1);
-  font: 800 0.9rem/1 "Cascadia Mono", Consolas, monospace;
+  font: 600 1.02rem/1 "Cascadia Mono", Consolas, monospace;
   white-space: nowrap;
 }
 
@@ -5574,7 +5574,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   box-shadow: 0 2px 0 #3c3b37, 0 3px 5px rgba(0, 0, 0, 0.55);
   color: #2a2926;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 /* The top face of the cap: lighter, inset from the base, slightly dished. */
@@ -5610,8 +5610,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   min-width: 0;
   overflow-wrap: anywhere;
   white-space: normal;
-  font-weight: 500;
-  line-height: 1.35;
+  font-weight: 300;
+  line-height: 1.4;
 }
 
 

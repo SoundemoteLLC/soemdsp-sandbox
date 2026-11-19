@@ -421,6 +421,12 @@ function nodeGraphModuleScopeHasModelDisplay() {
       renderer === "screenBendFace" ||
       renderer === "placeFace" ||
       renderer === "screenShakeFace" ||
+      renderer === "crtRasterFace" ||
+      renderer === "analogSignalFace" ||
+      renderer === "analogDistortionFace" ||
+      renderer === "kaleidoscopeFace" ||
+      renderer === "chromaColorFace" ||
+      renderer === "bloomGlowFace" ||
       nodeGraphModuleScopeIsOscillatorType(slot.type) ||
       (["waterfall", "dotOscilloscope", "valueOscilloscope", "lineBurnOscilloscope", "scope1dTrace", "led"].includes(slot.type) &&
         nodeGraphModuleScopeConnectionsTo(slot.nodeId, "In").length > 0) ||

@@ -603,7 +603,8 @@ function handleNodeGraphKeydown(event) {
     }
     return;
   }
-  if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "d") {
+  // Shift+D (D alone is the camera's "move right", see node-graph-camera-keys.js).
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && event.key.toLowerCase() === "d") {
     event.preventDefault();
     if (typeof toggleNodeGraphConstraintGuideVisibility === "function") {
       toggleNodeGraphConstraintGuideVisibility();

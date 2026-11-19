@@ -23516,18 +23516,6 @@ const nodeGraphModuleDefinitions = (
     parameters: [],
     visualSink: true
   },
-  bloomGlow: {
-    planRole: "monitor",
-    displayType: "dot",
-    outputs: [],
-    parameters: [
-      { defaultValue: "0", key: "screenDim", label: "Dim", max: "1", mid: "0", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.55", key: "visualBrightness", label: "Brightness", max: "1", mid: "0.55", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.45", key: "visualBloom", label: "Bloom", max: "1", mid: "0.45", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.60", key: "visualGlow", label: "Glow", max: "1", mid: "0.6", min: "0", nonlinearSlider: false, step: "any" },
-    ],
-    visualSink: true
-  },
   rgbaHsla: {
     planRole: "monitor",
     bufferedInputs: ["Red", "Green", "Blue", "Hue", "Saturation", "Lightness", "HSL Mix", "Alpha"],
@@ -23554,23 +23542,6 @@ const nodeGraphModuleDefinitions = (
       { key: "lightness", label: "Lightness", port: "Lightness" },
       { key: "hslMix", label: "HSL Mix", port: "HSL Mix" },
       { key: "screenDim", label: "Alpha", port: "Alpha" },
-    ],
-    visualSink: true
-  },
-  chromaColor: {
-    planRole: "monitor",
-    displayType: "dot",
-    outputs: [],
-    parameters: [
-      { defaultValue: "0.58", key: "chromaHue", label: "Hue", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", wraparound: true },
-      { defaultValue: "0.82", key: "chromaSaturation", label: "Chroma", max: "1", mid: "0.6", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.52", key: "chromaLightness", label: "Light", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.35", key: "chromaAlpha", label: "Alpha", max: "1", mid: "0.35", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.25", key: "chromaDrift", label: "Drift", max: "1", mid: "0.25", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.40", key: "chromaSpread", label: "Spread", max: "1", mid: "0.4", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.55", key: "visualBrightness", label: "Trace Brightness", max: "1", mid: "0.55", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.45", key: "visualBloom", label: "Bloom", max: "1", mid: "0.45", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "0.60", key: "visualGlow", label: "Glow", max: "1", mid: "0.6", min: "0", nonlinearSlider: false, step: "any" },
     ],
     visualSink: true
   },

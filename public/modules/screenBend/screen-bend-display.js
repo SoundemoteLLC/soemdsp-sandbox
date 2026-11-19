@@ -94,6 +94,9 @@ function drawNodeGraphScreenBendFaceItem(_renderer, item) {
       glareSize: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareSize", 0.5), 0, 1),
       vigReach: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigReach", 0.4), 0, 1),
       vigCurve: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigCurve", 0.3), 0, 1),
+      vigShape: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigShape", 1), 0, 1),
+      shadowAlpha: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "shadowAlpha", 0), 0, 1),
+      shadowThick: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "shadowThick", 0.3), 0, 1),
       picture,
     });
   }

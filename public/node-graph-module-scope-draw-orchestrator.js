@@ -547,7 +547,19 @@ function drawNodeGraphModuleScopes(options = {}) {
     || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "placeFace"
     || it?.slot?.type === "place"
     || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "screenShakeFace"
-    || it?.slot?.type === "screenShake",
+    || it?.slot?.type === "screenShake"
+    || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "crtRasterFace"
+    || it?.slot?.type === "crtRaster"
+    || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "analogSignalFace"
+    || it?.slot?.type === "analogSignal"
+    || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "analogDistortionFace"
+    || it?.slot?.type === "analogDistortion"
+    || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "kaleidoscopeFace"
+    || it?.slot?.type === "kaleidoscope"
+    || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "chromaColorFace"
+    || it?.slot?.type === "chromaColor"
+    || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "bloomGlowFace"
+    || it?.slot?.type === "bloomGlow",
   );
   if (!force && allowTraceSkip && !feedbackLive && nodeGraphModuleScopeTraceDisplayFrameUnchanged(visibleItems)) {
     setNodeGraphModuleScopeDebugPhase("trace-unchanged");

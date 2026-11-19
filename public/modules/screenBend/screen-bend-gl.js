@@ -37,6 +37,9 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 4096;
     uniform float uGlareSize;
     uniform float uVigReach;
     uniform float uVigCurve;
+    uniform float uVigShape;
+    uniform float uShadowAlpha;
+    uniform float uShadowThick;
 
     void main() {
       vec2 p = vUv * 2.0 - 1.0;
@@ -65,14 +68,25 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 4096;
       float vStart = mix(0.95, 0.0, clamp(uVigReach, 0.0, 1.0));
       float vEnd = mix(1.4, vStart + 0.05, pow(clamp(uVigCurve, 0.0, 1.0), 0.7));
       vEnd = mix(vEnd, min(vEnd, 1.0), vAmt);
-      float vig = 1.0 - vAmt * smoothstep(vStart, max(vEnd, vStart + 0.02), length(p));
+      // The distance the vignette is measured by: a superellipse like the glass edge. Vig Shape 0 is a circle (oval on a wide
+      // screen), 1 is the glass edge's own shape (Roundness), so the dark follows the screen outline and reaches full black exactly
+      // at the glass edge: at full Vignette there is no screen edge to see, only the shadow.
+      float nv = mix(2.0, n, clamp(uVigShape, 0.0, 1.0));
+      vec2 av = pow(abs(p), vec2(nv));
+      float dv = pow(av.x + av.y, 1.0 / nv);
+      float vig = 1.0 - vAmt * smoothstep(vStart, max(vEnd, vStart + 0.02), dv);
       // Glare: a soft window-like reflection where Glare X / Y put it (size from Glare Size), plus a faint sheen along the rim.
       vec2 g = (p - uGlarePos) * vec2(1.1, 1.7);
       float blob = exp(-dot(g, g) * mix(14.0, 1.2, clamp(uGlareSize, 0.0, 1.0)));
       float rim = smoothstep(0.84, 0.985, d);
       col += clamp(uGlare, 0.0, 1.0) * (0.32 * blob + 0.07 * rim) * vec3(1.0);
-      // The vignette multiplies everything, glare included, so full Vignette is pure black out there (nothing is added back).
-      gl_FragColor = vec4(col * vig * mask, 1.0);
+      // Rim shadow: a band hugging the glass edge, like the shadow the enclosure casts on the screen. Thick is how far in it reaches,
+      // Alpha how dark it gets at the edge (1 is black). It follows the glass outline (Roundness), and falls off softly into the picture.
+      float shadowW = 0.02 + 0.45 * clamp(uShadowThick, 0.0, 1.0);
+      float rimShadow = pow(smoothstep(1.0 - shadowW, 1.0, d), 1.6);
+      float shade = 1.0 - clamp(uShadowAlpha, 0.0, 1.0) * rimShadow;
+      // The vignette and the rim shadow multiply everything, glare included, so full Vignette is pure black out there (nothing is added back).
+      gl_FragColor = vec4(col * vig * shade * mask, 1.0);
     }
   `;
 
@@ -140,6 +154,9 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 4096;
       uGlareSize: gl.getUniformLocation(program, "uGlareSize"),
       uVigReach: gl.getUniformLocation(program, "uVigReach"),
       uVigCurve: gl.getUniformLocation(program, "uVigCurve"),
+      uVigShape: gl.getUniformLocation(program, "uVigShape"),
+      uShadowAlpha: gl.getUniformLocation(program, "uShadowAlpha"),
+      uShadowThick: gl.getUniformLocation(program, "uShadowThick"),
     };
     return sharedDevice;
   }
@@ -248,6 +265,9 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 4096;
     gl.uniform1f(device.uGlareSize, Number(options.glareSize) || 0);
     gl.uniform1f(device.uVigReach, Number(options.vigReach) || 0);
     gl.uniform1f(device.uVigCurve, Number(options.vigCurve) || 0);
+    gl.uniform1f(device.uVigShape, Number.isFinite(Number(options.vigShape)) ? Number(options.vigShape) : 1);
+    gl.uniform1f(device.uShadowAlpha, Number(options.shadowAlpha) || 0);
+    gl.uniform1f(device.uShadowThick, Number.isFinite(Number(options.shadowThick)) ? Number(options.shadowThick) : 0.3);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, null);

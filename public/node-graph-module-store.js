@@ -108,7 +108,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "massSpringDamper",
   "wavetable3d",
   "pixelGrid",
-  "chromaColor",
   "image",
   "rgbaHsla",
   "waveguide",
@@ -118,7 +117,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "ePiano",
   "percussion",
   "phosphillator",
-  "bloomGlow",
   "gradientVectorscope",
   "scope2dTraceStereo",
   "lufs",
@@ -153,6 +151,9 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   // Shipped as Formant Voice (was BLIT Formant; the parked "formantFilter" placeholder).
   "formantFilter",
   "screenSpaceShader",
+  // Shipped as picture effects (📺 in, 📺 out): Chroma Color (also what RGBA / HSLA was for) and Bloom & Glow.
+  "chromaColor",
+  "bloomGlow",
   "output",
   "audioInput",
   "rms",
@@ -199,11 +200,9 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
 const nodeGraphModuleConstructionPlans = Object.freeze({
   spectralSmear: "pre and post ringing smear",
   fftReconstruction: "General buffered-audio FFT reconstruction: sample/live capture, independently controlled read position and speed, and spectral time stretching. Plan: docs/FFT_RECONSTRUCTION_PLAN.md. No DSP yet.",
-  bloomGlow: "Screen bloom/glow/dim from CV. Parked until the shader wash stack is live.",
   gradientVectorscope: "Woscope XY beam with gradient-along-length and dest persist. Parked until that face is finished.",
   canvas: "Composite images, scopes, and shaders. Parked until the shader stack ships.",
-  rgbaHsla: "RGB/HSL screen wash. Parked until shader color controls land.",
-  chromaColor: "Drifting chroma wash. Parked until shader lighting lands.",
+  rgbaHsla: "Folded into Chroma Color (RGB gains, hue, saturation, lightness, and more). Use that instead.",
   image: "Patch image asset for textures. Parked until file storage ships.",
   pixelGrid: "Lo-fi pixel-grid looks. Parked until RGB face pass.",
   asciiscope: "XY character-grid phosphor. Parked; cannot spawn yet.",
@@ -2761,25 +2760,15 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Screen Space Out: its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
     notes: ["screen space", "screen", "feedback", "picture"],
   },
-  bloomGlow: {
-    category: "rgba",
-    description: "Drive bloom/glow/dim of the screen wash from control signals.",
-    notes: ["under construction", "visual sink", "dim input", "bloom and glow", "shader"],
-  },
   rgbaHsla: {
     category: "rgba",
-    description: "Precise RGB/HSL screen wash color for intentional lighting.",
-    notes: ["under construction", "visual sink", "rgb channels", "hsla control"],
-  },
-  chromaColor: {
-    category: "rgba",
-    description: "Stylized chroma wash with drift/spread for mood lighting.",
-    notes: ["under construction", "visual sink", "chroma wash", "moving color"],
+    description: "Retired: Chroma Color does this and more (RGB channel gains, hue, saturation, lightness) on a picture.",
+    notes: ["under construction", "retired", "use chroma color", "rgb channels", "hsla control"],
   },
   image: {
-    category: "rgba",
-    description: "Hold a patch image asset for textures (e.g. phosphor dots).",
-    notes: ["under construction", "load image", "save image", "trace texture"],
+    category: "rgb",
+    description: "Hold a patch image asset for textures (e.g. phosphor dots). Sits with Image Ghost and Picture in the RGB category.",
+    notes: ["under construction", "rgb", "load image", "save image", "trace texture"],
   },
   canvas: {
     category: "rgb",
@@ -3576,8 +3565,8 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/ring_mod/ring_mod.cpp",
   },
   bloomGlow: {
-    source: "public/modules/bloomGlow/bloom-glow-live-evaluator.js",
-    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/public/modules/bloomGlow/bloom-glow-live-evaluator.js",
+    source: "public/modules/bloomGlow/bloom-glow-gl.js",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/public/modules/bloomGlow/bloom-glow-gl.js",
   },
   blubb: {
     source: "public/modules/blubb/blubb-worklet-evaluator.js",
@@ -3616,8 +3605,8 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/public/modules/chordPad/chord-pad-worklet-evaluator.js",
   },
   chromaColor: {
-    source: "public/modules/chromaColor/chroma-color-live-evaluator.js",
-    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/public/modules/chromaColor/chroma-color-live-evaluator.js",
+    source: "public/modules/chromaColor/chroma-color-gl.js",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/public/modules/chromaColor/chroma-color-gl.js",
   },
   chuaAttractor: {
     source: "native_modules/chua_attractor/chua_attractor.cpp",

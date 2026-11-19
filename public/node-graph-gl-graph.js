@@ -837,6 +837,18 @@ function nodeGraphGlGraphDrawSliderFillVertical(batch, readout, input, x, y, w, 
   const real = span(t);
   if (real.size > 0) nodeGraphGlLinesRect(batch, x, y + real.top * h, w, real.size * h, fill);
   if (hideGhost || !readout?.classList.contains("has-ghost-slider")) return;
+  // The value moved this frame: the ghost is the rectangle it covered (the span the ghost sync stored), from its lowest to
+  // its highest value.
+  const minRaw = Number(input.dataset?.ghostDomainMin);
+  const maxRaw = Number(input.dataset?.ghostDomainMax);
+  if (Number.isFinite(minRaw) && Number.isFinite(maxRaw) && maxRaw > minRaw) {
+    const tLo = nodeGraphGlGraphSliderTravel(input, minRaw);
+    const tHi = nodeGraphGlGraphSliderTravel(input, maxRaw);
+    if (Number.isFinite(tLo) && Number.isFinite(tHi) && tHi > tLo) {
+      nodeGraphGlLinesRect(batch, x, y + (1 - tHi) * h, w, (tHi - tLo) * h, ghostFill);
+      return;
+    }
+  }
   const sentRaw = Number(input.dataset?.sentDomainValue);
   const tg = Number.isFinite(sentRaw) ? nodeGraphGlGraphSliderTravel(input, sentRaw) : NaN;
   if (!Number.isFinite(tg)) return;

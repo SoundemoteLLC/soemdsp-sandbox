@@ -35,7 +35,7 @@
   "use strict";
 
   // Module types that run on this scheduler (VG-3 adapters).
-  const VIDEO_TYPES = new Set(["aberration", "fbmField", "place", "rgbFractal", "screenBend", "screenShake", "videoDelay", "videoFeedback", "imageBurn"]);
+  const VIDEO_TYPES = new Set(["aberration", "fbmField", "place", "rgbFractal", "screenBend", "screenShake", "crtRaster", "analogSignal", "analogDistortion", "kaleidoscope", "chromaColor", "bloomGlow", "videoDelay", "videoFeedback", "imageBurn"]);
   // Tokens live far above real rAF ids so a stray cancelAnimationFrame never
   // hits one and nodeGraphVideoGraphCancelFrame can tell them apart.
   const TOKEN_BASE = 2 ** 40;

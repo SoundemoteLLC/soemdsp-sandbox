@@ -532,6 +532,72 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
             }, pixelRatio);
           }
         } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "chromaColorFace"
+          || slot?.type === "chromaColor"
+        ) {
+          if (typeof drawNodeGraphChromaColorFaceItem === "function") {
+            drawNodeGraphChromaColorFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "bloomGlowFace"
+          || slot?.type === "bloomGlow"
+        ) {
+          if (typeof drawNodeGraphBloomGlowFaceItem === "function") {
+            drawNodeGraphBloomGlowFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "kaleidoscopeFace"
+          || slot?.type === "kaleidoscope"
+        ) {
+          if (typeof drawNodeGraphKaleidoscopeFaceItem === "function") {
+            drawNodeGraphKaleidoscopeFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "analogDistortionFace"
+          || slot?.type === "analogDistortion"
+        ) {
+          if (typeof drawNodeGraphAnalogDistortionFaceItem === "function") {
+            drawNodeGraphAnalogDistortionFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "analogSignalFace"
+          || slot?.type === "analogSignal"
+        ) {
+          if (typeof drawNodeGraphAnalogSignalFaceItem === "function") {
+            drawNodeGraphAnalogSignalFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "crtRasterFace"
+          || slot?.type === "crtRaster"
+        ) {
+          if (typeof drawNodeGraphCrtRasterFaceItem === "function") {
+            drawNodeGraphCrtRasterFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
           nodeGraphModuleDisplayRendererForSlot(slot) === "videoFeedbackFace"
           || slot?.type === "videoFeedback"
         ) {

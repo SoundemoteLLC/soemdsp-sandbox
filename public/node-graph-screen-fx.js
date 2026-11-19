@@ -22,6 +22,8 @@ const nodeGraphScreenFxState = {
   status: new Map(), // nodeId -> label text
   frames: 0,
   raf: 0,
+  // Peek (hold P): the screen shows the plain circuit while Screen Space Out's chain keeps running.
+  peek: false,
 };
 
 const NODE_GRAPH_SCREEN_FX_VS = `#version 300 es
@@ -410,7 +412,7 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
     gl.disable(gl.BLEND);
     // 3. Screen: Screen Space Out's picture, else the plain scene.
     let screen = null;
-    for (const id of nodes.screenOuts) {
+    for (const id of (st.peek ? [] : nodes.screenOuts)) {
       // Screen Space Out only replaces the screen while its chain is fed. With nothing plugged into an effect on the way (Screen
       // Space In disconnected) it would only be black, so the shaders are simply off: the plain circuit shows.
       if (!nodeGraphScreenFxChainFed(id)) continue;
