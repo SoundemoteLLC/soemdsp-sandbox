@@ -26216,3 +26216,8 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
 body[data-io-collapse="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell .node-io-row:not(:has(.connected-port)):not(:has(.node-param-port)) {
   display: none !important;
 }
+
+/* IO view C: a dedicated strip, one jack row tall, between the display and the sliders. The IO pills sit in it. */
+body[data-io-view="C"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .dsp-node-body {
+  padding-top: 15px;
+}

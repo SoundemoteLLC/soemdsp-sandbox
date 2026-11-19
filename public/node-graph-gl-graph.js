@@ -1203,6 +1203,12 @@ function nodeGraphGlGraphIoPanel(id) {
   if (geo?.box && Array.isArray(geo.ports)) {
     const pitch = nodeGraphGlGraphJackDiameter();
     const bottom = geo.box.y + geo.box.h;
+    // The dedicated IO strip: the first row of the slider section (View C pads it), between the display and the
+    // sliders. A module with no slider section keeps the pill in its bottom slot.
+    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
+    const body = el?.querySelector(":scope > .dsp-node-body");
+    const bodyBox = body && !body.hidden ? nodeGraphGlGraphWorldBox(body) : null;
+    const pillY = bodyBox && bodyBox.h > pitch ? bodyBox.y + pitch / 2 : bottom - pitch / 2;
     for (const io of ["input", "output"]) {
       const ports = geo.ports.filter((p) => p.visible !== false && p.io === io).sort((a, b) => a.y - b.y);
       if (!ports.length) continue;
@@ -1210,8 +1216,7 @@ function nodeGraphGlGraphIoPanel(id) {
       const firstY = bottom + 2 + pitch / 2;
       result = result || {};
       result[io] = {
-        // The bottommost slot of the wall, so the pill sits on the module edge.
-        pill: { x: wallX, y: bottom - pitch / 2, count: ports.length },
+        pill: { x: wallX, y: pillY, count: ports.length },
         ports: ports.map((p, i) => ({ port: p.port, io, x: wallX, y: firstY + i * pitch })),
         pitch,
         wallX,
@@ -1262,8 +1267,8 @@ function nodeGraphGlGraphIoExpandedRegion(id, io) {
   return {
     id, io, side, r, labels, ports: edge.ports, wallX, width,
     x0, x1: x0 + width,
-    // A panel starts at the pill (so the pointer can travel from the pill into it); an overflow list at its first jack.
-    y0: edge.panel ? edge.panel.pill.y - r : edge.ports[0].y - r,
+    // A panel starts at the module's bottom edge (it never covers the module); an overflow list at its first jack.
+    y0: edge.panel ? edge.panel.bottom : edge.ports[0].y - r,
     y1: edge.ports[edge.ports.length - 1].y + r,
   };
 }

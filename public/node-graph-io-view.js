@@ -105,7 +105,12 @@
   window.nodeGraphIoView = () => state.view;
   window.nodeGraphIoViewConfig = () => VIEWS[state.view];
   /** Extra module height (grid cells) the view needs: View C reserves the jack stack at the bottom. */
-  window.nodeGraphIoViewExtraHeightGu = () => 0;
+  window.nodeGraphIoViewExtraHeightGu = (type) => {
+    if (!VIEWS[state.view].panel) return 0;
+    if (typeof nodeGraphModuleUsesLayoutB !== "function" || !nodeGraphModuleUsesLayoutB(type)) return 0;
+    const sliders = typeof nodeGraphModuleSliderBodyHeightGu === "function" ? nodeGraphModuleSliderBodyHeightGu(type, null, null) : 0;
+    return sliders > 0 ? 15 / 28 : 0;
+  };
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
   /** Shift+Tab: View C, and back to A. */
@@ -168,9 +173,14 @@
     const ex = nodeGraphGlGraphState?.ioExpanded;
     if (!ex || typeof nodeGraphGlGraphIoExpandedRegion !== "function") return false;
     const pad = 6;
-    return nodeGraphGlGraphIoExpandedRegions(ex).some((reg) => (
+    if (nodeGraphGlGraphIoExpandedRegions(ex).some((reg) => (
       point.x >= reg.x0 - pad && point.x <= reg.x1 + pad && point.y >= reg.y0 - pad && point.y <= reg.y1 + pad
-    ));
+    ))) return true;
+    // IO view C: the pill is inside the module, the panels below it, so the module itself keeps them open.
+    if (ex.io !== "both") return false;
+    const plate = (nodeGraphGlGraphState.plates || []).find((p) => p.id === ex.id);
+    return Boolean(plate && point.x >= plate.x - pad && point.x <= plate.x + plate.w + pad
+      && point.y >= plate.y - pad && point.y <= plate.y + plate.h + pad);
   }
 
   document.addEventListener("pointermove", (event) => {
