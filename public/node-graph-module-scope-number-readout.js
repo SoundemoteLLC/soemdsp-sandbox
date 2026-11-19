@@ -645,7 +645,14 @@ const NODE_GRAPH_NUMBER_READOUT_PLATE_FS = `
     vec4 t = texture2D(uSrc, gl_FragCoord.xy / uSize);
     float k = uKeep;
     if (uResidual > 0.5) {
-      k = pow(mix(uKeepSlow, uKeepFast, pow(clamp(t.a, 0.0, 1.0), 12.0)), uFrames);
+      // two-component decay (monotone): the first 0.5 of energy is the dim tail (Ghost rate), only the energy above it is hot
+      // (Trail rate). The old per-pixel blend of the two rates made a full-energy pixel decay at the Trail rate alone, so with
+      // Trail below Ghost hot pixels vanished while dimmer neighbours kept a tail: dark holes inside bright areas. With Trail
+      // >= Ghost the two rates are equal and the result is identical to before.
+      float a = clamp(t.a, 0.0, 1.0);
+      float tailDecay = uFrames > 0.0 ? pow(uKeepSlow, uFrames) : 1.0;
+      float hotDecay = uFrames > 0.0 ? pow(uKeepFast, uFrames) : 1.0;
+      k = a > 1e-5 ? (min(a, 0.5) * tailDecay + max(a - 0.5, 0.0) * hotDecay) / a : tailDecay;
     }
     if (uFloor8 > 0.5) {
       gl_FragColor = floor(floor(t * 255.0 + 0.5) * k) / 255.0;

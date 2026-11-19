@@ -6,8 +6,13 @@ const nodeGraphVectorRgbSettingsDefaults = Object.freeze({
   background: "#000000",
   dot1Brightness: 1,
   dot1Size: 0.08,
-  lineThickness: 0.12,
   dotBudget: 2048,
+  // The Trace settings (Vector RGB takes its colours from the R / G / B streams, so there is no gradient).
+  decayBlur: 0,
+  buildUp: true,
+  drawMode: "budget",
+  rotate90: false,
+  skipDiscontinuities: false,
   // Mid Ghost ≈ DestFade erase 0.008 (sweet hang); see PhosphorResidual.destFadeAmount.
   ghost: 0.35,
   pixelDensity: 1,
@@ -38,12 +43,22 @@ function normalizeNodeGraphVectorRgbSettings(settings = {}) {
   const ghost = Residual?.migrateGhost
     ? Residual.migrateGhost(source, d.ghost)
     : Math.max(0, Math.min(1, num("ghost", d.ghost)));
+  const flag = (key, fallback) => {
+    const raw = source[key];
+    if (raw === undefined || raw === null || raw === "") return fallback;
+    return raw === true || raw === 1 || raw === "true" || raw === "1";
+  };
+  const mode = String(source.drawMode || d.drawMode);
   return {
     background,
-    dot1Brightness: Math.max(0, Math.min(1, num("dot1Brightness", d.dot1Brightness))),
+    dot1Brightness: Math.max(0, Math.min(4, num("dot1Brightness", d.dot1Brightness))),
     dot1Size: Math.max(0, Math.min(1, num("dot1Size", d.dot1Size))),
-    lineThickness: Math.max(0, Math.min(1, num("lineThickness", d.lineThickness))),
     dotBudget: Math.max(1, Math.min(8192, Math.round(num("dotBudget", d.dotBudget)))),
+    decayBlur: Math.max(0, Math.min(1, num("decayBlur", d.decayBlur))),
+    buildUp: flag("buildUp", d.buildUp),
+    drawMode: mode === "length" || mode === "dots" || mode === "lines" ? mode : "budget",
+    rotate90: flag("rotate90", d.rotate90),
+    skipDiscontinuities: flag("skipDiscontinuities", d.skipDiscontinuities),
     ghost,
     pixelDensity: Math.max(0, Math.min(1, num("pixelDensity", d.pixelDensity))),
     scale: Math.max(0.05, Math.min(8, num("scale", d.scale))),
@@ -143,6 +158,14 @@ function nodeGraphVectorRgbAnalog01(value) {
   return Math.max(0, Math.min(1, n));
 }
 
+// Level of a stream (R, G, B, Bright) as a drive amount: 0..1 as-is, a bipolar -1..0 maps through 0.5 + 0.5x, and ABOVE 1 it is an
+// overdrive (10 = ten times full), so a signal can push past the Brightness slider's ceiling.
+function nodeGraphVectorRgbDrive(value) {
+  const n = Number(value);
+  if (Number.isFinite(n) && n > 1) return n;
+  return nodeGraphVectorRgbAnalog01(value);
+}
+
 function nodeGraphVectorRgbNodePoweredOff(nodeId) {
   const id = String(nodeId || "");
   if (!id) return false;
@@ -186,6 +209,8 @@ function nodeGraphVectorRgbClearPlate(canvas, ctx, bg) {
   if (!canvas) return;
   canvas._vectorRgbPrimed = false;
   canvas._vectorRgbAbs = 0;
+  canvas._vectorRgbLast = null;
+  canvas._vectorRgbAcc = 0;
   const trails = typeof TraceRgbTrailsGl !== "undefined" ? TraceRgbTrailsGl : null;
   if (trails && typeof trails.clear === "function") {
     trails.clear(canvas, bg);
@@ -295,7 +320,8 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     canvas._vectorRgbPrimed = false;
     return;
   }
-  trails.stepFade(canvas, settings.trail, settings.ghost, bg);
+  // Decay blur 0 (the default) is the plain fade; above 0 the stored picture also diffuses a little every frame (0..0.25 per frame).
+  trails.stepFade(canvas, settings.trail, settings.ghost, bg, settings.decayBlur * 0.25);
 
   try {
     const source = nodeGraphRgbPickPortBuffer(slot, "X");
@@ -334,8 +360,12 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     const oy = (h - side) * 0.5;
     const scale = settings.scale;
     const gain = settings.dot1Brightness;
-    const radius = Math.max(0.6, side * settings.dot1Size * 0.5);
-    const line = Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings.lineThickness, 0)));
+    // Size is the same mapping as Trace: authored px (dotUnitInkPx) -> px on this face (faceInkPx), not a share of the side.
+    const sizePx = typeof dotUnitInkPx === "function" ? dotUnitInkPx(settings.dot1Size) : settings.dot1Size * 96;
+    const diameter = typeof faceInkPx === "function" ? faceInkPx(sizePx, side) : side * settings.dot1Size;
+    const radius = Math.max(0.5, diameter * 0.5);
+    // Draw: dots = the samples only; budget / length / lines = connected by an even-spaced fill along the path.
+    const skipJump = side * 0.35;
     const budget = Math.max(1, Math.min(8192, Math.round(nodeGraphFiniteNumber(settings.dotBudget, 2048))));
     const connectionsTo = typeof nodeGraphModuleScopeConnectionsTo === "function"
       ? nodeGraphModuleScopeConnectionsTo
@@ -344,10 +374,57 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     const rgbWired = ["R", "G", "B"].some((port) => connectionsTo(slot.nodeId, port).length > 0);
 
     const floatsPer = typeof TraceRgbPoints !== "undefined" ? TraceRgbPoints.FLOATS : 5;
-    const segs = Math.max(0, Math.round(line * 8));
     const nCap = captured.length;
-    const stride = nCap > budget ? nCap / budget : 1;
-    const maxStamps = Math.min(8192, Math.ceil(nCap / stride) * (segs + 1) + 2);
+    // Pass 1: every sample to a pixel position and a colour. Colour is the analog 0..1 of each stream (a bipolar -1..1 signal
+    // maps through 0.5 + 0.5x, the same as Bright), so a channel can sit at any level, not only fully on or off.
+    const pts = new Float32Array((nCap + 1) * 6);
+    let np = 0;
+    const last = canvas._vectorRgbLast || null;
+    if (last) {
+      pts.set([last.x, last.y, last.r, last.g, last.b, 1], 0);
+      np = 1;
+    }
+    const chan = (arr, i) => (rgbWired ? nodeGraphVectorRgbDrive(arr?.[i]) : 1);
+    for (let i = 0; i < nCap; i += 1) {
+      let sx = captured.X[i];
+      let sy = captured.Y[i];
+      if (settings.rotate90) {
+        const rot = typeof nodeGraphGradientVectorscopeRotate === "function"
+          ? nodeGraphGradientVectorscopeRotate(sx, sy, true)
+          : { x: (sx - sy) * Math.SQRT1_2, y: (sx + sy) * Math.SQRT1_2 };
+        sx = rot.x;
+        sy = rot.y;
+      }
+      const x = nodeGraphVectorRgbUnitToPx(sx, ox, side, scale);
+      const y = nodeGraphVectorRgbUnitToPx(-sy, oy, side, scale);
+      const bright = brightWired ? nodeGraphVectorRgbDrive(captured.Bright?.[i] ?? captured.Blank?.[i]) : 1;
+      const ink = gain * bright;
+      const o = np * 6;
+      if (x == null || y == null) {
+        pts[o + 5] = 0; // no position: the line breaks here
+      } else {
+        pts[o] = x;
+        pts[o + 1] = y;
+        pts[o + 2] = chan(captured.R, i) * ink;
+        pts[o + 3] = chan(captured.G, i) * ink;
+        pts[o + 4] = chan(captured.B, i) * ink;
+        pts[o + 5] = pts[o + 2] + pts[o + 3] + pts[o + 4] > 1e-6 ? 1 : 0; // black = pen up
+      }
+      np += 1;
+    }
+    const joined = (a, b) => {
+      if (!pts[a * 6 + 5] || !pts[b * 6 + 5]) return false;
+      if (!settings.skipDiscontinuities) return true;
+      return Math.hypot(pts[b * 6] - pts[a * 6], pts[b * 6 + 1] - pts[a * 6 + 1]) <= skipJump;
+    };
+
+    // Pass 2: stamps. Lines / budget / length: the stamps are spaced by ARC LENGTH along the path, so the line is unbroken at
+    // any speed and as bright at a fast part as a slow one; the dot budget only widens the spacing when the path is too long
+    // for it. Dots: just the samples, thinned to the budget.
+    // Dots: the budget is the number of dots. Lines: the budget is per 1/8 of the cap, so a fast path still gets stamped close
+    // enough to read as a line (the spacing only widens past 8x the budget).
+    const stampCap = settings.drawMode === "dots" ? budget : Math.min(65536, budget * 8);
+    const maxStamps = stampCap + 16;
     let packed = canvas._vectorRgbPacked;
     const need = maxStamps * floatsPer;
     if (!(packed instanceof Float32Array) || packed.length < need) {
@@ -355,66 +432,81 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
       canvas._vectorRgbPacked = packed;
     }
     let count = 0;
-    let prevX = NaN;
-    let prevY = NaN;
-    let prevR = 0;
-    let prevG = 0;
-    let prevB = 0;
-    const pushStamp = (x, y, r, g, b) => {
+    const pushStamp = (x, y, r, g, b, w) => {
       if (count >= maxStamps) return;
       const o = count * floatsPer;
       packed[o] = x;
       packed[o + 1] = y;
-      packed[o + 2] = r;
-      packed[o + 3] = g;
-      packed[o + 4] = b;
+      packed[o + 2] = r * w;
+      packed[o + 3] = g * w;
+      packed[o + 4] = b * w;
       count += 1;
     };
-    const pickCount = stride <= 1 ? nCap : Math.min(budget, nCap);
-    const pickStep = pickCount <= 1 ? 1 : (nCap - 1) / Math.max(1, pickCount - 1);
-    for (let p = 0; p < pickCount && count < budget; p += 1) {
-      const i = stride <= 1 ? p : Math.min(nCap - 1, Math.round(p * pickStep));
-      const x = nodeGraphVectorRgbUnitToPx(captured.X[i], ox, side, scale);
-      const y = nodeGraphVectorRgbUnitToPx(-captured.Y[i], oy, side, scale);
-      if (x == null || y == null) {
-        continue;
+    if (settings.drawMode === "dots") {
+      const step = np > budget ? np / budget : 1;
+      for (let f = 0; f < np && count < budget; f += step) {
+        const i = Math.floor(f);
+        if (!pts[i * 6 + 5]) continue;
+        pushStamp(pts[i * 6], pts[i * 6 + 1], pts[i * 6 + 2], pts[i * 6 + 3], pts[i * 6 + 4], 1);
       }
-      const bright = brightWired
-        ? nodeGraphVectorRgbAnalog01(captured.Bright?.[i] ?? captured.Blank?.[i])
-        : 1;
-      const ink = gain * bright;
-      const r = (rgbWired ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(captured.R[i]))) : 1) * ink;
-      const g = (rgbWired ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(captured.G[i]))) : 1) * ink;
-      const b = (rgbWired ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(captured.B[i]))) : 1) * ink;
-      if (r + g + b <= 1e-6) {
-        prevX = NaN;
-        continue;
+    } else {
+      let pathLen = 0;
+      for (let i = 1; i < np; i += 1) {
+        if (joined(i - 1, i)) pathLen += Math.hypot(pts[i * 6] - pts[(i - 1) * 6], pts[i * 6 + 1] - pts[(i - 1) * 6 + 1]);
       }
-      if (segs > 0 && Number.isFinite(prevX) && Number.isFinite(prevY)) {
-        for (let s = 1; s <= segs && count < budget; s += 1) {
-          const t = s / (segs + 1);
-          pushStamp(
-            prevX + (x - prevX) * t,
-            prevY + (y - prevY) * t,
-            prevR + (r - prevR) * t,
-            prevG + (g - prevG) * t,
-            prevB + (b - prevB) * t,
-          );
+      // Close enough that the stamps blend into one smooth line (a gaussian dot every 0.25 radius ripples by about 3%).
+      const spacing = Math.max(radius * 0.25, pathLen / stampCap, 0.2);
+      // Build up off takes the brightest stamp (MAX), so a stamp must carry the full level: scaling it down by the spacing would cap
+      // the line below what you dialled. Build up on adds the stamps, so there each is scaled to keep the sum at the level.
+      const weight = settings.buildUp === false ? 1 : Math.min(1, spacing / (radius * 1.2));
+      let acc = canvas._vectorRgbAcc || 0;
+      for (let i = 1; i < np; i += 1) {
+        const a = (i - 1) * 6;
+        const b = i * 6;
+        if (!joined(i - 1, i)) {
+          acc = 0;
+          if (pts[b + 5] && i > 1) pushStamp(pts[b], pts[b + 1], pts[b + 2], pts[b + 3], pts[b + 4], weight);
+          continue;
         }
+        const dx = pts[b] - pts[a];
+        const dy = pts[b + 1] - pts[a + 1];
+        const d = Math.hypot(dx, dy);
+        let pos = spacing - acc; // distance along this segment of the next stamp
+        while (pos <= d) {
+          const t = d > 0 ? pos / d : 1;
+          pushStamp(
+            pts[a] + dx * t, pts[a + 1] + dy * t,
+            pts[a + 2] + (pts[b + 2] - pts[a + 2]) * t,
+            pts[a + 3] + (pts[b + 3] - pts[a + 3]) * t,
+            pts[a + 4] + (pts[b + 4] - pts[a + 4]) * t,
+            weight,
+          );
+          pos += spacing;
+        }
+        acc = spacing - (pos - d);
       }
-      pushStamp(x, y, r, g, b);
-      prevX = x;
-      prevY = y;
-      prevR = r;
-      prevG = g;
-      prevB = b;
+      canvas._vectorRgbAcc = acc;
+      // Standing still: nothing travelled, so keep the point lit.
+      if (count === 0 && np > 0 && pts[(np - 1) * 6 + 5]) {
+        const o = (np - 1) * 6;
+        pushStamp(pts[o], pts[o + 1], pts[o + 2], pts[o + 3], pts[o + 4], weight);
+      }
+    }
+    if (np > 0) {
+      const o = (np - 1) * 6;
+      canvas._vectorRgbLast = pts[o + 5] ? { x: pts[o], y: pts[o + 1], r: pts[o + 2], g: pts[o + 3], b: pts[o + 4] } : null;
     }
     if (count > 0 && typeof trails.stampPoints === "function") {
-      trails.stampPoints(canvas, packed, count, radius * 2);
+      // Build up off: a pixel never gets brighter than one stamp (MAX blend), like Trace.
+      trails.stampPoints(canvas, packed, count, radius * 2, { max: settings.buildUp === false });
     }
   } finally {
     if (typeof trails.presentTo === "function") {
       trails.presentTo(canvas, ctx, bg);
+    }
+    // The rgba out: the finished picture, published only while a cable leaves it.
+    if (typeof nodeGraphPicturePublishCanvas === "function") {
+      nodeGraphPicturePublishCanvas(slot.nodeId, canvas);
     }
   }
 }

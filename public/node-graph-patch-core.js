@@ -571,6 +571,23 @@ function validateNodeGraphPatch(patch) {
         node.paramMeta.skewOffset = node.paramMeta.curveOffset;
         delete node.paramMeta.curveOffset;
       }
+      // Noise Convolution Reverb (0.20.0 patches): Spread is Decorrelate again, and
+      // Brightness / Darkness (0..1) become Start / End Cutoff in Hz with the
+      // 0.20.0 curve, so old patches keep their sound.
+      if (type === "noiseConvReverb" && node.params) {
+        const has = (k) => Object.prototype.hasOwnProperty.call(node.params, k);
+        if (has("spread") && !has("decorrelate")) node.params.decorrelate = node.params.spread;
+        if ((has("brightness") || has("darkness")) && !has("startCutoffHz") && !has("endCutoffHz")) {
+          const unit = (v, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : d; };
+          const fStart = Math.max(80, Math.min(0.45 * 48000, 1500 * Math.pow(16000 / 1500, unit(node.params.brightness, 0.7))));
+          node.params.startCutoffHz = fStart;
+          node.params.endCutoffHz = fStart * Math.pow(120 / fStart, unit(node.params.darkness, 0.25));
+        }
+        for (const k of ["spread", "brightness", "darkness"]) {
+          delete node.params[k];
+          if (node.paramMeta) delete node.paramMeta[k];
+        }
+      }
       if (type === "smoothGraph" && parameter.key === "smoothingMode") {
         const sourceMax = Number(node.paramMeta?.[parameter.key]?.max);
         const n = Math.round(Number(value));
@@ -1023,7 +1040,7 @@ function validateNodeGraphPatch(patch) {
       const sourceNode = String(modulation.sourceNode || "").trim();
       let sourcePort = String(modulation.sourcePort || "").trim();
       const destinationNode = String(modulation.destinationNode || "").trim();
-      const destinationParam = String(modulation.destinationParam || "").trim();
+      let destinationParam = String(modulation.destinationParam || "").trim();
       if (!sourceNode || !sourcePort || !destinationNode || !destinationParam) {
         throw new Error("modulation entries require sourceNode, sourcePort, destinationNode, destinationParam");
       }
@@ -1045,6 +1062,7 @@ function validateNodeGraphPatch(patch) {
         return [];
       }
       const destinationPatchNode = nodeById.get(destinationNode);
+      if (destinationPatchNode?.type === "noiseConvReverb" && destinationParam === "decorrelate") destinationParam = "spread";
       if (!nodeGraphPatchNodeParameterDefinitions(destinationPatchNode).some((parameter) => parameter.key === destinationParam)) {
         loadWarnings.push(`modulation destination parameter invalid: ${destinationNode}.${destinationParam}`);
         return [];

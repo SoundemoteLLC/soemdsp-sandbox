@@ -22,7 +22,7 @@ const nodeGraphEmojiCatalog = Object.freeze([
       // Trigger (impulse)
       "▲", "◀", "▶", "△", "◁", "▷", "↑", "↥", "⌃", "⌅", "※",
       // Wave / analog
-      "∿", "∼", "≈", "〜", "⌇", "﹋", "﹏", "⎺", "⎻", "─", "⎼", "⎽",
+      "∿", "〰️", "∼", "≈", "〜", "⌇", "﹋", "﹏", "⎺", "⎻", "─", "⎼", "⎽",
       "ƒ", "τ",
       // Circuit / power / jacks
       "⏚", "⊤", "⊥", "⌁", "🗲", "⚡", "⎓", "⏦", "⊕", "⊖", "⊗", "⊙", "⊚",
@@ -92,7 +92,7 @@ const nodeGraphEmojiCatalog = Object.freeze([
     glyphs: [
       "💻", "🖥️", "⌨️", "🖱️", "🖨️", "📱", "📲", "☎️", "📞", "📟",
       "📠", "📡", "🔋", "🔌", "💡", "🔦", "🧮", "⌚", "🕹️", "🎮",
-      "📷", "📸", "📹", "🎥", "📺", "📻", "🛰️", "🤖", "⚙️", "🔧",
+      "📷", "📸", "📹", "🎥", "📺", "📻", "🛰️", "🤖", "👾", "⚙️", "🔧",
       "🔨", "🪛", "🧲", "🧪", "🔬", "🔭", "💾", "💿",
     ],
   },
@@ -257,6 +257,7 @@ const nodeGraphEmojiGlyphNames = Object.freeze({
   "∿": "sine wave (analog)",
   "∼": "tilde operator (wave)",
   "〜": "wave dash",
+  "〰️": "wavy dash",
   "⌇": "wavy line",
   "﹋": "wavy overline",
   "﹏": "wavy low line",
@@ -520,6 +521,7 @@ const nodeGraphEmojiGlyphNames = Object.freeze({
   "📻": "radio",
   "🛰️": "satellite",
   "🤖": "robot",
+  "👾": "alien monster",
   "⚙️": "gear",
   "🔧": "wrench",
   "🔨": "hammer",

@@ -122,9 +122,14 @@
       ghost: resolveGhost(options),
       pathPoints: options.pathPoints || null,
       vertices: options.vertices || null,
-      radius: Math.max(0.35, nodeGraphFiniteNumber(options.radius, 2)),
+      radius: Math.max(0.05, nodeGraphFiniteNumber(options.radius, 2)),
       brightness: Math.max(0, brightness || 0),
       blur,
+      glowCore: options.glowCore,
+      glowReach: options.glowReach,
+      glowStrength: options.glowStrength,
+      glowReachPx: options.glowReachPx,
+      aaPx: options.aaPx,
       mode: "dots",
       maxDots: Math.max(64, Math.min(8192, Math.round(nodeGraphFiniteNumber(options.maxDots, 2048)))),
       bleed: options.bleed,
@@ -172,7 +177,7 @@
     const blur = normalizeBlur(options.blur, 0.2);
     const size01 = faceInkPx(clampAuthoredInkPx(options.size01, 2), options.faceMinSide || face.width || face.height);
     const radius = Number.isFinite(Number(options.radius))
-      ? Math.max(0.35, Number(options.radius))
+      ? Math.max(0.05, Number(options.radius))
       : radiusFromSize(options.faceMinSide || face.width || 1, size01);
     const brightness = Math.max(0, Math.min(1.5, nodeGraphFiniteNumber(options.brightness)));
     if (brightness < 1e-6) {

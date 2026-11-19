@@ -40,6 +40,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/final out test",
+      "label": "final out test",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/final%20out%20test.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/jittery plot",
       "label": "jittery plot",
       "name": "",
@@ -94,6 +103,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/stroke animation not working per module",
+      "label": "stroke animation not working per module",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/stroke%20animation%20not%20working%20per%20module.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/thumper",
       "label": "thumper",
       "name": "",
@@ -107,15 +125,6 @@
       "label": "ugly timing jitter",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/ugly%20timing%20jitter.json",
-      "author": "",
-      "emoji": "",
-      "folder": "bugs"
-    },
-    {
-      "slug": "bugs/velvet noise breaks engine",
-      "label": "velvet noise breaks engine",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/velvet%20noise%20breaks%20engine.json",
       "author": "",
       "emoji": "",
       "folder": "bugs"
@@ -148,10 +157,28 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/cinematicreverb",
+      "label": "cinematicreverb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/cinematicreverb.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/crossover",
       "label": "crossover",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/crossover.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/darkvelvetnoise",
+      "label": "darkvelvetnoise",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/darkvelvetnoise.json",
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
@@ -287,6 +314,15 @@
       "label": "stepregister",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/stepregister.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/sturmiangridwithreverb",
+      "label": "sturmiangridwithreverb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/sturmiangridwithreverb.json",
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
@@ -713,6 +749,14 @@
       "emoji": ""
     },
     {
+      "slug": "cinematicreverb",
+      "label": "cinematicreverb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/cinematicreverb.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "clean",
       "label": "clean",
       "name": "",
@@ -741,6 +785,14 @@
       "label": "damaged_chorus",
       "name": "",
       "url": "/soemdsp-sandbox/patches/guitar_pedals/damaged_chorus.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "darkvelvetnoise",
+      "label": "darkvelvetnoise",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/darkvelvetnoise.json",
       "author": "",
       "emoji": ""
     },
@@ -821,6 +873,14 @@
       "label": "filteredsawtooth",
       "name": "",
       "url": "/soemdsp-sandbox/patches/filteredsawtooth.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "final out test",
+      "label": "final out test",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/final%20out%20test.json",
       "author": "",
       "emoji": ""
     },
@@ -1489,6 +1549,22 @@
       "emoji": ""
     },
     {
+      "slug": "stroke animation not working per module",
+      "label": "stroke animation not working per module",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/stroke%20animation%20not%20working%20per%20module.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "sturmiangridwithreverb",
+      "label": "sturmiangridwithreverb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/sturmiangridwithreverb.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "superlove",
       "label": "superlove",
       "name": "",
@@ -1581,14 +1657,6 @@
       "label": "ugly timing jitter",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/ugly%20timing%20jitter.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
-      "slug": "velvet noise breaks engine",
-      "label": "velvet noise breaks engine",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/velvet%20noise%20breaks%20engine.json",
       "author": "",
       "emoji": ""
     },

@@ -111,6 +111,10 @@ function nodeGraphTraceDisplayUnitDragField(key, formType = null) {
     "ghost",
     "ghostBlend",
     "trail",
+    "decayBlur",
+    "glowCore",
+    "glowReach",
+    "glowStrength",
     "burnAmount",
     "unlitSegments",
     "centsBand",
@@ -258,6 +262,10 @@ function nodeGraphTraceDisplayHistoryCurveExponent(key) {
 
 
 function nodeGraphTraceDisplaySensitiveControlMax(key, formType = "") {
+  // Vector RGB Brightness goes past 1 (0…4): an overdrive for the non-build line.
+  if (key === "dot1Brightness" && formType === "vectorRgbFace") {
+    return 4;
+  }
   if (key === "pixelDensity") {
     return 1;
   }
@@ -561,6 +569,10 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
     return clampNodeSliderValue(n, 0, 2);
   },
   ghost: nodeGraphTraceDisplayClampUnit,
+  decayBlur: nodeGraphTraceDisplayClampUnit,
+  glowCore: nodeGraphTraceDisplayClampUnit,
+  glowReach: nodeGraphTraceDisplayClampUnit,
+  glowStrength: nodeGraphTraceDisplayClampUnit,
   ghostBlend: nodeGraphTraceDisplayClampUnit,
   capLength: nodeGraphTraceDisplayClampUnit,
   capPadding: nodeGraphTraceDisplayClampUnit,
@@ -616,6 +628,10 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   dot1Brightness: nodeGraphTraceDisplayClampBrightness,
   dot1Size: nodeGraphTraceDisplayClampInkPx,
   ghost: nodeGraphTraceDisplayClampUnit,
+  decayBlur: nodeGraphTraceDisplayClampUnit,
+  glowCore: nodeGraphTraceDisplayClampUnit,
+  glowReach: nodeGraphTraceDisplayClampUnit,
+  glowStrength: nodeGraphTraceDisplayClampUnit,
   historySeconds: (value) => (typeof nodeGraphWaterfallClampHistorySeconds === "function"
     ? nodeGraphWaterfallClampHistorySeconds(value, 0.25)
     : nodeGraphTraceDisplayClampHistorySeconds(value)),
@@ -791,7 +807,9 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
   }),
   vectorRgbFace: Object.freeze({
-    lineThickness: nodeGraphTraceDisplayClampStampBlur,
+    // Size is a share of the face min side (0…1), like Trace.
+    dot1Size: nodeGraphTraceDisplayClampUnit,
+    dot1Brightness: (value) => Math.max(0, Math.min(4, Number.isFinite(Number(value)) ? Number(value) : 1)),
     dotBudget: nodeGraphTraceDisplayClampDotBudget,
   }),
   toggleButtonFace: Object.freeze({

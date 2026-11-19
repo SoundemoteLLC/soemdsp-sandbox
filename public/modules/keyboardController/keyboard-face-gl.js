@@ -339,7 +339,7 @@ function nodeGraphKeyboardGlDraw(batch, surface, x, y, w, h) {
   if (!batch || !geom || !(geom.w > 0) || !(geom.h > 0) || !(w > 0) || !(h > 0)) return false;
   if (typeof nodeGraphPianoKeysDraw !== "function") return false;
   const L = NODE_GRAPH_MIDI_KEY_LOOK;
-  const sizeK = Math.max(0.5, Math.min(4, (Number(model.keys[0]?.surface?.dataset?.keyLabelSize) || 100) / 100));
+  const sizeK = Math.max(0.5, Math.min(4, (Number(model.keys[0]?.surface?.dataset?.keyLabelSize) || (typeof nodeGraphKeyboardLayoutDefaults !== "undefined" ? nodeGraphKeyboardLayoutDefaults.keyLabelSize : 100)) / 100));
   const textOpts = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts : (o) => o;
   return nodeGraphPianoKeysDraw(batch, geom, {
     x,

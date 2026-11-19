@@ -148,4 +148,31 @@ const css = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmia
 assert(css.includes(".sturmian-param-row"), "compact row CSS");
 assert(!css.includes(".sturmian-side") && !css.includes(".sturmian-lane-map"), "lane strip CSS removed");
 
+
+// Docked-tip descriptions must be real text, not the metadata placeholder.
+const tipKeys = [
+  "rate", "drift", "semitoneOffset", "pitchSource", "pitchRange",
+  "alpha", "beta", "rho", "steps", "spread", "reset", "walk", "snap", "view",
+];
+for (const key of tipKeys) {
+  const param = def.parameters.find((p) => p.key === key);
+  const tip = String(param?.tooltip || "").trim();
+  assert(tip.length > 20, key + " has a real docked-tip description");
+  assert(!/shown in docked tips/i.test(tip), key + " is not the placeholder");
+}
+const pitchTip = def.parameters.find((p) => p.key === "pitchSource").tooltip;
+for (const mode of ["Classic", "Tile", "Height", "X"]) {
+  assert(pitchTip.includes(mode), "pitchSource tip names " + mode);
+}
+assert(/A3/.test(def.parameters.find((p) => p.key === "semitoneOffset").tooltip), "semitoneOffset tip states A3 pitch formula");
+assert(/slides down/i.test(def.parameters.find((p) => p.key === "walk").tooltip), "Bar Walk tip explains row slide");
+assert(/fraction/i.test(def.parameters.find((p) => p.key === "snap").tooltip), "Rational Snap tip mentions fractions");
+assert(/\b0\b/.test(def.parameters.find((p) => p.key === "walk").tooltip), "Bar Walk tip mentions 0");
+for (const port of ["Restart", "Adv", "f"]) {
+  assert(String(def.inputTooltips?.[port] || "").trim().length > 20, port + " inlet tip");
+}
+for (const port of ["Kick", "Snare", "Hat", "Melody", "Pitch", "f"]) {
+  assert(String(def.outputTooltips?.[port] || "").trim().length > 20, port + " outlet tip");
+}
+
 console.log("ok  sturmian common-slider parameterRows and Hide Sliders");

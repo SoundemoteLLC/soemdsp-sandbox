@@ -76,6 +76,18 @@ function nodeGraphGlGraphParseCssColor(color, fallback) {
       Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1,
     ];
   }
+  // Computed styles come back as color(srgb r g b [/ a]) for colours given in modern syntax (components 0..1).
+  const srgb = text.match(/^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)(%?))?\s*\)/);
+  if (srgb) {
+    let alpha = 1;
+    if (srgb[4] != null && srgb[4] !== "") alpha = srgb[5] === "%" ? Number(srgb[4]) / 100 : Number(srgb[4]);
+    return [
+      Math.max(0, Math.min(1, Number(srgb[1]))),
+      Math.max(0, Math.min(1, Number(srgb[2]))),
+      Math.max(0, Math.min(1, Number(srgb[3]))),
+      Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1,
+    ];
+  }
   return fallback;
 }
 
@@ -1757,6 +1769,17 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   if (toNode && nodeGraphGlGraphState.firstCableIn && !nodeGraphGlGraphState.firstCableIn.has(String(toNode))) {
     nodeGraphGlGraphState.firstCableIn.set(String(toNode), rgba);
   }
+  // Every cable colour per module, out and in: Left (red) plus Right (blue) cables mix the
+  // stroke light additively (nodeGraphStrokeLoudColor).
+  const addCable = (map, node) => {
+    if (!node || !map) return;
+    const key = String(node);
+    const list = map.get(key);
+    if (!list) map.set(key, [rgba]);
+    else if (list.length < 16) list.push(rgba);
+  };
+  addCable(nodeGraphGlGraphState.cablesOut, fromNode);
+  addCable(nodeGraphGlGraphState.cablesIn, toNode);
   // Curve tolerance in world px: 0.2 screen px at the rebuild zoom. A cable
   // with a patch slot under UIDEV pixelate wires is baked as a zoom-1
   // picture, so it uses 0.25 world px and stays the same at every zoom.
@@ -1830,6 +1853,8 @@ function nodeGraphGlGraphRebuild(options = {}) {
   nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
   nodeGraphGlGraphState.firstCable = new Map();
   nodeGraphGlGraphState.firstCableIn = new Map();
+  nodeGraphGlGraphState.cablesOut = new Map();
+  nodeGraphGlGraphState.cablesIn = new Map();
   const lite = options.lite === true;
   const wires = [];
   const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1;
@@ -3447,7 +3472,9 @@ function nodeGraphGlGraphBindRoomLight() {
   host.dataset.roomLightBound = "1";
   host.addEventListener("pointermove", (event) => {
     nodeGraphRoomLight.mouse = { x: event.clientX, y: event.clientY };
-    if (typeof nodeGraphRoomAmbientDark === "function" && nodeGraphRoomAmbientDark() > 0) nodeGraphGlGraphRoomLampSoon();
+    // The lamp moves the text light in a dark room, and the grid lines light up under it in any room.
+    if ((typeof nodeGraphRoomAmbientDark === "function" && nodeGraphRoomAmbientDark() > 0)
+      || (typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid())) nodeGraphGlGraphRoomLampSoon();
   }, { passive: true });
   host.addEventListener("pointerleave", () => {
     nodeGraphRoomLight.mouse = null;

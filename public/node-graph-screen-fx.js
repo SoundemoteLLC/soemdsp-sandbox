@@ -1,11 +1,12 @@
 // Circuit view on the 📺 picture pipeline (one path):
-//   View Out     source: last frame's on-screen circuit view on its 📺 out.
-//   Screen Out   sink: its 📺 in replaces the circuit area on screen.
+//   Screen Space In     source: the circuit view (before Screen Space Out replaces it) on its 📺 out, one frame behind.
+//   Screen Space Out   sink: its 📺 in replaces the circuit area on screen.
 //   Screen Space Shader  picture effect: 📺 in -> GLSL -> 📺 out, like Aberration.
 // Each frame: the GL graph's workspace canvases (plates, cables, dots, faces)
-// composite into one scene texture; the screen is Screen Out's picture, or the
-// scene when there is none; that final picture lands on #nodeScreenFxCanvas and
-// is copied into View Out's ping-pong pair for the next frame. Every texture is
+// composite into one scene texture; the screen is Screen Space Out's picture, or the
+// scene when there is none; that final picture lands on #nodeScreenFxCanvas. The scene itself
+// is copied into Screen Space In's ping-pong pair for the next frame, so In -> Out shows the
+// circuit unchanged (feedback is up to the effects in between). Every texture is
 // double-buffered: nothing is read and written in the same frame.
 
 const NODE_GRAPH_SCREEN_FX_MAX = 4096;
@@ -216,7 +217,8 @@ function nodeGraphScreenFxNodes() {
     const id = String(node.id);
     if (node.type === "screenSpaceShader") {
       const script = normalizeNodeGraphScreenSpaceShader(node.screenSpaceShader);
-      if (script.enabled) shaders.push({ id, script });
+      // A shader nothing reads (no cable leaves its 📺 out) does no work.
+      if (script.enabled && (typeof nodeGraphPictureHasConsumer !== "function" || nodeGraphPictureHasConsumer(id))) shaders.push({ id, script });
     } else if (node.type === "viewOut") viewOuts.push(id);
     else if (node.type === "screenOut") screenOuts.push(id);
   }
@@ -240,7 +242,9 @@ function nodeGraphScreenFxNodes() {
 function nodeGraphScreenFxSources() {
   if (typeof nodeGraphGlGraphState === "undefined") return [];
   const g = nodeGraphGlGraphState;
-  return [g.canvas, g.wireCanvas, g.dotsCanvas].filter((canvas) => canvas?.isConnected);
+  // Back to front, as the GL graph stacks them: the cables' canvas first (it carries the room-dark quad that sits UNDER the cables and
+  // the modules), then the plates / faces / screens, then the cable end dots. Cables on top of the plates would darken every screen.
+  return [g.wireCanvas, g.canvas, g.dotsCanvas].filter((canvas) => canvas?.isConnected);
 }
 
 function nodeGraphScreenFxOverlay(host) {
@@ -338,6 +342,32 @@ function nodeGraphScreenFxRunShader(kit, id, script, w, h, now) {
   }
 }
 
+/**
+ * True when the picture chain behind this node is fed all the way back: every effect on the way has its 📺 in connected to a
+ * live source (Screen Space In, a Vector RGB, ...; not a disabled one). An effect with nothing plugged in only makes black, so Screen Space Out ignores
+ * such a chain and the plain circuit shows (the shaders are off).
+ */
+function nodeGraphScreenFxChainFed(nodeId) {
+  const table = typeof nodeGraphPictureEdges === "function" ? nodeGraphPictureEdges() : null;
+  const nodes = nodeGraphMvp?.patch?.nodes;
+  if (!table || !Array.isArray(nodes)) return true;
+  const typeOf = new Map(nodes.map((n) => [String(n?.id || ""), String(n?.type || "")]));
+  const seen = new Set();
+  const fed = (id) => {
+    if (seen.has(id)) return true; // a feedback loop: not a missing source
+    seen.add(id);
+    const def = nodeGraphModuleDefinitions?.[typeOf.get(id)];
+    if (!def || !Array.isArray(def.inputs) || !def.inputs.includes("rgba")) {
+      // A source. A disabled one (Screen Space In bypassed) makes nothing new: its last picture would just sit there, frozen.
+      return !(typeof nodeGraphNodeIsBypassed === "function" && nodeGraphNodeIsBypassed(id));
+    }
+    const feeds = table.inlets.get(`${id}\u0000rgba`);
+    if (!feeds || !feeds.length) return false;
+    return feeds.some((feed) => fed(feed));
+  };
+  return fed(nodeId);
+}
+
 /** One frame. Returns the surface to show, or null when the screen is not involved. */
 function nodeGraphScreenFxRender(host, nodes, onScreen) {
   const st = nodeGraphScreenFxState;
@@ -360,7 +390,7 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
   for (const { id, script } of nodes.shaders) nodeGraphScreenFxRunShader(kit, id, script, w, h, now);
   let final = null;
   if (onScreen && base) {
-    // 2. Scene: workspace background, then each layer in z order (straight alpha, like drawImage).
+    // 2. Scene: workspace background, then each layer in z order (premultiplied alpha).
     st.scene = nodeGraphScreenFxSurface(gl, w, h, st.scene);
     const bg = nodeGraphScreenFxBackground(host);
     gl.bindFramebuffer(gl.FRAMEBUFFER, st.scene.fbo);
@@ -368,7 +398,9 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
     gl.clearColor(bg[0], bg[1], bg[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    // The layer textures are premultiplied (every picture / face texture is): ONE, not SRC_ALPHA, or anything partly transparent
+    // (a lit screen over a dimmed plate, glows, text edges) gets multiplied by its alpha twice and goes dark.
+    gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
     gl.useProgram(kit.layer);
     gl.uniform1i(kit.layerTex, 0);
     for (const canvas of sources) {
@@ -376,9 +408,12 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
       if (face?.texture) nodeGraphScreenFxDraw(kit, st.scene, kit.layer, [face.texture]);
     }
     gl.disable(gl.BLEND);
-    // 3. Screen: Screen Out's picture, else the plain scene.
+    // 3. Screen: Screen Space Out's picture, else the plain scene.
     let screen = null;
     for (const id of nodes.screenOuts) {
+      // Screen Space Out only replaces the screen while its chain is fed. With nothing plugged into an effect on the way (Screen
+      // Space In disconnected) it would only be black, so the shaders are simply off: the plain circuit shows.
+      if (!nodeGraphScreenFxChainFed(id)) continue;
       screen = typeof nodeGraphPictureRead === "function" ? nodeGraphPictureRead(id, "rgba") : null;
       if (screen?.texture) break;
     }
@@ -390,14 +425,15 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
       nodeGraphScreenFxDraw(kit, st.screen, kit.copy, [screen.texture]);
       final = st.screen;
     }
-    // 4. View Out: this frame's screen into the view texture nobody reads now, published for the next frame.
+    // 4. Screen Space In: this frame's SCENE (not the final screen) into the view texture nobody reads now, published for the
+    // next frame. Using the final screen here made In -> Out a closed loop that never took in a new frame (frozen view).
     if (nodes.viewOuts.length) {
       st.views[0] = nodeGraphScreenFxSurface(gl, w, h, st.views[0]);
       st.views[1] = nodeGraphScreenFxSurface(gl, w, h, st.views[1]);
       const view = st.views[st.viewIndex];
       gl.useProgram(kit.copy);
       gl.uniform1i(kit.copyTex, 0);
-      nodeGraphScreenFxDraw(kit, view, kit.copy, [final.texture]);
+      nodeGraphScreenFxDraw(kit, view, kit.copy, [st.scene.texture]);
       for (const id of nodes.viewOuts) {
         if (typeof nodeGraphPicturePublish === "function") nodeGraphPicturePublish(id, view.texture, w, h, { byReference: true });
       }
@@ -420,7 +456,7 @@ function nodeGraphScreenFxTick() {
   const host = document.getElementById("nodeGraphWorkspace");
   if (!host) return;
   const nodes = nodeGraphScreenFxNodes();
-  // The circuit view is a picture only while View Out or Screen Out is in the patch.
+  // The circuit view is a picture only while Screen Space In or Screen Space Out is in the patch.
   const onScreen = (nodes.viewOuts.length > 0 || nodes.screenOuts.length > 0)
     && host.classList.contains("gl-graph-on") && host.clientWidth > 0;
   nodeGraphScreenFxSetActive(host, onScreen);

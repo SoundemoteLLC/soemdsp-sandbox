@@ -521,6 +521,17 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
             }, pixelRatio);
           }
         } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "screenShakeFace"
+          || slot?.type === "screenShake"
+        ) {
+          if (typeof drawNodeGraphScreenShakeFaceItem === "function") {
+            drawNodeGraphScreenShakeFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
           nodeGraphModuleDisplayRendererForSlot(slot) === "videoFeedbackFace"
           || slot?.type === "videoFeedback"
         ) {

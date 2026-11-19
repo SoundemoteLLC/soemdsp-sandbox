@@ -333,6 +333,17 @@ function bindNodeUiDevSliderFillColorControls() {
 // Unselected plate outline. CSS-only — do not fold into the header sync
 // (that rebuilds the patch / heatmap / wires on every input event).
 // Plate corners for the GL plates (read per draw). Top and bottom are set apart.
+// Rebuild the GPU scene after a lighting / stroke setting changed. These controls also run while the
+// app is still starting (the UI Dev binding), before every script the graph needs has loaded, so the
+// rebuild only happens once the GL graph has drawn at least once, and never throws into the binder.
+function nodeGraphUiDevRefreshGlGraph() {
+  try {
+    if (typeof nodeGraphGlGraphState !== "object" || !nodeGraphGlGraphState || !nodeGraphGlGraphState.canvas) return;
+    nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
+    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+  } catch (_error) { /* the next normal present picks the change up */ }
+}
+
 const NODE_MODULE_CORNER_SHAPE_NAMES = ["Round", "Squircle", "Pill"];
 let nodeGraphModuleStrokeFollowAmount = 0.92;
 let nodeGraphModuleStrokeFollowFrame = 0;
@@ -344,12 +355,61 @@ const nodeGraphStrokeLoudFallbackRgb = [252 / 255, 190 / 255, 161 / 255];
 let nodeGraphStrokeLoudBrightness = 0;
 let nodeGraphStrokeLoudAlpha = 0.31;
 
-// A module's loud colour is the colour of its first outgoing cable; the UI Dev colour is the
-// fallback (the Output module, or a module with no cable yet).
+// Stereo light: a module with both a Left (red) and a Right (blue) cable glows in their additive
+// mix, the way two lamps add: the two colours summed in linear light, scaled back so the brighter
+// channel sits where the brighter lamp's did (purple, not white-hot). Only red + blue mixes; Left
+// alone stays red, Right alone blue, every other cable colour as before. Cached per cable rebuild.
+const nodeGraphStrokeStereoMixCache = { gen: -1, map: new Map() };
+function nodeGraphStrokeStereoRgbOf(channel, fallbacks) {
+  const list = [];
+  const css = typeof nodeGraphJackChannelCssColor === "function" ? nodeGraphJackChannelCssColor(channel) : "";
+  if (css && typeof nodeGraphGlGraphCssColor === "function") list.push(nodeGraphGlGraphCssColor(css));
+  for (const hex of fallbacks) {
+    const n = Number.parseInt(hex.slice(1), 16);
+    list.push([(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]);
+  }
+  return list;
+}
+function nodeGraphStrokeStereoMix(cables) {
+  if (!Array.isArray(cables) || cables.length < 2) return null;
+  // The Left / Right jack colours (stereo red / blue), and the app-wide L / R inks.
+  const reds = nodeGraphStrokeStereoRgbOf("red", ["#ff7171"]);
+  const blues = nodeGraphStrokeStereoRgbOf("blue", ["#5454f9"]);
+  const same = (a, b) => Math.abs(a[0] - b[0]) < 2e-3 && Math.abs(a[1] - b[1]) < 2e-3 && Math.abs(a[2] - b[2]) < 2e-3;
+  const red = cables.find((c) => reds.some((r) => same(c, r)));
+  const blue = cables.find((c) => blues.some((b) => same(c, b)));
+  if (!red || !blue) return null;
+  const toLin = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const toSrgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  const lr = [toLin(red[0]), toLin(red[1]), toLin(red[2])];
+  const lb = [toLin(blue[0]), toLin(blue[1]), toLin(blue[2])];
+  const sum = [lr[0] + lb[0], lr[1] + lb[1], lr[2] + lb[2]];
+  const peak = Math.max(lr[0], lr[1], lr[2], lb[0], lb[1], lb[2]);
+  const top = Math.max(sum[0], sum[1], sum[2]);
+  const k = top > peak && top > 0 ? peak / top : 1;
+  return [toSrgb(sum[0] * k), toSrgb(sum[1] * k), toSrgb(sum[2] * k), 1];
+}
+
+// A module's loud colour is the colour of its first outgoing cable (a Left + Right pair: their
+// additive mix, see above); the UI Dev colour is the fallback (a module with no cable yet).
 function nodeGraphStrokeLoudColor(nodeId) {
   const cableState = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
   // First outgoing cable; a module with none (the Output module) uses its first incoming cable.
-  const cable = cableState?.firstCable?.get?.(String(nodeId)) || cableState?.firstCableIn?.get?.(String(nodeId)) || null;
+  const id = String(nodeId);
+  const outFirst = cableState?.firstCable?.get?.(id) || null;
+  let cable = outFirst || cableState?.firstCableIn?.get?.(id) || null;
+  if (cable && cableState) {
+    if (nodeGraphStrokeStereoMixCache.gen !== cableState.gen) {
+      nodeGraphStrokeStereoMixCache.gen = cableState.gen;
+      nodeGraphStrokeStereoMixCache.map = new Map();
+    }
+    let mix = nodeGraphStrokeStereoMixCache.map.get(id);
+    if (mix === undefined) {
+      mix = nodeGraphStrokeStereoMix((outFirst ? cableState.cablesOut : cableState.cablesIn)?.get?.(id)) || null;
+      nodeGraphStrokeStereoMixCache.map.set(id, mix);
+    }
+    if (mix) cable = mix;
+  }
   const rgb = cable || nodeGraphStrokeLoudFallbackRgb;
   const lift = nodeGraphStrokeLoudBrightness;
   return [rgb[0] + (1 - rgb[0]) * lift, rgb[1] + (1 - rgb[1]) * lift, rgb[2] + (1 - rgb[2]) * lift, nodeGraphStrokeLoudAlpha];
@@ -473,9 +533,11 @@ function syncNodeUiDevModuleCorners() {
   show("nodeUiDevModuleStrokeTopRadiusValue", look.topShape === 2 ? "full" : `${look.strokeTopRadius}px`);
   show("nodeUiDevModuleBottomShapeValue", NODE_MODULE_CORNER_SHAPE_NAMES[look.bottomShape]);
   show("nodeUiDevModuleBottomRadiusValue", look.bottomShape === 2 ? "full" : `${look.bottomRadius}px`);
-  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
-  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  nodeGraphUiDevRefreshGlGraph();
 }
+
+// The edge antialiasing feather (px) the phosphor shaders read (a fixed value now: there is no UI Dev setting).
+globalThis.nodeGraphDotCoreAaPx = 1.5;
 
 // UI Dev "lighting: wires" (the light cables and their end dots keep in a fully dark room) and
 // "lighting: jacks" (connected / unconnected jack ring light). Percent controls; the range is the
@@ -505,8 +567,7 @@ function syncNodeUiDevLightingLevels() {
     const out = document.getElementById(`${id}Value`);
     if (out) out.textContent = `${pct}%`;
   }
-  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
-  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  nodeGraphUiDevRefreshGlGraph();
 }
 
 function syncNodeUiDevModuleIdleStroke() {
@@ -556,8 +617,7 @@ function syncNodeUiDevModuleIdleStroke() {
     `rgb(${nodeUiDevHexColorToRgbTriplet(selectedColor)} / ${selectedAlphaPercent / 100})`,
   );
   // The plate stroke vars are read once per rebuild generation; bump it so this change shows now.
-  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) nodeGraphGlGraphState.gen += 1;
-  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  nodeGraphUiDevRefreshGlGraph();
 }
 
 const NODE_MODULE_PLATE_ROUNDNESS_RATIO = 0.11;
@@ -1022,10 +1082,7 @@ function syncNodeUiDevModuleLightGridControls() {
     updateNodeGraphGridHeatmap({ force: true });
   }
   // The module lights and the grid are drawn on the GPU: rebuild the scene so it picks the values up.
-  if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) {
-    nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
-    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
-  }
+  nodeGraphUiDevRefreshGlGraph();
 }
 
 function bindNodeUiDevModuleLightGridControls() {

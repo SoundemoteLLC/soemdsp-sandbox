@@ -44,6 +44,9 @@ function nodeGraphScreenBendEnsureCanvas(face) {
 }
 
 function nodeGraphScreenBendCircuitLive() {
+  // While Screen Space In / Out are in the patch the circuit view is the picture being worked on, so a screen effect keeps working with the
+  // engine stopped (it would otherwise sit on a wiped black frame and the screen would go black).
+  if (typeof nodeGraphScreenFxState === "object" && nodeGraphScreenFxState?.active) return true;
   try {
     if (typeof nodeGraphModuleScopeEnginePaused === "function" && nodeGraphModuleScopeEnginePaused()) return false;
   } catch (_e) { /* fall through */ }
@@ -72,7 +75,8 @@ function drawNodeGraphScreenBendFaceItem(_renderer, item) {
     nodeGraphGlLinesFillBlack(canvas);
     return;
   }
-  const renderer = nodeGraphScreenBendGlEnsure(canvas, canvas.width, canvas.height);
+  // Render at the size of the picture coming in (the whole screen for Screen Space In), not the small face; the face shows it scaled down.
+  const renderer = nodeGraphScreenBendGlEnsure(canvas, picture?.width > 0 ? picture.width : canvas.width, picture?.height > 0 ? picture.height : canvas.height);
   if (!renderer) {
     nodeGraphGlLinesFillBlack(canvas);
     return;
@@ -82,6 +86,14 @@ function drawNodeGraphScreenBendFaceItem(_renderer, item) {
       nodeId,
       width: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "width", 0.55), -1, 1),
       height: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "height", 0.55), -1, 1),
+      round: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "round", 0.4), 0, 1),
+      vignette: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vignette", 0.35), 0, 1),
+      glare: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glare", 0.15), 0, 1),
+      glareX: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareX", -0.42), -1, 1),
+      glareY: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareY", 0.5), -1, 1),
+      glareSize: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareSize", 0.5), 0, 1),
+      vigReach: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigReach", 0.4), 0, 1),
+      vigCurve: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigCurve", 0.3), 0, 1),
       picture,
     });
   }

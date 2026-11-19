@@ -284,6 +284,8 @@ function nodeGraphScope1dTraceDrawLayer(context, points, settings, role = "prima
       trail: settings?.trail,
       ghost: settings?.ghost,
       burnAmount: settings?.burnAmount,
+      // Decay blur (0 by default = no diffusion pass at all), the same 0..0.25 per-frame bleed scale as phosphor.
+      bleed: Number.isFinite(Number(settings?.decayBlur)) ? Math.max(0, Math.min(1, Number(settings.decayBlur))) * 0.25 : 0,
       traceContinue: phase.traceContinue === true,
       tracePresent: phase.tracePresent !== false,
       presentComposite: phase.presentComposite || "copy",

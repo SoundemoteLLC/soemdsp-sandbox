@@ -36,6 +36,20 @@
 //   - fHi clamped to [50 Hz, fs/2] (fHi < 50 Hz makes c < 0: upward sweep and
 //     a singularity), fLo to [0, fs/2]. TriSaw guard at P = +1.
 //   - No key / velocity frequency tracking, no FadeOut / PassThrough / stereo.
+//   - Anti-aliasing (Argi 2026-11-17: clocked at audio rates it aliased). The
+//     kick is a continuous-time signal sampled like a real converter does it:
+//     every voice runs at 4x the host rate, each 4x sample is the wave's exact
+//     average over its time slot (from the closed-form antiderivative of each
+//     wave over phase, wave_integral: an integrate-and-hold, so a wave's step
+//     or a hit / cut at a sample lands as a band-limited ramp, not a jump), and
+//     the sum goes through Robin's 12th-order elliptic quarter-band lowpass
+//     (rapt_elliptic_decimator's x4 design: flat to ~0.45 x host rate,
+//     -77 dB from the host Nyquist up) before every 4th sample is kept. That is
+//     an analog anti-alias filter in front of the sampler: causal, so a hit
+//     still starts on its sample. Hits keep host-sample timing (the Trigger
+//     has no sub-sample position). The tent's corner rounding (tent_k) keeps
+//     its host-rate floor, so TriSine is the same shape. The face preview
+//     stays the plain host-rate render.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -69,6 +83,7 @@ struct Voice {
   double env;
   double decayLatched;
   double decayCached, srCached, r;
+  double lastInc;  // phase step into this sample (cycles), 0 on the hit sample
 };
 
 struct State {
@@ -84,6 +99,7 @@ struct State {
   double sr;
   double elapsedHold;
   bool active;
+  double aaZ[6][2];  // elliptic decimator state (DF2 transposed, per section)
 };
 
 static State gPool[kMaxInstances];
@@ -110,6 +126,7 @@ static void init_voice(Voice& v) {
   v.env = 0.0;
   v.decayLatched = 0.5;
   v.decayCached = -1.0; v.srCached = -1.0; v.r = 0.0;
+  v.lastInc = 0.0;
 }
 
 static void init_state(State& s) {
@@ -127,6 +144,7 @@ static void init_state(State& s) {
   s.lastTrigger = 0.0;
   s.sr = 44100.0;
   s.elapsedHold = -1.0;
+  for (int i = 0; i < 6; i++) s.aaZ[i][0] = s.aaZ[i][1] = 0.0;
 }
 
 // rsFreqSweeper::updateCoeffs (rosic_MiscUnfinished.cpp).
@@ -217,6 +235,100 @@ static double wave_value(int wave, double pos, double waveShape) {
   return wave_value(wave, pos, waveShape, 100.0, 48000.0);
 }
 
+// Oversampling factor of the voices (anti-aliasing, see the header).
+static const int kOs = 4;
+
+// Robin's (RAPT) elliptic quarter-band lowpass, 6 biquads [b0, b1, b2, 1, a1, a2],
+// run at kOs x the host rate (same design as rapt_elliptic_decimator x4).
+static const double kAaSos[6][6] = {
+  { 1.3515101236634053e-04,  1.8481719657676747e-04, 1.3515101236634053e-04, 1.0, -1.5863119326809123, 0.6428204816292211 },
+  { 1.0, -0.3714014551732318, 0.9999999999999998, 1.0, -1.5620959364626055, 0.7161571320953768 },
+  { 1.0, -1.0298229723362611, 1.0, 1.0, -1.5310702081483014, 0.8130950789236201 },
+  { 1.0, -1.2676395426322578, 1.0000000000000002, 1.0, -1.50809401930334, 0.8931580864862605 },
+  { 1.0, -1.3628788519102755, 1.0000000000000002, 1.0, -1.4983265140498274, 0.9475287279522546 },
+  { 1.0, -1.3980241837651683, 1.0, 1.0, -1.5032624176850438, 0.9843747059042128 },
+};
+
+// The design's DC gain is its -0.1 dB ripple floor; this puts DC (a kick body) at
+// exactly 1, so the passband sits between 0 and +0.1 dB.
+static const double kAaDcNorm = 1.0 / 0.9885530946569381;
+
+static double aa_lowpass(State& s, double x) {
+  double y = x;
+  for (int i = 0; i < 6; i++) {
+    const double* c = kAaSos[i];
+    double* z = s.aaZ[i];
+    const double out = c[0] * y + z[0];
+    z[0] = c[1] * y - c[4] * out + z[1];
+    z[1] = c[2] * y - c[5] * out;
+    y = out;
+  }
+  return y;
+}
+
+// Silent filter: clear tiny state so it never runs on subnormals.
+static bool aa_quiet(State& s) {
+  bool quiet = true;
+  for (int i = 0; i < 6; i++) {
+    for (int k = 0; k < 2; k++) {
+      if (s.aaZ[i][k] > 1.0e-20 || s.aaZ[i][k] < -1.0e-20) quiet = false;
+    }
+  }
+  if (quiet) for (int i = 0; i < 6; i++) s.aaZ[i][0] = s.aaZ[i][1] = 0.0;
+  return quiet;
+}
+
+// Antiderivative of one wave cycle over its phase x in [0, 1): Y(x) = integral
+// from 0 to x of the wave. Every wave has zero mean (odd about x = 0.5), so
+// Y(0) = Y(1) = 0 and Y is periodic: the average over any phase span [a, a + d]
+// is (Y(b) - Y(a)) / d with a and b wrapped, however many cycles d covers.
+// SawSine: y = sin(pi/2 * tri), tri = tri_saw (rise r2, fall d = 1 - 2 r2).
+// SawTri: y = tri. TriSine: the hyperbolic tent, y = g (r - sqrt(b^2 + k)).
+static double wave_integral(int wave, double x, double m, double k) {
+  const double kPi = 3.141592653589793;
+  if (wave == kWaveTriSine) {
+    const double kk = k > 0.0 ? k : 0.0;
+    const double r = __builtin_sqrt(0.25 + kk);
+    const double g = 4.0 * (r + __builtin_sqrt(kk));
+    // F(b) = integral of (r - sqrt(b^2 + k)) db. ln(b + S) = ln(k / (S - b)) for
+    // b < 0 keeps the small-k case free of cancellation.
+    auto F = [&](double b) {
+      const double S = __builtin_sqrt(b * b + kk);
+      double lnTerm = 0.0;
+      if (kk > 0.0) lnTerm = (b >= 0.0) ? dsp_ln(b + S) : dsp_ln(kk / (S - b));
+      return r * b - 0.5 * b * S - 0.5 * kk * lnTerm;
+    };
+    const double f0 = F(-0.5);
+    const double half = 0.5 * g * (F(0.5) - f0);  // Y(0.5); dx = 2 du
+    if (x < 0.5) return 0.5 * g * (F(2.0 * x - 0.5) - f0);
+    return half - 0.5 * g * (F(2.0 * x - 1.5) - f0);
+  }
+  const double r2 = 0.25 * (m + 1.0);
+  const double d = 1.0 - 2.0 * r2;
+  if (wave == kWaveSawSine) {
+    const double rise = 2.0 * r2 / kPi;
+    if (x < r2) return rise * (1.0 - dsp_cos_turns(x / (4.0 * r2)));
+    if (x > 1.0 - r2 || !(d > 0.0)) return rise * (1.0 - dsp_cos_turns((x - 1.0) / (4.0 * r2)));
+    const double tri = 2.0 * (r2 - x) / d + 1.0;
+    return rise + (d / kPi) * dsp_cos_turns(0.25 * tri);
+  }
+  // SawTri
+  if (x < r2) return x * x / (2.0 * r2);
+  if (x > 1.0 - r2 || !(d > 0.0)) return (x - 1.0) * (x - 1.0) / (2.0 * r2);
+  const double u = x - r2;
+  return 0.5 * r2 + u - u * u / d;
+}
+
+// The wave averaged over phase [x0, x0 + d] (d >= 0, cycles). A span too short
+// to difference is the wave at its middle.
+static double wave_box(int wave, double x0, double d, double waveShape, double freq, double sr) {
+  if (!(d > 1.0e-9)) return wave_value(wave, x0 + 0.5 * d, waveShape, freq, sr);
+  const double ms = clamp(waveShape, 0.0, 1.0);
+  const double m = tri_saw_param_map(ms);
+  const double k = (wave == kWaveTriSine) ? tent_k(ms, freq, sr) : 0.0;
+  return (wave_integral(wave, wrap01(x0 + d), m, k) - wave_integral(wave, wrap01(x0), m, k)) / d;
+}
+
 // Live control in: NaN/inf -> 0, |x| < kPlanck -> exact 0 (keeps subnormal
 // modulation values out of the wave position and the output product).
 static double clean_control(double x) {
@@ -273,29 +385,47 @@ static int start_voice(State& s, int fadeSlots, double fadeSamples) {
 
 // One voice, one sample: Robin's output-before-update order. Returns the
 // faded voice output (without Amplitude).
+// shapeSr: the host rate, for the tent's corner floor and the Decay step (the
+// envelope steps once per host sample, envTick, exactly as before the 4x run).
+// slotAverage: the sample is
+// the wave's average over its time slot (half the step before, half after;
+// the hit sample starts at the hit), else the plain point sample.
 static double run_voice(Voice& v, int w, double phase, double waveShape,
-                        double ch, double sh, double decay, double sr) {
-  const double y = wave_value(w, v.instPhase + phase, waveShape, v.instFreq, sr);
+                        double ch, double sh, double decay, double sr,
+                        double shapeSr, bool slotAverage, bool envTick) {
+  // State update (rsFreqSweeper::getSampleFrameStereo order); the next phase
+  // step is known ahead, the slot average needs it.
+  if (v.dirty || ch != v.coeffChirp || sh != v.coeffShape) update_coeffs(v, ch, sh);
+  const double newFreq = inst_freq(v, (v.sampleCount + 1.0) / sr);
+  const double inc = (0.5 / sr) * (v.instFreq + newFreq);  // trapezoidal integration
+  const double x = v.instPhase + phase;
+  double y;
+  if (slotAverage) {
+    const double back = 0.5 * v.lastInc;
+    y = wave_box(w, x - back, back + 0.5 * inc, waveShape, v.instFreq, shapeSr);
+  } else {
+    y = wave_value(w, x, waveShape, v.instFreq, shapeSr);
+  }
   const double out = v.env * v.gain * y;
 
-  // State update (rsFreqSweeper::getSampleFrameStereo order).
-  if (v.dirty || ch != v.coeffChirp || sh != v.coeffShape) update_coeffs(v, ch, sh);
   v.sampleCount += 1.0;
-  const double newFreq = inst_freq(v, v.sampleCount / sr);
-  v.instPhase += (0.5 / sr) * (v.instFreq + newFreq);  // trapezoidal integration
+  v.instPhase += inc;
   if (v.instPhase >= 1.0) v.instPhase -= 1.0;
   v.instFreq = newFreq;
+  v.lastInc = inc;
 
   // Decay envelope: e *= r, r = exp(-ln(1000) / (decay * fs)). No floor: the
   // Decay param sets the range. Guard only: decay <= 0 (or NaN) would divide
   // by zero / make e grow, so it means instant silence (r = 0).
-  if (decay != v.decayCached || sr != v.srCached) {
+  if (decay != v.decayCached || shapeSr != v.srCached) {
     v.decayCached = decay;
-    v.srCached = sr;
-    v.r = (decay > 0.0) ? dsp_exp(-kLn1000 / (decay * sr)) : 0.0;
+    v.srCached = shapeSr;
+    v.r = (decay > 0.0) ? dsp_exp(-kLn1000 / (decay * shapeSr)) : 0.0;
   }
-  v.env *= v.r;
-  if (v.env < kPlanck) { v.env = 0.0; v.on = false; }
+  if (envTick) {
+    v.env *= v.r;
+    if (v.env < kPlanck) { v.env = 0.0; v.on = false; }
+  }
   if (v.fading) {
     v.gain -= v.gainStep;
     if (!(v.gain > 0.0)) { v.gain = 0.0; v.on = false; }
@@ -352,7 +482,7 @@ extern "C" double soemdsp_robin_sinepulse_sample(
     // Voices is fade-stack depth (1..8), not how many kicks ring together.
     int fadeSlots = (int)(safe(voices) + 0.5);
     fadeSlots = fadeSlots < 1 ? 1 : (fadeSlots > kMaxVoices ? kMaxVoices : fadeSlots);
-    const double fadeSamples = safe(fadeMs) * 0.001 * sr;  // <= 0: hard cut
+    const double fadeSamples = safe(fadeMs) * 0.001 * sr * kOs;  // voices run at kOs x; <= 0: hard cut
     const int slot = start_voice(s, fadeSlots, fadeSamples);
     Voice& v = s.v[slot];
     init_voice(v);
@@ -386,16 +516,28 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   const double sh = clamp(safe(chirpShape), -1.0, 1.0);
   const double liveDecay = safe(decay);
 
+  // Voices at kOs x the host rate, through the anti-alias lowpass; every
+  // kOs-th filter output is the host sample.
+  const double srOs = sr * kOs;
+  bool any = false;
+  for (int i = 0; i < kSlots; i++) if (s.v[i].on) { any = true; break; }
   double sum = 0.0;
   s.envOut = 0.0;
-  for (int i = 0; i < kSlots; i++) {
-    Voice& v = s.v[i];
-    if (!v.on) continue;
-    if (i == s.newest) { s.envOut = v.env; s.lastFreq = v.instFreq; }
-    sum += run_voice(v, w, ph, ws, ch, sh, latch ? v.decayLatched : liveDecay, sr);
-    if (i == s.newest) {
-      s.elapsedHold = v.sampleCount / sr;
-      if (!v.on) s.lastFreq = v.instFreq;  // rest: f stays where the sweep landed
+  if (any || !aa_quiet(s)) {
+    bool envSet = false;
+    for (int j = 0; j < kOs; j++) {
+      double sub = 0.0;
+      for (int i = 0; i < kSlots; i++) {
+        Voice& v = s.v[i];
+        if (!v.on) continue;
+        if (i == s.newest && !envSet) { s.envOut = v.env; s.lastFreq = v.instFreq; envSet = true; }
+        sub += run_voice(v, w, ph, ws, ch, sh, latch ? v.decayLatched : liveDecay, srOs, sr, true, j == kOs - 1);
+        if (i == s.newest) {
+          s.elapsedHold = v.sampleCount / srOs;
+          if (!v.on) s.lastFreq = v.instFreq;  // rest: f stays where the sweep landed
+        }
+      }
+      sum = aa_lowpass(s, sub) * kAaDcNorm;
     }
   }
 
@@ -520,7 +662,7 @@ extern "C" int soemdsp_robin_sinepulse_preview(
   int prevCol = -1;
   float prevY = 0.0f;
   for (int n = 0; n < nSamples; n++) {
-    const double y = amp * run_voice(v, w, ph, ws, ch, sh, dec, sr);
+    const double y = amp * run_voice(v, w, ph, ws, ch, sh, dec, sr, sr, false, true);
     int col = (int)((double)n * (double)cols / (double)nSamples);
     if (col >= cols) col = cols - 1;
     const float f = (float)y;
@@ -606,6 +748,6 @@ extern "C" double soemdsp_robin_sinepulse_preview_field_at(int i) {
   return (i >= 0 && i < 11) ? gFieldPack[i] : 0.0;
 }
 
-extern "C" int soemdsp_robin_sinepulse_version() { return 15; }  // 15: SawSine/TriSine/SawTri, morph 1→0, tent k pitch floor. 14: preview_field T60-to-1e-6 window. 13: field pack. 11: preview = connected min/max band per column (preview_y removed). 10: connected preview_y polyline. 9: face preview + elapsed. 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
+extern "C" int soemdsp_robin_sinepulse_version() { return 16; }  // 16: anti-aliased (4x voices, slot-averaged waves, Robin's elliptic quarter-band before decimation). 15: SawSine/TriSine/SawTri, morph 1→0, tent k pitch floor. 14: preview_field T60-to-1e-6 window. 13: field pack. 11: preview = connected min/max band per column (preview_y removed). 10: connected preview_y polyline. 9: face preview + elapsed. 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_robin_sinepulse_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_robin_sinepulse_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

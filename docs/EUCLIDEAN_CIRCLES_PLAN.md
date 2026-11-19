@@ -11,7 +11,7 @@ line with rational slope k/n. Each lane is a circle, hits are dots on the circle
 and a playhead hand sweeps around clockwise. Lanes with different step counts
 show polyrhythms naturally as rings with different dot spacing.
 
-## Module (working name: Euclid Circles, key `euclidCircles`)
+## Module: Euclidean Sequencer (key `euclideanSequencer`)
 
 Mirrors Sturmian Grid's shape so it patches the same way:
 
@@ -32,7 +32,7 @@ Mirrors Sturmian Grid's shape so it patches the same way:
 Global: Rate, Swing, Reset after (bars), Semitone Offset, Pitch Range, and Pitch
 Source for the Melody ring.
 
-## Sturmian-flavoured extras (open, pick which)
+## Sturmian-flavoured extras (v1: 2 and 3; 1 and 4 deferred)
 
 1. **Fractional hits.** Let k be continuous; the ring uses a Sturmian rotation
    (slope k/n plus ρ) so between integers it morphs smoothly instead of jumping.
@@ -55,6 +55,17 @@ Source for the Melody ring.
   a ring to change k, and click a dot to toggle a manual override (open).
 - Ring colours follow the existing lane colours from Sturmian.
 
+## Rules for the builder
+
+- Parameter definitions are the only source of limits (e.g. Hits <= Steps is enforced in the
+  definition and engine logic, not by clamps in the draw code).
+- No MIDI. Pitch is a plain signal output; the inputs are signals.
+- Fill in the `tooltip` fields in the definitions, with no hover pop-ups in the UI.
+- The display is WebGL via `public/lib/visual/gl-line-renderer.js`, pixel-for-pixel. Rings and
+  dots stay still unless a parameter changes, and hit flashes are welcome. Display scaling never
+  fakes clipping.
+- CRLF line endings; bump `?v=` only for changed scripts; commit only your own hunks.
+
 ## Files (expected)
 
 - graph_engine.cpp: new process function + state (copy Sturmian's clock/Adv/Restart handling, factored).
@@ -62,10 +73,14 @@ Source for the Melody ring.
 - public/node-graph-module-definitions.js / module-store / execution plan / parameter metadata / efficient-product.
 - Native wasm rebuild, index/perform cache tags for changed scripts only, docs/module_faces_inventory.json.
 
-## Open questions for Argi
+## Decisions (Argi, 2026-11-17)
 
-1. Name: "Euclid Circles", "Euclidean Rings", or something else?
-2. Four fixed lanes like Sturmian, or a variable ring count?
-3. Each ring has its own step length (polyrhythm), or all rings fit one bar (polymeter in time)? Or both, via a switch?
-4. Which Sturmian extras: fractional hits, drift, pitch from position, coupling?
-5. Edit on the face (drag rings), or sliders only?
+1. **Name:** "Euclidean Sequencer" (key `euclideanSequencer`).
+2. **Four fixed rings**, like Sturmian Grid's four lanes.
+3. **Each ring has its own step length** (polyrhythm); all rings advance at the same step rate.
+4. **Extras for v1:** pitch from position (the Melody ring's ♯/♭ pitch output comes from the
+   hit's position or index around the ring, using Sturmian-style Classic/Tile pitch maps, plus
+   Pitch Range and Semitone Offset) and **Drift** (Rotate advances each loop for evolving
+   variations, with Reset after N bars). Fractional hits and ring coupling are deferred.
+5. **Editing is by dragging the rings on the display:** drag around a ring to rotate it, drag
+   in or out on a ring to change its hits, and use sliders as well for exact values.

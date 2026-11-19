@@ -318,7 +318,7 @@
   }
 
   /** Latest published texture feeding this inlet, or null. */
-  function nodeGraphPictureRead(nodeId, portName) {
+  function nodeGraphPictureRead(nodeId, portName, depth = 0) {
     const id = String(nodeId || "").trim();
     if (!id) return null;
     const table = nodeGraphPictureEdges();
@@ -326,12 +326,23 @@
     const feeds = table.inlets.get(`${id}\u0000${String(portName || "rgba")}`);
     if (!feeds) return null;
     for (let i = 0; i < feeds.length; i += 1) {
+      // A bypassed picture effect passes the picture it receives straight through, instead of reading as "no picture"
+      // (its own last frame is stale or black). A node with no picture input has nothing to pass.
+      if (depth < 32 && pictureNodeBypassed(feeds[i]) && table.inlets.has(`${feeds[i]}\u0000rgba`)) {
+        const through = nodeGraphPictureRead(feeds[i], "rgba", depth + 1);
+        if (through) return through;
+        continue;
+      }
       const slot = published.get(feeds[i]);
       if (slot?.texture) {
         return { texture: slot.texture, width: slot.width, height: slot.height, nodeId: feeds[i] };
       }
     }
     return null;
+  }
+
+  function pictureNodeBypassed(nodeId) {
+    return typeof nodeGraphNodeIsBypassed === "function" && nodeGraphNodeIsBypassed(nodeId);
   }
 
   /**

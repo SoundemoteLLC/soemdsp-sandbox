@@ -544,6 +544,10 @@ function normalizeNodeGraphXyPadDisplaySettings(settings = {}) {
     }),
     ghost: residual.ghost,
     trail: residual.trail,
+    glowCore: normalizeNodeGraphTraceDisplayNumber(source.glowCore, defaults.glowCore ?? 0.08, 0, 1),
+    glowReach: normalizeNodeGraphTraceDisplayNumber(source.glowReach, defaults.glowReach ?? 0.5, 0, 1),
+    glowStrength: normalizeNodeGraphTraceDisplayNumber(source.glowStrength, defaults.glowStrength ?? 0.7, 0, 1),
+    buildUp: source.buildUp === undefined ? (defaults.buildUp ?? true) : nodeGraphDisplaySettingsToggleIsOn(source.buildUp),
     residualSchema: residual.residualSchema,
     burnAmount: residual.burnAmount,
     dot1Brightness: normalizeNodeGraphTraceDisplayBrightness(
@@ -597,7 +601,7 @@ function nodeGraphXyPadDisplaySettingsForNode(node) {
 // (1 = one dot as big as the display). Renderers turn it into authored px at
 // 96 with dotUnitInkPx. Every other face keeps px at 96 (nodeGraphTraceDisplayNormalizeInkPx).
 const NODE_GRAPH_SCOPE_DOT_UNIT_SCHEMAS = Object.freeze(new Set([
-  "scope1dTrace", "scope2dTrace", "lineBurn", "scope2d", "xyPad",
+  "scope1dTrace", "scope2dTrace", "lineBurn", "scope2d", "xyPad", "vectorRgbFace",
 ]));
 
 function nodeGraphScopeDotSizeIsUnit(schema) {
@@ -773,6 +777,12 @@ function normalizeNodeGraphLineBurnSettings(settings = {}) {
     burnAmount: residual.burnAmount,
     ghost: residual.ghost,
     trail: residual.trail,
+    glowCore: normalizeNodeGraphTraceDisplayNumber(source.glowCore, defaults.glowCore ?? 0.08, 0, 1),
+    glowReach: normalizeNodeGraphTraceDisplayNumber(source.glowReach, defaults.glowReach ?? 0.5, 0, 1),
+    glowStrength: normalizeNodeGraphTraceDisplayNumber(source.glowStrength, defaults.glowStrength ?? 0.7, 0, 1),
+    buildUp: source.buildUp === undefined ? (defaults.buildUp ?? true) : nodeGraphDisplaySettingsToggleIsOn(source.buildUp),
+    // Blur of the stored picture as it decays (separate from the stamp Blur).
+    decayBlur: normalizeNodeGraphTraceDisplayNumber(source.decayBlur, defaults.decayBlur ?? 0.1, 0, 1),
     // Bright 0…1 exact (legacy 0…2 values halved once on load).
     dot1Brightness: normalizeNodeGraphTraceDisplayBrightness(
       source.dot1Brightness ?? source.brightness,
@@ -837,6 +847,10 @@ function normalizeNodeGraphZeroDBurnSettings(settings = {}) {
     bipolarBrightness: source.bipolarBrightness === true,
     ghost: residual.ghost,
     trail: residual.trail,
+    glowCore: normalizeNodeGraphTraceDisplayNumber(source.glowCore, defaults.glowCore ?? 0.08, 0, 1),
+    glowReach: normalizeNodeGraphTraceDisplayNumber(source.glowReach, defaults.glowReach ?? 0.5, 0, 1),
+    glowStrength: normalizeNodeGraphTraceDisplayNumber(source.glowStrength, defaults.glowStrength ?? 0.7, 0, 1),
+    buildUp: source.buildUp === undefined ? (defaults.buildUp ?? true) : nodeGraphDisplaySettingsToggleIsOn(source.buildUp),
     residualSchema: residual.residualSchema,
     burnAmount: residual.burnAmount,
     dot1Brightness: normalizeNodeGraphTraceDisplayBrightness(
@@ -1131,6 +1145,10 @@ function normalizeNodeGraphValueOscilloscopeSettings(settings = {}) {
     color: normalizeNodeGraphTraceDisplayColor(source.color ?? source.dot1Color, defaults.color),
     dot1Color: normalizeNodeGraphTraceDisplayColor(source.dot1Color ?? source.color, defaults.color),
     trail: residual.trail,
+    glowCore: normalizeNodeGraphTraceDisplayNumber(source.glowCore, defaults.glowCore ?? 0.08, 0, 1),
+    glowReach: normalizeNodeGraphTraceDisplayNumber(source.glowReach, defaults.glowReach ?? 0.5, 0, 1),
+    glowStrength: normalizeNodeGraphTraceDisplayNumber(source.glowStrength, defaults.glowStrength ?? 0.7, 0, 1),
+    buildUp: source.buildUp === undefined ? (defaults.buildUp ?? true) : nodeGraphDisplaySettingsToggleIsOn(source.buildUp),
     dot1Enabled: true,
     dot1Size: nodeGraphTraceDisplayNormalizeInkPx(source.dot1Size, defaults.dot1Size),
     lineLength: normalizeNodeGraphTraceDisplayNumber(source.lineLength, defaults.lineLength, 0, 1),
@@ -1667,6 +1685,14 @@ function normalizeNodeGraphScope2dSettings(settings = {}, defaultsOverride = nul
     burnAmount: residual.burnAmount,
     ghost: residual.ghost,
     trail: residual.trail,
+    glowCore: normalizeNodeGraphTraceDisplayNumber(source.glowCore, defaults.glowCore ?? 0.08, 0, 1),
+    glowReach: normalizeNodeGraphTraceDisplayNumber(source.glowReach, defaults.glowReach ?? 0.5, 0, 1),
+    glowStrength: normalizeNodeGraphTraceDisplayNumber(source.glowStrength, defaults.glowStrength ?? 0.7, 0, 1),
+    buildUp: source.buildUp === undefined ? (defaults.buildUp ?? true) : nodeGraphDisplaySettingsToggleIsOn(source.buildUp),
+    // Decay blur: how much the stored picture blurs as it fades (draw-burn turns it into the per-frame bleed). This normalizer
+    // used to drop it, so the slider did nothing and a hidden bleed from Glow (up to 0.18) always applied. 0.3 (bleed 0.075)
+    // keeps the old default look a little sharper; 0 = no diffusion.
+    decayBlur: normalizeNodeGraphTraceDisplayNumber(source.decayBlur, defaults.decayBlur ?? 0.3, 0, 1),
     // Bright 0…1 exact (legacy 0…2 halved once).
     dot1Brightness: normalizeNodeGraphTraceDisplayBrightness(
       source.dot1Brightness ?? source.brightness,
@@ -1768,6 +1794,8 @@ function normalizeNodeGraphScope2dTraceSettings(settings = {}, typeDefaults = nu
     burnAmount: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateBurnAmount
       ? PhosphorResidual.migrateBurnAmount(source, defaults.burnAmount ?? PhosphorResidual.DEFAULT_BURN_AMOUNT)
       : normalizeNodeGraphTraceDisplayNumber(source.burnAmount, defaults.burnAmount ?? PhosphorResidual.DEFAULT_BURN_AMOUNT, 0, 4),
+    // Decay blur: 0 = none (the default; Trace then skips the diffusion pass entirely).
+    decayBlur: normalizeNodeGraphTraceDisplayNumber(source.decayBlur, defaults.decayBlur ?? 0, 0, 1),
     pixelDensity: normalizeNodeGraphTraceDisplayNumber(
       source.pixelDensity,
       defaults.pixelDensity,
@@ -1882,6 +1910,8 @@ function normalizeNodeGraphScope1dTraceSettings(settings = {}) {
     burnAmount: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateBurnAmount
       ? PhosphorResidual.migrateBurnAmount(source, defaults.burnAmount ?? PhosphorResidual.DEFAULT_BURN_AMOUNT)
       : normalizeNodeGraphTraceDisplayNumber(source.burnAmount, defaults.burnAmount ?? PhosphorResidual.DEFAULT_BURN_AMOUNT, 0, 4),
+    // Decay blur: 0 = none (the default; Trace then skips the diffusion pass entirely).
+    decayBlur: normalizeNodeGraphTraceDisplayNumber(source.decayBlur, defaults.decayBlur ?? 0, 0, 1),
     pixelDensity: normalizeNodeGraphTraceDisplayNumber(
       source.pixelDensity,
       defaults.pixelDensity,

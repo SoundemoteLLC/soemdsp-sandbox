@@ -58,6 +58,15 @@
   const MAX_DIM = 4096;
   const FLOATS = 12; // pos2, local2, len1, half1, feather1, caps1, rgba4
   const PULSE_TRAIN_MAX = 16384;
+  // Canonical display Expo skirt (APP_POLICY §3). One source for JS and GLSL.
+  // coverage = 1 - (1 - e^-3t) / (1 - e^-3), t in [0, 1] past the solid edge.
+  const NODE_GRAPH_GL_LINES_EXPO_SKIRT_GLSL = "1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163";
+  function nodeGraphGlLinesExpoSkirt(t) {
+    const x = Number(t);
+    if (!(x > 0)) return 1;
+    if (x >= 1) return 0;
+    return 1 - (1 - Math.exp(-3 * x)) / 0.95021293163;
+  }
   // Perlin quintic. Same one-SDF cost as Hermite smoothstep; C2 at the
   // skirt ends.
   // App edge (APP_POLICY section 3), in-shader 4x4 supersampling. The 16
@@ -69,7 +78,7 @@
 uniform float uEdge;
 float edgeCurve(float t) {
   if (uEdge > 0.5) return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-  return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+  return ${NODE_GRAPH_GL_LINES_EXPO_SKIRT_GLSL};
 }
 float coverageEdgeAt(float halfPx, float feather, float dist) {
   if (dist <= halfPx) return 1.0;
@@ -419,6 +428,16 @@ uniform float uGridOn;
 uniform vec2 uGridCell;
 uniform vec4 uGridRgba;
 uniform float uGridSpread;
+// The grid lines reflect the room light like module text does (see the glyph shader): uGridDark is how much a dark room dims
+// them (0 = not at all), the mouse lamp (x, y, radius, strength) lifts that dimming around the cursor and, past full
+// brightness, lifts the lines toward white.
+uniform float uGridDark;
+uniform highp vec4 uGridLamp;
+// The mouse as a module-like light: 1 = it reveals the grid as brightly as a module does (0 = not at all).
+uniform float uGridReflect;
+// TEMPORARY dial-in: x = push the lines at the mouse toward full white (0..1), y = how far the mouse light reaches, in SCREEN (device)
+// px, so it does not change with the zoom.
+uniform vec2 uGridLampMore;
 uniform float uModuleAmt;
 uniform highp vec4 uMouse;
 uniform float uZoomPx;
@@ -477,8 +496,24 @@ void main() {
       float mr = uMouse.w * (1.0 / (1.0 + (mt / 0.35) * (mt / 0.35))) * (1.0 - smoothstep(0.6, 1.0, mt));
       rv = 1.0 - (1.0 - rv) * (1.0 - clamp(mr, 0.0, 1.0));
     }
-    float gridA = uGridRgba.a * cov * rv;
-    acc.rgb += (1.0 - acc.a) * uGridRgba.rgb * gridA;
+    // The mouse is a light like a module: it reveals the grid with the same falloff, over the same reach and at the same line
+    // strength a module does (uGridReflect scales it; 1 = exactly as bright as around a module), wherever it is, in a lit room or
+    // a dark one. The text lamp (lit) also lifts the lines toward white and, in a dark room, undims them around the cursor.
+    float lit = 0.0;
+    float lampRev = 0.0;
+    if (uGridLamp.w > 0.0) {
+      float ldw = length(vPx - uGridLamp.xy);
+      float ld = ldw / max(uGridLamp.z, 1.0);
+      lit = clamp(uGridLamp.w * exp(-1.6 * ld * ld), 0.0, 1.0);
+      // Screen distance to the mouse over a screen-px reach: the mouse light is the same size on screen at every zoom.
+      float ug = (ldw * uZoomPx) / max(uGridLampMore.y, 1.0);
+      lampRev = clamp(uGridReflect, 0.0, 4.0) * (1.0 / (1.0 + (ug / 0.3) * (ug / 0.3))) * (1.0 - smoothstep(0.55, 1.0, ug));
+    }
+    float gridF = 1.0 - uGridDark * (1.0 - lit);
+    vec3 gridRgb = mix(uGridRgba.rgb, vec3(1.0), 0.45 * lit * lit);
+    rv = 1.0 - (1.0 - rv) * (1.0 - clamp(lampRev, 0.0, 1.0));
+    float gridA = cov * mix(uGridRgba.a * rv * gridF, 1.0, clamp(lampRev, 0.0, 1.0) * clamp(uGridLampMore.x, 0.0, 1.0));
+    acc.rgb += (1.0 - acc.a) * gridRgb * gridA;
     acc.a += (1.0 - acc.a) * gridA;
   }
   if (acc.a < 0.002) discard;
@@ -834,6 +869,10 @@ void main() {
         lightGridCell: gl.getUniformLocation(lightProgram, "uGridCell"),
         lightGridRgba: gl.getUniformLocation(lightProgram, "uGridRgba"),
         lightGridSpread: gl.getUniformLocation(lightProgram, "uGridSpread"),
+        lightGridDark: gl.getUniformLocation(lightProgram, "uGridDark"),
+        lightGridLamp: gl.getUniformLocation(lightProgram, "uGridLamp"),
+        lightGridReflect: gl.getUniformLocation(lightProgram, "uGridReflect"),
+        lightGridLampMore: gl.getUniformLocation(lightProgram, "uGridLampMore"),
         lightModuleAmt: gl.getUniformLocation(lightProgram, "uModuleAmt"),
         lightMouse: gl.getUniformLocation(lightProgram, "uMouse"),
         lightZoomPx: gl.getUniformLocation(lightProgram, "uZoomPx"),
@@ -1511,7 +1550,7 @@ out vec4 fragColor;
 uniform float uEdge;
 float edgeCurve(float t) {
   if (uEdge > 0.5) return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-  return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+  return ${NODE_GRAPH_GL_LINES_EXPO_SKIRT_GLSL};
 }
 float segDist(vec2 p) {
   vec2 a = vSeg.xy;
@@ -3080,7 +3119,7 @@ uniform float uEdge;
 float insideAt(float sd, float w) {
   float t = clamp(sd / max(w, 1e-4) + 0.5, 0.0, 1.0);
   if (uEdge > 0.5) return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-  return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+  return ${NODE_GRAPH_GL_LINES_EXPO_SKIRT_GLSL};
 }
 float inside(float sd, float w) {
   vec2 g = vec2(dFdx(sd), dFdy(sd));
@@ -3541,6 +3580,15 @@ void main() {
       if (mp) gl.uniform4f(s.lightMouse, cam.x + mp.x / cam.zoom, cam.y + mp.y / cam.zoom, grid.mouseRadius, grid.mouseAmount);
       else gl.uniform4f(s.lightMouse, 0, 0, 1, 0);
       gl.uniform1f(s.lightZoomPx, cam.zoom * scalePx);
+      // Like module text: lit (and whitened) by the mouse lamp, anywhere; dimmed by a dark room away from it.
+      const ambient = typeof global.nodeGraphRoomAmbientDark === "function"
+        ? Math.max(0, Math.min(1, Number(global.nodeGraphRoomAmbientDark()) || 0)) : 0;
+      const gridDark = Math.min(ambient, 0.75);
+      const lamp = typeof global.nodeGraphRoomLightUniform === "function" ? global.nodeGraphRoomLightUniform() : null;
+      if (s.lightGridReflect) gl.uniform1f(s.lightGridReflect, Math.max(0, Math.min(4, Number(grid.reflect) || 0)));
+      if (s.lightGridLampMore) gl.uniform2f(s.lightGridLampMore, Math.max(0, Math.min(1, Number(grid.lampBright) || 0)), Math.max(1, (lo.gridMinX || 140) * (Number(grid.spread) || 1) * Math.max(0.25, Number(grid.lampReach) || 1) * scalePx));
+      if (s.lightGridDark) gl.uniform1f(s.lightGridDark, gridDark);
+      if (s.lightGridLamp) gl.uniform4f(s.lightGridLamp, lamp ? lamp[0] : 0, lamp ? lamp[1] : 0, lamp ? lamp[2] : 1, lamp ? lamp[3] : 0);
     }
     if (s.lightPlate) gl.uniform4f(s.lightPlate, 0, 0, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, s.outBuf);
@@ -4088,6 +4136,7 @@ void main() {
 
   const api = {
     nodeGraphGlLinesFillBlack,
+    nodeGraphGlLinesExpoSkirt,
     nodeGraphGlLinesBegin,
     nodeGraphGlLinesLayer,
     nodeGraphGlLinesRect,

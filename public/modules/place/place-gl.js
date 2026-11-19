@@ -1,5 +1,5 @@
-const NODE_GRAPH_PLACE_GL_REV = 1;
-const NODE_GRAPH_PLACE_MAX = 512;
+const NODE_GRAPH_PLACE_GL_REV = 2;
+const NODE_GRAPH_PLACE_MAX = 4096;
 
 (function initNodeGraphPlaceGl(global) {
   const KEY = "_placeGl";

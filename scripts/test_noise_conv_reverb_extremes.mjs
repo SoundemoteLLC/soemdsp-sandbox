@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import nodeProcess from 'node:process';
 
-const bytes = nodeProcess.argv.includes('--baseline')
-  ? execFileSync('git', ['show', 'ad44142c:native_modules/noise_conv_reverb/noise_conv_reverb.wasm'], { maxBuffer: 1024 * 1024 })
+const bytes = nodeProcess.argv.includes('--previous-build')
+  ? execFileSync('git', ['show', 'HEAD:native_modules/noise_conv_reverb/noise_conv_reverb.wasm'], { maxBuffer: 1024 * 1024 })
   : fs.readFileSync(new URL('../native_modules/noise_conv_reverb/noise_conv_reverb.wasm', import.meta.url));
 const compiled = await WebAssembly.compile(bytes);
 let x, block, pointers;
