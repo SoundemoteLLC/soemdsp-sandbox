@@ -242,7 +242,9 @@ function nodeGraphScreenFxNodes() {
 function nodeGraphScreenFxSources() {
   if (typeof nodeGraphGlGraphState === "undefined") return [];
   const g = nodeGraphGlGraphState;
-  return [g.canvas, g.wireCanvas, g.dotsCanvas].filter((canvas) => canvas?.isConnected);
+  // Back to front, as the GL graph stacks them: the cables' canvas first (it carries the room-dark quad that sits UNDER the cables and
+  // the modules), then the plates / faces / screens, then the cable end dots. Cables on top of the plates would darken every screen.
+  return [g.wireCanvas, g.canvas, g.dotsCanvas].filter((canvas) => canvas?.isConnected);
 }
 
 function nodeGraphScreenFxOverlay(host) {
@@ -388,7 +390,7 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
   for (const { id, script } of nodes.shaders) nodeGraphScreenFxRunShader(kit, id, script, w, h, now);
   let final = null;
   if (onScreen && base) {
-    // 2. Scene: workspace background, then each layer in z order (straight alpha, like drawImage).
+    // 2. Scene: workspace background, then each layer in z order (premultiplied alpha).
     st.scene = nodeGraphScreenFxSurface(gl, w, h, st.scene);
     const bg = nodeGraphScreenFxBackground(host);
     gl.bindFramebuffer(gl.FRAMEBUFFER, st.scene.fbo);
@@ -396,7 +398,9 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
     gl.clearColor(bg[0], bg[1], bg[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    // The layer textures are premultiplied (every picture / face texture is): ONE, not SRC_ALPHA, or anything partly transparent
+    // (a lit screen over a dimmed plate, glows, text edges) gets multiplied by its alpha twice and goes dark.
+    gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
     gl.useProgram(kit.layer);
     gl.uniform1i(kit.layerTex, 0);
     for (const canvas of sources) {
