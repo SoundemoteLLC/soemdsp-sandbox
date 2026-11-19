@@ -1332,7 +1332,8 @@ function nodeGraphGlGraphDrawLabels(batch, toX, toY, zoom, cssW, cssH) {
   const ink = [1, 1, 1, 1];
   for (let i = 0; i < labels.length; i += 1) {
     const label = labels[i];
-    const text = String(label.el?.textContent || "").replace(/\s+/g, " ").trim();
+    let text = String(label.el?.textContent || "").replace(/\s+/g, " ").trim();
+    if (typeof nodeGraphIoViewLabelText === "function") text = nodeGraphIoViewLabelText(text);
     if (!text || typeof nodeGraphGlLinesText !== "function") continue;
     const lx = toX(label.x);
     const ly = toY(label.y);
@@ -1942,7 +1943,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
       const from = nodeGraphPortCenter(connection.sourceNode, connection.sourcePort, "output");
       const to = nodeGraphPortCenter(connection.destinationNode, connection.destinationPort, "input");
       const fromColor = colorOf(connection.sourceNode, connection.sourcePort, "output");
-      if (!from || !to) {
+      if (!from || !to || nodeGraphIoViewHidesWire?.(connection.sourceNode, connection.destinationNode)) {
         // One end's jack is hidden: no cable, dots on the visible jacks only.
         nodeGraphGlGraphPushWireJackDots(wires, colorOf(connection.destinationNode, connection.destinationPort, "input") || fromColor, [
           { at: from, el: nodeGraphGlGraphWireJackEl(connection.sourceNode, connection.sourcePort, "output"), square: square(connection.sourceNode, connection.sourcePort, "output"), rail: rail(connection.sourceNode, connection.sourcePort), node: connection.sourceNode },
@@ -1978,7 +1979,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
         ? nodeGraphModulationPortCenter(modulation.destinationNode, modulation.destinationParam)
         : null;
       const fromColor = colorOf(modulation.sourceNode, modulation.sourcePort, "output");
-      if (!from || !to) {
+      if (!from || !to || nodeGraphIoViewHidesWire?.(modulation.sourceNode, modulation.destinationNode)) {
         // Target param row hidden (sliders hidden or the param hidden) or the
         // outlet hidden: no cable, dots on the visible jacks only.
         nodeGraphGlGraphPushWireJackDots(wires, colorOf(modulation.destinationNode, modulation.destinationParam, "modulation") || fromColor, [
@@ -3210,6 +3211,17 @@ function nodeGraphGlGraphPresent(options = {}) {
         const ink = nodeGraphGlLinesLayer(batch);
         nodeGraphGlGraphDrawGroupInk(ink, group, toX, toY, layoutZoom, cssW, cssH, Boolean(frameCamera));
         if (inks) for (let i = 0; i < group.displays.length; i += 1) inks.set(group.displays[i].canvas, { layer: ink, group });
+      }
+      // View B: a dark veil over each whole module, under its jacks, labels and wire dots.
+      if (typeof nodeGraphIoView === "function" && nodeGraphIoView() === "B") {
+        const veil = nodeGraphGlLinesLayer(batch);
+        if (veil) {
+          for (let i = 0; i < group.plates.length; i += 1) {
+            const plate = group.plates[i];
+            if (!nodeGraphGlGraphIoOverlay(plate.id)) continue;
+            nodeGraphGlLinesRect(veil, toX(plate.x), toY(plate.y), plate.w * layoutZoom, plate.h * layoutZoom, [0, 0, 0, 0.55]);
+          }
+        }
       }
       // IO overlay: jacks and labels of opted-in modules, drawn over their display.
       let ioLayer = null;
