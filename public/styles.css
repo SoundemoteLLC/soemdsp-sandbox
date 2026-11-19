@@ -5032,7 +5032,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  min-width: var(--node-unified-window-min-width, 24px);
+  /* The key column plus room for a description beside it. */
+  min-width: max(var(--node-unified-window-min-width, 24px), 360px);
   min-height: var(--node-unified-window-min-height, 120px);
   overflow: hidden;
   padding: 0;
@@ -5526,12 +5527,13 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 .node-hotkeys-row {
   display: grid;
   /* The key column is as wide as its key; the description takes the rest and wraps. */
-  grid-template-columns: minmax(3.6rem, max-content) minmax(0, 1fr);
+  /* Two columns at every width: a key column just wide enough for the widest key, then the description. */
+  grid-template-columns: 7.4rem minmax(0, 1fr);
   /* A row keeps its full height (the list scrolls); a flex item would otherwise shrink and overlap the next row. */
   flex: 0 0 auto;
-  align-items: start;
-  gap: 4px 10px;
-  min-height: 28px;
+  align-items: center;
+  gap: 4px 6px;
+  min-height: 34px;
   padding: 6px 8px;
   border-bottom: 1px solid rgba(127, 199, 217, 0.12);
   color: rgba(243, 241, 236, 0.92);
@@ -5539,14 +5541,42 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 }
 
 .node-hotkeys-row kbd {
+  /* The key column: keycaps in a row (a combo is several keys). */
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
   justify-self: start;
+  gap: 3px;
   min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
-  color: rgba(226, 168, 109, 0.95);
-  font: 800 0.78rem/1 inherit;
+  color: rgba(238, 190, 135, 1);
+  font: 800 0.9rem/1 "Cascadia Mono", Consolas, monospace;
+  white-space: nowrap;
 }
+
+/* One key: a lit top face, a darker front edge and a soft shadow, sized by what the key is. */
+.node-hotkeys-row .keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 1.9em;
+  padding: 0 0.55em;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom-width: 3px;
+  border-bottom-color: rgba(0, 0, 0, 0.55);
+  border-radius: 5px;
+  background: linear-gradient(180deg, #2f3842 0%, #1b2128 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+.node-hotkeys-row .key-char { min-width: 1.9em; padding: 0 0.3em; }
+.node-hotkeys-row .key-mod { min-width: 2.6em; }
+.node-hotkeys-row .key-wide { min-width: 3.1em; }
+/* The spacebar: as long as the key column allows. */
+.node-hotkeys-row .key-space { min-width: 6.2em; letter-spacing: 0.08em; }
+.node-hotkeys-row .key-sep { font-style: normal; font-weight: 600; opacity: 0.6; padding: 0 1px; }
 
 .node-hotkeys-row span {
   /* Descriptions wrap (they used to be cut off with an ellipsis). */
@@ -5557,13 +5587,6 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   line-height: 1.35;
 }
 
-/* A narrow window: the key sits above its description, which then has the full width. */
-@container (max-width: 340px) {
-  .node-hotkeys-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
-  }
-}
 
 .node-visibility-menu .scene-context-heading {
   flex: 0 0 auto;
