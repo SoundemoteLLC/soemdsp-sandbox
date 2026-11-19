@@ -19,19 +19,21 @@
   //   veil    alpha of the dark veil over each module under its IO (0 = none)
   //   wireColor "from" (the colour of the jack the cable leaves) | "to" (the jack it enters); modulation cables
   //             always keep their modulation (purple) colour
+  //   strip   the one-row band between the title and the display (A shows the IO pills in it; B keeps it empty so a
+  //           module's size does not change between the views)
   //   collapseUnused  unconnected jacks leave the rail, so the connected ones stack up from the top
   //                   (module sizes do not change: that is only where the jacks sit)
   // Only the views in ENABLED_VIEWS can be reached. A is the IO pills in a strip between the title and the display
   // (click a pill to go to B); B is the full jacks and names. The others are kept, switched off.
   const ENABLED_VIEWS = ["A", "B"];
   const VIEWS = {
-    A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true },
+    A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true, strip: true },
     // Disabled: the earlier quiet A (no jacks, no labels, unconnected jacks collapsed to the top).
     QUIET: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: true },
-    B: { jacks: true, labels: "full", wires: "all", veil: 0.55, wireColor: "to", collapseUnused: false },
+    B: { jacks: true, labels: "full", wires: "all", veil: 0.55, wireColor: "to", collapseUnused: false, strip: true },
     // Disabled C: the same pills as A, with Shift+Tab cycling the pill slot (bottom, mid, top). Each pill side opens
     //    its panel (drawn in the top layer, no module resizes) with every jack and its full name.
-    C: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true },
+    C: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true, strip: true },
   };
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
@@ -52,6 +54,7 @@
     body.setAttribute("data-io-view", state.view);
     body.setAttribute("data-io-slot", state.slot);
     body.setAttribute("data-io-panel", VIEWS[state.view].panel ? "1" : "0");
+    body.setAttribute("data-io-strip", VIEWS[state.view].strip ? "1" : "0");
     body.setAttribute("data-io-collapse", VIEWS[state.view].collapseUnused ? "1" : "0");
   }
 
@@ -118,13 +121,13 @@
   const usesLayoutB = (type) => typeof nodeGraphModuleUsesLayoutB === "function" && nodeGraphModuleUsesLayoutB(type);
   /** IO view C, "mid": a strip (grid cells) between the display and the sliders, only where there are sliders. */
   window.nodeGraphIoViewExtraHeightGu = (type) => {
-    if (!VIEWS[state.view].panel || state.slot !== "mid" || !usesLayoutB(type)) return 0;
+    if (!VIEWS[state.view].strip || state.slot !== "mid" || !usesLayoutB(type)) return 0;
     const sliders = typeof nodeGraphModuleSliderBodyHeightGu === "function" ? nodeGraphModuleSliderBodyHeightGu(type, null, null) : 0;
     return sliders > 0 ? 15 / 28 : 0;
   };
   /** IO view C, "top": a strip (grid cells) at the top of each module's shell, between the title and the display. */
   window.nodeGraphIoViewStripGu = (type) => (
-    VIEWS[state.view].panel && state.slot === "top" && usesLayoutB(type) ? 15 / 28 : 0
+    VIEWS[state.view].strip && state.slot === "top" && usesLayoutB(type) ? 15 / 28 : 0
   );
   /** Where View C puts the pills: "bottom" | "mid" | "top". */
   window.nodeGraphIoViewPillSlot = () => state.slot;

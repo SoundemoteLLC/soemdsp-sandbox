@@ -1138,7 +1138,7 @@ function nodeGraphGlGraphJackHoles(jacks, plate, plateStyle, camera, device) {
  */
 function nodeGraphGlGraphIoStrip(id) {
   const cfg = typeof nodeGraphIoViewConfig === "function" ? nodeGraphIoViewConfig() : null;
-  if (!cfg || !cfg.panel || !nodeGraphGlGraphIoOverlay(id)) return null;
+  if (!cfg || !cfg.strip || !nodeGraphGlGraphIoOverlay(id)) return null;
   const slot = typeof nodeGraphIoViewPillSlot === "function" ? nodeGraphIoViewPillSlot() : "top";
   if (slot === "bottom") return null;
   const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
