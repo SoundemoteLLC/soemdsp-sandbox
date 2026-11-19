@@ -1062,6 +1062,12 @@ function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, b
   }
 }
 
+/** Module opted in to drawing its jacks and labels over its display (definition.ioOverlay). */
+function nodeGraphGlGraphIoOverlay(id) {
+  const type = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id)?.type : "";
+  return Boolean(type && nodeGraphModuleDefinitions[type]?.ioOverlay);
+}
+
 function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, plateStyle, borderOn, borderIdle, mode = "", dark = 0) {
   const x = toX(plate.x);
   const y = toY(plate.y);
@@ -1081,7 +1087,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   let color = selected ? borderOn : borderIdle;
   // The dim covers the body only. Its stroke is transparent: darkening the stroke band and then
   // redrawing a translucent stroke over it left the (loudness-animated) stroke dimmed by the room.
-  if (mode === "dim") color = [0, 0, 0, 0];
+  if (mode === "dim" || mode === "jacks") color = [0, 0, 0, 0];
   // "shine": the module reflecting the mouse lamp, in its own stroke colour (strongest near the lamp).
   if (mode === "shine") color = [color[0], color[1], color[2], 0.5];
   const plateJacks = [];
@@ -1089,6 +1095,8 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   for (let j = 0; j < allJacks.length; j += 1) {
     const jack = allJacks[j];
     if (jack.id !== plate.id || jack.rail) continue;
+    // IO-overlay modules draw their jacks again after the display (mode "jacks"), not under it.
+    if (mode === "" && nodeGraphGlGraphIoOverlay(plate.id)) continue;
     // Connected, or a wire is being dragged out of it right now.
     const lit = jack.lit || nodeGraphGlGraphJackDragging(jack);
     plateJacks.push({
@@ -1114,7 +1122,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     const round = look
       ? [look.topRadius * zoom, look.topShape, look.bottomRadius * zoom, look.bottomShape, (look.strokeTopRadius ?? look.topRadius) * zoom]
       : null;
-    const fill = mode === "dim" ? [0, 0, 0, dark]
+    const fill = mode === "jacks" ? [0, 0, 0, 0] : mode === "dim" ? [0, 0, 0, dark]
       : (mode === "emit" ? [0, 0, 0, 0]
         : (mode === "shine" ? [color[0], color[1], color[2], 0.28] : plate.fill));
     nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, fill, cuts, round, mode === "dim" || mode === "shine" ? "" : plate.id, selected === true, mode === "dim" ? true : (mode === "shine" ? 2 : false));
@@ -1276,7 +1284,27 @@ function nodeGraphGlGraphDrawSeedWidget(batch, cells, text, zoom, opts = {}) {
   }
 }
 
-function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
+function nodeGraphGlGraphDrawLabels(batch, toX, toY, zoom, cssW, cssH) {
+  const labels = nodeGraphGlGraphState.chrome?.labels || [];
+  const ink = [1, 1, 1, 1];
+  for (let i = 0; i < labels.length; i += 1) {
+    const label = labels[i];
+    const text = String(label.el?.textContent || "").replace(/\s+/g, " ").trim();
+    if (!text || typeof nodeGraphGlLinesText !== "function") continue;
+    const lx = toX(label.x);
+    const ly = toY(label.y);
+    if (nodeGraphGlGraphOutside(lx, ly, 0, 0, cssW, cssH, 480)) continue;
+    nodeGraphGlLinesText(batch, text, lx, ly, nodeGraphGlGraphTextOpts({
+      px: Math.max(1, (label.fontPx || 13) * zoom),
+      rgba: ink,
+      align: label.align,
+      baseline: "middle",
+      weight: 400,
+    }));
+  }
+}
+
+function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH, skipLabels = false) {
   const chrome = nodeGraphGlGraphState.chrome;
   if (!chrome) return;
   // Face-cell palette (node-graph-module-face.js NodeGraphFaceInk): cellFill
@@ -1394,22 +1422,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     }
   }
   nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH);
-  const labels = chrome.labels || [];
-  for (let i = 0; i < labels.length; i += 1) {
-    const label = labels[i];
-    const text = String(label.el?.textContent || "").replace(/\s+/g, " ").trim();
-    if (!text || typeof nodeGraphGlLinesText !== "function") continue;
-    const lx = toX(label.x);
-    const ly = toY(label.y);
-    if (nodeGraphGlGraphOutside(lx, ly, 0, 0, cssW, cssH, 480)) continue;
-    nodeGraphGlLinesText(batch, text, lx, ly, nodeGraphGlGraphTextOpts({
-      px: Math.max(1, (label.fontPx || 13) * zoom),
-      rgba: ink,
-      align: label.align,
-      baseline: "middle",
-      weight: 400,
-    }));
-  }
+  if (!skipLabels) nodeGraphGlGraphDrawLabels(batch, toX, toY, zoom, cssW, cssH);
   const titles = chrome.titles || [];
   for (let i = 0; i < titles.length; i += 1) {
     const title = titles[i];
@@ -3089,7 +3102,7 @@ function nodeGraphGlGraphPresent(options = {}) {
         const plate = group.plates[i];
         nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
         nodeGraphGlGraphDrawPlate(body, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle);
-        nodeGraphGlGraphDrawChrome(body, toX, toY, layoutZoom, cssW, cssH);
+        nodeGraphGlGraphDrawChrome(body, toX, toY, layoutZoom, cssW, cssH, nodeGraphGlGraphIoOverlay(plate.id));
         const ownCaptions = captionsById.get(plate.id);
         if (ownCaptions) captions.push(...ownCaptions);
         const ownShapes = shapesById.get(plate.id);
@@ -3147,6 +3160,18 @@ function nodeGraphGlGraphPresent(options = {}) {
         const ink = nodeGraphGlLinesLayer(batch);
         nodeGraphGlGraphDrawGroupInk(ink, group, toX, toY, layoutZoom, cssW, cssH, Boolean(frameCamera));
         if (inks) for (let i = 0; i < group.displays.length; i += 1) inks.set(group.displays[i].canvas, { layer: ink, group });
+      }
+      // IO overlay: jacks and labels of opted-in modules, drawn over their display.
+      let ioLayer = null;
+      for (let i = 0; i < group.plates.length; i += 1) {
+        const plate = group.plates[i];
+        if (!nodeGraphGlGraphIoOverlay(plate.id)) continue;
+        ioLayer = ioLayer || nodeGraphGlLinesLayer(batch);
+        if (!ioLayer) break;
+        nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
+        nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "jacks");
+        nodeGraphGlGraphDrawLabels(ioLayer, toX, toY, layoutZoom, cssW, cssH);
+        nodeGraphGlGraphState.chrome = chromeAll;
       }
       if (endsByNode.size || dotBake) {
         // UIDEV wire dot shadows off: the dots' soft edge lands unmultiplied

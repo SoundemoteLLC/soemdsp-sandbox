@@ -61,6 +61,8 @@ registerNodeGraphChromelessModule("fbmField", {
     ],
     defaultDisplayMode: "face",
     layoutBPortLabels: true,
+    // Jacks and their labels draw over the display, which runs the full module width.
+    ioOverlay: true,
     inputAliases: { Reset: "In" },
     inputs: ["In"],
     inputLabels: { In: "→" },
