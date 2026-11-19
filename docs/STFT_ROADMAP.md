@@ -160,15 +160,20 @@ them simultaneously. Proposed order follows musical value and implementation ris
 
 ### 5. Spectral Shift / Warp
 
-- [ ] Linear Shift in Hz, nonlinear Warp with Pivot, Mix.
-- [ ] Reject/fade out-of-band energy rather than wrapping accidentally.
-- [ ] Later: separate positive/negative-frequency policies and stereo offsets.
+- [x] Native stereo Spectral Shift / Warp: Shift in Hz, positive Warp exponent,
+  Pivot in Hz, Pitch in semitones, Stereo Shift in Hz, Mix/Gain and FFT sizes
+  512..16384. See [SPECTRAL_WARP.md](SPECTRAL_WARP.md).
+- [x] Phase-coherent peak-region translation and explicit out-of-band rejection.
+- [x] Base listening acceptance. New Pitch/Stereo controls await confirmation.
+- [ ] Later: alternate negative-frequency policies and worst-case host CPU proof.
 - Proof: sine/multitone output frequencies match the mapping; phase evolution
   is continuous; high-frequency products and aliasing are measured.
 - True pitch shifting needs its own phase-coherent design; moving FFT bins is
   not sufficient and is not a promised shortcut here.
 
 ### 6. Spectral Morph
+
+Parked by Architect; do not implement next automatically.
 
 - [ ] Two stereo inputs, Morph amount, explicit magnitude interpolation law.
 - [ ] Define phase ownership/alignment; do not merely crossfade audio and call

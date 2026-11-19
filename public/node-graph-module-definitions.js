@@ -213,6 +213,7 @@ const nodeGraphNodeLabels = Object.freeze({
   materialResonator: "Material Resonator",
   dispersion: "Dispersion",
   spectralCrossSynthesis: "Spectral Cross-Synthesis",
+  spectralWarp: "Spectral Shift / Warp",
   spectralSmear: "Spectral Smear",
   earlyReflectionConvolution: "Early Reflection Convolution",
   stftGate: "STFT Gate",
@@ -7544,6 +7545,138 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "%",
         "tooltip": "Delayed dry stereo versus reflected sound. Direct path is excluded from the IR; dry and wet share 256 samples of convolution buffering latency. Ready becomes high after the first kernel is built; Error reports an invalid or over-capacity request."
+      }
+    ],
+  },
+  spectralWarp: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
+    inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
+    outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["shiftHz", "Shift"], ["warp", "Warp"]], h: 40 },
+      { kind: "cells", params: [["pitchSemitones", "Pitch"], ["stereoShiftHz", "Stereo Shift"]], h: 40 },
+      { kind: "cells", params: [["pivotHz", "Pivot"]], h: 40 },
+      { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Output Gain"]], h: 40 },
+    ],
+    parameters: [
+      {
+        "key": "fftSize",
+        "label": "FFT Size",
+        "kind": "choice",
+        "choices": [
+          "512",
+          "1024",
+          "2048",
+          "4096",
+          "8192",
+          "16384"
+        ],
+        "choiceKeys": [
+          "512",
+          "1024",
+          "2048",
+          "4096",
+          "8192",
+          "16384"
+        ],
+        "choiceIds": [
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384
+        ],
+        "defaultValue": "2048",
+        "min": "0",
+        "mid": "2.5",
+        "max": "5",
+        "step": "1",
+        "unit": "samples",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "STFT window and dry/wet reference delay in samples. Hop is one quarter of size. Small is tighter; large separates nearby partials. Size edits warm a second engine then crossfade for 50 ms. Requests queue the latest size. No automatic host delay compensation."
+      },
+      {
+        "key": "shiftHz",
+        "label": "Shift",
+        "defaultValue": "0",
+        "min": "-2000",
+        "mid": "0",
+        "max": "2000",
+        "step": "any",
+        "unit": "Hz",
+        "tooltip": "Add this many Hz after nonlinear warping. Positive shifts up; negative shifts down. This is additive frequency shifting, not a semitone pitch control. Frequencies leaving 0..Nyquist are rejected, not folded or wrapped."
+      },
+      {
+        "key": "pitchSemitones",
+        "label": "Pitch",
+        "defaultValue": "0",
+        "min": "-24",
+        "mid": "0",
+        "max": "24",
+        "step": "any",
+        "unit": "st",
+        "tooltip": "Multiply warped partial frequencies by 2^(Pitch/12), before adding Shift. Warp one and Shift zero give musical transposition. Preserves local peak-region shape, not formant-corrected or transient-perfect pitch shifting. Continuous native smoothing; no fixed semitone range clamp."
+      },
+      {
+        "key": "stereoShiftHz",
+        "label": "Stereo Shift",
+        "defaultValue": "0",
+        "min": "-1000",
+        "mid": "0",
+        "max": "1000",
+        "step": "any",
+        "unit": "Hz",
+        "tooltip": "Total right-minus-left additive frequency-shift difference in Hz. Left gets -half, right +half, after Warp and Pitch, around the main Shift value. Zero preserves matched stereo processing. Negative reverses sides; out-of-band frequencies are rejected."
+      },
+      {
+        "key": "warp",
+        "label": "Warp",
+        "defaultValue": "1",
+        "min": ".25",
+        "mid": "1",
+        "max": "4",
+        "step": "any",
+        "tooltip": "Positive dimensionless exponent: warped = Pivot * (f_in / Pivot)^Warp. Pitch then multiplies it, followed by Shift and per-channel Stereo Shift. One gives linear frequency mapping. Above one spreads partials away from Pivot; below one crowds them. Peak regions retain local phase structure."
+      },
+      {
+        "key": "pivotHz",
+        "label": "Pivot",
+        "kind": "frequency",
+        "defaultValue": "1000",
+        "min": "20",
+        "mid": "1000",
+        "max": "16000",
+        "step": "any",
+        "unit": "Hz",
+        "nonlinearSlider": true,
+        "tooltip": "Actual Hz held fixed by Warp before Shift is added. Must be above zero and below Nyquist. Warp one ignores Pivot. Partial frequencies are estimated from frame-to-frame phase; nearby unresolved partials can move together."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": ".5",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Delayed dry to spectral wet, aligned at the active FFT Size. Partial wet/dry intentionally mixes original and transformed frequencies. FFT changes alter delay during the warmed crossfade."
+      },
+      {
+        "key": "gainDb",
+        "label": "Output Gain",
+        "defaultValue": "0",
+        "min": "-24",
+        "mid": "0",
+        "max": "24",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Explicit final gain in dB. No hidden amplitude normalization, limiter or clipping. Mapped spectral regions can overlap and add in level."
       }
     ],
   },

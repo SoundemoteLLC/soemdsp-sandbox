@@ -3224,6 +3224,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "spectral_warp",
+      "label": "Spectral Shift / Warp",
+      "targetType": "spectralWarp",
+      "kind": "effect",
+      "source": "native_modules/spectral_warp/spectral_warp.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_warp/spectral_warp.cpp",
+      "localSourceUrl": "/native_modules/spectral_warp/spectral_warp.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/spectral_warp/spectral_warp.wasm",
+      "wasmUrl": "native_modules/spectral_warp/spectral_warp.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "step_graph",
       "label": "Step Graph",
       "targetType": "stepGraph",

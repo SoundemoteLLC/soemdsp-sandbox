@@ -843,6 +843,13 @@ extern "C" int soemdsp_spectral_delay_create();
 extern "C" int soemdsp_material_resonator_create();
 extern "C" int soemdsp_dispersion_create();
 extern "C" int soemdsp_spectral_cross_synthesis_create();
+extern "C" int soemdsp_spectral_warp_create();
+extern "C" void soemdsp_spectral_warp_destroy(int h);
+extern "C" int soemdsp_spectral_warp_configure(int h,int size,double shift,double warp,double pivot,double rate);
+extern "C" int soemdsp_spectral_warp_set_pitch_stereo(int h,double semitones,double stereoHz);
+extern "C" double soemdsp_spectral_warp_sample(int h,double l,double r,double mix,double gainDb);
+extern "C" double soemdsp_spectral_warp_right(int h);
+extern "C" double soemdsp_spectral_warp_error(int h);
 extern "C" void soemdsp_spectral_cross_synthesis_destroy(int h);
 extern "C" double soemdsp_spectral_cross_synthesis_sample(int h,double vl,double vr,double sl,double sr,double amount,double width,double attack,double release,double mix,double gainDb,double rate);
 extern "C" double soemdsp_spectral_cross_synthesis_right(int h);
@@ -2653,6 +2660,7 @@ static const int kTypeConvolutionResonator = 268;
 static const int kTypeVocoder = 269;
 static const int kTypeSpectralBlur = 272;
 static const int kTypeSpectralCrossSynthesis = 278;
+static const int kTypeSpectralWarp = 279;
 static const int kTypeSpectralFreeze = 273;
 static const int kTypeEarlyReflectionConvolution = 274;
 static const int kTypeSpectralDelay = 275;
@@ -3333,6 +3341,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_noise_conv_reverb_destroy(handle);
   } else if (kind == kTypeConvolutionResonator) {
     soemdsp_convolution_resonator_destroy(handle);
+  } else if (kind == kTypeSpectralWarp) {
+    soemdsp_spectral_warp_destroy(handle);
   } else if (kind == kTypeSpectralCrossSynthesis) {
     soemdsp_spectral_cross_synthesis_destroy(handle);
   } else if (kind == kTypeVocoder) {
@@ -5101,6 +5111,11 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.shape,1,false);init_control(n.width,300,false);init_control(n.diffusionAmount,5,false);
     init_control(n.feedback,50,false);init_control(n.mix,1,false);init_control(n.gainDb,0,false);
   }
+  if(typeId==kTypeSpectralWarp){
+    init_control(n.frequency,0,false);init_control(n.width,0,false);
+    init_control(n.stages,2048,true);init_control(n.phaseParam,0,false);init_control(n.shape,1,false);
+    init_control(n.center,1000,false);init_control(n.mix,1,false);init_control(n.gainDb,0,false);
+  }
   if(typeId==kTypeDispersion){init_control(n.frequency,300,false);init_control(n.stages,50,true);init_control(n.width,2,false);init_control(n.shape,0,false);init_control(n.mode,0,true);init_control(n.pan,0,false);init_control(n.mix,1,false);
    init_control(n.waveform,1,true);init_control(n.timingMode,1,true);init_control(n.center,15,false);init_control(n.lpfFrequency,8000,false);init_control(n.diffusionAmount,0,false);init_control(n.resonance,1,false);init_control(n.feedback,1,false);init_control(n.lfoVariation,0,false);init_control(n.gainDb,0,false);
   }
@@ -5930,6 +5945,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeConvolutionResonator) return soemdsp_convolution_resonator_create();
   if (typeId == kTypeVocoder) return soemdsp_vocoder_create();
   if (typeId == kTypeSpectralCrossSynthesis) return soemdsp_spectral_cross_synthesis_create();
+  if (typeId == kTypeSpectralWarp) return soemdsp_spectral_warp_create();
   if (typeId == kTypeSpectralBlur) return soemdsp_spectral_blur_create();
   if (typeId == kTypeSpectralFreeze) return soemdsp_spectral_freeze_create();
   if (typeId == kTypeEarlyReflectionConvolution) return soemdsp_early_reflection_convolution_create();
@@ -16209,6 +16225,27 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
   }
 }
 
+static void process_spectral_warp(Circuit& g,Node& node,int frames){
+  if(node.nativeHandle<=0)return;
+  using namespace soemdsp::routing;
+  const StereoRoute route=stereo_route(probe_stereo_route_wiring(g,node));
+  mix_node_inputs(g,node,frames);
+  for(int f=0;f<frames;++f){
+    control_frame(g,node,f);
+    soemdsp_spectral_warp_configure(node.nativeHandle,(int)control_audio(g,node.stages,f),
+      control_audio(g,node.phaseParam,f),control_audio(g,node.shape,f),control_audio(g,node.center,f),g.sampleRate);
+    soemdsp_spectral_warp_set_pitch_stereo(node.nativeHandle,control_audio(g,node.frequency,f),control_audio(g,node.width,f));
+    const double m=g.mixMono[f],l=g.mixLeft[f],r=g.mixRight[f];
+    const double a=stereo_route_feed(route.runMono?route.feedMono:route.feedL,m,l,r),b=stereo_route_feed(route.feedR,m,l,r);
+    const double y=soemdsp_spectral_warp_sample(node.nativeHandle,a,b,control_audio(g,node.mix,f),control_audio(g,node.gainDb,f));
+    const double yr=soemdsp_spectral_warp_right(node.nativeHandle);
+    node.buf[kPortMono][f]=stereo_route_out(route.outMono,y,y,yr);
+    node.buf[kPortLeft][f]=stereo_route_out(route.outLeft,y,y,yr);
+    node.buf[kPortRight][f]=stereo_route_out(route.outRight,y,y,yr);
+    node.buf[kPortIsIdle][f]=soemdsp_spectral_warp_error(node.nativeHandle);
+  }
+}
+
 static void process_spectral_cross_synthesis(Circuit& g, Node& node, int frames) {
   if(node.nativeHandle<=0)return;
   double vl[kMaxBlockFrames],vr[kMaxBlockFrames],sl[kMaxBlockFrames],sr[kMaxBlockFrames];
@@ -17745,6 +17782,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeConvolutionResonator
     || typeId == kTypeVocoder
     || typeId == kTypeSpectralCrossSynthesis
+    || typeId == kTypeSpectralWarp
     || typeId == kTypeEarlyReflectionConvolution
     || typeId == kTypeSpectralDelay
     || typeId == kTypeMaterialResonator
@@ -17913,7 +17951,7 @@ static bool type_needs_native(int typeId) {
 // Adding or removing one makes the host rebuild the engine, and their capacity is the node count
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
-  if (typeId == kTypeSpectralCrossSynthesis || typeId == kTypeDispersion || typeId == kTypeMaterialResonator || typeId == kTypeSpectralDelay || typeId == kTypeEarlyReflectionConvolution || typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
+  if (typeId == kTypeSpectralWarp || typeId == kTypeSpectralCrossSynthesis || typeId == kTypeDispersion || typeId == kTypeMaterialResonator || typeId == kTypeSpectralDelay || typeId == kTypeEarlyReflectionConvolution || typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
     || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralFreeze) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
@@ -19368,6 +19406,9 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     if (node.typeId == kTypeNoiseConvReverb) {
       process_noise_conv_reverb(g, node, frames);
       return;
+    }
+    if (node.typeId == kTypeSpectralWarp) {
+      process_spectral_warp(g,node,frames);return;
     }
     if (node.typeId == kTypeSpectralCrossSynthesis) {
       process_spectral_cross_synthesis(g, node, frames);

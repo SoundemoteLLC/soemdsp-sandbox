@@ -1121,6 +1121,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Voice envelope onto external Synth fine structure and phase. Stereo native STFT with envelope width in Hz, attack/release, transfer and aligned dry/wet.",
     notes: ["spectral", "STFT", "cross synthesis", "voice", "synth", "native"],
   },
+  spectralWarp: {
+    browserEmoji: "🌊", category: "space", label: "Spectral Shift / Warp",
+    description: "Stereo phase-coherent spectral-region shifting and nonlinear frequency warping around a pivot. Shift in Hz, Warp exponent, FFT resolution and aligned dry/wet. Out-of-band regions are rejected.",
+    notes: ["spectral", "STFT", "frequency shift", "warp", "metallic", "inharmonic", "native"],
+  },
   materialResonator: {
     browserEmoji: "🌊",
     category: "space", label: "Material Resonator",
@@ -4012,6 +4017,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   spectralCrossSynthesis: {
     source: "native_modules/spectral_cross_synthesis/spectral_cross_synthesis.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_cross_synthesis/spectral_cross_synthesis.cpp",
+  },
+  spectralWarp: {
+    source: "native_modules/spectral_warp/spectral_warp.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_warp/spectral_warp.cpp",
   },
   spectralBlur: {
     source: "native_modules/spectral_blur/spectral_blur.cpp",

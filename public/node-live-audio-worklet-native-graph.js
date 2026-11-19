@@ -300,6 +300,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   materialResonator: 276,
   dispersion: 277,
   spectralCrossSynthesis: 278,
+  spectralWarp: 279,
   stftContrast: 270,
   stftGate: 271,
 });
@@ -650,6 +651,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     const ids={fftSize:22,formantShift:14,amount:13,widthHz:31,attackMs:42,releaseMs:50,mix:40,gainDb:90};
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
   }
+  if(t==="spectralWarp") {
+    const ids={fftSize:22,pitchSemitones:10,stereoShiftHz:31,shiftHz:14,warp:13,pivotHz:30,mix:40,gainDb:90};
+    if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
+  }
   if (t === "materialResonator") {
     const ids={material:21,modes:22,frequency:10,decay:52,dampingHz:59,inharmonicity:13,position:30,stereoSpread:1,inputGainDb:90,mix:40};
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
@@ -981,7 +986,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (t === "earlyReflectionConvolution" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "spectralDelay" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "materialResonator" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
-  if((t==="dispersion"||t==="spectralCrossSynthesis")&&p==="error")return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
+  if((t==="dispersion"||t==="spectralCrossSynthesis"||t==="spectralWarp")&&p==="error")return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "sturmianGrid") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "snare") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -6218,6 +6223,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if(type==="spectralCrossSynthesis") {
       push("fftSize",P.NATIVE_GRAPH_PARAM_STAGES,disc("fftSize",2048));
       for(const[key,value]of Object.entries({formantShift:0,amount:1,widthHz:300,attackMs:5,releaseMs:50,mix:1,gainDb:0}))
+        push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
+      continue;
+    }
+    if(type==="spectralWarp") {
+      push("fftSize",P.NATIVE_GRAPH_PARAM_STAGES,disc("fftSize",2048));
+      for(const[key,value]of Object.entries({pitchSemitones:0,stereoShiftHz:0,shiftHz:0,warp:1,pivotHz:1000,mix:1,gainDb:0}))
         push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
       continue;
     }
