@@ -24,6 +24,8 @@
   const VIEWS = {
     A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: true },
     B: { jacks: true, labels: "full", wires: "all", veil: 0.55, wireColor: "to", collapseUnused: false },
+    // C: every jack stacked at the bottom of the module (CSS: body[data-io-view="C"]), short labels, no veil.
+    C: { jacks: true, labels: "short", wires: "all", veil: 0, wireColor: "from", collapseUnused: false },
   };
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
@@ -31,7 +33,7 @@
 
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === "A" || saved === "B") state.view = saved;
+    if (saved === "A" || saved === "B" || saved === "C") state.view = saved;
   } catch { /* storage unavailable: keep the default */ }
 
   function applyBodyState() {
@@ -58,7 +60,7 @@
   }
 
   function setView(view) {
-    const next = view === "B" ? "B" : "A";
+    const next = view === "B" || view === "C" ? view : "A";
     if (next === state.view) return state.view;
     state.view = next;
     state.hover = "";
@@ -89,6 +91,8 @@
   window.nodeGraphIoViewConfig = () => VIEWS[state.view];
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
+  /** Shift+Tab: View C, and back to A. */
+  window.toggleNodeGraphIoViewC = () => setView(state.view === "C" ? "A" : "C");
 
   /** A cable is hidden (its jack dots stay) per the view's `wires` setting. */
   window.nodeGraphIoViewHidesWire = (sourceNode, destinationNode) => {
@@ -196,11 +200,12 @@
   }, { passive: true });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Tab" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key !== "Tab" || event.ctrlKey || event.altKey || event.metaKey) return;
     if (typeof nodeGraphEventTargetIsTextEditable === "function" && nodeGraphEventTargetIsTextEditable(event.target)) return;
     if (event.repeat) { event.preventDefault(); return; }
     event.preventDefault();
-    window.toggleNodeGraphIoView();
+    if (event.shiftKey) window.toggleNodeGraphIoViewC();
+    else window.toggleNodeGraphIoView();
   }, true);
 
   if (document.body) applyBodyState();
