@@ -59,6 +59,18 @@
     }
   }
 
+  /** Module sizes depend on the view (C adds the jack stack), so every module re-reads its size. */
+  function resyncModuleSizes() {
+    const nodes = nodeGraphMvp?.patch?.nodes;
+    if (!Array.isArray(nodes) || typeof syncNodeGraphModuleChromeElement !== "function") return;
+    for (const node of nodes) {
+      const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(node.id) : null;
+      if (el) {
+        try { syncNodeGraphModuleChromeElement(el, node); } catch { /* module not mounted */ }
+      }
+    }
+  }
+
   function setView(view) {
     const next = view === "B" || view === "C" ? view : "A";
     if (next === state.view) return state.view;
@@ -68,6 +80,7 @@
     if (typeof nodeGraphGlGraphState === "object") nodeGraphGlGraphState.ioExpanded = null;
     try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
     applyBodyState();
+    resyncModuleSizes();
     refreshGeometry();
     redraw();
     return state.view;
@@ -89,6 +102,12 @@
 
   window.nodeGraphIoView = () => state.view;
   window.nodeGraphIoViewConfig = () => VIEWS[state.view];
+  /** Extra module height (grid cells) the view needs: View C reserves the jack stack at the bottom. */
+  window.nodeGraphIoViewExtraHeightGu = (type) => {
+    if (state.view !== "C") return 0;
+    if (typeof nodeGraphModuleUsesLayoutB !== "function" || !nodeGraphModuleUsesLayoutB(type)) return 0;
+    return typeof nodeGraphLayoutBIoColumnHeightGu === "function" ? nodeGraphLayoutBIoColumnHeightGu(type) : 0;
+  };
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
   /** Shift+Tab: View C, and back to A. */

@@ -1987,10 +1987,12 @@ function nodeGraphModuleOuterHeightGu(type, ui = {}, node = null) {
     return normalizeNodeGraphModuleHeightUnits(resolvedType, patchNode?.heightGu, resolvedUi);
   }
   // Face modules + content-sized modules: never honor freehand heightGu.
+  // IO view C stacks every jack at the bottom, so the module grows by the stack's height there.
+  const ioViewExtraGu = typeof nodeGraphIoViewExtraHeightGu === "function" ? nodeGraphIoViewExtraHeightGu(resolvedType) : 0;
   return Math.max(
     nodeGraphModuleGuPolicy.minGu,
     nodeGraphModuleGridHeightUnitsForUi(resolvedType, resolvedUi, patchNode),
-  );
+  ) + ioViewExtraGu;
 }
 
 function nodeGraphPatchNodeGridHeightUnits(node) {
