@@ -19,8 +19,9 @@
   //   veil    alpha of the dark veil over each module under its IO (0 = none)
   //   wireColor "from" (the colour of the jack the cable leaves) | "to" (the jack it enters); modulation cables
   //             always keep their modulation (purple) colour
-  //   strip   the one-row band between the title and the display (A shows the IO pills in it; B keeps it empty so a
-  //           module's size does not change between the views)
+  //   strip   the one-row band between the title and the display. A shows the compacted IO (the pills) in it; in B it is
+  //           the first jack row, so the pill and the first jack are the same slot and a module's size is the same in
+  //           both views
   //   collapseUnused  unconnected jacks leave the rail, so the connected ones stack up from the top
   //                   (module sizes do not change: that is only where the jacks sit)
   // Only the views in ENABLED_VIEWS can be reached. A is the IO pills in a strip between the title and the display

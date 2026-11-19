@@ -26227,7 +26227,9 @@ body[data-io-strip="1"][data-io-slot="top"] .dsp-node:is(.chrome-layout-b, .soli
 body[data-io-strip="1"][data-io-slot="mid"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .dsp-node-body {
   padding-top: 15px;
 }
-/* With the strip on (top slot), the jack columns start below it, so the strip stays empty where the jacks show (View B). */
+
+/* The IO strip (top slot) is the shell's padding. A jack column placed in a grid row is positioned in that grid area,
+   which starts below the padding; letting the row be automatic puts the first jack in the strip row. */
 body[data-io-strip="1"][data-io-slot="top"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column {
-  top: 15px;
+  grid-row: auto !important;
 }
