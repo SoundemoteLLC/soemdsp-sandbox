@@ -845,8 +845,8 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
         cell: [nodeGraphGridWidth() * visualScale, nodeGraphGridHeight() * visualScale],
         rgba: [(rgb[0] || 255) / 255, (rgb[1] || 255) / 255, (rgb[2] || 255) / 255, 0],
         // The grid's strength: "grid bright reflect" in a lit room, "grid dim reflect" in a dark one (crossfaded by the dimmer).
-        alphaBright: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha", 0.4),
-        alphaDim: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha-dim", 0.48),
+        alphaBright: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha", 0.48),
+        alphaDim: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha-dim", 0.4),
         spread: Math.max(0.4, Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78))),
         mouseSpread: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread"))),
         mouseBase: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount"))),

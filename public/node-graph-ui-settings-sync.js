@@ -1063,8 +1063,8 @@ function syncNodeUiDevModuleLightGridControls() {
   const lightBright = Math.max(0, Math.min(300, nodeGraphFiniteNumber(lightBrightEl?.value, 100)));
   // Module light spread: 10% (a tight rim) up to 220%.
   const lightSpread = Math.max(10, Math.min(220, nodeGraphFiniteNumber(lightSpreadEl?.value, 10)));
-  const gridBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridBrightEl?.value, 40)));
-  const gridDim = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridDimEl?.value, 48)));
+  const gridBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridBrightEl?.value, 48)));
+  const gridDim = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridDimEl?.value, 40)));
   const gridSpread = Math.max(40, Math.min(220, nodeGraphFiniteNumber(gridSpreadEl?.value, 220)));
 
   if (lightBrightOut) lightBrightOut.textContent = `${lightBright}%`;
