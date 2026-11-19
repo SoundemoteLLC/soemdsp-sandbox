@@ -1,4 +1,4 @@
-const NODE_GRAPH_SCREEN_BEND_GL_REV = 4;
+const NODE_GRAPH_SCREEN_BEND_GL_REV = 5;
 const NODE_GRAPH_SCREEN_BEND_MAX = 512;
 
 (function initNodeGraphScreenBendGl(global) {
@@ -65,13 +65,14 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
       float vStart = mix(0.95, 0.0, clamp(uVigReach, 0.0, 1.0));
       float vEnd = mix(1.4, vStart + 0.05, pow(clamp(uVigCurve, 0.0, 1.0), 0.7));
       vEnd = mix(vEnd, min(vEnd, 1.0), vAmt);
-      col *= 1.0 - vAmt * smoothstep(vStart, max(vEnd, vStart + 0.02), length(p));
+      float vig = 1.0 - vAmt * smoothstep(vStart, max(vEnd, vStart + 0.02), length(p));
       // Glare: a soft window-like reflection where Glare X / Y put it (size from Glare Size), plus a faint sheen along the rim.
       vec2 g = (p - uGlarePos) * vec2(1.1, 1.7);
       float blob = exp(-dot(g, g) * mix(14.0, 1.2, clamp(uGlareSize, 0.0, 1.0)));
       float rim = smoothstep(0.84, 0.985, d);
       col += clamp(uGlare, 0.0, 1.0) * (0.32 * blob + 0.07 * rim) * vec3(1.0);
-      gl_FragColor = vec4(col * mask, 1.0);
+      // The vignette multiplies everything, glare included, so full Vignette is pure black out there (nothing is added back).
+      gl_FragColor = vec4(col * vig * mask, 1.0);
     }
   `;
 
