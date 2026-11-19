@@ -390,6 +390,12 @@
     }
 
     function patchPointTargetFromPointRaw(clientX, clientY, sourceIo = "") {
+      // A drop on a jack of an expanded IO panel counts as a drop on that jack's real element.
+      const panelPoint = typeof nodeGraphGlGraphIoPanelRemap === "function" ? nodeGraphGlGraphIoPanelRemap(clientX, clientY) : null;
+      if (panelPoint) {
+        clientX = panelPoint.x;
+        clientY = panelPoint.y;
+      }
       const parameterDrop = parameterWidgetHalfDrop(clientX, clientY, sourceIo);
       if (parameterDrop.claimed) {
         return parameterDrop.port;

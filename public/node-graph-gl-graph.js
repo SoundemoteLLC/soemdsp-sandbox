@@ -2021,6 +2021,11 @@ function nodeGraphGlGraphShape(from, to, wire, tolerance) {
 function nodeGraphGlGraphDragFrom(point, endpoint) {
   if (!point) return point;
   const io = endpoint?.io;
+  // A jack that lives in an IO pill or panel: the cable leaves from there, not from the real jack's position.
+  const shown = endpoint?.node && (endpoint.port || endpoint.param)
+    ? nodeGraphGlGraphIoPillPoint(endpoint.node, endpoint.port || endpoint.param, io === "output" ? "output" : "input")
+    : null;
+  if (shown) point = { x: shown.x, y: shown.y };
   if (io && io !== "output") {
     return { x: point.x, y: point.y, departSign: -1 };
   }
@@ -4300,9 +4305,32 @@ function nodeGraphGlHitTest(x, y) {
   return null;
 }
 
-function nodeGraphGlHitRetarget(event, element) {
+/**
+ * A click on a jack of an expanded IO panel is far from that jack's real element (which stays where the module lays
+ * it out), and the wire code only accepts a pointer near the element. This returns the client point of the real jack,
+ * so the click can be handed over as if it had landed on it. null when the point is not on an expanded panel jack.
+ */
+function nodeGraphGlGraphIoPanelRemap(clientX, clientY) {
+  if (!nodeGraphGlGraphState.ioExpanded || typeof nodeGraphClientToZoomSurfacePoint !== "function") return null;
+  const p = nodeGraphClientToZoomSurfacePoint(clientX, clientY);
+  if (!p) return null;
+  const hit = nodeGraphGlHitExpandedJack(p.x, p.y);
+  const el = hit ? nodeGraphGlHitJackElement(hit.jack) : null;
+  if (!el) return null;
+  const io = hit.jack.io === "output" ? "output" : "input";
+  if (typeof nodeGraphElementPatchPointClientCenter === "function") {
+    const c = nodeGraphElementPatchPointClientCenter(el, io);
+    if (c) return { x: c.x, y: c.y };
+  }
+  const r = el.getBoundingClientRect();
+  return { x: io === "output" ? r.right : r.left, y: r.top + r.height / 2 };
+}
+
+function nodeGraphGlHitRetarget(event, element, override = null) {
   return new Proxy(event, {
     get(source, key) {
+      if (override && key === "clientX") return override.x;
+      if (override && key === "clientY") return override.y;
       if (key === "target" || key === "currentTarget") return element;
       const value = source[key];
       return typeof value === "function" ? value.bind(source) : value;
@@ -4454,7 +4482,8 @@ function nodeGraphGlHitPointerDown(event) {
     if (port && typeof handler === "function") {
       event.preventDefault();
       event.stopPropagation();
-      handler(nodeGraphGlHitRetarget(event, port));
+      // A jack of an expanded IO panel: hand the wire code the real jack's own position.
+      handler(nodeGraphGlHitRetarget(event, port, nodeGraphGlGraphIoPanelRemap(event.clientX, event.clientY)));
     }
     return;
   }
