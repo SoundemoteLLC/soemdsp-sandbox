@@ -915,15 +915,13 @@ function nodeGraphLayoutBShellHeightGu(type, ui = {}) {
   if (faceGu > 0) {
     return faceGu;
   }
-  // No visible face (Hide / Off / Display Height 0): still need a 1gu plate
-  // (or jack-only floor). Jacks share the shell as 1fr bands, so they fit in
-  // the type's default face height — cap the floor there so hiding a display
-  // never makes the module taller than showing it (lone `t`: 3 jacks, 1gu face).
+  // No visible display: no reserved IO band. The jacks overlay the slider rows (the rail runs down the module
+  // side), so the shell is only as tall as the jacks need beyond the sliders, and 0 when the sliders are taller.
   const ioGu = nodeGraphLayoutBIoColumnHeightGu(type);
-  const defaultFaceGu = nodeGraphModuleHasFace(type)
-    ? nodeGraphModuleDefaultDisplayHeightUnits(type)
-    : ioGu;
-  return Math.max(nodeGraphModuleGuPolicy.minGu, Math.min(ioGu, Math.max(1, defaultFaceGu)));
+  const sliderGu = typeof nodeGraphModuleSliderBodyHeightGu === "function"
+    ? nodeGraphModuleSliderBodyHeightGu(type, ui, null)
+    : 0;
+  return Math.max(0, ioGu - Math.max(0, sliderGu));
 }
 
 /** @deprecated use nodeGraphLayoutBShellHeightGu */
@@ -1109,7 +1107,7 @@ function nodeGraphModuleLayoutBands(type, ui = {}, node = null) {
     }
     bands.push({
       id: "shell",
-      heightGu: Math.max(1, nodeGraphFiniteNumber(shellGu, 1)),
+      heightGu: Math.max(0, nodeGraphFiniteNumber(shellGu, 0)),
       visible: true,
       // Display-only: the face is the plate. 1fr of the inset article box,
       // never a raw N×gridHeight track (that is taller than the plate).
@@ -1349,7 +1347,8 @@ function applyNodeGraphModuleLayout(article, patchNodeOrBands) {
       Array.isArray(patchNodeOrBands) ? null : patchNodeOrBands,
     );
   const visible = bands.filter((band) => (
-    band.visible && (band.heightGu > 0 || band.grow || band.id === "lip")
+    // The shell keeps its (possibly 0 px) track: its jack columns hang from the top of it over the sliders.
+    band.visible && (band.heightGu > 0 || band.grow || band.id === "lip" || band.id === "shell")
   ));
   // LayoutA / Metamodule omit the face track when Displays are off or Display
   // Height is 0. The face node stays mounted (keyboard remount bug) but must
