@@ -239,7 +239,8 @@
       setExpanded(null);
     }
     const pill = pillAt(point);
-    if (pill) setExpanded(pill.id, pill.panel ? "both" : pill.io);
+    // The compacted IO of View A opens only by a click (which goes to View B); hover opens only an overflow pill's list.
+    if (pill && !(pill.panel && state.view === "A")) setExpanded(pill.id, pill.panel ? "both" : pill.io);
   }, { passive: true });
 
   document.addEventListener("pointerdown", (event) => {
