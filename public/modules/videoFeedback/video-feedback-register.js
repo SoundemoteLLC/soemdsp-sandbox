@@ -1,4 +1,4 @@
-// Spectrum Circle — mirrored spectrum rays. Type stays videoFeedback for patches.
+// Spectrum Circle with optional mirror symmetry. Type stays videoFeedback for patches.
 registerNodeGraphChromelessModule("videoFeedback", {
   label: "Spectrum Circle",
   solidModule: false,
@@ -28,7 +28,7 @@ registerNodeGraphChromelessModule("videoFeedback", {
     inputs: ["A", "B"],
     inputLabels: { A: "In", B: "Spin" },
     inputTooltips: {
-      A: "Audio in. FFT drives the mirrored circle.",
+      A: "Audio in. FFT drives the spectrum circle.",
       B: "Spin. Adds to Twist.",
     },
     outputs: ["rgba"],
@@ -74,13 +74,15 @@ registerNodeGraphChromelessModule("videoFeedback", {
         defaultValue: "0",
         key: "twist",
         label: "Twist",
+        kind: "phase",
+        wraparound: true,
         bipolar: true,
         max: "1",
         mid: "0",
         min: "-1",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Rotation of the circle. Spin in adds.",
+        tooltip: "Full circle rotation: -1 to +1 covers 360 degrees and wraps at the ends. Spin input uses the same scale and adds to Twist.",
       },
       {
         defaultValue: "0.75",
@@ -110,7 +112,7 @@ registerNodeGraphChromelessModule("videoFeedback", {
   catalog: {
     category: "rgba",
     description:
-      "Mirrored spectrum circle: rays from the centre, colored by a gradient. Audio In is FFT'd; Spin turns the ring. 📺 out for Video Delay.",
+      "Spectrum circle with mirrored or full-ring mapping, independent level/radius coloring and continuous ray width. Audio In is FFT'd; Spin turns the ring. 📺 out for Video Delay.",
     notes: [
       "spectrum",
       "circle",

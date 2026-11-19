@@ -1,8 +1,8 @@
 // Spectrum Circle plate: ping-pong on the shared picture device (Sim FPS, not
-// audio rate). Each step fades the previous plate by Decay (Twist turns it a
-// little) and keeps the brighter of it and this frame's rays.
+// audio rate). Each step fades the previous plate by Decay, rotates retained
+// ink with the orientation change, and keeps the brighter of it and new rays.
 
-const NODE_GRAPH_VIDEO_FEEDBACK_GL_REV = 10;
+const NODE_GRAPH_VIDEO_FEEDBACK_GL_REV = 11;
 // Longest plate side; the other side scales with it so the circle stays round.
 const NODE_GRAPH_VIDEO_FEEDBACK_MAX = 1024;
 // Spectrum texels: one per band, or one per slot when Continuous.
@@ -40,8 +40,8 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     uniform sampler2D uWave;
     uniform sampler2D uLut;
     uniform float uDecay;
-    uniform float uTwist;
-    uniform float uSpin;
+    uniform float uRotation;
+    uniform float uTrailRotation;
     uniform float uBright;
     uniform float uSmooth;
     uniform float uSize;
@@ -50,6 +50,8 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     uniform float uCount;
     uniform float uRayWidth;
     uniform float uColorByRadius;
+    uniform float uColorByLevel;
+    uniform float uSymmetric;
     uniform float uPx;
     uniform vec2 uFit;
 
@@ -84,12 +86,14 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     void main() {
       // Centred, short side spans -0.5..0.5 (contain-fit: the circle stays round).
       vec2 c = (vUv - 0.5) * uFit;
-      vec2 p = clamp(vfRot(c, uTwist * 0.15) / uFit + 0.5, 0.0, 1.0);
+      vec2 p = clamp(vfRot(c, uTrailRotation) / uFit + 0.5, 0.0, 1.0);
       vec3 col = texture2D(uPrev, p).rgb * uDecay;
-      vec2 sc = vfRot(c, uTwist * 1.2 + uSpin * 1.4);
+      vec2 sc = vfRot(c, uRotation);
       // r = 1 at the edge of the short side.
       float r = length(sc) * 2.0;
-      float t = clamp(atan(sc.y, abs(sc.x)) / PI + 0.5, 0.0, 1.0);
+      float t = uSymmetric > 0.5
+        ? clamp(atan(sc.y, abs(sc.x)) / PI + 0.5, 0.0, 1.0)
+        : fract(atan(sc.y, sc.x) / (2.0 * PI) + 0.25);
       float m = vfLevel(t);
       float r0 = uSize * uInner;
       float tip = r0 + (uSize - r0) * m;
@@ -99,10 +103,13 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
         // 0 at a ray's centre line, 1 at the edge of its slot; one pixel of
         // arc in those units keeps thin rays antialiased at every radius.
         float d = abs(fract(t * uBands) - 0.5) * 2.0;
-        float px = 2.0 * uPx * uBands / (PI * max(r, uPx));
-        across = 1.0 - smoothstep(uRayWidth - px, uRayWidth + px, d);
+        float span = uSymmetric > 0.5 ? PI : 2.0 * PI;
+        float px = 2.0 * uPx * uBands / (span * max(r, uPx));
+        across = uRayWidth <= 0.0 ? 0.0 : 1.0 - smoothstep(uRayWidth - px, uRayWidth + px, d);
       }
-      float pos = uColorByRadius > 0.5 ? clamp((r - r0) / max(uSize - r0, 1e-4), 0.0, 1.0) : m;
+      float pos = 1.0;
+      if (uColorByLevel > 0.5) pos *= m;
+      if (uColorByRadius > 0.5) pos *= clamp((r - r0) / max(uSize - r0, 1e-4), 0.0, 1.0);
       vec3 ink = texture2D(uLut, vec2(pos * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).rgb;
       col = max(col, ink * (radial * across * uBright));
       gl_FragColor = vec4(min(col, vec3(1.0)), 1.0);
@@ -110,8 +117,8 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
   `;
 
   const UNIFORMS = [
-    "uPrev", "uWave", "uLut", "uDecay", "uTwist", "uSpin", "uBright", "uSmooth", "uSize", "uInner",
-    "uBands", "uCount", "uRayWidth", "uColorByRadius", "uPx", "uFit",
+    "uPrev", "uWave", "uLut", "uDecay", "uRotation", "uTrailRotation", "uBright", "uSmooth", "uSize", "uInner",
+    "uBands", "uCount", "uRayWidth", "uColorByRadius", "uColorByLevel", "uSymmetric", "uPx", "uFit",
   ];
 
   function link(gl, vsSrc, fsSrc) {
@@ -237,6 +244,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
       lutTex: createDataTexture(gl, 256, gl.LINEAR),
       lutBytes: new Uint8Array(256 * 4),
       lutRgb: null,
+      lastAngle: null,
     };
     host[KEY] = renderer;
     return renderer;
@@ -259,6 +267,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
   function wipeRenderer(host) {
     const renderer = host?.[KEY];
     if (!renderer?.alive) return;
+    renderer.lastAngle = null;
     const gl = renderer.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.read.framebuffer);
     gl.viewport(0, 0, renderer.width, renderer.height);
@@ -326,8 +335,15 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     gl.uniform2f(device.uFit, Math.max(aspect, 1), Math.max(1 / aspect, 1));
     gl.uniform1f(device.uPx, 2 / Math.min(renderer.width, renderer.height));
     gl.uniform1f(device.uDecay, Number(options.decay) || 0);
-    gl.uniform1f(device.uTwist, Number(options.twist) || 0);
-    gl.uniform1f(device.uSpin, Number(options.spin) || 0);
+    const twist = Number(options.twist) || 0;
+    const spin = Number(options.spin) || 0;
+    const turns = (twist + spin) * 0.5;
+    const angle = ((turns % 1) + 1) % 1 * Math.PI * 2;
+    const delta = renderer.lastAngle == null ? 0 : angle - renderer.lastAngle;
+    const trailAngle = Math.atan2(Math.sin(delta), Math.cos(delta));
+    gl.uniform1f(device.uRotation, angle);
+    gl.uniform1f(device.uTrailRotation, trailAngle);
+    renderer.lastAngle = angle;
     gl.uniform1f(device.uBright, Number(options.bright) || 0);
     gl.uniform1f(device.uSmooth, Number(options.smooth) || 0);
     gl.uniform1f(device.uSize, Number(options.size) || 0);
@@ -336,6 +352,8 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     gl.uniform1f(device.uCount, count);
     gl.uniform1f(device.uRayWidth, Number(options.rayWidth) || 0);
     gl.uniform1f(device.uColorByRadius, options.colorByRadius ? 1 : 0);
+    gl.uniform1f(device.uColorByLevel, (options.colorByLevel ?? !options.colorByRadius) ? 1 : 0);
+    gl.uniform1f(device.uSymmetric, options.symmetric !== false ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     const tmp = renderer.read;

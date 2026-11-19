@@ -21,7 +21,9 @@ const NODE_GRAPH_VIDEO_FEEDBACK_DEFAULTS = Object.freeze({
   spectrumDbFloor: -72,
   spectrumCircleBands: 64,
   spectrumCircleRayWidth: 0.6,
-  spectrumCircleColorBy: "level",
+  spectrumCircleColorLevel: "on",
+  spectrumCircleColorRadius: "off",
+  spectrumCircleSymmetric: "on",
 });
 
 // Choice values come from the shared Display Settings choice table (one list).
@@ -49,16 +51,21 @@ function normalizeNodeGraphVideoFeedbackSettings(settings = {}) {
     legacyInk ? [{ t: 0, color: "#000000" }, { t: 1, color: legacyInk }] : source.gradientStops,
   );
   const hue = Number(source.backgroundHue);
+  const floor = source.spectrumDbFloor == null ? d.spectrumDbFloor : Number(source.spectrumDbFloor);
+  const width = source.spectrumCircleRayWidth == null ? d.spectrumCircleRayWidth : Number(source.spectrumCircleRayWidth);
+  const legacyRadius = source.spectrumCircleColorBy === "radius";
   return {
     fftSize: source.fftSize == null ? d.fftSize : nodeGraphSpectrogramSnapFftSize(source.fftSize),
     window: Number(nodeGraphVideoFeedbackChoice("window", source.window, d.window)),
     spectrumAxis: nodeGraphVideoFeedbackChoice("spectrumAxis", source.spectrumAxis, d.spectrumAxis),
     minFreq,
     maxFreq,
-    spectrumDbFloor: Number(nodeGraphVideoFeedbackChoice("spectrumDbFloor", source.spectrumDbFloor, d.spectrumDbFloor)),
+    spectrumDbFloor: Number.isFinite(floor) ? Math.max(-180, Math.min(-0.1, floor)) : d.spectrumDbFloor,
     spectrumCircleBands: Number(nodeGraphVideoFeedbackChoice("spectrumCircleBands", source.spectrumCircleBands, d.spectrumCircleBands)),
-    spectrumCircleRayWidth: Number(nodeGraphVideoFeedbackChoice("spectrumCircleRayWidth", source.spectrumCircleRayWidth, d.spectrumCircleRayWidth)),
-    spectrumCircleColorBy: nodeGraphVideoFeedbackChoice("spectrumCircleColorBy", source.spectrumCircleColorBy, d.spectrumCircleColorBy),
+    spectrumCircleRayWidth: Number.isFinite(width) ? Math.max(0, Math.min(1, width)) : d.spectrumCircleRayWidth,
+    spectrumCircleColorLevel: nodeGraphVideoFeedbackChoice("spectrumCircleColorLevel", source.spectrumCircleColorLevel, legacyRadius ? "off" : d.spectrumCircleColorLevel),
+    spectrumCircleColorRadius: nodeGraphVideoFeedbackChoice("spectrumCircleColorRadius", source.spectrumCircleColorRadius, legacyRadius ? "on" : d.spectrumCircleColorRadius),
+    spectrumCircleSymmetric: nodeGraphVideoFeedbackChoice("spectrumCircleSymmetric", source.spectrumCircleSymmetric, d.spectrumCircleSymmetric),
     gradientStops,
     backgroundHue: Number.isFinite(hue) ? hue : 0,
   };
@@ -104,10 +111,12 @@ function buildNodeGraphVideoFeedbackDisplaySettingsBodyHtml() {
       ${nodeGraphDisplaySettingsBuildChoiceRowHtml("spectrumAxis")}
       ${nodeGraphDisplaySettingsBuildStepperRowHtml("minFreq", type)}
       ${nodeGraphDisplaySettingsBuildStepperRowHtml("maxFreq", type)}
-      ${nodeGraphDisplaySettingsBuildChoiceRowHtml("spectrumDbFloor")}
+      ${nodeGraphDisplaySettingsBuildStepperRowHtml("spectrumDbFloor", type)}
       ${nodeGraphDisplaySettingsBuildChoiceRowHtml("spectrumCircleBands")}
-      ${nodeGraphDisplaySettingsBuildChoiceRowHtml("spectrumCircleRayWidth")}
-      ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleColorBy")}
+      ${nodeGraphDisplaySettingsBuildStepperRowHtml("spectrumCircleRayWidth", type)}
+      ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleSymmetric")}
+      ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleColorLevel")}
+      ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleColorRadius")}
     </div>
     <div class="metadata-field-section node-trace-display-gradient-section">
       <div
@@ -315,7 +324,9 @@ function drawNodeGraphVideoFeedbackFaceItem(_renderer, item) {
       count: levels.count,
       bands: settings.spectrumCircleBands,
       rayWidth: settings.spectrumCircleRayWidth,
-      colorByRadius: settings.spectrumCircleColorBy === "radius",
+      colorByLevel: settings.spectrumCircleColorLevel === "on",
+      colorByRadius: settings.spectrumCircleColorRadius === "on",
+      symmetric: settings.spectrumCircleSymmetric === "on",
       lutRgb: nodeGraphVideoFeedbackLutRgb(settings),
     });
   }

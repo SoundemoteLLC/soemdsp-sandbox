@@ -685,17 +685,17 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze([]),
   }),
   videoFeedbackFace: Object.freeze({
-    fields: Object.freeze(["minFreq", "maxFreq"]),
+    fields: Object.freeze(["minFreq", "maxFreq", "spectrumDbFloor", "spectrumCircleRayWidth"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([
       "fftSize",
       "window",
       "spectrumAxis",
-      "spectrumDbFloor",
       "spectrumCircleBands",
-      "spectrumCircleRayWidth",
-      "spectrumCircleColorBy",
+      "spectrumCircleSymmetric",
+      "spectrumCircleColorLevel",
+      "spectrumCircleColorRadius",
     ]),
   }),
   // RGB Soft Fractal: outer plate mode + gradient (field is module params + rAF).
@@ -1359,6 +1359,14 @@ function nodeGraphTraceDisplaySettingsRoot() {
 // Field labels / input modes for schema-exclusive body builders.
 // Phosphor labels: Bright, Size, Blur, Ghost, Trail, Burn x, Scale, Pixel density, Dot Budget.
 const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
+  spectrumDbFloor: Object.freeze({
+    label: "dB floor", inputmode: "decimal", id: "nodeTraceDisplaySpectrumDbFloor",
+    title: "Spectrum Circle's minimum visible level in dBFS. Continuous from -180 to -0.1 dBFS.",
+  }),
+  spectrumCircleRayWidth: Object.freeze({
+    label: "Ray width", inputmode: "decimal", id: "nodeTraceDisplaySpectrumCircleRayWidth",
+    title: "Fraction of each angular band slot, 0 to 1. Zero hides rays; one fills each slot. Not used with Continuous bands.",
+  }),
   imageSize: Object.freeze({
     label: "Image Size",
     inputmode: "decimal",
@@ -2913,27 +2921,27 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     label: "Bands",
     aria: "Spectrum Circle number of bands",
     id: "nodeTraceDisplaySpectrumCircleBands",
+    title: "Visual density presets, not FFT sizes. With Symmetric on, this count is repeated on each mirrored half; off uses this count around the full circle.",
     options: Object.freeze([
       Object.freeze({ value: "0", label: "Continuous" }),
       ...["8", "12", "16", "24", "32", "48", "64", "96", "128", "192", "256"]
         .map((v) => Object.freeze({ value: v, label: v })),
     ]),
   }),
-  spectrumCircleRayWidth: Object.freeze({
-    label: "Ray width",
-    aria: "Spectrum Circle ray width",
-    id: "nodeTraceDisplaySpectrumCircleRayWidth",
-    options: Object.freeze(["0.1", "0.25", "0.4", "0.6", "0.8", "1"]
-      .map((v) => Object.freeze({ value: v, label: Math.round(Number(v) * 100) + "%" }))),
+  spectrumCircleColorLevel: Object.freeze({
+    label: "Level color", id: "nodeTraceDisplaySpectrumCircleColorLevel",
+    title: "Use band level for gradient position. When Radius is also on, multiply both coordinates. Both off uses the gradient's final color.",
+    options: Object.freeze([Object.freeze({ value: "off", label: "Off" }), Object.freeze({ value: "on", label: "On" })]),
   }),
-  spectrumCircleColorBy: Object.freeze({
-    label: "Color by",
-    aria: "Spectrum Circle gradient position",
-    id: "nodeTraceDisplaySpectrumCircleColorBy",
-    options: Object.freeze([
-      Object.freeze({ value: "level", label: "Level" }),
-      Object.freeze({ value: "radius", label: "Radius" }),
-    ]),
+  spectrumCircleColorRadius: Object.freeze({
+    label: "Radius color", id: "nodeTraceDisplaySpectrumCircleColorRadius",
+    title: "Use distance from Inner to Size for gradient position. Can combine with Level.",
+    options: Object.freeze([Object.freeze({ value: "off", label: "Off" }), Object.freeze({ value: "on", label: "On" })]),
+  }),
+  spectrumCircleSymmetric: Object.freeze({
+    label: "Symmetric", id: "nodeTraceDisplaySpectrumCircleSymmetric",
+    title: "On mirrors the spectrum across two halves. Off maps low to high once around the full circle, starting at the bottom before Twist.",
+    options: Object.freeze([Object.freeze({ value: "off", label: "Off" }), Object.freeze({ value: "on", label: "On" })]),
   }),
   spectrumDbCeiling: Object.freeze({
     label: "dB ceiling",
