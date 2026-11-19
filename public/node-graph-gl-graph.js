@@ -76,6 +76,18 @@ function nodeGraphGlGraphParseCssColor(color, fallback) {
       Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1,
     ];
   }
+  // Computed styles come back as color(srgb r g b [/ a]) for colours given in modern syntax (components 0..1).
+  const srgb = text.match(/^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)(%?))?\s*\)/);
+  if (srgb) {
+    let alpha = 1;
+    if (srgb[4] != null && srgb[4] !== "") alpha = srgb[5] === "%" ? Number(srgb[4]) / 100 : Number(srgb[4]);
+    return [
+      Math.max(0, Math.min(1, Number(srgb[1]))),
+      Math.max(0, Math.min(1, Number(srgb[2]))),
+      Math.max(0, Math.min(1, Number(srgb[3]))),
+      Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1,
+    ];
+  }
   return fallback;
 }
 
