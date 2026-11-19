@@ -262,6 +262,10 @@ function nodeGraphTraceDisplayHistoryCurveExponent(key) {
 
 
 function nodeGraphTraceDisplaySensitiveControlMax(key, formType = "") {
+  // Vector RGB Brightness goes past 1 (0…4): an overdrive for the non-build line.
+  if (key === "dot1Brightness" && formType === "vectorRgbFace") {
+    return 4;
+  }
   if (key === "pixelDensity") {
     return 1;
   }
@@ -805,6 +809,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   vectorRgbFace: Object.freeze({
     // Size is a share of the face min side (0…1), like Trace.
     dot1Size: nodeGraphTraceDisplayClampUnit,
+    dot1Brightness: (value) => Math.max(0, Math.min(4, Number.isFinite(Number(value)) ? Number(value) : 1)),
     dotBudget: nodeGraphTraceDisplayClampDotBudget,
   }),
   toggleButtonFace: Object.freeze({

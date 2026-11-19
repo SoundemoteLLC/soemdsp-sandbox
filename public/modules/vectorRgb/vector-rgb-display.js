@@ -51,7 +51,7 @@ function normalizeNodeGraphVectorRgbSettings(settings = {}) {
   const mode = String(source.drawMode || d.drawMode);
   return {
     background,
-    dot1Brightness: Math.max(0, Math.min(1, num("dot1Brightness", d.dot1Brightness))),
+    dot1Brightness: Math.max(0, Math.min(4, num("dot1Brightness", d.dot1Brightness))),
     dot1Size: Math.max(0, Math.min(1, num("dot1Size", d.dot1Size))),
     dotBudget: Math.max(1, Math.min(8192, Math.round(num("dotBudget", d.dotBudget)))),
     decayBlur: Math.max(0, Math.min(1, num("decayBlur", d.decayBlur))),
@@ -421,7 +421,10 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     // Pass 2: stamps. Lines / budget / length: the stamps are spaced by ARC LENGTH along the path, so the line is unbroken at
     // any speed and as bright at a fast part as a slow one; the dot budget only widens the spacing when the path is too long
     // for it. Dots: just the samples, thinned to the budget.
-    const maxStamps = budget + 16;
+    // Dots: the budget is the number of dots. Lines: the budget is per 1/8 of the cap, so a fast path still gets stamped close
+    // enough to read as a line (the spacing only widens past 8x the budget).
+    const stampCap = settings.drawMode === "dots" ? budget : Math.min(65536, budget * 8);
+    const maxStamps = stampCap + 16;
     let packed = canvas._vectorRgbPacked;
     const need = maxStamps * floatsPer;
     if (!(packed instanceof Float32Array) || packed.length < need) {
@@ -451,7 +454,8 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
       for (let i = 1; i < np; i += 1) {
         if (joined(i - 1, i)) pathLen += Math.hypot(pts[i * 6] - pts[(i - 1) * 6], pts[i * 6 + 1] - pts[(i - 1) * 6 + 1]);
       }
-      const spacing = Math.max(radius * 0.5, pathLen / budget, 0.25);
+      // Close enough that the stamps blend into one smooth line (a gaussian dot every 0.25 radius ripples by about 3%).
+      const spacing = Math.max(radius * 0.25, pathLen / stampCap, 0.2);
       // Build up off takes the brightest stamp (MAX), so a stamp must carry the full level: scaling it down by the spacing would cap
       // the line below what you dialled. Build up on adds the stamps, so there each is scaled to keep the sum at the level.
       const weight = settings.buildUp === false ? 1 : Math.min(1, spacing / (radius * 1.2));
