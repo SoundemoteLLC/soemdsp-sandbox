@@ -1063,13 +1063,16 @@ function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, b
 }
 
 /**
- * Every IO jack as a plain half circle centred on the module edge: the inner half, a stroked arc, drawn whole
- * (a square half for square jacks). Nothing is cut out of the plate or its stroke.
+ * Every IO jack is a cutout: a hard-edged half disc through the module, its inner half, showing the workspace
+ * behind. The plate cut its own notch (stroke wraps it); this cuts the display too and draws the rim over it.
+ * Plain geometry, no feather, so it never reads as a sticker.
  */
 function nodeGraphGlGraphDrawJackHalves(batch, plate, toX, toY, zoom, plateStyle) {
   const jacks = nodeGraphGlGraphState.chrome?.jacks || [];
   const strokeW = Number.parseFloat(plateStyle.getPropertyValue("--node-module-idle-stroke-width")) || 1;
-  const half = Math.max(0.5, strokeW * zoom * 0.5);
+  const rim = Math.max(1, strokeW * zoom);
+  const bg = nodeGraphGlGraphJackBackdrop();
+  const hole = [bg[0], bg[1], bg[2], 1];
   for (let i = 0; i < jacks.length; i += 1) {
     const jack = jacks[i];
     if (jack.id !== plate.id || jack.rail) continue;
@@ -1079,17 +1082,30 @@ function nodeGraphGlGraphDrawJackHalves(batch, plate, toX, toY, zoom, plateStyle
     const cy = toY(jack.y);
     const r = jack.r * zoom;
     const sign = jack.io === "output" ? -1 : 1;
-    const pts = [];
     if (jack.square) {
-      pts.push(cx, cy - r, cx + sign * r, cy - r, cx + sign * r, cy + r, cx, cy + r);
-    } else {
-      const n = 20;
-      for (let s = 0; s <= n; s += 1) {
-        const a = -Math.PI / 2 + (Math.PI * s) / n;
-        pts.push(cx + sign * r * Math.cos(a), cy + r * Math.sin(a));
-      }
+      nodeGraphGlLinesRect(batch, sign > 0 ? cx : cx - r, cy - r, r, 2 * r, hole);
+      const outline = [cx, cy - r + rim * 0.5, cx + sign * (r - rim * 0.5), cy - r + rim * 0.5, cx + sign * (r - rim * 0.5), cy + r - rim * 0.5, cx, cy + r - rim * 0.5];
+      nodeGraphGlLinesPolyline(batch, outline, rim * 0.5, 0, rgba, "square");
+      continue;
     }
-    nodeGraphGlLinesPolyline(batch, pts, half, 0.75, rgba);
+    const n = 40;
+    let px = cx;
+    let py = cy - r;
+    for (let s = 1; s <= n; s += 1) {
+      const a = -Math.PI / 2 + (Math.PI * s) / n;
+      const x = cx + sign * r * Math.cos(a);
+      const y = cy + r * Math.sin(a);
+      nodeGraphGlLinesTriangle(batch, cx, cy, px, py, x, y, hole);
+      px = x;
+      py = y;
+    }
+    const arc = [];
+    const rr = r - rim * 0.5;
+    for (let s = 0; s <= n; s += 1) {
+      const a = -Math.PI / 2 + (Math.PI * s) / n;
+      arc.push(cx + sign * rr * Math.cos(a), cy + rr * Math.sin(a));
+    }
+    nodeGraphGlLinesPolyline(batch, arc, rim * 0.5, 0, rgba);
   }
 }
 
@@ -1126,9 +1142,8 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   for (let j = 0; j < allJacks.length; j += 1) {
     const jack = allJacks[j];
     if (jack.id !== plate.id || jack.rail) continue;
-    // IO overlay modules draw plain half circles over the display (nodeGraphGlGraphDrawJackHalves), with no
-    // notch cut in the plate or its stroke.
-    if (mode === "" && nodeGraphGlGraphIoOverlay(plate.id)) continue;
+    // The plate keeps its jack notches, so its stroke wraps each jack instead of crossing it; the display is
+    // cut the same way afterwards (nodeGraphGlGraphDrawJackHalves).
     // Connected, or a wire is being dragged out of it right now.
     const lit = jack.lit || nodeGraphGlGraphJackDragging(jack);
     plateJacks.push({
