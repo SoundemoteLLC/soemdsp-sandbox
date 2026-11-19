@@ -697,7 +697,12 @@ void main() {
     float inDisc = clamp((radius - dist) / jaa + 0.5, 0.0, 1.0);
     float inHole = clamp((radius - jackRimW - dist) / jaa + 0.5, 0.0, 1.0);
     float onInside = clamp(dv.x * side / jaa + 0.5, 0.0, 1.0);
-    wallClear = max(wallClear, inDisc);
+    // The module stroke is removed along the jack's whole height (the stroke band is outside the wall, so the
+    // disc alone would leave a sliver in the notch where neighbouring jacks meet). Coverages add, so two jacks
+    // meeting at one edge clear it completely.
+    float spanClear = clamp((radius - abs(dv.y)) / jaa + 0.5, 0.0, 1.0)
+      * clamp((dv.x * side + jackRimW + 2.0) / jaa + 0.5, 0.0, 1.0);
+    wallClear = min(1.0, wallClear + max(inDisc, spanClear));
     float holeI = inHole * onInside;
     float rimI = max(inDisc - inHole, 0.0) * onInside;
     if (holeI > hole) hole = holeI;
