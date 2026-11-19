@@ -24,8 +24,9 @@
   const VIEWS = {
     A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: true },
     B: { jacks: true, labels: "full", wires: "all", veil: 0.55, wireColor: "to", collapseUnused: false },
-    // C: one pill at the bottom edge of each module; every cable comes out of it. Click or hover opens a panel
-    //    (drawn in the top layer, no module resizes) with all the module's jacks and their full names.
+    // C: one pill per side at the bottom of the module wall (inputs left, outputs right); every cable comes out of
+    //    its side's pill. Click or hover opens that side's panel (drawn in the top layer, no module resizes) with
+    //    every jack and its full name.
     C: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true },
   };
 
@@ -155,10 +156,6 @@
     const pills = nodeGraphGlGraphState?.chrome?.pills || [];
     for (let i = pills.length - 1; i >= 0; i -= 1) {
       const pill = pills[i];
-      if (pill.panel) {
-        if (Math.abs(point.x - pill.x) <= pill.r * 2.2 && Math.abs(point.y - pill.y) <= pill.r) return pill;
-        continue;
-      }
       const side = pill.io === "output" ? -1 : 1;
       const w = pill.r * 3.4;
       const x0 = side > 0 ? pill.x : pill.x - w;
@@ -170,10 +167,10 @@
   function insideExpanded(point) {
     const ex = nodeGraphGlGraphState?.ioExpanded;
     if (!ex || typeof nodeGraphGlGraphIoExpandedRegion !== "function") return false;
-    const reg = nodeGraphGlGraphIoExpandedRegion(ex.id, ex.io);
-    // The panel pill straddles the module's bottom edge, above the panel: keep the gap between them inside.
-    const pad = reg?.panel ? 12 : 4;
-    return Boolean(reg && point.x >= reg.x0 - pad && point.x <= reg.x1 + pad && point.y >= reg.y0 - pad && point.y <= reg.y1 + pad);
+    const pad = 6;
+    return nodeGraphGlGraphIoExpandedRegions(ex).some((reg) => (
+      point.x >= reg.x0 - pad && point.x <= reg.x1 + pad && point.y >= reg.y0 - pad && point.y <= reg.y1 + pad
+    ));
   }
 
   document.addEventListener("pointermove", (event) => {
@@ -185,7 +182,7 @@
       setExpanded(null);
     }
     const pill = pillAt(point);
-    if (pill) setExpanded(pill.id, pill.io);
+    if (pill) setExpanded(pill.id, pill.panel ? "both" : pill.io);
   }, { passive: true });
 
   document.addEventListener("pointerdown", (event) => {
@@ -196,16 +193,13 @@
     if (pill) {
       // Click the pill: keep the list open (click again to close).
       pinned = true;
-      setExpanded(pill.id, pill.io);
+      setExpanded(pill.id, pill.panel ? "both" : pill.io);
       event.preventDefault();
       event.stopPropagation();
       return;
     }
     if (pinned && nodeGraphGlGraphState.ioExpanded) {
-      const ex = nodeGraphGlGraphState.ioExpanded;
-      const reg = nodeGraphGlGraphIoExpandedRegion?.(ex.id, ex.io);
-      const onPillSlot = reg && point.x >= reg.x0 - 4 && point.x <= reg.x1 + 4 && point.y >= reg.y0 - 4 && point.y <= reg.y1 + 4;
-      if (!onPillSlot) {
+      if (!insideExpanded(point)) {
         pinned = false;
         setExpanded(null);
       }
