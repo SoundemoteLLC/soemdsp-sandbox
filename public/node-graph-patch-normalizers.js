@@ -230,13 +230,27 @@ layer("a_buffer").opacity = 1.0;
 
 output = canvas;`;
 
-const nodeGraphScreenSpaceShaderDefaultSource = `// Screen shake. Shake adds to a small base wobble.
+// The previous default (it shook by fractions of a pixel, so every frame was sampled between pixels and the whole screen went
+// soft). A node still carrying exactly this text is upgraded to the current default.
+const nodeGraphScreenSpaceShaderOldDefaultSource = `// Screen shake. Shake adds to a small base wobble.
 uniform float Shake;
 
 vec4 effect(vec2 uv) {
   float amount = 0.004 + 0.04 * abs(Shake);
   float t = uTime * 6.2831853 * 9.0;
   vec2 offset = vec2(sin(t * 1.31), cos(t * 1.73)) * amount;
+  return scene(uv + offset);
+}`;
+
+const nodeGraphScreenSpaceShaderDefaultSource = `// Screen shake. Shake adds to a small base wobble.
+// The shift is rounded to whole pixels: a fractional shift samples between pixels and blurs everything.
+uniform float Shake;
+
+vec4 effect(vec2 uv) {
+  float amount = 0.004 + 0.04 * abs(Shake);
+  float t = uTime * 6.2831853 * 9.0;
+  vec2 offset = vec2(sin(t * 1.31), cos(t * 1.73)) * amount;
+  offset = floor(offset * uResolution + 0.5) / uResolution;
   return scene(uv + offset);
 }`;
 
@@ -557,7 +571,8 @@ function normalizeNodeGraphScreenSpaceShader(screenSpaceShader = {}) {
     : screenSpaceShader && typeof screenSpaceShader === "object"
       ? screenSpaceShader.source
       : "";
-  const normalizedSource = String(source || "").trim().slice(0, 100000) || nodeGraphScreenSpaceShaderDefaultSource;
+  let normalizedSource = String(source || "").trim().slice(0, 100000) || nodeGraphScreenSpaceShaderDefaultSource;
+  if (normalizedSource === nodeGraphScreenSpaceShaderOldDefaultSource.trim()) normalizedSource = nodeGraphScreenSpaceShaderDefaultSource;
   const { floats, samplers } = parseNodeGraphScreenSpaceShaderUniforms(normalizedSource);
   return {
     bufferSampleLimit: nodeGraphBufferedInputSampleLimit,
