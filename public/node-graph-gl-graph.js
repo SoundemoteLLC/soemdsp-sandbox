@@ -1132,6 +1132,13 @@ function nodeGraphGlGraphJackHoles(jacks, plate, plateStyle, camera, device) {
   return holes;
 }
 
+/** The colour of a module's display plate (black when it has none), for panels that should look part of it. */
+function nodeGraphGlGraphDisplayPlateColor(id) {
+  const face = (nodeGraphGlGraphState.displays || []).find((d) => d.id === id);
+  const plateCss = face?.canvas?._wfGlSession?.plateCss;
+  return plateCss ? nodeGraphGlGraphParseCssColor(plateCss, [0, 0, 0, 1]) : [0, 0, 0, 1];
+}
+
 /**
  * IO view C's pill strip (a one-row band at the top of the shell, or at the top of the slider section) gets the
  * display's colour, so it reads as part of the display. [y0, y1, r, g, b, a] in world y, or null.
@@ -1150,9 +1157,7 @@ function nodeGraphGlGraphIoStrip(id) {
   // One pixel longer than the strip, under the display: the display's edge is not pixel-snapped like this band, and a
   // sub-pixel gap between two black areas shows the plate colour as a thin line.
   // The strip takes the module's own display colour (a display's plate is not always pure black).
-  const face = (nodeGraphGlGraphState.displays || []).find((d) => d.id === id);
-  const plateCss = face?.canvas?._wfGlSession?.plateCss;
-  const col = plateCss ? nodeGraphGlGraphParseCssColor(plateCss, [0, 0, 0, 1]) : [0, 0, 0, 1];
+  const col = nodeGraphGlGraphDisplayPlateColor(id);
   return [box.y, box.y + pitch + 1, col[0], col[1], col[2], 1];
 }
 
@@ -1363,13 +1368,21 @@ function nodeGraphGlGraphIoExpandedRegions(ex) {
 }
 
 function nodeGraphGlGraphDrawIoRegion(layer, reg, el, toX, toY, zoom) {
-  // An always-open edge (View B) draws only what hangs below the module: the module draws its own jacks.
-  const top = reg.auto && Number.isFinite(reg.bottom) ? Math.max(reg.y0, reg.bottom) : reg.y0;
+  // An always-open edge (View B) is one panel: it starts at the top of the first jack that does not fit inside the
+  // module (that row and every row below it), in the display's colour, so it reads as part of the same object. The
+  // module draws the jacks above it.
+  let top = reg.y0;
+  if (reg.auto && Number.isFinite(reg.bottom)) {
+    const first = reg.ports.find((q) => q.y + reg.r > reg.bottom + 0.5);
+    if (!first) return;
+    top = first.y - reg.r;
+  }
   if (top >= reg.y1) return;
-  nodeGraphGlLinesRect(layer, toX(reg.x0), toY(top), reg.width * zoom, (reg.y1 - top) * zoom, [0.03, 0.04, 0.07, 0.96]);
+  const back = nodeGraphGlGraphDisplayPlateColor(reg.id);
+  nodeGraphGlLinesRect(layer, toX(reg.x0), toY(top), reg.width * zoom, (reg.y1 - top) * zoom, [back[0], back[1], back[2], 1]);
   for (let i = 0; i < reg.ports.length; i += 1) {
     const p = reg.ports[i];
-    if (reg.auto && p.y < top + reg.r * 0.5) continue;
+    if (p.y < top) continue;
     const cx = toX(p.x);
     const cy = toY(p.y);
     const r = reg.r * zoom;
