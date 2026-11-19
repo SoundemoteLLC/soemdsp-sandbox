@@ -26216,15 +26216,3 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
 body[data-io-collapse="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell .node-io-row:not(:has(.connected-port)):not(:has(.node-param-port)) {
   display: none !important;
 }
-
-/* IO view C: every jack stacks at the bottom of the module. The columns hang from the module (the article is the
-   containing block, so the shell stops being it) and are as tall as their jacks, anchored to the bottom edge. */
-body[data-io-view="C"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
-  position: static;
-}
-body[data-io-view="C"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column {
-  top: auto !important;
-  bottom: 0 !important;
-  height: auto !important;
-  max-height: none !important;
-}

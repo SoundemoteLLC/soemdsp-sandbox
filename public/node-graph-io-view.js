@@ -24,8 +24,9 @@
   const VIEWS = {
     A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: true },
     B: { jacks: true, labels: "full", wires: "all", veil: 0.55, wireColor: "to", collapseUnused: false },
-    // C: every jack stacked at the bottom of the module (CSS: body[data-io-view="C"]), short labels, no veil.
-    C: { jacks: true, labels: "short", wires: "all", veil: 0, wireColor: "from", collapseUnused: false },
+    // C: one pill at the bottom edge of each module; every cable comes out of it. Click or hover opens a panel
+    //    (drawn in the top layer, no module resizes) with all the module's jacks and their full names.
+    C: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true },
   };
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
@@ -103,11 +104,7 @@
   window.nodeGraphIoView = () => state.view;
   window.nodeGraphIoViewConfig = () => VIEWS[state.view];
   /** Extra module height (grid cells) the view needs: View C reserves the jack stack at the bottom. */
-  window.nodeGraphIoViewExtraHeightGu = (type) => {
-    if (state.view !== "C") return 0;
-    if (typeof nodeGraphModuleUsesLayoutB !== "function" || !nodeGraphModuleUsesLayoutB(type)) return 0;
-    return typeof nodeGraphLayoutBIoColumnHeightGu === "function" ? nodeGraphLayoutBIoColumnHeightGu(type) : 0;
-  };
+  window.nodeGraphIoViewExtraHeightGu = () => 0;
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
   /** Shift+Tab: View C, and back to A. */
@@ -158,6 +155,10 @@
     const pills = nodeGraphGlGraphState?.chrome?.pills || [];
     for (let i = pills.length - 1; i >= 0; i -= 1) {
       const pill = pills[i];
+      if (pill.panel) {
+        if (Math.abs(point.x - pill.x) <= pill.r * 2.2 && Math.abs(point.y - pill.y) <= pill.r) return pill;
+        continue;
+      }
       const side = pill.io === "output" ? -1 : 1;
       const w = pill.r * 3.4;
       const x0 = side > 0 ? pill.x : pill.x - w;
@@ -170,7 +171,8 @@
     const ex = nodeGraphGlGraphState?.ioExpanded;
     if (!ex || typeof nodeGraphGlGraphIoExpandedRegion !== "function") return false;
     const reg = nodeGraphGlGraphIoExpandedRegion(ex.id, ex.io);
-    const pad = 4;
+    // The panel pill straddles the module's bottom edge, above the panel: keep the gap between them inside.
+    const pad = reg?.panel ? 12 : 4;
     return Boolean(reg && point.x >= reg.x0 - pad && point.x <= reg.x1 + pad && point.y >= reg.y0 - pad && point.y <= reg.y1 + pad);
   }
 

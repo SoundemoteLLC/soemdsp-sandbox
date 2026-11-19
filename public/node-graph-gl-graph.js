@@ -469,7 +469,11 @@ function nodeGraphGlGraphRebuildChrome() {
         rgba,
       });
     }
-    const overflow = nodeGraphGlGraphIoOverflow(id);
+    const panel = nodeGraphGlGraphIoPanel(id);
+    if (panel) {
+      pills.push({ id, io: "panel", panel: true, x: panel.pill.x, y: panel.pill.y, r: radius, count: panel.ports.length });
+    }
+    const overflow = panel ? null : nodeGraphGlGraphIoOverflow(id);
     if (overflow) {
       for (const io of ["input", "output"]) {
         const edge = overflow[io];
@@ -1178,8 +1182,59 @@ function nodeGraphGlGraphIoExpanded(id, io) {
   return io && ex.io !== io ? null : ex;
 }
 
+/**
+ * IO view C: every wall jack of a module lives in one panel that opens under a single pill at the module's bottom edge.
+ * Returns the pill, the panel's jack positions (inputs down the left wall, outputs down the right) and its box, or null
+ * when the view is not in panel mode.
+ */
+function nodeGraphGlGraphIoPanel(id) {
+  const cfg = typeof nodeGraphIoViewConfig === "function" ? nodeGraphIoViewConfig() : null;
+  if (!cfg || !cfg.panel || !nodeGraphGlGraphIoOverlay(id)) return null;
+  const cache = nodeGraphGlGraphState.ioOverflow || (nodeGraphGlGraphState.ioOverflow = new Map());
+  const key = "panel:" + id;
+  if (cache.has(key)) return cache.get(key);
+  let result = null;
+  const geo = nodeGraphGlGraphGeometry(id);
+  if (geo?.box && Array.isArray(geo.ports)) {
+    const ports = geo.ports.filter((p) => p.visible !== false);
+    const ins = ports.filter((p) => p.io === "input").sort((a, b) => a.y - b.y);
+    const outs = ports.filter((p) => p.io === "output").sort((a, b) => a.y - b.y);
+    if (ins.length + outs.length) {
+      const pitch = nodeGraphGlGraphJackDiameter();
+      const box = geo.box;
+      const bottom = box.y + box.h;
+      const leftX = ins.length ? ins[0].x : box.x;
+      const rightX = outs.length ? outs[0].x : box.x + box.w;
+      const firstY = bottom + 4 + pitch / 2;
+      const placed = [];
+      ins.forEach((p, i) => placed.push({ port: p.port, io: "input", x: leftX, y: firstY + i * pitch }));
+      outs.forEach((p, i) => placed.push({ port: p.port, io: "output", x: rightX, y: firstY + i * pitch }));
+      const rows = Math.max(ins.length, outs.length);
+      result = {
+        pill: { x: box.x + box.w / 2, y: bottom },
+        ports: placed,
+        pitch,
+        x0: box.x,
+        x1: box.x + box.w,
+        y0: bottom,
+        y1: firstY + (rows - 1) * pitch + pitch / 2 + 2,
+      };
+    }
+  }
+  cache.set(key, result);
+  return result;
+}
+
 /** Where a cable to a hidden jack ends: the pill. null when the jack is visible (or its edge is expanded). */
 function nodeGraphGlGraphIoPillPoint(node, port, io) {
+  const panel = nodeGraphGlGraphIoPanel(node);
+  if (panel) {
+    if (nodeGraphGlGraphIoExpanded(node, "panel")) {
+      const p = panel.ports.find((q) => q.port === port && q.io === io);
+      return p ? { x: p.x, y: p.y } : null;
+    }
+    return { x: panel.pill.x, y: panel.pill.y };
+  }
   if (nodeGraphGlGraphIoExpanded(node, io)) return null;
   const edge = nodeGraphGlGraphIoOverflow(node)?.[io];
   if (!edge || !edge.hidden.has(port)) return null;
@@ -1188,6 +1243,19 @@ function nodeGraphGlGraphIoPillPoint(node, port, io) {
 
 /** The expanded list's box and its full labels (CSS px, world units). */
 function nodeGraphGlGraphIoExpandedRegion(id, io) {
+  if (io === "panel") {
+    const panel = nodeGraphGlGraphIoPanel(id);
+    if (!panel) return null;
+    const el0 = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
+    const labels0 = panel.ports.map((p) => {
+      const row = el0?.querySelector(`.node-io-column.${p.io} .node-port[data-port="${CSS.escape(p.port)}"]`)?.closest(".node-io-row");
+      return String(row?.querySelector(".node-io-label")?.textContent || p.port).replace(/\s+/g, " ").trim();
+    });
+    return {
+      id, io, panel: true, r: panel.pitch / 2, labels: labels0, ports: panel.ports, side: 1,
+      width: panel.x1 - panel.x0, x0: panel.x0, x1: panel.x1, y0: panel.y0, y1: panel.y1, pill: panel.pill,
+    };
+  }
   const edge = nodeGraphGlGraphIoOverflow(id)?.[io];
   if (!edge) return null;
   const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
@@ -1222,21 +1290,22 @@ function nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, zoom) {
     const cx = toX(p.x);
     const cy = toY(p.y);
     const r = reg.r * zoom;
-    const color = typeof nodeGraphPortWireColor === "function" ? nodeGraphPortWireColor(ex.id, p.port, ex.io) : "";
+    const color = typeof nodeGraphPortWireColor === "function" ? nodeGraphPortWireColor(ex.id, p.port, reg.panel ? p.io : ex.io) : "";
     const base = nodeGraphGlGraphParseCssColor(color, nodeGraphGlGraphCssColor(color));
     const lit = nodeGraphGlGraphPortConnected(el, p.port);
     const rgba = lit ? nodeGraphGlGraphLitStroke(base) : nodeGraphGlGraphUnlitStroke(base);
+    const side = reg.panel ? (p.io === "output" ? -1 : 1) : reg.side;
     const arc = [];
     for (let s = 0; s <= 20; s += 1) {
       const a = -Math.PI / 2 + (Math.PI * s) / 20;
-      arc.push(cx + reg.side * (r - 0.5) * Math.cos(a), cy + (r - 0.5) * Math.sin(a));
+      arc.push(cx + side * (r - 0.5) * Math.cos(a), cy + (r - 0.5) * Math.sin(a));
     }
     nodeGraphGlLinesPolyline(layer, arc, Math.max(0.5, zoom * 0.5), 0.75, rgba);
     if (typeof nodeGraphGlLinesText === "function") {
-      nodeGraphGlLinesText(layer, reg.labels[i], cx + reg.side * (r + 4 * zoom), cy, nodeGraphGlGraphTextOpts({
+      nodeGraphGlLinesText(layer, reg.labels[i], cx + side * (r + 4 * zoom), cy, nodeGraphGlGraphTextOpts({
         px: Math.max(1, 13 * zoom),
         rgba: [1, 1, 1, 1],
-        align: reg.side > 0 ? "left" : "right",
+        align: side > 0 ? "left" : "right",
         baseline: "middle",
         weight: 400,
       }));
@@ -1246,6 +1315,28 @@ function nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, zoom) {
 
 /** The pill that stands for the jacks that do not fit: an accent capsule from the wall, "+N" inside. */
 function nodeGraphGlGraphDrawPill(batch, pill, toX, toY, zoom) {
+  if (pill.panel) {
+    // IO view C: one horizontal capsule centred on the module's bottom edge.
+    const pcx = toX(pill.x);
+    const pcy = toY(pill.y);
+    const pr = pill.r * zoom;
+    const ph = Math.max(1, pr - 1);
+    const pw = pr * 4.4;
+    const pcol = [0.45, 0.62, 1, 1];
+    nodeGraphGlLinesRect(batch, pcx - pw / 2 + ph, pcy - ph, pw - ph * 2, ph * 2, pcol);
+    nodeGraphGlLinesDot(batch, pcx - pw / 2 + ph, pcy, ph, 0.75, pcol);
+    nodeGraphGlLinesDot(batch, pcx + pw / 2 - ph, pcy, ph, 0.75, pcol);
+    if (typeof nodeGraphGlLinesText === "function") {
+      nodeGraphGlLinesText(batch, "IO " + pill.count, pcx, pcy, nodeGraphGlGraphTextOpts({
+        px: Math.max(1, 11 * zoom),
+        rgba: [0.03, 0.04, 0.08, 1],
+        align: "center",
+        baseline: "middle",
+        weight: 600,
+      }));
+    }
+    return;
+  }
   const side = pill.io === "output" ? -1 : 1;
   const cx = toX(pill.x);
   const cy = toY(pill.y);
@@ -4123,14 +4214,17 @@ function nodeGraphGlHitExpandedJack(x, y) {
   let best = null;
   let bestDist = Infinity;
   for (const p of reg.ports) {
-    const dist = Math.abs(p.y - y);
-    if (dist < bestDist && dist <= reg.r) {
+    const dy = Math.abs(p.y - y);
+    // The panel has two columns (inputs left, outputs right): the nearer wall wins within a row.
+    const dist = reg.panel ? dy + Math.abs(p.x - x) * 0.01 : dy;
+    if (dy <= reg.r && dist < bestDist) {
       bestDist = dist;
       best = p;
     }
   }
   if (!best) return null;
-  return { kind: "jack", x: best.x, y: best.y, jack: { id: ex.id, port: best.port, io: ex.io, x: best.x, y: best.y, r: reg.r, inlet: true } };
+  const bio = reg.panel ? best.io : ex.io;
+  return { kind: "jack", x: best.x, y: best.y, jack: { id: ex.id, port: best.port, io: bio, x: best.x, y: best.y, r: reg.r, inlet: true } };
 }
 
 function nodeGraphGlHitTest(x, y) {
