@@ -843,7 +843,10 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
       at: now,
       base: {
         cell: [nodeGraphGridWidth() * visualScale, nodeGraphGridHeight() * visualScale],
-        rgba: [(rgb[0] || 255) / 255, (rgb[1] || 255) / 255, (rgb[2] || 255) / 255, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha", 0.2)],
+        rgba: [(rgb[0] || 255) / 255, (rgb[1] || 255) / 255, (rgb[2] || 255) / 255, 0],
+        // The grid's strength: "grid bright reflect" in a lit room, "grid dim reflect" in a dark one (crossfaded by the dimmer).
+        alphaBright: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha", 0.4),
+        alphaDim: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha-dim", 0.48),
         spread: Math.max(0.4, Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78))),
         mouseSpread: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread"))),
         mouseBase: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount"))),
@@ -861,7 +864,7 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
   const active = Boolean(mouse) && mouseAmount > 0 && b.mouseSpread > 0;
   return {
     cell: b.cell,
-    rgba: b.rgba,
+    rgba: [b.rgba[0], b.rgba[1], b.rgba[2], b.alphaBright + (b.alphaDim - b.alphaBright) * roomDim],
     spread: b.spread,
     moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
     mouse: active ? mouse : null,

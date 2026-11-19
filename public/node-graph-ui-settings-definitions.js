@@ -83,7 +83,8 @@ const nodeUiDevSettingControls = Object.freeze([
   // Floor for fit-to-box tip text. The fitter never goes below this; longer tips clip.
   { defaultValue: 12, id: "nodeUiDevTooltipTextSize", key: "tooltipTextSize", max: 96, min: 12, type: "number" },
   { defaultValue: 100, id: "nodeUiDevModuleLightBrightness", key: "moduleLightBrightness", max: 300, min: 0, type: "number" },
-  { defaultValue: 34.5, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, step: 0.5, type: "number" },
+  { defaultValue: 40, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, step: 0.5, type: "number" },
+  { defaultValue: 48, id: "nodeUiDevGridDimReflect", key: "gridDimReflect", max: 100, min: 0, step: 0.5, type: "number" },
   {
     defaultValue: 220,
     id: "nodeUiDevGridSpread",
@@ -307,6 +308,7 @@ const nodeUiDevSettingSections = Object.freeze([
     title: "grid",
     ids: [
       "nodeUiDevMinimumGridBrightness",
+      "nodeUiDevGridDimReflect",
       "nodeUiDevGridSpread",
       "nodeUiDevGridDivisionMultiply",
       "nodeUiDevGridColor",
