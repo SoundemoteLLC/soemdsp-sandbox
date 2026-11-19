@@ -1147,7 +1147,13 @@ function nodeGraphGlGraphIoStrip(id) {
   const target = el?.querySelector(part);
   const box = target && !target.hidden ? nodeGraphGlGraphWorldBox(target) : null;
   if (!box || box.h < pitch) return null;
-  return [box.y, box.y + pitch, 0, 0, 0, 1];
+  // One pixel longer than the strip, under the display: the display's edge is not pixel-snapped like this band, and a
+  // sub-pixel gap between two black areas shows the plate colour as a thin line.
+  // The strip takes the module's own display colour (a display's plate is not always pure black).
+  const face = (nodeGraphGlGraphState.displays || []).find((d) => d.id === id);
+  const plateCss = face?.canvas?._wfGlSession?.plateCss;
+  const col = plateCss ? nodeGraphGlGraphParseCssColor(plateCss, [0, 0, 0, 1]) : [0, 0, 0, 1];
+  return [box.y, box.y + pitch + 1, col[0], col[1], col[2], 1];
 }
 
 /** A jack is drawn unless the IO view has jacks off; the pills (pseudo-jacks) are always drawn as cutouts. */
