@@ -88,4 +88,6 @@ Deleting the module releases its memory. Hiding the GL face does not alter DSP.
   updates and shared GL desktop/mobile face.
 
 Base-module listening accepted. New FFT/formant controls await listening.
-Later candidates: envelope whitening and transient blend. No IR-loading workflow.
+Whitening and Transient Blend are declared as hidden WIP parameters, with
+modulation and parameter outputs disabled. They have no runtime bindings and
+currently do nothing. No IR-loading workflow.

@@ -150,7 +150,9 @@ them simultaneously. Proposed order follows musical value and implementation ris
 - [x] Base-module listening acceptance; FFT-size warm/crossfade and Formant Shift
   in semitones, with explicit Voice-envelope versus Synth-phase ownership.
 - [ ] New controls listening acceptance and worst-case host callback proof.
-- [ ] Later: envelope whitening and transient blend.
+- [x] Hidden, inactive Whitening and Transient Blend parameter placeholders;
+  no modulation, parameter outputs or runtime bindings.
+- [ ] Later: implement envelope whitening and transient blend.
 - Proof: donor ownership is audible and measurable; silent donors have defined
   behavior; stereo and dry alignment remain correct.
 - Decision: establish a distinct sound/use case from the resonator's STFT path

@@ -283,6 +283,32 @@ const char metadata[]=R"json({
       "step": "any",
       "unit": "dB",
       "tooltip": "Explicit final output gain in dB. No automatic loudness matching, hidden limiter or clipping. Envelope replacement can increase individual spectral components."
+    },
+    {
+      "key": "whitening",
+      "label": "Whitening (WIP)",
+      "defaultValue": "0",
+      "min": "0",
+      "mid": ".5",
+      "max": "1",
+      "step": "any",
+      "hidden": true,
+      "modulation": false,
+      "parameterOutput": false,
+      "tooltip": "Under construction. Reserved for independent removal of Synth's original spectral envelope. Currently inactive: changing this value does nothing."
+    },
+    {
+      "key": "transientBlend",
+      "label": "Transient Blend (WIP)",
+      "defaultValue": "0",
+      "min": "0",
+      "mid": ".5",
+      "max": "1",
+      "step": "any",
+      "hidden": true,
+      "modulation": false,
+      "parameterOutput": false,
+      "tooltip": "Under construction. Reserved for retaining Synth attacks alongside the transferred envelope. Currently inactive: changing this value does nothing."
     }
   ]
 })json";
