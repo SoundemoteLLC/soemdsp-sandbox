@@ -193,6 +193,10 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
       // Build up off = MAX deposit onto the stored energy (a pixel never exceeds one dab's peak).
       accumulate: settings?.buildUp !== false,
       pathPoints: points,
+      // An incremental path (this frame's new samples, oldest first): shade the stamps by their age so the trail fades
+      // smoothly along its length instead of in one flat band per frame.
+      ageDecay: options.ageDecay === true,
+      bridged: options.ageDecay === true && points.bridged === true,
       radius: Math.max(0.05, layer.radius),
       brightness: beamBrightness,
       blur: nodeGraphTraceDisplayClampStampBlur(layer.blur),
@@ -425,6 +429,7 @@ function drawNodeGraphScope2dRetainedBurn(item, pixelRatio, square, buffer, sett
     endFrame: frameAt(rawStart + buildCount),
     parkedBeamHold: true,
     samplesOnly: true,
+    ageDecay: true,
   });
 }
 

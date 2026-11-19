@@ -6,7 +6,8 @@
 //                 wire dots on top of it, so the names stay readable over a display or sliders. A crowded edge shows
 //                 every jack at once.
 //
-// Tab toggles A and B. The view is a UI setting, saved in the browser (not in the patch).
+// Tab toggles A and B. Shift+Tab shows / hides the cables in A (their jack dots stay); B always shows every cable.
+// The view and the cable setting are UI settings, saved in the browser (not in the patch).
 
 (() => {
   "use strict";
@@ -26,11 +27,13 @@
   };
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
-  const state = { view: "A" };
+  const WIRES_KEY = "soemdsp-sandbox.ioWiresHidden.v1";
+  const state = { view: "A", wiresHidden: false };
 
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved === "A" || saved === "B") state.view = saved;
+    state.wiresHidden = window.localStorage.getItem(WIRES_KEY) === "1";
   } catch { /* storage unavailable: keep the default */ }
 
   function applyBodyState() {
@@ -90,6 +93,15 @@
   );
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
+  /** Cables are hidden (their jack dots stay) in View A when the user hid them; View B always shows them. */
+  window.nodeGraphWiresHidden = () => state.view === "A" && state.wiresHidden;
+  window.toggleNodeGraphWiresHidden = () => {
+    if (state.view !== "A") return state.wiresHidden;
+    state.wiresHidden = !state.wiresHidden;
+    try { window.localStorage.setItem(WIRES_KEY, state.wiresHidden ? "1" : "0"); } catch { /* ignore */ }
+    redraw();
+    return state.wiresHidden;
+  };
 
   /** Jack label text for the current view ("" = none). */
   window.nodeGraphIoViewLabelText = (text) => (VIEWS[state.view].labels === "off" ? "" : String(text || ""));
@@ -123,10 +135,12 @@
   }, true);
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Tab" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key !== "Tab" || event.ctrlKey || event.altKey || event.metaKey) return;
     if (typeof nodeGraphEventTargetIsTextEditable === "function" && nodeGraphEventTargetIsTextEditable(event.target)) return;
     event.preventDefault();
-    if (!event.repeat) window.toggleNodeGraphIoView();
+    if (event.repeat) return;
+    if (event.shiftKey) window.toggleNodeGraphWiresHidden();
+    else window.toggleNodeGraphIoView();
   }, true);
 
   if (document.body) applyBodyState();

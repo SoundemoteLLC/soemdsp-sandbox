@@ -28,6 +28,9 @@ let nodeGraphModuleFacePageCopyMap = null;
 // The press being replayed on the module: { pointerId, target }.
 let nodeGraphModuleFacePageForward = null;
 const nodeGraphModuleFacePageReplayed = new WeakSet();
+// The rows page repaints its slider readouts when the window is resized.
+let nodeGraphModuleFacePageRowsRepaint = null;
+let nodeGraphModuleFacePageRowsObserver = null;
 
 function nodeGraphModuleFacePageVisible() {
   const panel = document.getElementById("nodeModuleFacePage");
@@ -204,9 +207,10 @@ function presentNodeGraphModuleFacePageDisplay() {
   if (!wrap) return false;
   const nodeId = nodeGraphModuleFacePageNodeId;
   const el = nodeId && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeId) : null;
-  if (!el || !el.isConnected || !(el.offsetWidth > 0)) {
+  if (!el || !el.isConnected || !(el.offsetWidth > 0) || nodeGraphModuleFacePageUsesRows(nodeId, el)) {
     wrap.hidden = true;
     nodeGraphModuleFacePageCopyMap = null;
+    document.getElementById("nodeModuleFacePageFace")?.replaceChildren();
     return false;
   }
   wrap.hidden = false;
@@ -546,6 +550,22 @@ function nodeGraphModuleFacePageLayout(moduleEl, sliders) {
   return rows.length ? rows : plain();
 }
 
+/**
+ * A plain slider module (no face layout of its own) shows its controls as rows that fill the page: fixed row height,
+ * the page's width, nothing to do with the module's width (so a wide module is not shrunk and resizing the module does
+ * not move the page). A module with a face layout (choices, bands, XY ...) or no sliders keeps the scaled copy.
+ */
+function nodeGraphModuleFacePageUsesRows(nodeId, moduleEl) {
+  if (!moduleEl || !nodeGraphModuleFacePageSliders(moduleEl).length) return false;
+  if (moduleEl.classList.contains("has-module-face") && typeof nodeGraphModuleFaceSpec === "function") {
+    const node = nodeId && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+    const type = String(moduleEl.dataset?.nodeType || node?.type || "");
+    const spec = nodeGraphModuleFaceSpec(type, node);
+    if (Array.isArray(spec) && spec.length) return false;
+  }
+  return true;
+}
+
 function nodeGraphModuleFacePageTitle(nodeId, moduleEl) {
   const header = moduleEl?.querySelector?.(".node-header-title");
   const text = String(header?.textContent || "").trim();
@@ -586,6 +606,7 @@ function nodeGraphModuleFacePageComputeSignature(nodeId) {
     moduleEl ? "el" : "none",
     nodeGraphModuleFacePageTitle(nodeId, moduleEl),
     nodeGraphModuleFacePageNeedsReadouts(nodeId, moduleEl) ? "h" : "s",
+    nodeGraphModuleFacePageUsesRows(nodeId, moduleEl) ? "rows" : "copy",
     layout.map((row) => row.cells.map((cell) => `${cell.slider.id}=${nodeSliderLabelText(cell.slider)}`).join(",")).join("|"),
   ].join("\n");
 }
@@ -612,12 +633,17 @@ function renderNodeGraphModuleFacePage(nodeId) {
   }
   nodeGraphModuleFacePageNodeId = nodeId;
   if (titleEl) titleEl.textContent = nodeGraphModuleFacePageTitle(nodeId, moduleEl);
+  if (nodeGraphModuleFacePageUsesRows(nodeId, moduleEl)) {
+    // Rows that fill the page (see nodeGraphModuleFacePageUsesRows); the scaled copy is off.
+    renderNodeGraphModuleFacePageReadouts(body, moduleEl);
+    return;
+  }
   // The copy above shows (and runs) the module's own controls, sliders
   // hidden or not.
   body.replaceChildren();
 }
 
-/** Retired: the mirror readout list once shown under a slider-less copy. */
+/** The mirror readout rows: one row per face row, filling the page (plain slider modules; see UsesRows). */
 function renderNodeGraphModuleFacePageReadouts(body, moduleEl) {
   const sliders = nodeGraphModuleFacePageSliders(moduleEl);
   const rows = [];
@@ -652,6 +678,24 @@ function renderNodeGraphModuleFacePageReadouts(body, moduleEl) {
   paintAll();
   // Text fit is measured after layout.
   window.requestAnimationFrame(paintAll);
+  // The slider fills and the value positions are pixel values painted for the row's width: paint them again when the
+  // window is resized, so the rows follow it.
+  nodeGraphModuleFacePageRowsRepaint = paintAll;
+  if (!nodeGraphModuleFacePageRowsObserver && typeof ResizeObserver === "function") {
+    let lastWidth = 0;
+    let raf = 0;
+    nodeGraphModuleFacePageRowsObserver = new ResizeObserver((entries) => {
+      const width = Math.round(entries[0]?.contentRect?.width || 0);
+      if (width === lastWidth) return;
+      lastWidth = width;
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        nodeGraphModuleFacePageRowsRepaint?.();
+      });
+    });
+    nodeGraphModuleFacePageRowsObserver.observe(body);
+  }
 }
 
 function refreshNodeGraphModuleFacePage(options = {}) {

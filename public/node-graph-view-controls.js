@@ -1475,6 +1475,18 @@ function nodeGraphHotkeysDrawKeycaps() {
       const label = part.trim();
       const cap = document.createElement("span");
       const name = label.toLowerCase();
+      if (name === "mouse") {
+        // A mouse symbol: the modifier is held while clicking.
+        cap.className = "key-mouse";
+        cap.setAttribute("role", "img");
+        cap.setAttribute("aria-label", "mouse click");
+        cap.innerHTML = '<svg viewBox="0 0 24 32" width="1.5em" height="2em" aria-hidden="true">'
+          + '<rect x="3" y="2" width="18" height="28" rx="9" fill="none" stroke="currentColor" stroke-width="2"/>'
+          + '<path d="M3 13h18M12 2v11" fill="none" stroke="currentColor" stroke-width="2"/>'
+          + '<path d="M12 2a9 9 0 0 0-9 9v2h9z" fill="currentColor"/></svg>';
+        kbd.append(cap);
+        continue;
+      }
       const kind = name === "space"
         ? "key-space"
         : (name === "tab" || name === "shift" || name === "enter" ? "key-wide"

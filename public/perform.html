@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>soemdsp perform</title>
   <link rel="icon" href="./public/favicon.svg?v=ico-1" type="image/svg+xml">
-  <link rel="stylesheet" href="./public/styles.css?v=mp-wave-midi-cc-4-sg-overhaul-1-sg-gl-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-vthick-1-vcur-1-cmcur-1-mp-face-gl-1-mp-scale-1-sg-fix-1-topbar-1-titlefit-1-chrome-1-cbstroke-1-layerui-1-tileblend-1-canvasbg-1-facebox-1-plugrow-5-cols-4p2nlntrd-clkui1-bg19-stg5-stg6-stg7-facesliders-1-modface4-hukeep1-stgsel1-modface8-modface9pvrgstns5gw16-xypbs-xyf-allb17-abc1">
+  <link rel="stylesheet" href="./public/styles.css?v=mp-wave-midi-cc-4-sg-overhaul-1-sg-gl-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-vthick-1-vcur-1-cmcur-1-mp-face-gl-1-mp-scale-1-sg-fix-1-topbar-1-titlefit-1-chrome-1-cbstroke-1-layerui-1-tileblend-1-canvasbg-1-facebox-1-plugrow-5-cols-4p2nlntrd-clkui1-bg19-stg5-stg6-stg7-facesliders-1-modface4-hukeep1-stgsel1-modface8-modface9pvrgstns5gw16-xypbs-xyf-allb17-abc1-hk1">
   <link rel="stylesheet" href="./public/perform.css?v=perform-param-io-1">
   <link rel="stylesheet" href="./public/modules/portal/portal-ui.css?v=portal-thru-1">
   <link rel="stylesheet" href="./public/modules/keypad/keypad-ui.css?v=keypad-press-once-1">
@@ -482,21 +482,22 @@
         </div>
         <div id="nodeHotkeysUnifiedNavHost" class="node-unified-window-nav-host" aria-label="Floating window pages"></div>
         <div class="node-hotkeys-list">
+          <div class="node-hotkeys-row"><kbd>? / `</kbd><span>Command Center</span></div>
           <div class="node-hotkeys-row"><kbd>Ctrl+Z</kbd><span>Undo</span></div>
-          <div class="node-hotkeys-row"><kbd>Del</kbd><span>Delete selection</span></div>
           <div class="node-hotkeys-row"><kbd>Ctrl+Y</kbd><span>Redo (or Ctrl+Shift+Z)</span></div>
+          <div class="node-hotkeys-row"><kbd>Tab</kbd><span>Show / hide inputs and outputs</span></div>
+          <div class="node-hotkeys-row"><kbd>Shift+Tab</kbd><span>Show / hide wires (in the compacted view)</span></div>
+          <div class="node-hotkeys-row"><kbd>F</kbd><span>Canvas: off → Perform → Arrange → off</span></div>
+          <div class="node-hotkeys-row"><kbd>Shift+F</kbd><span>Mini Canvas: off → Perform → Arrange → off</span></div>
           <div class="node-hotkeys-row"><kbd>V</kbd><span>Hide / show bars</span></div>
           <div class="node-hotkeys-row"><kbd>T</kbd><span>Stick transport (overrides V hide)</span></div>
-          <div class="node-hotkeys-row"><kbd>D</kbd><span>Debug</span></div>
-          <div class="node-hotkeys-row"><kbd>Shift+F</kbd><span>Mini Canvas: off → Perform → Arrange → off</span></div>
-          <div class="node-hotkeys-row"><kbd>F</kbd><span>Canvas: off → Perform → Arrange → off</span></div>
+          <div class="node-hotkeys-row"><kbd>Ctrl+Mouse</kbd><span>Click on play button: keep project playing when unfocused</span></div>
+          <div class="node-hotkeys-row"><kbd>Alt+Mouse</kbd><span>Click enables or disables a module</span></div>
+          <div class="node-hotkeys-row"><kbd>Shift+Mouse</kbd><span>Click # locks view to grid</span></div>
           <div class="node-hotkeys-row"><kbd>Z</kbd><span>Center view on modules (selection, else all) at current zoom</span></div>
-          <div class="node-hotkeys-row"><kbd>? / `</kbd><span>Command Center</span></div>
           <div class="node-hotkeys-row"><kbd>Space</kbd><span>Pause / play</span></div>
-          <div class="node-hotkeys-row"><kbd>Tab</kbd><span>Show / hide inputs and outputs</span></div>
-          <div class="node-hotkeys-row"><kbd>Ctrl</kbd><span>Click on play button: keep project playing when unfocused</span></div>
-          <div class="node-hotkeys-row"><kbd>Alt</kbd><span>Click enables or disables a module</span></div>
-          <div class="node-hotkeys-row"><kbd>Shift</kbd><span>Click # locks view to grid</span></div>
+          <div class="node-hotkeys-row"><kbd>Del</kbd><span>Delete selection</span></div>
+          <div class="node-hotkeys-row"><kbd>D</kbd><span>Debug</span></div>
           <div class="node-hotkeys-row"><kbd>Ctrl</kbd><span>Snake: keep / add trail</span></div>
           <div class="node-hotkeys-row"><kbd>Shift</kbd><span>Snake: mirror trail</span></div>
         </div>
@@ -3389,7 +3390,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-unified-window.js?v=mini-round2-1-canvas-name-modface1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-emoji-page.js?v=audio-emoji-3-emj5-cm1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-pencil-page.js?v=pencil-4"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-face-page.js?v=modface-13"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-face-page.js?v=modface-13-rows2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-pages.js?v=overwrite-baseline-20261013"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-file-actions.js?v=init-confirm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-default-buttons.js?v=reset-settings-1"></script>
@@ -3486,7 +3487,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-settings-text-fit.js?v=css-type-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-default-preset.js?v=plugin-ui-persist-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-script-status.js?v=dbgpanel-rm-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-view-controls.js?v=2026.11.14.3-keys1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-view-controls.js?v=2026.11.14.3-keys1-hk1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-geometry.js?v=zp4-4-zp-hoverg2ml2f3gpugridlc-sknd1-gr1-gf2-gm1-gt2-gk-gdr2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-viewport-perf.js?v=vg-4-zp-hover-fb1-bootflush-2-modface1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-zoom.js?v=all-sync-1-z-center-1-zoomrace-1"></script>
@@ -3499,7 +3500,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-actions.js?v=io-ch-3-sg-overhaul-1-sg-gl-1-sg-drag-2-cbz-1-collapse-indep-1-hukeep1-raise1"></script>
   <!-- node-graph-code-screen.js loaded by node-graph-code-screen-loader.js on demand -->
     <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-residual.js?v=burn-03-1dk"></script>
-  <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-energy-gl.js?v=expo-all-1-fb1bkdbacsk5gsaa6"></script>
+  <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-energy-gl.js?v=expo-all-1-fb1bkdbacsk5gsaa6-age3"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-drawer.js?v=ink-px-1-fb1gsst5"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/display-layer-compositor.js?v=allow-gl-20261016c"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-phosphor-energy-gl.js?v=expo-all-1bkdbacsk5gsaa6"></script>
@@ -3534,7 +3535,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-capture.js?v=2026.11.08.5"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-number-readout.js?v=2026.11.08.5-fb1-binfit-1dk"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-draw-basic.js?v=torch-buf-1-g-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-draw-burn.js?v=burn-03-1-fb1-snhit-1-beats-1dbacgspp2-bl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-draw-burn.js?v=burn-03-1-fb1-snhit-1-beats-1dbacgspp2-bl1-age3"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-residual-face-gl.js?v=pp-trail-1-fb1dk-polar-burn1-sweep-hang2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scopes.js?v=clap-1-fb1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-spectrum.js?v=window-cycles-1-wbeats1dbogs"></script>
@@ -3561,7 +3562,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-canvas.js?v=allow-gl-20261016b"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-waterfall-gl.js?v=stack-layers-1-fb1-g-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-waterfall.js?v=wf-line-blur-1-wf-pad-1-noclip-1-wf-fade-1-rms-5-white-1-g-1-rbw1-wfbeats-1-lrvel1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-paint-helpers.js?v=stack-layers-1-burn-catchup-fb1-noclip-1-wf-fade-1-rms-5-g-1-snhit-1-beats-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-paint-helpers.js?v=stack-layers-1-burn-catchup-fb1-noclip-1-wf-fade-1-rms-5-g-1-snhit-1-beats-1-age3"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-1d-trace.js?v=window-cycles-1-fb1-beats-1-bl1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-draw-orchestrator.js?v=step-register-1-reaa-fb1-pq-gl-1-cpluck2-ssk"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/lookaheadLimiter/lookahead-limiter-display.js?v=color-row-1"></script>
@@ -3693,8 +3694,8 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-trace-router.js?v=no-self-burst-1780321400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-rendering.js?v=pt-reverse-2-stg7"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-stroke-builder.js?v=snake-gl-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=stack-layers-1-sg-overhaul-1-sg-gl-1-sg-drag-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-wf-fade-1-vcur-1-wirepx-1-wiredotpx-1-wirecurve-1-tcollapse-1-pausedisp-1-cbz-1-cap-1-altdbl-1-round-8msk-ambwp2blampscnglowt75shbsnmlgpu2gridtxtflbspwdot-sknd1-wlit1-jlit2-wdot1-jnoloud2-clkui2-txtrv1-jdrag1-jin55-stg5-stg6-hidwdot1-vslider2-stgsel1-jackdot1-vstack1-toprnd1-glowmix1-crmg1-lamp1-gr1-gf2-cs-xypbchsl-xyf-cm1-ioov1-ioview17-abc1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-io-view.js?v=ioview-17"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=stack-layers-1-sg-overhaul-1-sg-gl-1-sg-drag-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-wf-fade-1-vcur-1-wirepx-1-wiredotpx-1-wirecurve-1-tcollapse-1-pausedisp-1-cbz-1-cap-1-altdbl-1-round-8msk-ambwp2blampscnglowt75shbsnmlgpu2gridtxtflbspwdot-sknd1-wlit1-jlit2-wdot1-jnoloud2-clkui2-txtrv1-jdrag1-jin55-stg5-stg6-hidwdot1-vslider2-stgsel1-jackdot1-vstack1-toprnd1-glowmix1-crmg1-lamp1-gr1-gf2-cs-xypbchsl-xyf-cm1-ioov1-ioview17-rt7"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-io-view.js?v=ioview-18"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-screen-fx.js?v=screen-out-1-ssn-bcdsfgh-cm1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-render-output.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-debug-copy.js?v=dbgpanel-rm-1"></script>

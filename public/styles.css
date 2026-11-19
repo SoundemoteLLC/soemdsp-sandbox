@@ -5528,7 +5528,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   display: grid;
   /* The key column is as wide as its key; the description takes the rest and wraps. */
   /* Two columns at every width: a key column just wide enough for the widest key, then the description. */
-  grid-template-columns: 7.4rem minmax(0, 1fr);
+  grid-template-columns: 9.2rem minmax(0, 1fr);
   /* A row keeps its full height (the list scrolls); a flex item would otherwise shrink and overlap the next row. */
   flex: 0 0 auto;
   align-items: center;
@@ -5595,7 +5595,17 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 .node-hotkeys-row .key-sep { font-style: normal; font-weight: 600; opacity: 0.6; padding: 0 1px; }
 .node-hotkeys-row .keycap { isolation: isolate; }
 
-.node-hotkeys-row span {
+/* The keycaps are spans too: they never wrap or clip their legend. */
+.node-hotkeys-row kbd span {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+.node-hotkeys-row .key-mouse {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(238, 190, 135, 1);
+}
+.node-hotkeys-row > span {
   /* Descriptions wrap (they used to be cut off with an ellipsis). */
   min-width: 0;
   overflow-wrap: anywhere;

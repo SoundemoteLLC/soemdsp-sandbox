@@ -2269,7 +2269,10 @@ function bridgeNodeGraphScope2dAdjacentFramePath(canvas, pathPoints, maxDistance
   // stamps sample hits — never chord-fill long jumps with intermediate dots or
   // beam segments (that drew sporadic lines across the face).
   void spacingPx;
-  return [previousPoint, ...pathPoints];
+  const bridged = [previousPoint, ...pathPoints];
+  // The first point is last frame's last point: the phosphor draw does not stamp it again (see ageDecay / build-up).
+  bridged.bridged = true;
+  return bridged;
 }
 
 /**

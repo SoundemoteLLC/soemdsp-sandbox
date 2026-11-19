@@ -232,6 +232,7 @@
     attribute vec2 aStart;
     attribute vec2 aEnd;
     attribute float aCorner;
+    attribute vec2 aAges;
     uniform mediump vec2 uCanvasSize;
     uniform mediump float uRadius;
     uniform mediump float uBlur;
@@ -240,7 +241,9 @@
     varying vec2 vStart;
     varying vec2 vEnd;
     varying vec2 vPosition;
+    varying vec2 vAges;
     void main() {
+      vAges = aAges;
       vec2 segment = aEnd - aStart;
       float segmentLength = max(length(segment), 0.0001);
       vec2 tangent = segment / segmentLength;
@@ -275,9 +278,16 @@
     uniform mediump float uGlowStrength;
     uniform mediump float uAaPx;
     uniform mediump float uRadius;
+    // The keep over one step: a point from the start of this frame's chunk has decayed by it by the end of the chunk
+    // (age 0), one at the end has not (age 1). 1 = no age shading. See DOT_FRAG.
+    uniform mediump float uAgeKeep;
+    // Build-up joins: (x) the chunk's first segment starts flat, (y) its last segment ends flat, so the frame joint is
+    // drawn once (round caps there overlap and, added up frame after frame, show as a bright dot at every join).
+    uniform mediump vec2 uButt;
     varying vec2 vStart;
     varying vec2 vEnd;
     varying vec2 vPosition;
+    varying vec2 vAges;
     float phosphorShoulder(float d, float R, float aa, float soft) {
       // Glow (the Blur knob), a beam profile (APP_POLICY exempts phosphor beams from the edge rule).
       // Two uses of the same Expo curve: a hot PINPOINT core that shrinks to 8% of R as Glow rises, plus a wide,
@@ -316,7 +326,14 @@
       // The dab centre is full strength at any Blur: Bright is the peak one stamp can reach.
       float profile = phosphorShoulder(d, R, aa, soft);
 
-      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area;
+      // Decay runs once per frame, so a chunk drawn at one brightness shows as a flat band per frame. Shade it by the decay
+      // each point would have had by now (its age runs along the chunk), so the trail fades smoothly along its length.
+      float age = clamp(mix(vAges.x, vAges.y, t), 0.0, 1.0);
+      float ageShade = pow(max(uAgeKeep, 0.0001), 1.0 - age);
+      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area * ageShade;
+      float tRaw = segmentLengthSquared > 0.000001 ? dot(vPosition - vStart, segment) / segmentLengthSquared : 0.5;
+      if (uButt.x > 0.5 && vAges.x < 0.00001 && tRaw < 0.0) e = 0.0;
+      if (uButt.y > 0.5 && vAges.y > 0.99999 && tRaw > 1.0) e = 0.0;
       // Monochrome energy (R=G=B); additive blend accumulates trail.
       gl_FragColor = vec4(e, e, e, e);
     }
@@ -331,6 +348,7 @@
     precision highp float;
     attribute vec2 aCenter;
     attribute float aCorner;
+    attribute float aAge;
     uniform vec2 uCanvasSize;
     uniform float uRadius;
     uniform float uBlur;
@@ -341,7 +359,9 @@
     varying vec2 vUv;
     varying float vRadius;
     varying float vBlur;
+    varying float vAge;
     void main() {
+      vAge = aAge;
       float softAmt = clamp(uBlur, 0.0, 1.0);
       // Built-in profile ends at uRadius (+ <1px AA); custom stamps fill the quad.
       float pad = max(uRadius, 0.05) + 2.0;
@@ -372,11 +392,15 @@
     uniform float uGlowReach;
     uniform float uGlowStrength;
     uniform float uAaPx;
+    // How much a stamp from the START of this frame's chunk has already decayed by the end of it (the keep over one
+    // step); a stamp at the end of the chunk (age 1) has not decayed at all. 1 = no age shading.
+    uniform float uAgeKeep;
     uniform sampler2D uStamp;
     varying vec2 vOffset;
     varying vec2 vUv;
     varying float vRadius;
     varying float vBlur;
+    varying float vAge;
     float phosphorShoulder(float d, float R, float aa, float soft) {
       // Glow (the Blur knob), a beam profile (APP_POLICY exempts phosphor beams from the edge rule).
       // Two uses of the same Expo curve: a hot PINPOINT core that shrinks to 8% of R as Glow rises, plus a wide,
@@ -406,15 +430,19 @@
         tex = stamp.r;
       }
       // Custom art (heart, …): the texture *is* the stamp.
+      // Decay runs once per frame, so a chunk stamped at one brightness shows as a flat band per frame. Stamps carry their
+      // place in the chunk (0 oldest .. 1 newest): shade them by the decay they would have had by now, so the trail
+      // fades smoothly along its length instead of in steps.
+      float ageShade = pow(max(uAgeKeep, 0.0001), 1.0 - clamp(vAge, 0.0, 1.0));
       if (uStampCustom > 0.5) {
-        float e = clamp(tex, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
+        float e = clamp(tex, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * ageShade;
         gl_FragColor = vec4(e, e, e, e);
         return;
       }
       // Built-in: same flat core + Expo shoulder as the ribbon, zero at R.
       float aa = max(0.55, min(1.25, R * 0.06));
       float profile = phosphorShoulder(r, R, aa, soft);
-      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area;
+      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area * ageShade;
       gl_FragColor = vec4(e, e, e, e);
     }
   `;
@@ -698,6 +726,9 @@
         aStart: gl.getAttribLocation(beamProgram, "aStart"),
         aEnd: gl.getAttribLocation(beamProgram, "aEnd"),
         aCorner: gl.getAttribLocation(beamProgram, "aCorner"),
+        aAges: gl.getAttribLocation(beamProgram, "aAges"),
+        uAgeKeep: gl.getUniformLocation(beamProgram, "uAgeKeep"),
+        uButt: gl.getUniformLocation(beamProgram, "uButt"),
         uCanvasSize: gl.getUniformLocation(beamProgram, "uCanvasSize"),
         uRadius: gl.getUniformLocation(beamProgram, "uRadius"),
         uBrightness: gl.getUniformLocation(beamProgram, "uBrightness"),
@@ -714,6 +745,8 @@
         program: dotProgram,
         aCenter: gl.getAttribLocation(dotProgram, "aCenter"),
         aCorner: gl.getAttribLocation(dotProgram, "aCorner"),
+        aAge: gl.getAttribLocation(dotProgram, "aAge"),
+        uAgeKeep: gl.getUniformLocation(dotProgram, "uAgeKeep"),
         uCanvasSize: gl.getUniformLocation(dotProgram, "uCanvasSize"),
         uRadius: gl.getUniformLocation(dotProgram, "uRadius"),
         uBrightness: gl.getUniformLocation(dotProgram, "uBrightness"),
@@ -854,7 +887,7 @@
   }
 
   /** Append one ribbon quad (6 verts × 5 floats) like scope2d burn. */
-  function appendBeamSegment(vertices, from, to) {
+  function appendBeamSegment(vertices, from, to, age0, age1) {
     if (!from || !to) {
       return;
     }
@@ -868,14 +901,25 @@
     const endY = distance < 0.01 ? from.y : to.y;
     const corners = [0, 1, 2, 1, 3, 2];
     for (let i = 0; i < corners.length; i += 1) {
-      vertices.push(from.x, from.y, endX, endY, corners[i]);
+      if (age0 === undefined) vertices.push(from.x, from.y, endX, endY, corners[i]);
+      else vertices.push(from.x, from.y, endX, endY, corners[i], age0, age1);
     }
   }
 
-  function buildBeamVertices(pathPoints) {
+  // 5 floats per vertex (start, end, corner), or 7 with the age (0 oldest .. 1 newest along the path) of the segment's
+  // two ends when ageDecay is set. The points are oldest to newest.
+  function buildBeamVertices(pathPoints, ageDecay = false) {
     const points = Array.isArray(pathPoints) ? pathPoints : [];
     const vertices = [];
+    let total = 0;
+    if (ageDecay) {
+      for (let i = 0; i < points.length; i += 1) {
+        if (points[i] && Number.isFinite(points[i].x) && Number.isFinite(points[i].y)) total += 1;
+      }
+    }
+    const den = Math.max(1, total - 1);
     let previous = null;
+    let index = 0;
     for (let i = 0; i < points.length; i += 1) {
       const point = points[i];
       if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
@@ -883,9 +927,11 @@
         continue;
       }
       if (previous) {
-        appendBeamSegment(vertices, previous, point);
+        if (ageDecay) appendBeamSegment(vertices, previous, point, (index - 1) / den, index / den);
+        else appendBeamSegment(vertices, previous, point);
       }
       previous = point;
+      index += 1;
     }
     return vertices;
   }
@@ -976,17 +1022,20 @@
       step = Math.max(0.28, Math.min(denseStep, budgetStep));
     }
     const stampCap = maxDots;
+    let skipFirst = options.skipFirstStamp === true;
     let consumedPoints = 0;
     let realSeen = 0;
     let truncated = false;
     const totalReal = pieces.reduce((n, pts) => n + pts.length, 0);
 
+    // Each stamp also carries its age 0..1 along the path (points are oldest to newest), used to shade the chunk.
+    const ageDen = Math.max(1, totalReal - 1);
     const stamps = [];
-    const pushStamp = (x, y) => {
-      if (stamps.length / 2 >= stampCap) {
+    const pushStamp = (x, y, pointIndex = 0) => {
+      if (stamps.length / 3 >= stampCap) {
         return false;
       }
-      stamps.push(x, y);
+      stamps.push(x, y, Math.max(0, Math.min(1, pointIndex / ageDen)));
       return true;
     };
 
@@ -1003,11 +1052,11 @@
       }
       const stride = Math.max(1, Math.ceil(real.length / Math.max(1, stampCap)));
       for (let i = 0; i < real.length; i += stride) {
-        pushStamp(real[i].x, real[i].y);
+        pushStamp(real[i].x, real[i].y, i);
       }
       if (real.length > 1) {
         const tail = real[real.length - 1];
-        pushStamp(tail.x, tail.y);
+        pushStamp(tail.x, tail.y, real.length - 1);
       }
       consumedPoints = totalReal;
       truncated = false;
@@ -1022,7 +1071,9 @@
           ? Math.max(1, Math.ceil(pts.length / stampCap))
           : 1;
         for (let i = 0; i < pts.length; i += stride) {
-          if (!pushStamp(pts[i].x, pts[i].y)) {
+          const skip = skipFirst && i === 0;
+          skipFirst = false;
+          if (!skip && !pushStamp(pts[i].x, pts[i].y, consumedPoints)) {
             truncated = true;
             break outer;
           }
@@ -1032,7 +1083,9 @@
       }
       if (pts.length === 1) {
         realSeen += 1;
-        if (!pushStamp(pts[0].x, pts[0].y)) {
+        const skip = skipFirst;
+        skipFirst = false;
+        if (!skip && !pushStamp(pts[0].x, pts[0].y, realSeen - 1)) {
           truncated = true;
           break;
         }
@@ -1040,7 +1093,9 @@
         continue;
       }
       realSeen += 1;
-      if (!pushStamp(pts[0].x, pts[0].y)) {
+      const skipHead = skipFirst;
+      skipFirst = false;
+      if (!skipHead && !pushStamp(pts[0].x, pts[0].y, realSeen - 1)) {
         truncated = true;
         break;
       }
@@ -1060,7 +1115,7 @@
         let placed = 0;
         for (let s = 1; s <= n; s += 1) {
           const t = s / n;
-          if (!pushStamp(a.x + dx * t, a.y + dy * t)) {
+          if (!pushStamp(a.x + dx * t, a.y + dy * t, realSeen - 1 + t)) {
             truncated = true;
             break outer;
           }
@@ -1085,14 +1140,18 @@
     void truncated;
     void pairCount;
 
+    // 3 floats per vertex (x, y, corner), or 4 with the stamp's age when options.ageDecay is set.
+    const withAge = options.ageDecay === true;
     const vertices = [];
     const corners = [0, 1, 2, 1, 3, 2];
-    const stampCount = Math.floor(stamps.length / 2);
+    const stampCount = Math.floor(stamps.length / 3);
     for (let i = 0; i < stampCount; i += 1) {
-      const x = stamps[i * 2];
-      const y = stamps[i * 2 + 1];
+      const x = stamps[i * 3];
+      const y = stamps[i * 3 + 1];
+      const age = stamps[i * 3 + 2];
       for (let c = 0; c < corners.length; c += 1) {
-        vertices.push(x, y, corners[c]);
+        if (withAge) vertices.push(x, y, corners[c], age);
+        else vertices.push(x, y, corners[c]);
       }
     }
     return vertices;
@@ -1133,7 +1192,8 @@
     const vertices = Array.isArray(options.vertices)
       ? options.vertices
       : buildBeamVertices(pathPoints);
-    const vertexCount = Math.floor(vertices.length / 5);
+    const vertexStride = options.vertexStride === 7 ? 7 : 5;
+    const vertexCount = Math.floor(vertices.length / vertexStride);
     if (vertexCount <= 0) {
       return 0;
     }
@@ -1173,13 +1233,29 @@
       renderer.segmentScratch.subarray(0, vertices.length),
       gl.STREAM_DRAW,
     );
-    const stride = 5 * 4;
+    const stride = vertexStride * 4;
     gl.enableVertexAttribArray(renderer.beam.aStart);
     gl.vertexAttribPointer(renderer.beam.aStart, 2, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(renderer.beam.aEnd);
     gl.vertexAttribPointer(renderer.beam.aEnd, 2, gl.FLOAT, false, stride, 2 * 4);
     gl.enableVertexAttribArray(renderer.beam.aCorner);
     gl.vertexAttribPointer(renderer.beam.aCorner, 1, gl.FLOAT, false, stride, 4 * 4);
+    if (renderer.beam.aAges >= 0) {
+      if (vertexStride === 7) {
+        gl.enableVertexAttribArray(renderer.beam.aAges);
+        gl.vertexAttribPointer(renderer.beam.aAges, 2, gl.FLOAT, false, stride, 5 * 4);
+      } else {
+        // No ages on these segments: age 1 = no shading.
+        gl.disableVertexAttribArray(renderer.beam.aAges);
+        gl.vertexAttrib2f(renderer.beam.aAges, 1, 1);
+      }
+    }
+    if (renderer.beam.uAgeKeep) {
+      gl.uniform1f(renderer.beam.uAgeKeep, vertexStride === 7 ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.ageKeep, 1))) : 1);
+    }
+    if (renderer.beam.uButt) {
+      gl.uniform2f(renderer.beam.uButt, vertexStride === 7 && options.buttStart ? 1 : 0, vertexStride === 7 && options.buttEnd ? 1 : 0);
+    }
     gl.uniform2f(renderer.beam.uCanvasSize, renderer.width, renderer.height);
     gl.uniform1f(renderer.beam.uRadius, radius);
     gl.uniform1f(renderer.beam.uBrightness, brightness);
@@ -1218,8 +1294,9 @@
     const vertices = Array.isArray(options.vertices)
       ? options.vertices
       : buildDotVertices(pathPoints, options);
-    // 3 floats per vertex.
-    const vertexCount = Math.floor(vertices.length / 3);
+    // 3 floats per vertex (x, y, corner), 4 when the stamps carry their age.
+    const vertexStride = options.vertexStride === 4 ? 4 : 3;
+    const vertexCount = Math.floor(vertices.length / vertexStride);
     if (vertexCount <= 0) {
       return 0;
     }
@@ -1259,11 +1336,24 @@
       renderer.segmentScratch.subarray(0, vertices.length),
       gl.STREAM_DRAW,
     );
-    const stride = 3 * 4;
+    const stride = vertexStride * 4;
     gl.enableVertexAttribArray(renderer.dot.aCenter);
     gl.vertexAttribPointer(renderer.dot.aCenter, 2, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(renderer.dot.aCorner);
     gl.vertexAttribPointer(renderer.dot.aCorner, 1, gl.FLOAT, false, stride, 2 * 4);
+    if (renderer.dot.aAge >= 0) {
+      if (vertexStride === 4) {
+        gl.enableVertexAttribArray(renderer.dot.aAge);
+        gl.vertexAttribPointer(renderer.dot.aAge, 1, gl.FLOAT, false, stride, 3 * 4);
+      } else {
+        // No age on these stamps: age 1 = no shading.
+        gl.disableVertexAttribArray(renderer.dot.aAge);
+        gl.vertexAttrib1f(renderer.dot.aAge, 1);
+      }
+    }
+    if (renderer.dot.uAgeKeep) {
+      gl.uniform1f(renderer.dot.uAgeKeep, vertexStride === 4 ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.ageKeep, 1))) : 1);
+    }
     gl.uniform2f(renderer.dot.uCanvasSize, renderer.width, renderer.height);
     gl.uniform1f(renderer.dot.uRadius, radius);
     gl.uniform1f(renderer.dot.uBrightness, brightness);
@@ -1567,6 +1657,8 @@
     const depositGain = options.depositGain || 0;
     const maskCanvas = options.maskCanvas || null;
     const { gl } = renderer;
+    // No decay step (early returns): nothing to shade by.
+    renderer.lastAgeKeep = 1;
     const fade = fadeAmountFromTrail(trail);
     const keep = Math.max(0, 1 - fade);
     const keepSlow = ghostKeepAmount(ghostAmt, keep);
@@ -1622,7 +1714,10 @@
       gl.uniform1f(renderer.step.uKeepSlow, keepSlow);
     }
     if (renderer.step.uFrames) {
-      gl.uniform1f(renderer.step.uFrames, global.PhosphorResidual.stepFrames(renderer));
+      const stepFrames = global.PhosphorResidual.stepFrames(renderer);
+      gl.uniform1f(renderer.step.uFrames, stepFrames);
+      // The hot decay over this step: the stamps deposited right after are shaded by it (see DOT_FRAG, uAgeKeep).
+      renderer.lastAgeKeep = Math.pow(Math.max(0, keep), stepFrames);
     }
     gl.uniform1f(renderer.step.uGain, useMask ? Math.max(0, Math.min(1.5, depositGain)) : 0);
     gl.uniform1f(renderer.step.uUseMask, useMask);
@@ -1705,11 +1800,14 @@
             || options.verticesOnly === true
             || options.samplesOnly === true,
           coverLength: options.coverLength === true,
+          ageDecay: options.ageDecay === true,
+          // The first point is last frame's last point (the bridge): it was stamped then; stamping it again adds up.
+          skipFirstStamp: options.accumulate === true && options.bridged === true,
         });
         renderer.lastPathStats = buildDotVertices.lastStats || null;
       }
     } else if (!Array.isArray(depositVertices) || depositVertices.length < 5) {
-      depositVertices = buildBeamVertices(pathPoints);
+      depositVertices = buildBeamVertices(pathPoints, options.ageDecay === true);
       const total = Array.isArray(pathPoints)
         ? pathPoints.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)).length
         : 0;
@@ -1742,6 +1840,8 @@
       const count = dotsMode
         ? depositDots(renderer, {
           vertices: depositVertices,
+          vertexStride: options.ageDecay === true && !Array.isArray(vertices) ? 4 : 3,
+          ageKeep: renderer.lastAgeKeep,
           radius,
           brightness,
           blur,
@@ -1754,6 +1854,10 @@
         })
         : depositBeamSegments(renderer, {
           vertices: depositVertices,
+          vertexStride: options.ageDecay === true && !Array.isArray(vertices) ? 7 : 5,
+          ageKeep: renderer.lastAgeKeep,
+          buttStart: options.accumulate === true && options.bridged === true,
+          buttEnd: options.accumulate === true,
           radius,
           brightness,
           blur,

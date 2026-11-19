@@ -475,14 +475,14 @@ function nodeGraphGlGraphRebuildChrome() {
       jacks.push({
         key: `pill:${id}:${pill.io}`, id, port: "__pill", io: pill.io, kind: "pill", signal: false,
         x: pill.x, y: pill.y, r: radius, square: false, rail: false, inwardRight: pill.io !== "output",
-        inlet: true, lit: true, pill: true, rgba: [0.45, 0.62, 1, 1],
+        inlet: true, lit: Boolean(pill.connected), pill: true, rgba: [0.45, 0.62, 1, 1],
       });
     };
     const sides = nodeGraphGlGraphIoPills(id);
     if (sides) {
       for (const io of ["input", "output"]) {
         const side = sides[io];
-        if (side) pushPill({ id, io, x: side.x, y: side.y, r: radius, count: side.count });
+        if (side) pushPill({ id, io, x: side.x, y: side.y, r: radius, count: side.count, connected: side.connected });
       }
     }
     const readouts = el.querySelectorAll(".node-slider-readout");
@@ -1253,7 +1253,12 @@ function nodeGraphGlGraphIoPills(id) {
       const ports = geo.ports.filter((p) => p.visible !== false && p.io === io).sort((a, b) => a.y - b.y);
       if (!ports.length) continue;
       result = result || {};
-      result[io] = { x: ports[0].x, y: shellBox.y + pitch / 2, count: ports.length };
+      // Lit (its dot shows) when a jack on this side has a cable.
+      // Looked up on this side's own column: a module can have an input and an output of the same name.
+      const connected = ports.some((p) => Boolean(
+        el?.querySelector(`.node-io-column.${io} .node-port[data-port="${CSS.escape(String(p.port))}"]`)?.classList.contains("connected-port"),
+      ));
+      result[io] = { x: ports[0].x, y: shellBox.y + pitch / 2, count: ports.length, connected };
     }
   }
   cache.set(key, result);
@@ -1289,9 +1294,13 @@ function nodeGraphGlGraphIoExpandedRegion(id, io) {
   };
 }
 
-/** The top layer: every jack of an open list with its full name, over everything (never behind a module). */
-function nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, zoom) {
-  const regions = nodeGraphGlGraphIoActiveRegions();
+/**
+ * Every jack of an open list with its full name, drawn with its module's group: modules in front of this one cover
+ * it, modules behind it do not. `plates` = the plates of the group being drawn.
+ */
+function nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, zoom, plates) {
+  const ids = new Set((plates || []).map((p) => p.id));
+  const regions = nodeGraphGlGraphIoActiveRegions().filter((reg) => ids.has(reg.id));
   if (!regions.length) return;
   const layer = nodeGraphGlLinesLayer(batch);
   if (!layer) return;
@@ -1350,7 +1359,7 @@ function nodeGraphGlGraphDrawPill(batch, pill, toX, toY, zoom) {
   const cy = toY(pill.y);
   const r = pill.r * zoom;
   const accent = [0.45, 0.62, 1, 1];
-  nodeGraphGlLinesDot(batch, cx, cy, r * 0.42, 0.75, accent);
+  if (pill.connected) nodeGraphGlLinesDot(batch, cx, cy, r * 0.42, 0.75, accent);
   if (typeof nodeGraphGlLinesText === "function") {
     nodeGraphGlLinesText(batch, String(pill.count), cx + side * (r + 3 * zoom), cy, nodeGraphGlGraphTextOpts({
       px: Math.max(1, 11 * zoom),
@@ -1986,6 +1995,198 @@ function nodeGraphGlGraphCubic(ax, ay, bx, by, tolerance, departSign = 1) {
   return nodeGraphGlGraphPrune(pts, tolerance);
 }
 
+/**
+ * Cable auto-routing for modules in a horizontal row. A cable whose straight path would pass behind another module of
+ * its row leaves its jack, rises to a lane above the row, runs across, drops into the gap before its target and enters
+ * the jack. Lanes and drops are spaced apart so cables from one module to several in the row stay separate:
+ *   - a longer cable takes a higher lane (nested, so cables from one source do not cross),
+ *   - cables leaving one module turn up at staggered x (a lower jack turns up farther right),
+ *   - cables dropping into one gap are staggered (a lower jack drops farther left).
+ * Returns Map("s<i>" signal / "m<i>" modulation cable -> Float32Array of points) for the cables that need a route; the rest stay curves.
+ */
+const NODE_GRAPH_ROUTE_LANE0 = 9;     // lane 0 above the row's top edge (world px)
+const NODE_GRAPH_ROUTE_LANE_PITCH = 6; // between lanes
+const NODE_GRAPH_ROUTE_PITCH = 3.5;    // between parallel verticals in a gap
+const NODE_GRAPH_ROUTE_RADIUS = 5;     // corner radius (square-ish)
+
+function nodeGraphGlGraphRoundedPolyline(pts, radius) {
+  const out = [pts[0].x, pts[0].y];
+  for (let i = 1; i < pts.length - 1; i += 1) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const c = pts[i + 1];
+    const l1 = Math.hypot(b.x - a.x, b.y - a.y);
+    const l2 = Math.hypot(c.x - b.x, c.y - b.y);
+    const r = Math.min(radius, l1 / 2, l2 / 2);
+    if (r < 0.5) {
+      out.push(b.x, b.y);
+      continue;
+    }
+    const sx = b.x + ((a.x - b.x) / l1) * r;
+    const sy = b.y + ((a.y - b.y) / l1) * r;
+    const ex = b.x + ((c.x - b.x) / l2) * r;
+    const ey = b.y + ((c.y - b.y) / l2) * r;
+    const steps = 8;
+    for (let s = 0; s <= steps; s += 1) {
+      const u = s / steps;
+      const w0 = (1 - u) * (1 - u);
+      const w1 = 2 * (1 - u) * u;
+      const w2 = u * u;
+      out.push(w0 * sx + w1 * b.x + w2 * ex, w0 * sy + w1 * b.y + w2 * ey);
+    }
+  }
+  out.push(pts[pts.length - 1].x, pts[pts.length - 1].y);
+  return new Float32Array(out);
+}
+
+/** Whether the plain curve between two jacks would run into a module (so the cable needs a route instead). */
+function nodeGraphGlGraphCurveClips(plates, ax, ay, bx, by) {
+  const pts = nodeGraphGlGraphCubic(ax, ay, bx, by, 0.5, 1);
+  for (let i = 0; i + 1 < pts.length; i += 2) {
+    const x = pts[i];
+    const y = pts[i + 1];
+    for (let k = 0; k < plates.length; k += 1) {
+      const q = plates[k];
+      if (!q.textBox && x > q.x + 2 && x < q.x + q.w - 2 && y > q.y + 2 && y < q.y + q.h - 2) return true;
+    }
+  }
+  return false;
+}
+
+function nodeGraphGlGraphAutoRoutes(items) {
+  const routes = new Map();
+  const plates = nodeGraphGlGraphState.plates || [];
+  if (!items.length || plates.length < 2) return routes;
+  const gapRuns = [];
+  const gridW = typeof nodeGraphGridWidth === "function" ? Number(nodeGraphGridWidth()) || 28 : 28;
+  const plateOf = (id) => plates.find((q) => q.id === id) || null;
+  const overlapsY = (q, y0, y1) => q.y < y1 && q.y + q.h > y0;
+  const cands = [];
+  for (const it of items) {
+    const { from, to } = it;
+    const ax = Number(from.x);
+    const ay = Number(from.y);
+    const bx = Number(to.x);
+    const by = Number(to.y);
+    const src = plateOf(it.src);
+    const dst = plateOf(it.dst);
+    if (!src || !dst || src === dst) continue;
+    // Modules side by side with no grid cell between them (0 grid spaces apart) always use a routed cable: a straight
+    // run down the gap, squared off. Otherwise a curve is kept wherever it has room, and only a cable whose curve would
+    // run into a module gets a route.
+    const srcEdge = src.x + src.w;
+    const gapW = dst.x - srcEdge;
+    const adjacent = gapW >= -2 && gapW < gridW;
+    if (!adjacent && !nodeGraphGlGraphCurveClips(plates, ax, ay, bx, by)) continue;
+    if (gapW >= -2 && gapW <= 60) {
+      const gx0 = srcEdge + gapW / 2;
+      const ymin = Math.min(ay, by);
+      const ymax = Math.max(ay, by);
+      const blocked = plates.some((q) => !q.textBox && gx0 > q.x + 1 && gx0 < q.x + q.w - 1 && q.y < ymax && q.y + q.h > ymin);
+      if (!blocked) {
+        gapRuns.push({ it, ax, ay, bx, by, src, dst, srcEdge, gapW, dir: by >= ay ? 1 : -1 });
+        continue;
+      }
+    }
+    const forward = bx - ax > 24;
+    let top;
+    let chan = null;
+    if (forward) {
+      // The modules the straight path would pass behind: wholly between the two ends, in the cable's height band.
+      const y0 = Math.min(ay, by) - 8;
+      const y1 = Math.max(ay, by) + 8;
+      const between = plates.filter((q) => q !== src && q !== dst && !q.textBox
+        && q.x >= ax - 1 && q.x + q.w <= bx + 1 && overlapsY(q, y0, y1));
+      if (!between.length) continue;
+      top = Math.min(src.y, dst.y, ...between.map((q) => q.y));
+    } else {
+      // The target's jack is to the left of the source's: out to the right, along the gap between the two modules (or
+      // above the row when they overlap vertically), back past the target's wall, then into the jack.
+      top = Math.min(src.y, dst.y);
+      if (dst.y >= src.y + src.h - 1) {
+        const g = dst.y - (src.y + src.h);
+        if (g < 8) continue;
+        chan = src.y + src.h + g / 2;
+      } else if (dst.y + dst.h <= src.y + 1) {
+        const g = src.y - (dst.y + dst.h);
+        if (g < 8) continue;
+        chan = dst.y + dst.h + g / 2;
+      } else {
+        chan = top - NODE_GRAPH_ROUTE_LANE0;
+      }
+    }
+    // The gaps: to the right of the source and to the left of the destination.
+    const rightOfSrc = plates.filter((q) => q !== src && q.x >= src.x + src.w - 1 && overlapsY(q, src.y, src.y + src.h));
+    const srcRight = src.x + src.w;
+    const gapSrc = rightOfSrc.length ? Math.min(...rightOfSrc.map((q) => q.x)) - srcRight : 16;
+    const leftOfDst = plates.filter((q) => q !== dst && q.x + q.w <= dst.x + 1 && overlapsY(q, dst.y, dst.y + dst.h));
+    const gapDstLeft = leftOfDst.length ? Math.max(...leftOfDst.map((q) => q.x + q.w)) : dst.x - 16;
+    cands.push({
+      it, ax, ay, bx, by, src, dst, top, srcRight, gapSrc, gapDstLeft, span: bx - ax, rowKey: Math.round(top / 4),
+      forward, chan,
+    });
+  }
+  // Gap runs: cables into one module share a vertical; different modules in one gap are staggered, a farther target
+  // to the left, so a cable never crosses another one's vertical.
+  const gaps = new Map();
+  for (const g of gapRuns) {
+    const key = `${Math.round(g.srcEdge)}|${Math.round(g.dst.x)}|${g.dir}`;
+    (gaps.get(key) || gaps.set(key, []).get(key)).push(g);
+  }
+  for (const list of gaps.values()) {
+    const first = list[0];
+    const dsts = [...new Map(list.map((g) => [g.dst.id, g.by])).entries()]
+      .sort((p, q) => first.dir * (q[1] - p[1]))
+      .map((e) => e[0]);
+    const pitch = Math.min(NODE_GRAPH_ROUTE_PITCH, Math.max(1.5, (Math.max(first.gapW, 6) - 4) / Math.max(1, dsts.length)));
+    for (const g of list) {
+      const gx = g.srcEdge + g.gapW / 2 + (dsts.indexOf(g.dst.id) - (dsts.length - 1) / 2) * pitch;
+      routes.set(g.it.key, nodeGraphGlGraphRoundedPolyline([
+        { x: g.ax, y: g.ay }, { x: gx, y: g.ay }, { x: gx, y: g.by }, { x: g.bx, y: g.by },
+      ], NODE_GRAPH_ROUTE_RADIUS));
+    }
+  }
+  if (!cands.length) return routes;
+  // Cables may overlap when they go to the same module, so they are bundled by destination module.
+  // Lanes: per row, one lane per destination module; a farther destination takes a higher lane (nested).
+  const rows = new Map();
+  for (const c of cands) {
+    if (!c.forward) c.lane = c.chan;
+    else (rows.get(c.rowKey) || rows.set(c.rowKey, []).get(c.rowKey)).push(c);
+  }
+  for (const list of rows.values()) {
+    const dsts = [...new Map(list.map((c) => [c.dst.id, c.dst.x])).entries()].sort((p, q) => p[1] - q[1]).map((e) => e[0]);
+    for (const c of list) c.lane = c.top - NODE_GRAPH_ROUTE_LANE0 - dsts.indexOf(c.dst.id) * NODE_GRAPH_ROUTE_LANE_PITCH;
+  }
+  // Turn-up x per source module: one per (source, destination) bundle; a bundle from lower jacks turns up farther right.
+  const bySrc = new Map();
+  for (const c of cands) (bySrc.get(c.src.id) || bySrc.set(c.src.id, []).get(c.src.id)).push(c);
+  for (const list of bySrc.values()) {
+    const bundles = new Map();
+    for (const c of list) (bundles.get(c.dst.id) || bundles.set(c.dst.id, []).get(c.dst.id)).push(c);
+    const order = [...bundles.entries()]
+      .map(([id, cs]) => ({ id, cs, y: cs.reduce((s, c) => s + c.ay, 0) / cs.length }))
+      .sort((p, q) => p.y - q.y);
+    const gap = list[0].gapSrc;
+    const pitch = Math.min(NODE_GRAPH_ROUTE_PITCH, Math.max(1.5, (gap - 8) / Math.max(1, order.length)));
+    order.forEach((bundle, r) => {
+      for (const c of bundle.cs) {
+        c.xs = Math.max(c.ax + 2, Math.min(c.srcRight + gap - 3, c.ax + 3 + r * pitch));
+      }
+    });
+  }
+  // Drop x: one per destination gap (cables into one module share it).
+  for (const c of cands) c.xd = c.dst.x - Math.min((c.dst.x - c.gapDstLeft) / 2, 14);
+  for (const c of cands) {
+    if (c.forward ? !(c.xd - c.xs > 4) : !(c.xs - c.xd > 4)) continue;
+    routes.set(c.it.key, nodeGraphGlGraphRoundedPolyline([
+      { x: c.ax, y: c.ay }, { x: c.xs, y: c.ay }, { x: c.xs, y: c.lane },
+      { x: c.xd, y: c.lane }, { x: c.xd, y: c.by }, { x: c.bx, y: c.by },
+    ], NODE_GRAPH_ROUTE_RADIUS));
+  }
+  return routes;
+}
+
 function nodeGraphGlGraphShape(from, to, wire, tolerance) {
   const ax = Number(from.x);
   const ay = Number(from.y);
@@ -2116,7 +2317,8 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
       ? normalizeNodeGraphWireType(wire?.wireType)
       : "ribbon",
     index: Number.isInteger(index) ? index : -1,
-    xy: nodeGraphGlGraphShape(from, to, wire, tolerance),
+    xy: ((kind === "signal" || kind === "modulation") && nodeGraphGlGraphState.autoRoutes?.get((kind === "signal" ? "s" : "m") + index))
+      || nodeGraphGlGraphShape(from, to, wire, tolerance),
     // A param wire (an end on a rail IO box) has its own width and a tiny
     // round end dot where it meets the box.
     param: railFrom === true || railTo === true,
@@ -2198,6 +2400,27 @@ function nodeGraphGlGraphRebuild(options = {}) {
         : [],
     );
     const signalWires = nodeGraphMvp.connections || [];
+    // Cables that would pass behind a module of their row take a route over the row (see nodeGraphGlGraphAutoRoutes).
+    const routeItems = [];
+    for (let i = 0; i < signalWires.length; i += 1) {
+      const c = signalWires[i];
+      if (hiddenMovingWires.has(`signal:${i}`) || c.wireType === "trace") continue;
+      if (typeof nodeGraphSignalWireDestinationIsRenderable === "function" && !nodeGraphSignalWireDestinationIsRenderable(c)) continue;
+      const rf = nodeGraphGlGraphIoPillPoint(c.sourceNode, c.sourcePort, "output") || nodeGraphPortCenter(c.sourceNode, c.sourcePort, "output");
+      const rt = nodeGraphGlGraphIoPillPoint(c.destinationNode, c.destinationPort, "input") || nodeGraphPortCenter(c.destinationNode, c.destinationPort, "input");
+      if (rf && rt) routeItems.push({ key: `s${i}`, from: rf, to: rt, src: String(c.sourceNode), dst: String(c.destinationNode) });
+    }
+    // Modulation cables route the same way, to their parameter jack.
+    const routeMods = nodeGraphMvp.modulations || [];
+    for (let i = 0; i < routeMods.length; i += 1) {
+      const m = routeMods[i];
+      if (hiddenMovingWires.has(`modulation:${i}`) || m.wireType === "trace") continue;
+      if (typeof nodeGraphModulationWireDestinationIsRenderable === "function" && !nodeGraphModulationWireDestinationIsRenderable(m)) continue;
+      const rf = nodeGraphGlGraphIoPillPoint(m.sourceNode, m.sourcePort, "output") || nodeGraphPortCenter(m.sourceNode, m.sourcePort, "output");
+      const rt = typeof nodeGraphModulationPortCenter === "function" ? nodeGraphModulationPortCenter(m.destinationNode, m.destinationParam) : null;
+      if (rf && rt) routeItems.push({ key: `m${i}`, from: rf, to: rt, src: String(m.sourceNode), dst: String(m.destinationNode) });
+    }
+    nodeGraphGlGraphState.autoRoutes = nodeGraphGlGraphAutoRoutes(routeItems);
     for (let i = 0; i < signalWires.length; i += 1) {
       if (hiddenMovingWires.has(`signal:${i}`)) {
         continue;
@@ -2212,7 +2435,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
       const to = nodeGraphGlGraphIoPillPoint(connection.destinationNode, connection.destinationPort, "input")
         || nodeGraphPortCenter(connection.destinationNode, connection.destinationPort, "input");
       const fromColor = colorOf(connection.sourceNode, connection.sourcePort, "output");
-      if (!from || !to) {
+      if (!from || !to || nodeGraphWiresHidden?.()) {
         // One end's jack is hidden: no cable, dots on the visible jacks only.
         nodeGraphGlGraphPushWireJackDots(wires, colorOf(connection.destinationNode, connection.destinationPort, "input") || fromColor, [
           { at: from, el: nodeGraphGlGraphWireJackEl(connection.sourceNode, connection.sourcePort, "output"), square: square(connection.sourceNode, connection.sourcePort, "output"), rail: rail(connection.sourceNode, connection.sourcePort), node: connection.sourceNode },
@@ -2249,7 +2472,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
         ? nodeGraphModulationPortCenter(modulation.destinationNode, modulation.destinationParam)
         : null;
       const fromColor = colorOf(modulation.sourceNode, modulation.sourcePort, "output");
-      if (!from || !to) {
+      if (!from || !to || nodeGraphWiresHidden?.()) {
         // Target param row hidden (sliders hidden or the param hidden) or the
         // outlet hidden: no cable, dots on the visible jacks only.
         nodeGraphGlGraphPushWireJackDots(wires, colorOf(modulation.destinationNode, modulation.destinationParam, "modulation") || fromColor, [
@@ -3552,11 +3775,11 @@ function nodeGraphGlGraphPresent(options = {}) {
         nodeGraphGlGraphDrawRoundShapes(nodeGraphGlLinesLayer(batch), toX, toY, zoom, Boolean(frameCamera), shapes);
       }
       nodeGraphGlGraphDrawVeils(batch, group.plates, toX, toY, layoutZoom);
+      nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, layoutZoom, group.plates);
     }
   } finally {
     nodeGraphGlGraphState.chrome = chromeAll;
   }
-  nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, layoutZoom);
   for (let i = 0; i < nodeGraphGlGraphState.plates.length; i += 1) {
     const plate = nodeGraphGlGraphState.plates[i];
     if (!plate.onTop) continue;
@@ -4212,10 +4435,11 @@ function nodeGraphGlHitCovered(id, x, y) {
   return false;
 }
 
-/** A jack of the expanded edge (top layer): hit before anything, even where another module covers it. */
+/** A jack of an open list: hit before the module's own jacks, but not where a module in front covers it. */
 function nodeGraphGlHitExpandedJack(x, y) {
   for (const reg of nodeGraphGlGraphIoActiveRegions()) {
     if (x < reg.x0 || x > reg.x1 || y < reg.y0 || y > reg.y1) continue;
+    if (nodeGraphGlHitCovered(reg.id, x, y)) continue;
     let best = null;
     let bestDist = Infinity;
     for (const p of reg.ports) {
