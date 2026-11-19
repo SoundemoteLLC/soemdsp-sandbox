@@ -1077,17 +1077,30 @@ function nodeGraphGlGraphDrawStrokeGlow(layer, plates, toX, toY, zoom, camera, b
  * Jack cutouts through a module's display picture, in world units: the same hole the plate shader cuts
  * (radius minus the rim width, inner half only), so the display, plate and stroke are cut by one shape.
  */
-function nodeGraphGlGraphJackHoles(jacks, plateStyle, cameraZoom, device) {
+function nodeGraphGlGraphJackHoles(jacks, plate, plateStyle, camera, device) {
   const strokeCss = Number.parseFloat(plateStyle.getPropertyValue("--node-module-idle-stroke-width")) || 1;
-  const k = Math.max(0.0001, cameraZoom * device);
-  const rimWorld = Math.max(1, Math.floor(strokeCss * k + 0.5)) / k;
+  const zoom = camera?.zoom > 0 ? camera.zoom : 1;
+  const k = Math.max(0.0001, zoom * device);
+  const rimPx = Math.max(1, Math.floor(strokeCss * k + 0.5));
+  const rimWorld = rimPx / k;
+  // The plate's walls snapped to whole screen pixels, as the plate shader does; a wall jack's centre is the
+  // snapped wall plus one stroke width outward.
+  const camX = camera?.x || 0;
+  const wallMinPx = plate ? Math.ceil((plate.x - camX) * k - 0.5) : 0;
+  const wallMaxPx = plate ? Math.max(Math.ceil((plate.x + plate.w - camX) * k - 0.5), wallMinPx + 1) : 0;
   const holes = [];
   for (let i = 0; i < jacks.length && holes.length < 16; i += 1) {
     const jack = jacks[i];
     if (jack.rail) continue;
     const r = Math.max(0, jack.r - rimWorld);
     if (!(r > 0)) continue;
-    holes.push({ x: jack.x, y: jack.y, r: jack.square ? -r : r, side: jack.io === "output" ? -1 : 1 });
+    const side = jack.io === "output" ? -1 : 1;
+    let x = jack.x;
+    if (plate) {
+      const wallPx = side > 0 ? wallMinPx : wallMaxPx;
+      if (Math.abs((x - camX) * k - wallPx) < (jack.r * k + rimPx + 1)) x = camX + (wallPx - side * rimPx) / k;
+    }
+    holes.push({ x, y: jack.y, r: jack.square ? -r : r, side });
   }
   return holes;
 }
@@ -3184,7 +3197,13 @@ function nodeGraphGlGraphPresent(options = {}) {
           });
           if (picture) {
             picture.pin = pin;
-            picture.holes = nodeGraphGlGraphJackHoles(chromeById?.get(face.id)?.jacks || [], plateStyle, frameCamera?.zoom || layoutZoom, batch.scale || 1);
+            picture.holes = nodeGraphGlGraphJackHoles(
+              chromeById?.get(face.id)?.jacks || [],
+              group.plates.find((p) => p.id === face.id) || null,
+              plateStyle,
+              frameCamera || { x: 0, y: 0, zoom: layoutZoom },
+              batch.scale || 1,
+            );
             pictures.push(picture);
           }
         }

@@ -689,6 +689,11 @@ void main() {
     }
     float square = radius < 0.0 ? 1.0 : 0.0;
     radius = abs(radius);
+    // A wall jack sits on the outer edge of the module stroke: its centre is the plate edge plus one stroke
+    // width outward. Taken from the same snapped plate edge as the wall, so it never jitters against it.
+    float wallSide = jack.x < c.x ? 1.0 : -1.0;
+    float wallX = wallSide > 0.0 ? plateMin.x : plateMax.x;
+    if (abs(jack.x - wallX) < radius + jackRimW + 1.0) jack.x = wallX - wallSide * jackRimW;
     vec2 dv = px - jack;
     float dist = square > 0.5 ? max(abs(dv.x), abs(dv.y)) : length(dv);
     float side = jack.x < c.x ? 1.0 : -1.0;
