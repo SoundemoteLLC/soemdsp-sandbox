@@ -44,6 +44,9 @@ function nodeGraphAberrationEnsureCanvas(face) {
 }
 
 function nodeGraphAberrationCircuitLive() {
+  // While Screen Space In / Out are in the patch the circuit view is the picture being worked on, so a screen effect keeps working with the
+  // engine stopped (it would otherwise sit on a wiped black frame and the screen would go black).
+  if (typeof nodeGraphScreenFxState === "object" && nodeGraphScreenFxState?.active) return true;
   try {
     if (typeof nodeGraphModuleScopeEnginePaused === "function" && nodeGraphModuleScopeEnginePaused()) {
       return false;

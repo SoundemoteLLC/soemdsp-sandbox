@@ -341,8 +341,8 @@ function nodeGraphScreenFxRunShader(kit, id, script, w, h, now) {
 }
 
 /**
- * True when the picture chain behind this node is fed all the way back: every effect on the way has its 📺 in connected (to a
- * source: Screen Space In, a Vector RGB, ...). An effect with nothing plugged in only makes black, so Screen Space Out ignores
+ * True when the picture chain behind this node is fed all the way back: every effect on the way has its 📺 in connected to a
+ * live source (Screen Space In, a Vector RGB, ...; not a disabled one). An effect with nothing plugged in only makes black, so Screen Space Out ignores
  * such a chain and the plain circuit shows (the shaders are off).
  */
 function nodeGraphScreenFxChainFed(nodeId) {
@@ -355,7 +355,10 @@ function nodeGraphScreenFxChainFed(nodeId) {
     if (seen.has(id)) return true; // a feedback loop: not a missing source
     seen.add(id);
     const def = nodeGraphModuleDefinitions?.[typeOf.get(id)];
-    if (!def || !Array.isArray(def.inputs) || !def.inputs.includes("rgba")) return true; // a source
+    if (!def || !Array.isArray(def.inputs) || !def.inputs.includes("rgba")) {
+      // A source. A disabled one (Screen Space In bypassed) makes nothing new: its last picture would just sit there, frozen.
+      return !(typeof nodeGraphNodeIsBypassed === "function" && nodeGraphNodeIsBypassed(id));
+    }
     const feeds = table.inlets.get(`${id}\u0000rgba`);
     if (!feeds || !feeds.length) return false;
     return feeds.some((feed) => fed(feed));
