@@ -86,6 +86,11 @@ function drawNodeGraphScreenBendFaceItem(_renderer, item) {
       round: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "round", 0.4), 0, 1),
       vignette: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vignette", 0.35), 0, 1),
       glare: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glare", 0.15), 0, 1),
+      glareX: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareX", -0.42), -1, 1),
+      glareY: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareY", 0.5), -1, 1),
+      glareSize: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareSize", 0.5), 0, 1),
+      vigReach: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigReach", 0.4), 0, 1),
+      vigCurve: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigCurve", 0.3), 0, 1),
       picture,
     });
   }

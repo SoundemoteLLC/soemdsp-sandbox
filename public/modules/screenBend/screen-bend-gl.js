@@ -1,4 +1,4 @@
-const NODE_GRAPH_SCREEN_BEND_GL_REV = 2;
+const NODE_GRAPH_SCREEN_BEND_GL_REV = 3;
 const NODE_GRAPH_SCREEN_BEND_MAX = 512;
 
 (function initNodeGraphScreenBendGl(global) {
@@ -33,6 +33,10 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
     uniform float uRound;
     uniform float uVignette;
     uniform float uGlare;
+    uniform vec2 uGlarePos;
+    uniform float uGlareSize;
+    uniform float uVigReach;
+    uniform float uVigCurve;
 
     void main() {
       vec2 p = vUv * 2.0 - 1.0;
@@ -53,11 +57,14 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
       vec2 a = pow(abs(p), vec2(n));
       float d = pow(a.x + a.y, 1.0 / n);
       float mask = 1.0 - smoothstep(0.985, 1.0, d);
-      // Vignette: the edges of the glass fall away from the middle.
-      col *= 1.0 - clamp(uVignette, 0.0, 1.0) * smoothstep(0.3, 1.15, length(p));
-      // Glare: a soft window-like reflection up in the corner, plus a faint sheen along the rim.
-      vec2 g = (p - vec2(-0.42, 0.5)) * vec2(1.1, 1.7);
-      float blob = exp(-dot(g, g) * 2.6);
+      // Vignette: the edges of the glass fall away from the middle. Reach is how far in the dark starts, Curve is how sudden the
+      // fall is (soft gradient ... a hard shadow edge); at full Vignette the outside goes fully black.
+      float vEdge = mix(1.3, 0.15, clamp(uVigReach, 0.0, 1.0));
+      float vSoft = mix(0.9, 0.02, pow(clamp(uVigCurve, 0.0, 1.0), 0.7));
+      col *= 1.0 - clamp(uVignette, 0.0, 1.0) * smoothstep(vEdge - vSoft, vEdge + vSoft, length(p));
+      // Glare: a soft window-like reflection where Glare X / Y put it (size from Glare Size), plus a faint sheen along the rim.
+      vec2 g = (p - uGlarePos) * vec2(1.1, 1.7);
+      float blob = exp(-dot(g, g) * mix(14.0, 1.2, clamp(uGlareSize, 0.0, 1.0)));
       float rim = smoothstep(0.84, 0.985, d);
       col += clamp(uGlare, 0.0, 1.0) * (0.32 * blob + 0.07 * rim) * vec3(1.0);
       gl_FragColor = vec4(col * mask, 1.0);
@@ -124,6 +131,10 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
       uRound: gl.getUniformLocation(program, "uRound"),
       uVignette: gl.getUniformLocation(program, "uVignette"),
       uGlare: gl.getUniformLocation(program, "uGlare"),
+      uGlarePos: gl.getUniformLocation(program, "uGlarePos"),
+      uGlareSize: gl.getUniformLocation(program, "uGlareSize"),
+      uVigReach: gl.getUniformLocation(program, "uVigReach"),
+      uVigCurve: gl.getUniformLocation(program, "uVigCurve"),
     };
     return sharedDevice;
   }
@@ -228,6 +239,10 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 512;
     gl.uniform1f(device.uRound, Number(options.round) || 0);
     gl.uniform1f(device.uVignette, Number(options.vignette) || 0);
     gl.uniform1f(device.uGlare, Number(options.glare) || 0);
+    gl.uniform2f(device.uGlarePos, Number(options.glareX) || 0, Number(options.glareY) || 0);
+    gl.uniform1f(device.uGlareSize, Number(options.glareSize) || 0);
+    gl.uniform1f(device.uVigReach, Number(options.vigReach) || 0);
+    gl.uniform1f(device.uVigCurve, Number(options.vigCurve) || 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
