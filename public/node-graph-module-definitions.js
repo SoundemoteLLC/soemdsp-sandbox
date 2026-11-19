@@ -212,6 +212,7 @@ const nodeGraphNodeLabels = Object.freeze({
   spectralFreeze: "Spectral Freeze",
   spectralDelay: "Spectral Delay",
   materialResonator: "Material Resonator",
+  dispersion: "Dispersion",
   spectralSmear: "Spectral Smear",
   earlyReflectionConvolution: "Early Reflection Convolution",
   stftGate: "STFT Gate",
@@ -7543,6 +7544,115 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "%",
         "tooltip": "Delayed dry stereo versus reflected sound. Direct path is excluded from the IR; dry and wet share 256 samples of convolution buffering latency. Ready becomes high after the first kernel is built; Error reports an invalid or over-capacity request."
+      }
+    ],
+  },
+  dispersion: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 14,
+    inputs: ["In", "Left", "Right", "f"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In", "ƒ": "f" },
+    outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
+    bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["direction", "Direction", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["frequency", "Frequency"], ["stages", "Stages"]], h: 40 },
+      { kind: "cells", params: [["spreadOct", "Frequency Spread"], ["curve", "Distribution Curve"]], h: 40 },
+      { kind: "cells", params: [["stereoOct", "Stereo Offset"], ["mix", "Mix"]], h: 40 },
+    ],
+    parameters:
+    [
+      {
+        "key": "frequency",
+        "label": "Frequency",
+        "kind": "frequency",
+        "defaultValue": "300",
+        "min": "10",
+        "mid": "300",
+        "max": "10000",
+        "step": "any",
+        "unit": "Hz",
+        "nonlinearSlider": true,
+        "tooltip": "Geometric center of allpass corner frequencies in Hz. Wired f replaces the knob, including zero; negative uses magnitude. Low Late concentrates delay toward DC; High Late mirrors the response toward Nyquist, so the corner is measured from that edge. Not a narrow resonant peak or a pitch detector."
+      },
+      {
+        "key": "stages",
+        "label": "Stages",
+        "defaultValue": "32",
+        "min": "0",
+        "mid": "32",
+        "max": "128",
+        "step": "1",
+        "linearSmoothing": false,
+        "tooltip": "Number of normalized first-order allpass lattice stages, 0..128. Zero is a wire. More stages increase phase rotation and group delay, not gain. Count edits crossfade output taps over 50 ms; only removed stages are cleared after the fade. Fixed-count wet processing is allpass; tap fades and dry/wet mixes can comb-filter."
+      },
+      {
+        "key": "spreadOct",
+        "label": "Frequency Spread",
+        "defaultValue": "2",
+        "min": "0",
+        "mid": "2",
+        "max": "8",
+        "step": "any",
+        "unit": "oct",
+        "tooltip": "Total octave span of stage corner frequencies around Frequency. Zero tunes every stage alike; larger spans distribute frequency-dependent delay more broadly. No delay lines, FFT windows or IR samples."
+      },
+      {
+        "key": "curve",
+        "label": "Distribution Curve",
+        "defaultValue": "0",
+        "min": "-1",
+        "mid": "0",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Rational contour for distributing stage corners across Frequency Spread. Zero distributes uniformly in octaves; positive crowds corners toward the high end, negative toward the low end. Changes ramp geometry over 10 ms."
+      },
+      {
+        "key": "direction",
+        "label": "Direction",
+        "kind": "choice",
+        "choices": [
+          "Low Late",
+          "High Late"
+        ],
+        "choiceKeys": [
+          "lowLate",
+          "highLate"
+        ],
+        "choiceIds": [
+          0,
+          1
+        ],
+        "defaultValue": "lowLate",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "1",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "Low Late delays low frequencies more; High Late reflects the allpass coefficients so delay concentrates toward Nyquist. Does not reverse recorded audio or introduce negative delay. Direction changes ramp coefficients over 10 ms through valid lattice rotations."
+      },
+      {
+        "key": "stereoOct",
+        "label": "Stereo Offset",
+        "defaultValue": "0",
+        "min": "-2",
+        "mid": "0",
+        "max": "2",
+        "step": "any",
+        "unit": "oct",
+        "tooltip": "Signed octave difference between right and left stage tuning. Zero gives identical processing with independent channel states. Nonzero offsets turn mono excitation into different stereo phase/time shapes; mono summing may cancel frequencies."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "step": "any",
+        "unit": "%",
+        "tooltip": "Immediate dry/wet blend. Fully wet static processing preserves spectral magnitude while changing phase and group delay. Mixing dry and wet intentionally produces comb coloration. Zero buffering latency, no lookahead, no automatic gain, limiter or clipping."
       }
     ],
   },

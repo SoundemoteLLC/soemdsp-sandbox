@@ -794,6 +794,24 @@
       "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "dispersion",
+      "label": "Dispersion",
+      "targetType": "dispersion",
+      "kind": "effect",
+      "source": "native_modules/dispersion/dispersion.cpp",
+      "sourceUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/dispersion/dispersion.cpp",
+      "localSourceUrl": "/native_modules/dispersion/dispersion.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/dispersion/dispersion.wasm",
+      "wasmUrl": "native_modules/dispersion/dispersion.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "dsf_oscillator",
       "label": "DSF Oscillator",
       "targetType": "dsfOscillator",

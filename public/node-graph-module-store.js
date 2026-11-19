@@ -1111,6 +1111,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Capture and sustain a stereo spectrum with evolving phase. Freeze gate, Recapture trigger, infinite or decaying hold and optional stereo diffusion.",
     notes: ["spectral", "STFT", "freeze", "capture", "ambient", "native"],
   },
+  dispersion: {
+    browserEmoji: "🌊", category: "space", label: "Dispersion",
+    description: "Stereo energy-preserving lattice disperser: distributed allpass corners, low/high-delay direction, curve and stereo offsets. No IR files, FFT buffering or lookahead.",
+    notes: ["dispersion", "allpass", "group delay", "chirp", "lattice", "phase", "native"],
+  },
   materialResonator: {
     browserEmoji: "🌊",
     category: "space", label: "Material Resonator",
@@ -3986,6 +3991,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   spectralFreeze: {
     source: "native_modules/spectral_freeze/spectral_freeze.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_freeze/spectral_freeze.cpp",
+  },
+  dispersion: {
+    source: "native_modules/dispersion/dispersion.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/dispersion/dispersion.cpp",
   },
   materialResonator: {
     source: "native_modules/material_resonator/material_resonator.cpp",

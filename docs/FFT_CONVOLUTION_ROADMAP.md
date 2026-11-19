@@ -56,11 +56,13 @@ delay separately from convolution-engine buffering latency.
 
 Goal: frequency-dependent arrival time for chirping, springy or smeared attacks.
 
-- [ ] Prototype a phase/group-delay curve with Amount and Frequency/Pivot.
-- [ ] Compare a finite designed IR with a small allpass implementation before
-  deciding the runtime. FFT need not be forced into an effect better served by IIR.
-- [ ] Make direction, delay and dry/wet alignment explicit.
-- [ ] Later: curve shape, stereo differences and animated dispersion.
+- [x] Audit Phase Disperse and Robin Sinepulse Allpass; add a distinct stereo
+  normalized-lattice proof with Frequency and explicit Stages rather than hidden Amount.
+- [x] Generated FIR-prefix comparison versus recursive allpass; choose recursion
+  for flat static magnitude, live coefficient changes and no buffering latency.
+- [x] Low/High Late direction, octave distribution/curve, stereo offset and Mix.
+  See [DISPERSION.md](DISPERSION.md). No lookahead or imported IR workflow.
+- [ ] Listening acceptance and further group-delay shaping as needed.
 
 Proof: plot group delay and magnitude; listen to impulses, kicks and pulse trains.
 An ideal allpass preserves magnitude, but truncating its IR generally does not;

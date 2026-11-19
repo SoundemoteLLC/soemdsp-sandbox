@@ -298,6 +298,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   earlyReflectionConvolution: 274,
   spectralDelay: 275,
   materialResonator: 276,
+  dispersion: 277,
   stftContrast: 270,
   stftGate: 271,
 });
@@ -640,6 +641,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
+  if(t==="dispersion") {
+    const ids={frequency:10,stages:22,spreadOct:31,curve:13,direction:21,stereoOct:1,mix:40};
+    if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
+  }
   if (t === "materialResonator") {
     const ids={material:21,modes:22,frequency:10,decay:52,dampingHz:59,inharmonicity:13,position:30,stereoSpread:1,inputGainDb:90,mix:40};
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
@@ -971,6 +976,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (t === "earlyReflectionConvolution" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "spectralDelay" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "materialResonator" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
+  if(t==="dispersion"&&p==="error")return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "sturmianGrid") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "snare") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -5733,7 +5739,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     // Pulse Train Curve is continuous too (E_k exponent); without this its
     // smoothing settings never reached native and Curve jumped.
     const continuousCurveOverride = key === "curve"
-      && (nodeType === "additiveBlaster" || nodeType === "attackDecay" || nodeType === "pulseTrain");
+      && (nodeType === "additiveBlaster" || nodeType === "attackDecay" || nodeType === "pulseTrain"
+        || nodeType === "spectralDelay" || nodeType === "dispersion");
     // Hypersaw Oscillators is continuous (Decimal ceil + trailing frac amp).
     const continuousVoicesOverride = key === "voices"
       && nodeType === "hypersaw2";
@@ -6193,6 +6200,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("tailRandom", P.NATIVE_GRAPH_PARAM_CENTER, cont("tailRandom", 1));
       push("tailCurve", P.NATIVE_GRAPH_PARAM_SATURATE, cont("tailCurve", 0));
       push("precision", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("precision", 1));
+      continue;
+    }
+    if(type==="dispersion") {
+      push("stages",P.NATIVE_GRAPH_PARAM_STAGES,disc("stages",32));push("direction",P.NATIVE_GRAPH_PARAM_MODE,disc("direction",0));
+      for(const[key,value]of Object.entries({frequency:300,spreadOct:2,curve:0,stereoOct:0,mix:1}))push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
       continue;
     }
     if (type === "materialResonator") {
