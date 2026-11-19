@@ -17,11 +17,13 @@
   //   dots    the wire end dots (always drawn where a cable ends)
   //   wires   "all" | "hover" (only cables at the hovered module) | "none"
   //   veil    alpha of the dark veil over each module under its IO (0 = none)
+  //   wireColor "from" (the colour of the jack the cable leaves) | "to" (the jack it enters); modulation cables
+  //             always keep their modulation (purple) colour
   //   collapseUnused  unconnected jacks leave the rail, so the connected ones stack up from the top
   //                   (module sizes do not change: that is only where the jacks sit)
   const VIEWS = {
-    A: { jacks: false, labels: "off", wires: "all", veil: 0, collapseUnused: true },
-    B: { jacks: true, labels: "full", wires: "all", veil: 0.55, collapseUnused: false },
+    A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: true },
+    B: { jacks: true, labels: "full", wires: "all", veil: 0.55, wireColor: "to", collapseUnused: false },
   };
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";

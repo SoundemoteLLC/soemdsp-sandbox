@@ -1824,7 +1824,10 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   // nodeGraphPortWireColor (mod inlet purple, ...); source colour only when
   // there is no destination colour (drag / port-connection previews). One
   // solid colour per wire, end dots included.
-  const rgba = nodeGraphGlGraphCssColor(toColor || color);
+  // The IO view can colour a cable by the jack it leaves ("from"); modulation cables keep their own colour.
+  const fromColored = kind !== "modulation" && color
+    && typeof nodeGraphIoViewConfig === "function" && nodeGraphIoViewConfig().wireColor === "from";
+  const rgba = nodeGraphGlGraphCssColor(fromColored ? color : (toColor || color));
   // The first cable leaving a module gives its stroke animation its colour (nodeGraphStrokeLoudColor).
   if (fromNode && nodeGraphGlGraphState.firstCable && !nodeGraphGlGraphState.firstCable.has(String(fromNode))) {
     nodeGraphGlGraphState.firstCable.set(String(fromNode), rgba);
