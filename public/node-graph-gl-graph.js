@@ -469,6 +469,7 @@ function nodeGraphGlGraphRebuildChrome() {
       const unitBox = nodeGraphGlGraphWorldBox(unitEl);
       const row = readout.closest(".node-parameter-row");
       const rowBox = nodeGraphGlGraphWorldBox(row);
+      const padSide = Boolean(readout.closest(".node-xy-pad-side"));
       if (readout.closest(".node-seed-control, .node-parameter-row-seed")) {
         continue;
       }
@@ -480,10 +481,11 @@ function nodeGraphGlGraphRebuildChrome() {
         y: box.y,
         w: box.w,
         h: box.h,
-        hitX: rowBox ? rowBox.x : box.x,
-        hitY: rowBox ? rowBox.y : box.y,
-        hitW: rowBox ? rowBox.w : box.w,
-        hitH: rowBox ? rowBox.h : box.h,
+        // (the slider beside an XY pad only answers over itself: its row is the whole pad row)
+        hitX: rowBox && !padSide ? rowBox.x : box.x,
+        hitY: rowBox && !padSide ? rowBox.y : box.y,
+        hitW: rowBox && !padSide ? rowBox.w : box.w,
+        hitH: rowBox && !padSide ? rowBox.h : box.h,
         valueEl,
         valueBox,
         valueAnchor: valueEl && valueBox ? nodeGraphGlGraphTextAnchor(valueEl, valueBox) : null,
@@ -735,6 +737,8 @@ function nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhos
 function nodeGraphGlGraphSliderSharesRow(readout, row) {
   if (!readout || !row?.parentElement) return false;
   if (readout.classList.contains("displays-choices") || readout.classList.contains("choices-divided")) return false;
+  // The slider beside an XY parameter pad (node-graph-xy-param-pad.js) is a tall one.
+  if (readout.closest(".node-xy-pad-side")) return true;
   const top = row.offsetTop;
   const height = row.offsetHeight;
   if (!(height > 0)) return false;
@@ -756,7 +760,8 @@ function nodeGraphGlGraphSliderSharesRow(readout, row) {
  * a shorter cell draws Label above Value with the unit after the value.
  */
 function nodeGraphGlGraphDrawSliderStackedText(batch, slider, x, y, w, h, zoom, labelInk, valueInk, unitInk) {
-  const label = String(slider.labelEl?.textContent || "").replace(/\s+/g, " ").trim();
+  // (a slider beside an XY pad can carry a shorter label for its narrow column: data-short-label)
+  const label = String(slider.labelEl?.dataset?.shortLabel || slider.labelEl?.textContent || "").replace(/\s+/g, " ").trim();
   let text = String(slider.valueEl?.textContent || "").replace(/\s+/g, " ").trim();
   let unit = slider.unitEl && !slider.unitEl.classList.contains("is-empty")
     ? String(slider.unitEl.textContent || "").replace(/\s+/g, " ").trim()

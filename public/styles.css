@@ -26188,12 +26188,14 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
 }
 
 /* ---- XY parameter pad (node-graph-xy-param-pad.js) ----
-   One square pad edits two parameters. The X parameter's row is tall and holds the pad (the DOM box is a transparent hit target,
-   WebGL draws it); the Y parameter's row takes no height and its jack sits beside the pad's lower half. Both keep their jacks. */
+   One square pad edits two parameters, with an optional third as a tall slider on its right. The X parameter's row is tall and
+   holds them (the pad's DOM box is a transparent hit target, WebGL draws it); the Y and side parameters' rows hide and their jacks
+   move into it, stacked down the left edge: X, Y (and the side parameter's, lowest). */
 .node-parameter-row.node-parameter-row-xypad {
   --xy-unit: calc(var(--node-body-row-height) + var(--node-body-row-gap));
+  --xy-side-w: 56px;
 }
-.node-parameter-row-xypad > .node-parameter-control {
+.node-parameter-row-xypad > .node-parameter-control:not(.node-xy-pad-side) {
   display: none;
 }
 .node-parameter-row.node-parameter-row-xypad-x {
@@ -26201,21 +26203,37 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
   height: calc(var(--xy-unit) * var(--xy-pad-rows, 4));
   min-height: calc(var(--xy-unit) * var(--xy-pad-rows, 4));
 }
+.node-parameter-row.node-parameter-row-xypad-x.node-parameter-row-xypad-has-side {
+  grid-template-columns: var(--node-port-column-width) minmax(0, 1fr) var(--xy-side-w);
+}
+/* Jacks: halves of the pad, or thirds (X, Y, side) when a side slider is there. */
 .node-parameter-row-xypad-x > .node-param-port.modulation-input {
   align-self: start;
   transform: none;
   margin-top: calc(var(--xy-unit) * var(--xy-pad-rows, 4) * 0.25 - var(--node-slider-readout-height) * 0.5);
 }
-/* The Y parameter's row takes no space of its own: its jack moves into the X row (node-graph-xy-param-pad.js), under the X jack. */
-.node-parameter-row.node-parameter-row-xypad-y[hidden] {
-  display: none;
+.node-parameter-row-xypad-has-side > .node-param-port.modulation-input {
+  margin-top: calc(var(--xy-unit) * var(--xy-pad-rows, 4) * 0.1667 - var(--node-slider-readout-height) * 0.5);
 }
-.node-parameter-row-xypad-x > .node-param-port.modulation-input.node-xy-param-ypad-port {
+.node-parameter-row-xypad-x > .node-param-port.modulation-input.node-xy-param-ypad-port,
+.node-parameter-row-xypad-x > .node-param-port.modulation-input.node-xy-param-sidepad-port {
   position: absolute;
   left: 0;
-  top: calc(var(--xy-unit) * var(--xy-pad-rows, 4) * 0.75 - var(--node-slider-readout-height) * 0.5);
   margin-top: 0;
   transform: none;
+}
+.node-parameter-row-xypad-x > .node-param-port.modulation-input.node-xy-param-ypad-port {
+  top: calc(var(--xy-unit) * var(--xy-pad-rows, 4) * 0.75 - var(--node-slider-readout-height) * 0.5);
+}
+.node-parameter-row-xypad-has-side > .node-param-port.modulation-input.node-xy-param-ypad-port {
+  top: calc(var(--xy-unit) * var(--xy-pad-rows, 4) * 0.5 - var(--node-slider-readout-height) * 0.5);
+}
+.node-parameter-row-xypad-x > .node-param-port.modulation-input.node-xy-param-sidepad-port {
+  top: calc(var(--xy-unit) * var(--xy-pad-rows, 4) * 0.8333 - var(--node-slider-readout-height) * 0.5);
+}
+.node-parameter-row.node-parameter-row-xypad-y[hidden],
+.node-parameter-row.node-parameter-row-xypad-side[hidden] {
+  display: none;
 }
 .node-xy-param-pad {
   grid-column: 2;
@@ -26233,4 +26251,23 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
   user-select: none;
   -webkit-user-select: none;
   cursor: var(--node-dot-cursor, default);
+}
+/* The side slider fills the column to the right of the pad, as tall as the pad. */
+.node-parameter-row-xypad-x > .node-parameter-control.node-xy-pad-side {
+  display: grid;
+  grid-column: 3;
+  grid-row: 1;
+  align-self: stretch;
+  justify-self: stretch;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 3px 2px;
+  transform: none;
+}
+.node-xy-pad-side > .node-slider-readout,
+.node-xy-pad-side > .node-slider-readout-input {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
 }

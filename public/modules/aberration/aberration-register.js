@@ -93,18 +93,6 @@ registerNodeGraphChromelessModule("aberration", {
 function nodeGraphAberrationChannelParams(key, label) {
   return [
     {
-      defaultValue: "1",
-      key: key + "Bright",
-      label: label + " Bright",
-      linearSmoothing: false,
-      max: "1",
-      mid: "0.5",
-      min: "0",
-      nonlinearSlider: false,
-      step: "any",
-      tooltip: label + " plate level. 0 is off, 1 is full. Read once per simulation frame.",
-    },
-    {
       bipolar: true,
       defaultValue: "0",
       key: key + "X",
@@ -133,6 +121,20 @@ function nodeGraphAberrationChannelParams(key, label) {
       nonlinearSlider: false,
       step: "any",
       tooltip: label + " vertical shift. ±1 is 12% of the face. Positive moves up.",
+    },
+    {
+      defaultValue: "1",
+      key: key + "Bright",
+      parameterOutput: false,
+      xyPad: { axis: "side", pair: key + "X", label, shortLabel: "Bright" },
+      label: label + " Bright",
+      linearSmoothing: false,
+      max: "1",
+      mid: "0.5",
+      min: "0",
+      nonlinearSlider: false,
+      step: "any",
+      tooltip: label + " plate level. 0 is off, 1 is full. Read once per simulation frame.",
     },
     {
       defaultValue: "0",
