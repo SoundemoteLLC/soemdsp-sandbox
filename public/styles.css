@@ -26197,8 +26197,9 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
   position: absolute;
   top: 0;
   bottom: 0;
-  width: var(--node-port-column-width);
-  min-width: var(--node-port-column-width);
+  /* Whole-pixel width: the wire dots are placed from integer layout offsets, so a fractional column width leaves them 1 px short of the module edge. */
+  width: 32px !important;
+  min-width: 32px !important;
   max-width: none;
   overflow: visible;
 }
