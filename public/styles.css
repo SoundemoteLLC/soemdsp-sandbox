@@ -5520,15 +5520,19 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  container-type: inline-size;
 }
 
 .node-hotkeys-row {
   display: grid;
-  grid-template-columns: 5.4rem minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
+  /* The key column is as wide as its key; the description takes the rest and wraps. */
+  grid-template-columns: minmax(3.6rem, max-content) minmax(0, 1fr);
+  /* A row keeps its full height (the list scrolls); a flex item would otherwise shrink and overlap the next row. */
+  flex: 0 0 auto;
+  align-items: start;
+  gap: 4px 10px;
   min-height: 28px;
-  padding: 0 8px;
+  padding: 6px 8px;
   border-bottom: 1px solid rgba(127, 199, 217, 0.12);
   color: rgba(243, 241, 236, 0.92);
   font: 650 0.78rem/1.2 "Cascadia Mono", Consolas, monospace;
@@ -5545,9 +5549,20 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 }
 
 .node-hotkeys-row span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Descriptions wrap (they used to be cut off with an ellipsis). */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+/* A narrow window: the key sits above its description, which then has the full width. */
+@container (max-width: 340px) {
+  .node-hotkeys-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
 }
 
 .node-visibility-menu .scene-context-heading {
