@@ -22,6 +22,13 @@ are vestigial. Do not copy them and do not add new ones.
 
 ## Edit points
 
+### Spawn size
+
+Use `defaultWidthGu: 7` for new modules. Do not choose a wide spawn size just
+because a module has many controls; users can resize it. Preserve previously
+approved exceptions, especially Spectrogram and Circular Spectrogram spawn
+settings. Changing a default must not overwrite saved patch widths.
+
 ### C++ (`native_modules/graph_engine/graph_engine.cpp`)
 
 1. **Type id**: `static const int kType<Name> = <next free id>;` next to the

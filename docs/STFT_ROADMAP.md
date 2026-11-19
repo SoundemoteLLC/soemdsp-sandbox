@@ -144,11 +144,13 @@ them simultaneously. Proposed order follows musical value and implementation ris
 ### 4. Spectral Cross-Synthesis
 
 - [x] Voice L/R and Synth L/R; Transfer, Envelope Width (Hz), Attack/Release (ms),
-  Mix and explicit output gain. Fixed 2048 FFT / 512 hop v1.
+  Mix and explicit output gain. FFT sizes 512..16384, hop size / 4.
 - [x] Voice supplies broad power envelope; Synth supplies fine structure/phase.
   No built-in carrier or IIR bands. See [SPECTRAL_CROSS_SYNTHESIS.md](SPECTRAL_CROSS_SYNTHESIS.md).
-- [ ] Listening acceptance; FFT-size handoff and worst-case host callback proof.
-- [ ] Later: envelope whitening, transient blend, formant shift.
+- [x] Base-module listening acceptance; FFT-size warm/crossfade and Formant Shift
+  in semitones, with explicit Voice-envelope versus Synth-phase ownership.
+- [ ] New controls listening acceptance and worst-case host callback proof.
+- [ ] Later: envelope whitening and transient blend.
 - Proof: donor ownership is audible and measurable; silent donors have defined
   behavior; stereo and dry alignment remain correct.
 - Decision: establish a distinct sound/use case from the resonator's STFT path

@@ -4,7 +4,7 @@ const x=(await WebAssembly.instantiate(fs.readFileSync(new URL('../native_module
 const call=(s,...args)=>x['soemdsp_spectral_cross_synthesis_'+s](...args);
 const latency=call('latency');assert.equal(latency,2048);
 const meta=JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,call('metadata_json'),call('metadata_json_size'))));
-assert.equal(meta.parameters.length,6);assert.ok(meta.parameters.every(p=>p.tooltip));
+assert.equal(meta.parameters.length,8);assert.ok(meta.parameters.every(p=>p.tooltip));
 for(const sr of [44100,48000,96000]) {
  for(const identity of ['zero transfer','same donors','dry']) {
   const h=call('create'),n=sr+latency,input=new Float64Array(n);let worst=0;

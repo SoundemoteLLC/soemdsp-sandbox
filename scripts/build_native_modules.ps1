@@ -16,7 +16,9 @@ $modules = @(
     "soemdsp_spectral_cross_synthesis_create", "soemdsp_spectral_cross_synthesis_destroy", "soemdsp_spectral_cross_synthesis_reset",
     "soemdsp_spectral_cross_synthesis_sample", "soemdsp_spectral_cross_synthesis_right", "soemdsp_spectral_cross_synthesis_error",
     "soemdsp_spectral_cross_synthesis_latency", "soemdsp_spectral_cross_synthesis_version",
-    "soemdsp_spectral_cross_synthesis_metadata_json", "soemdsp_spectral_cross_synthesis_metadata_json_size"
+    "soemdsp_spectral_cross_synthesis_metadata_json", "soemdsp_spectral_cross_synthesis_metadata_json_size",
+    "soemdsp_spectral_cross_synthesis_set_fft_size", "soemdsp_spectral_cross_synthesis_fft_size",
+    "soemdsp_spectral_cross_synthesis_latency_for_handle", "soemdsp_spectral_cross_synthesis_set_formant_shift"
   ) }
   @{ Name = "dispersion"; Simd = $false; Exports = @(
     "soemdsp_dispersion_create", "soemdsp_dispersion_destroy", "soemdsp_dispersion_reset", "soemdsp_dispersion_sample",

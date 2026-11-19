@@ -647,7 +647,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
   }
   if(t==="spectralCrossSynthesis") {
-    const ids={amount:13,widthHz:31,attackMs:42,releaseMs:50,mix:40,gainDb:90};
+    const ids={fftSize:22,formantShift:14,amount:13,widthHz:31,attackMs:42,releaseMs:50,mix:40,gainDb:90};
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
   }
   if (t === "materialResonator") {
@@ -6216,7 +6216,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if(type==="spectralCrossSynthesis") {
-      for(const[key,value]of Object.entries({amount:1,widthHz:300,attackMs:5,releaseMs:50,mix:1,gainDb:0}))
+      push("fftSize",P.NATIVE_GRAPH_PARAM_STAGES,disc("fftSize",2048));
+      for(const[key,value]of Object.entries({formantShift:0,amount:1,widthHz:300,attackMs:5,releaseMs:50,mix:1,gainDb:0}))
         push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
       continue;
     }

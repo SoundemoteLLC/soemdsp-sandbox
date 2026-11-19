@@ -847,6 +847,8 @@ extern "C" void soemdsp_spectral_cross_synthesis_destroy(int h);
 extern "C" double soemdsp_spectral_cross_synthesis_sample(int h,double vl,double vr,double sl,double sr,double amount,double width,double attack,double release,double mix,double gainDb,double rate);
 extern "C" double soemdsp_spectral_cross_synthesis_right(int h);
 extern "C" double soemdsp_spectral_cross_synthesis_error(int h);
+extern "C" int soemdsp_spectral_cross_synthesis_set_fft_size(int h,int length);
+extern "C" int soemdsp_spectral_cross_synthesis_set_formant_shift(int h,double semitones);
 extern "C" int soemdsp_dispersion_configure(int h,int mode,int tuning,double low,double high,double fShape,double lowQ,double highQ,double qShape,int reference,double gainDb);
 extern "C" void soemdsp_dispersion_destroy(int h);
 extern "C" double soemdsp_dispersion_sample(int h,double l,double r,double f,double spread,double curve,double stereo,double mix,int count,int direction,double rate);
@@ -5095,6 +5097,7 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.center,.31,false);init_control(n.pan,.6,false);init_control(n.gainDb,0,false);init_control(n.mix,1,false);
   }
   if(typeId==kTypeSpectralCrossSynthesis){
+    init_control(n.stages,2048,true);init_control(n.phaseParam,0,false);
     init_control(n.shape,1,false);init_control(n.width,300,false);init_control(n.diffusionAmount,5,false);
     init_control(n.feedback,50,false);init_control(n.mix,1,false);init_control(n.gainDb,0,false);
   }
@@ -16213,6 +16216,8 @@ static void process_spectral_cross_synthesis(Circuit& g, Node& node, int frames)
   const bool c=mix_live_port(g,node,kPortDryL,frames,sl),d=mix_live_port(g,node,kPortDryR,frames,sr);
   for(int f=0;f<frames;++f) {
     control_frame(g,node,f);
+    soemdsp_spectral_cross_synthesis_set_fft_size(node.nativeHandle,(int)control_audio(g,node.stages,f));
+    soemdsp_spectral_cross_synthesis_set_formant_shift(node.nativeHandle,control_audio(g,node.phaseParam,f));
     const double left=soemdsp_spectral_cross_synthesis_sample(node.nativeHandle,
       a?vl[f]:b?vr[f]:0,b?vr[f]:a?vl[f]:0,c?sl[f]:d?sr[f]:0,d?sr[f]:c?sl[f]:0,
       control_audio(g,node.shape,f),control_audio(g,node.width,f),control_audio(g,node.diffusionAmount,f),

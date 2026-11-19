@@ -7349,7 +7349,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   earlyReflectionConvolution: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 14,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right", "Ready", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Ready", "Error"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
@@ -7548,17 +7548,58 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   spectralCrossSynthesis: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 14,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["Voice L", "Voice R", "Synth L", "Synth R"],
     outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
     bypassMap: [{ out: "Mono", in: "Synth L" }, { out: "Left", in: "Synth L" }, { out: "Right", in: "Synth R" }],
     displayType: "scope1dTrace",
     face: [
+      { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["amount", "Transfer"], ["widthHz", "Envelope Width"]], h: 40 },
+      { kind: "cells", params: [["formantShift", "Formant Shift"]], h: 40 },
       { kind: "cells", params: [["attackMs", "Attack"], ["releaseMs", "Release"]], h: 40 },
       { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Output Gain"]], h: 40 },
     ],
     parameters: [
+      {
+        "key": "fftSize",
+        "label": "FFT Size",
+        "kind": "choice",
+        "choices": [
+          "512",
+          "1024",
+          "2048",
+          "4096",
+          "8192",
+          "16384"
+        ],
+        "choiceKeys": [
+          "512",
+          "1024",
+          "2048",
+          "4096",
+          "8192",
+          "16384"
+        ],
+        "choiceIds": [
+          512,
+          1024,
+          2048,
+          4096,
+          8192,
+          16384
+        ],
+        "defaultValue": "2048",
+        "min": "0",
+        "mid": "2.5",
+        "max": "5",
+        "step": "1",
+        "unit": "samples",
+        "linearSmoothing": false,
+        "displayChoices": true,
+        "divideChoicesVisibly": false,
+        "tooltip": "FFT analysis window and reference delay in samples. Smaller is tighter; larger resolves finer frequency detail and costs more memory/peak CPU. Hop is one quarter of size. At 48 kHz: 512 = 10.67 ms, 2048 = 42.67 ms, 16384 = 341.33 ms. Changes warm and crossfade over 50 ms; rapid edits queue the latest size. No new host delay compensation."
+      },
       {
         "key": "amount",
         "label": "Transfer",
@@ -7578,7 +7619,18 @@ const nodeGraphModuleDefinitions = (
         "max": "4000",
         "step": "any",
         "unit": "Hz",
-        "tooltip": "Full width in Hz of the power-envelope averaging neighborhood. Zero transfers individual-bin magnitudes; wider neighborhoods preserve more Synth harmonic fine structure. Fractional bin widths interpolate continuously. FFT is fixed at 2048 samples, hop 512."
+        "tooltip": "Full width in Hz of the power-envelope averaging neighborhood. Zero transfers individual-bin magnitudes; wider neighborhoods preserve more Synth harmonic fine structure. Fractional bin widths interpolate continuously. FFT Size sets analysis resolution."
+      },
+      {
+        "key": "formantShift",
+        "label": "Formant Shift",
+        "defaultValue": "0",
+        "min": "-24",
+        "mid": "0",
+        "max": "24",
+        "step": "any",
+        "unit": "st",
+        "tooltip": "Shift Voice's spectral envelope in semitones. Positive moves formants up; negative moves them down. Synth harmonic frequencies and phases are unchanged. Out-of-band envelope regions become zero, never wrap. Width is measured before shifting."
       },
       {
         "key": "attackMs",
@@ -7589,7 +7641,7 @@ const nodeGraphModuleDefinitions = (
         "max": "1000",
         "step": "any",
         "unit": "ms",
-        "tooltip": "Rising spectral power-envelope time constant, in milliseconds, measured once per 512-sample hop. Zero is immediate at the frame rate. Both Voice and Synth envelope estimates use this setting."
+        "tooltip": "Rising spectral power-envelope time constant in milliseconds. Updated each hop (FFT Size / 4). Zero is immediate at frame rate. Both Voice and Synth use this setting."
       },
       {
         "key": "releaseMs",
@@ -7610,7 +7662,7 @@ const nodeGraphModuleDefinitions = (
         "mid": ".5",
         "max": "1",
         "step": "any",
-        "tooltip": "Delayed dry Synth to cross-synthesized output. Dry and wet are aligned to the fixed 2048-sample reference delay. Voice is never mixed directly into the output."
+        "tooltip": "Delayed dry Synth to cross-synthesized output, aligned to the active FFT Size. FFT-size edits warm a second engine then crossfade, intentionally changing delay. Voice is not directly mixed into output."
       },
       {
         "key": "gainDb",
@@ -7626,7 +7678,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   dispersion: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 14,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right", "f"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In", "ƒ": "f" },
     outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
@@ -7870,7 +7922,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   materialResonator: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 14,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right", "f"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In", "ƒ": "f" },
     outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
@@ -8074,11 +8126,12 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   spectralSmear: {
+    defaultWidthGu: 7,
     planRole: "processor",
     inputs: [], outputs: [], parameters: [],
   },
   spectralDelay: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
@@ -8226,7 +8279,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   spectralFreeze: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right", "Freeze", "Recapture"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right", "Held"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Held"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
@@ -8393,7 +8446,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   spectralBlur: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right"], outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
@@ -8533,7 +8586,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   stftContrast: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right"], outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
@@ -8647,7 +8700,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   stftGate: {
-    planRole: "processor", planFreeRun: true, defaultWidthGu: 12,
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right", "Ready"], outputAliases: { Out: "Mono" },
     digitalOutputs: ["Ready"],
@@ -8795,7 +8848,7 @@ const nodeGraphModuleDefinitions = (
   vocoder: {
     planRole: "processor",
     planFreeRun: true,
-    defaultWidthGu: 12,
+    defaultWidthGu: 7,
     face: [
       { kind: "cells", params: [["bands", "Bands", "horizontal"]], h: 26 },
       { kind: "cells", params: [["bandWidth", "Band Width"], ["followerMs", "Follower"]], h: 40 },
@@ -8825,7 +8878,7 @@ const nodeGraphModuleDefinitions = (
     planFreeRun: true,
     customDisplayArea: true,
     displayHeightGu: 8,
-    defaultWidthGu: 12,
+    defaultWidthGu: 7,
     face: [
       { kind: "cells", params: [["frequency", "Frequency"], ["bodySize", "Size"]], h: 40 },
       { kind: "cells", params: [["body", "Body"], ["bodyDecay", "Decay"]], h: 40 },
@@ -8869,6 +8922,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   noiseConvReverb: {
+    defaultWidthGu: 7,
     face: [
       { kind: "cells", params: [["decay", "Length", "horizontal"]], h: 26 },
       { kind: "cells", params: [["ampShape", "Amp Shape", "bipolar"], ["spectralShape", "Spectral Shape", "bipolar"]], h: 40 },
@@ -17592,6 +17646,7 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   stftBlur: {
+    defaultWidthGu: 7,
     planRole: "processor",
     inputs: ["In"],
     outputs: ["Out"],
@@ -20903,6 +20958,7 @@ const nodeGraphModuleDefinitions = (
         step: "any" },
     ] },
   fftReconstruction: {
+    defaultWidthGu: 7,
     planRole: "processor",
     inputs: [], outputs: [], parameters: [],
   },
@@ -23740,6 +23796,7 @@ const nodeGraphModuleDefinitions = (
   // Analysis (FFT / window / overlap / pad), axis, dB mode, peak hold, colors
   // live in Display Settings. Min/Max Freq are face knobs like Spectrogram.
   spectrum1d: {
+    defaultWidthGu: 7,
     // Hand-written face (node-graph-module-face.js): Freq band.
     face: [
       { kind: "band", lo: "minFreq", hi: "maxFreq", label: "Freq", h: 34 },

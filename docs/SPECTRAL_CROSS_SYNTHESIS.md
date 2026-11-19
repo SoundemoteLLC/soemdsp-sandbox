@@ -14,6 +14,10 @@ two cables keep independent stereo. Route Left/Right to Output.
 - Envelope Width 300-1000 Hz: broad envelope transfer, retaining Synth harmonics.
 - Width 0: individual FFT-bin magnitude transfer; more literal/robotic.
 - Attack 0-5 ms, Release 50-200 ms: tight versus lingering envelope.
+- Formant Shift -12 / +12 st: move the Voice envelope down/up an octave,
+  leaving Synth's harmonic frequencies and phase unchanged.
+- FFT Size 512..16384: smaller for tighter attacks, larger for finer spectral
+  detail. Existing patches retain the 2048-sample default.
 - Mix blends aligned dry Synth with wet. Voice is not directly mixed in.
 
 This is distinct from Vocoder's logarithmic IIR bands and resonant ringing.
@@ -24,15 +28,18 @@ It is not Spectral Morph or an audio crossfade.
 
 ## DSP Contract
 
-Fixed 2048-point FFT, hop 512, Hann analysis/synthesis, 4x overlap and 2/3
-overlap-add normalization. Reference delay is exactly 2048 samples, including
-dry Synth: 46.44 ms at 44.1 kHz, 42.67 ms at 48 kHz, 21.33 ms at 96 kHz.
-There is no new global latency-compensation system or configurable FFT size.
+FFT sizes 512, 1024, 2048, 4096, 8192 and 16384; hop is size / 4. Hann
+analysis/synthesis, 4x overlap and 2/3 overlap-add normalization. At stable size,
+reference delay equals FFT Size, including dry Synth. At 48 kHz this spans
+10.67..341.33 ms; default 2048 gives 42.67 ms. No new global host compensation.
 
 Each channel analyzes Voice and Synth independently. Per-bin power follows
 separate attack/release time constants, in ms. Prefix-sum neighborhood averaging
 forms the broad envelope in O(N); Envelope Width is the full neighborhood width
 in Hz. Fractional radii interpolate, with edge neighborhoods renormalized.
+Formant Shift resamples the Voice envelope at bin / 2^(semitones/12), with
+linear interpolation. Outside the source spectrum the envelope is zero, not
+wrapped or clamped to the edge. Envelope Width applies before shifting.
 
 Wet complex spectrum is Synth multiplied by
 `1 + Transfer * (sqrt(VoiceEnvelope / SynthEnvelope) - 1)`.
@@ -51,10 +58,18 @@ limiter, clipping, carrier generator or automatic phase invention.
 
 ## State And Cost
 
-One bounded, pool-allocated state per instance, capacity 64, about 0.15 MB each.
-No allocation inside processing. Each hop performs four forward FFTs and two
+One bounded, pool-allocated state per instance, capacity 64 subject to the pool
+memory budget, about 2.23 MB each. Two max-size engines are preallocated.
+No allocation inside processing. Each active hop performs four forward FFTs and two
 inverse FFTs for stereo. Work is bounded but concentrated on hop boundaries;
 native throughput is not a guarantee of every host's worst-case callback time.
+FFT-size edits reset the standby engine, remap power-envelope estimates in Hz
+with FFT normalization accounted for, warm for its full window, then crossfade
+over 50 ms. New requests queue the latest desired size. Warm/fade temporarily
+uses two engines and can color the sound as their different delays overlap.
+The active-size/latency getter changes when the handoff finishes. A size setter
+returns a local configuration error for unsupported sizes, never silently snaps.
+Formant Shift uses the ordinary continuous parameter smoothing path.
 Rate changes and explicit reset clear only local state. Nonfinite frames recover
 locally with Error=1; the next valid processing clears the error.
 Deleting the module releases its memory. Hiding the GL face does not alter DSP.
@@ -65,9 +80,12 @@ Deleting the module releases its memory. Hiding the GL face does not alter DSP.
   donors, dry alignment, silent donors, independent stereo, magnitude ownership
   and local nonfinite recovery.
 - `test_spectral_cross_synthesis_graph.mjs`: stereo and single-cable fallback,
-  controls, pool lifecycle and sample parity against the native module.
+  FFT/formant controls, pool lifecycle and sample parity against the native module.
+- `test_spectral_cross_synthesis_controls.mjs`: all FFT sizes reconstruct,
+  positive/negative octave envelope ownership, queued warm handoffs, reset
+  persistence and invalid configuration diagnostics.
 - `test_spectral_cross_synthesis_browser.mjs`: live audio, real parameter
   updates and shared GL desktop/mobile face.
 
-Listening acceptance remains required. Later candidates: FFT-size handoff,
-formant shift, envelope whitening and transient blend. No IR-loading workflow.
+Base-module listening accepted. New FFT/formant controls await listening.
+Later candidates: envelope whitening and transient blend. No IR-loading workflow.
