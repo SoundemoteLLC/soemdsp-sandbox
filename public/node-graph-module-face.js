@@ -30,8 +30,14 @@
 //                                               drags it alone, between two drags that pair; handles stop at
 //                                               their neighbours (no crossing, no pushing)
 //   seed      { param }                         [code][die][+][-]
+//   xy        { x, y, label, cell? }            one square pad that edits TWO params (x, y), optionally with one more param as a
+//                                               tall cell beside it ({ cell: [key, label] }, like fraction). Jacks stack down the
+//                                               rail: x, y, cell. Same mouse law as every slider: drag is relative, Alt+click jumps
+//                                               to the pointer, Ctrl+click resets both, Shift/Ctrl while dragging scale it.
 
 const NODE_GRAPH_FACE_JACK_SLOT_PX = 17;
+// XY pad rows: breathing room round the square pad, in face px.
+const NODE_GRAPH_FACE_XY_GAP_PX = 4;
 // Shared height for every continuous horizontal slider (face cells and the
 // generic DOM readout). Must stay equal to styles.css
 // --node-slider-readout-height: the Attenuverter Amplitude and PolyBLEP
@@ -199,6 +205,7 @@ function nodeGraphModuleFaceRowParams(row) {
     case "filter": return [row.hpf, row.lpf];
     case "band": return [row.lo, row.hi];
     case "span": return [...row.handles];
+    case "xy": return [row.x, row.y, row.cell?.[0]].filter(Boolean);
     default: return [row.param];
   }
 }
@@ -353,6 +360,13 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
       out.push({ ...base, type: "band", lo: row.lo, hi: row.hi, label: row.label, x: 0, w, param: "" });
     } else if (row.kind === "span") {
       out.push({ ...base, type: "span", handles: row.handles, x: 0, w, param: "" });
+    } else if (row.kind === "xy") {
+      // A square pad (centred in the room left of the optional tall cell) and that cell.
+      const cellW = row.cell ? Math.round(Math.min(60, w * 0.27)) : 0;
+      const room = Math.max(10, w - cellW - NODE_GRAPH_FACE_XY_GAP_PX);
+      const s = Math.max(10, Math.min(room, h - NODE_GRAPH_FACE_XY_GAP_PX * 2));
+      out.push({ ...base, type: "xyPad", param: row.x, py: row.y, label: row.label || "", x: Math.round((room - s) / 2), w: s });
+      if (row.cell) out.push({ ...base, type: "cell", param: row.cell[0], label: row.cell[1], bipolar: false, x: w - cellW, w: cellW });
     } else if (row.kind === "seed") {
       const bw = Math.round(Math.min(28, w * 0.15));
       out.push({ ...base, type: "seedNumber", param: row.param, x: 0, w: w - bw * 3 });
@@ -543,6 +557,11 @@ function layoutNodeGraphModuleFace(article) {
   }
 }
 
+/** The square an xyPad widget draws and answers in (face px): its width, centred in the row's height. */
+function nodeGraphModuleFaceXyBox(wd) {
+  return { x: wd.x, y: wd.y + (wd.h - wd.w) / 2, s: wd.w };
+}
+
 function nodeGraphModuleFaceLocalPoint(face, event) {
   const rect = face.getBoundingClientRect();
   const sx = face.offsetWidth / Math.max(1e-6, rect.width);
@@ -583,6 +602,7 @@ function nodeGraphModuleFaceWidgetKeys(wd) {
   if (wd.type === "filter") return [wd.hpf, wd.lpf];
   if (wd.type === "band") return [wd.lo, wd.hi];
   if (wd.type === "span") return [...wd.handles];
+  if (wd.type === "xyPad") return [wd.param, wd.py];
   return [wd.param];
 }
 
@@ -902,6 +922,38 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     ly = ev.clientY;
     return { dx: ax, dy: ay };
   };
+  if (wd.type === "xyPad") {
+    // Two params on one pad. The slider law: drag is relative (travel since the press, scaled by Shift / Ctrl), Alt+click jumps the
+    // handle to the pointer first, Ctrl+click on release resets both (captureOpts.onReset: both keys of the widget).
+    const xi = input;
+    const yi = nodeGraphModuleFaceInput(article, wd.py);
+    if (!xi || !yi) return;
+    const box = nodeGraphModuleFaceXyBox(wd);
+    let u0 = nodeGraphModuleFaceTravel(xi);
+    let v0 = nodeGraphModuleFaceTravel(yi);
+    const valueAt = (inp, t) => (typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(inp, t) : t);
+    const put = (u, v, drag, snap) => {
+      for (const [inp, t] of [[xi, u], [yi, v]]) {
+        const vv = valueAt(inp, t);
+        if (snap && typeof setNodeSliderValue === "function") {
+          setNodeSliderValue(inp, Number(inp.step) >= 1 ? Math.round(vv) : vv, { interaction: "drag", bypassSmoothing: true });
+        } else {
+          setNodeGraphModuleFaceValue(inp, Number(inp.step) >= 1 ? Math.round(vv) : vv, drag);
+        }
+      }
+      if (typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
+    };
+    if (!resetOnClick && event.altKey && !(event.shiftKey && (event.ctrlKey || event.metaKey))) {
+      u0 = Math.max(0, Math.min(1, (p.x - box.x) / Math.max(1, box.s)));
+      v0 = Math.max(0, Math.min(1, 1 - (p.y - box.y) / Math.max(1, box.s)));
+      put(u0, v0, true, true);
+    }
+    nodeGraphModuleFaceCapture(face, event, (ev, drag) => {
+      const { dx, dy } = travel(ev);
+      put(Math.max(0, Math.min(1, u0 + dx / Math.max(1, box.s))), Math.max(0, Math.min(1, v0 - dy / Math.max(1, box.s))), drag, false);
+    }, captureOpts);
+    return;
+  }
   let move = null;
   if (wd.type === "cell") {
     const choiceN = nodeGraphModuleFaceParamChoiceCount(input);
@@ -1495,6 +1547,39 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
           nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
         }
       }
+    } else if (wd.type === "xyPad") {
+      // The pad: well, quarter grid, centre cross, the handle (and a ghost where a wired MOD puts it), label, values, jack letters.
+      const yin = nodeGraphModuleFaceInput(el, wd.py);
+      const box = nodeGraphModuleFaceXyBox(wd);
+      rect(box.x, box.y, box.s, box.s, ink.cellFill);
+      for (let g = 1; g < 4; g += 1) {
+        const c = g === 2 ? ink.cellLine : ink.tickLine;
+        line(box.x + (box.s * g) / 4, box.y, 1, box.s, c);
+        line(box.x, box.y + (box.s * g) / 4, box.s, 1, c);
+      }
+      line(box.x, box.y, box.s, 1, ink.rowLine);
+      line(box.x, box.y + box.s - hairFace, box.s, 1, ink.rowLine);
+      line(box.x, box.y, 1, box.s, ink.rowLine);
+      line(box.x + box.s - hairFace, box.y, 1, box.s, ink.rowLine);
+      const u = nodeGraphModuleFaceTravel(input);
+      const v = nodeGraphModuleFaceTravel(yin);
+      const gu = nodeGraphModuleFaceGhostTravel(input);
+      const gv2 = nodeGraphModuleFaceGhostTravel(yin);
+      if (Number.isFinite(gu) && Number.isFinite(gv2) && typeof nodeGraphGlLinesDot === "function") {
+        nodeGraphGlLinesDot(batch, ox + (box.x + gu * box.s) * z, oy + (box.y + (1 - gv2) * box.s) * z, 4 * z, 0.7, nodeGraphModuleFaceRgba(ink.ghost));
+      }
+      const hx = ox + (box.x + u * box.s) * z;
+      const hy = oy + (box.y + (1 - v) * box.s) * z;
+      rect(box.x + u * box.s - 0.5, box.y, 1, box.s, "rgba(142, 197, 255, 0.28)");
+      rect(box.x, box.y + (1 - v) * box.s - 0.5, box.s, 1, "rgba(142, 197, 255, 0.28)");
+      if (typeof nodeGraphGlLinesRing === "function") nodeGraphGlLinesRing(batch, hx, hy, 6.5 * z, 0.7 * z, 0.7, nodeGraphModuleFaceRgba(ink.bandHandle));
+      if (typeof nodeGraphGlLinesDot === "function") nodeGraphGlLinesDot(batch, hx, hy, 3 * z, 0.7, nodeGraphModuleFaceRgba(ink.value));
+      if (wd.label) nodeGraphModuleFaceText(batch, wd.label, ox + (box.x + 5) * z, oy + (box.y + 9) * z, 11 * z, ink.offText, { align: "left" });
+      const fmt = (n) => (Math.abs(n) >= 100 ? n.toFixed(0) : Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2));
+      nodeGraphModuleFaceText(batch, `${fmt(nodeGraphModuleFaceValue(input))}, ${fmt(nodeGraphModuleFaceValue(yin))}`, ox + (box.x + box.s - 5) * z, oy + (box.y + box.s - 9) * z, 10.5 * z, ink.offText, { align: "right" });
+      // Which jack is which: the rail stacks one slot per param, x then y (then the cell's).
+      const slots = nodeGraphModuleFaceRowParams(wd.row).length;
+      ["X", "Y"].forEach((letter, i) => nodeGraphModuleFaceText(batch, letter, ox + (box.x + 5) * z, oy + (wd.y + (wd.h / slots) * (i + 0.5)) * z, 10.5 * z, ink.offText, { align: "left" }));
     } else if (wd.type === "filter") {
       nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line);
     } else if (wd.type === "band") {

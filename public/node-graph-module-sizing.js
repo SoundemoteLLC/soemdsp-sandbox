@@ -35,10 +35,6 @@ function nodeGraphModuleVisibleBodyRowCount(type, node = null) {
     }
     return rows;
   }
-  // An XY parameter pad pair (node-graph-xy-param-pad.js): the X parameter carries the pad's height, the Y parameter none.
-  if (typeof nodeGraphXyPadRowCount === "function") {
-    return visibleParams.reduce((sum, parameter) => sum + nodeGraphXyPadRowCount(parameter), 0);
-  }
   return visibleParams.length;
 }
 
