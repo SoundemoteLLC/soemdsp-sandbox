@@ -26267,24 +26267,15 @@ output[id^="nodeUiDev"][for] { cursor: copy; }
 .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column.output { right: 0; }
 .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-solid-module-custom-ui { grid-column: 1 / -1; }
 
-/* IO view with collapseUnused (View A): unconnected jacks leave the rail so the connected ones sit at the top. Rows with a parameter jack stay. */
-body[data-io-collapse="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell .node-io-row:not(:has(.connected-port)):not(:has(.node-param-port)) {
-  display: none !important;
-}
-
-/* IO pill views (View A; disabled View C), pill slot "top": a strip one jack row tall between the title and the display (the shell track is one row
-   taller, see sizing, so the display keeps its height). */
-body[data-io-strip="1"][data-io-slot="top"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
+/* The IO strip: one jack row tall between the title and the display (the shell track is one row taller, see sizing, so
+   the display keeps its height). */
+body[data-io-strip="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
   padding-top: 15px;
   box-sizing: border-box;
 }
-/* Slot "mid": a strip between the display and the sliders (the first row of the slider section). */
-body[data-io-strip="1"][data-io-slot="mid"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .dsp-node-body {
-  padding-top: 15px;
-}
 
-/* The IO strip (top slot) is the shell's padding. A jack column placed in a grid row is positioned in that grid area,
+/* The IO strip is the shell's padding. A jack column placed in a grid row is positioned in that grid area,
    which starts below the padding; letting the row be automatic puts the first jack in the strip row. */
-body[data-io-strip="1"][data-io-slot="top"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column {
+body[data-io-strip="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column {
   grid-row: auto !important;
 }

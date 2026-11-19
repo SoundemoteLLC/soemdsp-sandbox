@@ -1,62 +1,43 @@
-// IO view (Tab): how a module's jacks, labels and cables show.
+// IO view (Tab): how a module's jacks and labels show.
 //
-//   A  (default)  Short jack labels. Cables are hidden (their jack dots stay) unless the pointer is over a module at
-//                 one end of the cable. Quiet: sliders and displays stay clear to use.
-//   B             Full jack names, every cable, and a dark veil over each whole module with the jacks, labels and
-//                 wire dots on top of it, so the names stay readable over a display or sliders.
+//   A  (default)  The compacted IO: one pill per side in a strip between the title and the display. Cables end at the
+//                 pills. Click a pill to go to B.
+//   B             Full jacks, full names, every cable, and a dark veil over each whole module with the jacks, labels and
+//                 wire dots on top of it, so the names stay readable over a display or sliders. A crowded edge shows
+//                 every jack at once.
 //
-// A hover never shows full names: that would put labels over a slider being adjusted.
-// The view is a UI setting, saved in the browser (not in the patch).
+// Tab toggles A and B. The view is a UI setting, saved in the browser (not in the patch).
 
 (() => {
   "use strict";
 
   // One row per view; each is a setting, so a view is changed by editing its row.
   //   jacks   the half-circle jack cutouts (on the plate and through the display)
-  //   labels  jack names: "off" | "short" | "full"
-  //   dots    the wire end dots (always drawn where a cable ends)
-  //   wires   "all" | "hover" (only cables at the hovered module) | "none"
+  //   labels  jack names: "off" | "full"
   //   veil    alpha of the dark veil over each module under its IO (0 = none)
   //   wireColor "from" (the colour of the jack the cable leaves) | "to" (the jack it enters); modulation cables
   //             always keep their modulation (purple) colour
-  //   strip   the one-row band between the title and the display. A shows the compacted IO (the pills) in it; in B it is
-  //           the first jack row, so the pill and the first jack are the same slot and a module's size is the same in
-  //           both views
-  //   collapseUnused  unconnected jacks leave the rail, so the connected ones stack up from the top
-  //                   (module sizes do not change: that is only where the jacks sit)
-  // Only the views in ENABLED_VIEWS can be reached. A is the IO pills in a strip between the title and the display
-  // (click a pill to go to B); B is the full jacks and names. The others are kept, switched off.
-  const ENABLED_VIEWS = ["A", "B"];
+  //   pills   one pill per side stands for that side's jacks (cables end at it)
+  //   strip   the one-row band between the title and the display. A shows the pills in it; in B it is the first jack
+  //           row, so the pill and the first jack are the same slot and a module's size is the same in both views
   const VIEWS = {
-    A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true, strip: true },
-    // Disabled: the earlier quiet A (no jacks, no labels, unconnected jacks collapsed to the top).
-    QUIET: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: true },
-    B: { jacks: true, labels: "full", wires: "all", veil: 0.55, wireColor: "to", collapseUnused: false, strip: true },
-    // Disabled C: the same pills as A, with Shift+Tab cycling the pill slot (bottom, mid, top). Each pill side opens
-    //    its panel (drawn in the top layer, no module resizes) with every jack and its full name.
-    C: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true, strip: true },
+    A: { jacks: false, labels: "off", veil: 0, wireColor: "from", pills: true, strip: true },
+    B: { jacks: true, labels: "full", veil: 0.55, wireColor: "to", strip: true },
   };
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
-  const SLOT_KEY = "soemdsp-sandbox.ioPillSlot.v1";
-  const SLOTS = ["bottom", "mid", "top"];
-  const state = { view: "A", hover: "", slot: "top" };
+  const state = { view: "A" };
 
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (ENABLED_VIEWS.includes(saved)) state.view = saved;
-    const slot = window.localStorage.getItem(SLOT_KEY);
-    if (SLOTS.includes(slot) && ENABLED_VIEWS.includes("C")) state.slot = slot;
+    if (saved === "A" || saved === "B") state.view = saved;
   } catch { /* storage unavailable: keep the default */ }
 
   function applyBodyState() {
     const body = document.body;
     if (!body) return;
     body.setAttribute("data-io-view", state.view);
-    body.setAttribute("data-io-slot", state.slot);
-    body.setAttribute("data-io-panel", VIEWS[state.view].panel ? "1" : "0");
     body.setAttribute("data-io-strip", VIEWS[state.view].strip ? "1" : "0");
-    body.setAttribute("data-io-collapse", VIEWS[state.view].collapseUnused ? "1" : "0");
   }
 
   /** Jack positions follow the rows, so they are read again from the DOM after the view changes the rows. */
@@ -75,7 +56,7 @@
     }
   }
 
-  /** Module sizes depend on the view (C adds the jack stack), so every module re-reads its size. */
+  /** Every module re-reads its size (the strip row is part of it). */
   function resyncModuleSizes() {
     const nodes = nodeGraphMvp?.patch?.nodes;
     if (!Array.isArray(nodes) || typeof syncNodeGraphModuleChromeElement !== "function") return;
@@ -88,12 +69,9 @@
   }
 
   function setView(view) {
-    const next = ENABLED_VIEWS.includes(view) ? view : "A";
+    const next = view === "B" ? "B" : "A";
     if (next === state.view) return state.view;
     state.view = next;
-    state.hover = "";
-    pinned = false;
-    if (typeof nodeGraphGlGraphState === "object") nodeGraphGlGraphState.ioExpanded = null;
     try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
     applyBodyState();
     resyncModuleSizes();
@@ -102,106 +80,24 @@
     return state.view;
   }
 
-  /** The module under a client point, front-most first (the GL plates are the only hit geometry). */
-  function moduleAt(clientX, clientY) {
-    const point = typeof nodeGraphClientToZoomSurfacePoint === "function"
-      ? nodeGraphClientToZoomSurfacePoint(clientX, clientY)
-      : null;
-    const plates = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState?.plates || [] : [];
-    if (!point) return "";
-    for (let i = plates.length - 1; i >= 0; i -= 1) {
-      const p = plates[i];
-      if (point.x >= p.x && point.x <= p.x + p.w && point.y >= p.y && point.y <= p.y + p.h) return String(p.id || "");
-    }
-    return "";
-  }
-
   window.nodeGraphIoView = () => state.view;
   window.nodeGraphIoViewConfig = () => VIEWS[state.view];
-  /** Extra module height (grid cells) the view needs: View C reserves the jack stack at the bottom. */
-  const usesLayoutB = (type) => typeof nodeGraphModuleUsesLayoutB === "function" && nodeGraphModuleUsesLayoutB(type);
-  /** IO view C, "mid": a strip (grid cells) between the display and the sliders, only where there are sliders. */
-  window.nodeGraphIoViewExtraHeightGu = (type) => {
-    if (!VIEWS[state.view].strip || state.slot !== "mid" || !usesLayoutB(type)) return 0;
-    const sliders = typeof nodeGraphModuleSliderBodyHeightGu === "function" ? nodeGraphModuleSliderBodyHeightGu(type, null, null) : 0;
-    return sliders > 0 ? 15 / 28 : 0;
-  };
-  /** IO view C, "top": a strip (grid cells) at the top of each module's shell, between the title and the display. */
+  /** The strip (grid cells) at the top of each module's shell, between the title and the display. */
   window.nodeGraphIoViewStripGu = (type) => (
-    VIEWS[state.view].strip && state.slot === "top" && usesLayoutB(type) ? 15 / 28 : 0
+    VIEWS[state.view].strip && typeof nodeGraphModuleUsesLayoutB === "function" && nodeGraphModuleUsesLayoutB(type)
+      ? 15 / 28
+      : 0
   );
-  /** Where View C puts the pills: "bottom" | "mid" | "top". */
-  window.nodeGraphIoViewPillSlot = () => state.slot;
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
-  /** Shift+Tab: enter View C; in View C it cycles the pill slot (bottom, mid, top). Tab leaves C. */
-  window.toggleNodeGraphIoViewC = () => {
-    if (!ENABLED_VIEWS.includes("C")) return state.view;
-    if (state.view !== "C") return setView("C");
-    state.slot = SLOTS[(SLOTS.indexOf(state.slot) + 1) % SLOTS.length];
-    try { window.localStorage.setItem(SLOT_KEY, state.slot); } catch { /* ignore */ }
-    state.hover = "";
-    pinned = false;
-    if (typeof nodeGraphGlGraphState === "object") nodeGraphGlGraphState.ioExpanded = null;
-    applyBodyState();
-    resyncModuleSizes();
-    refreshGeometry();
-    redraw();
-    return state.view;
-  };
-  window.setNodeGraphIoPillSlot = (slot) => {
-    if (!SLOTS.includes(slot) || !ENABLED_VIEWS.includes("C")) return state.slot;
-    state.slot = slot;
-    try { window.localStorage.setItem(SLOT_KEY, slot); } catch { /* ignore */ }
-    state.hover = "";
-    pinned = false;
-    if (typeof nodeGraphGlGraphState === "object") nodeGraphGlGraphState.ioExpanded = null;
-    applyBodyState();
-    resyncModuleSizes();
-    refreshGeometry();
-    redraw();
-    return slot;
-  };
 
-  /** A cable is hidden (its jack dots stay) per the view's `wires` setting. */
-  window.nodeGraphIoViewHidesWire = (sourceNode, destinationNode) => {
-    const mode = VIEWS[state.view].wires;
-    if (mode === "all") return false;
-    if (mode === "none") return true;
-    const h = state.hover;
-    return !(h && (String(sourceNode) === h || String(destinationNode) === h));
-  };
-
-  /** Jack label text for the current view ("" = none), short by the shared rail short-label rule. */
-  window.nodeGraphIoViewLabelText = (text) => {
-    const full = String(text || "");
-    const mode = VIEWS[state.view].labels;
-    if (mode === "off") return "";
-    if (mode === "full" || full.length <= 4 || typeof nodeGraphRailShortLabel !== "function") return full;
-    return nodeGraphRailShortLabel(full) || full;
-  };
-
-  // ---- IO overflow pill: hover or click it to expand the crowded edge's full jack list ----------------------------
-  let pinned = false;
+  /** Jack label text for the current view ("" = none). */
+  window.nodeGraphIoViewLabelText = (text) => (VIEWS[state.view].labels === "off" ? "" : String(text || ""));
 
   function pointOf(event) {
     return typeof nodeGraphClientToZoomSurfacePoint === "function"
       ? nodeGraphClientToZoomSurfacePoint(event.clientX, event.clientY)
       : null;
-  }
-
-  function setExpanded(id, io) {
-    const gl = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
-    if (!gl) return;
-    const cur = gl.ioExpanded;
-    if (!id) {
-      if (!cur) return;
-      gl.ioExpanded = null;
-    } else {
-      if (cur && cur.id === id && cur.io === io) return;
-      gl.ioExpanded = { id, io };
-    }
-    redraw();
   }
 
   function pillAt(point) {
@@ -216,78 +112,21 @@
     return null;
   }
 
-  function insideExpanded(point) {
-    const ex = nodeGraphGlGraphState?.ioExpanded;
-    if (!ex || typeof nodeGraphGlGraphIoExpandedRegion !== "function") return false;
-    const pad = 6;
-    if (nodeGraphGlGraphIoExpandedRegions(ex).some((reg) => (
-      point.x >= reg.x0 - pad && point.x <= reg.x1 + pad && point.y >= reg.y0 - pad && point.y <= reg.y1 + pad
-    ))) return true;
-    // IO view C: the pill is inside the module, the panels below it, so the module itself keeps them open.
-    if (ex.io !== "both") return false;
-    const plate = (nodeGraphGlGraphState.plates || []).find((p) => p.id === ex.id);
-    return Boolean(plate && point.x >= plate.x - pad && point.x <= plate.x + plate.w + pad
-      && point.y >= plate.y - pad && point.y <= plate.y + plate.h + pad);
-  }
-
-  document.addEventListener("pointermove", (event) => {
-    if (typeof nodeGraphGlGraphState !== "object" || pinned) return;
-    const point = pointOf(event);
-    if (!point) return;
-    if (nodeGraphGlGraphState.ioExpanded) {
-      if (insideExpanded(point)) return;
-      setExpanded(null);
-    }
-    const pill = pillAt(point);
-    // The compacted IO of View A opens only by a click (which goes to View B); hover opens only an overflow pill's list.
-    if (pill && !(pill.panel && state.view === "A")) setExpanded(pill.id, pill.panel ? "both" : pill.io);
-  }, { passive: true });
-
+  // A click on a pill (View A) opens View B: every jack and its full name.
   document.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || typeof nodeGraphGlGraphState !== "object") return;
+    if (event.button !== 0 || typeof nodeGraphGlGraphState !== "object" || state.view !== "A") return;
     const point = pointOf(event);
-    if (!point) return;
-    const pill = pillAt(point);
-    if (pill && pill.panel && state.view === "A") {
-      // The compacted IO in View A: a click opens View B (every jack and its full name).
-      event.preventDefault();
-      event.stopPropagation();
-      setView("B");
-      return;
-    }
-    if (pill) {
-      // Click the pill: keep the list open (click again to close).
-      pinned = true;
-      setExpanded(pill.id, pill.panel ? "both" : pill.io);
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    if (pinned && nodeGraphGlGraphState.ioExpanded) {
-      if (!insideExpanded(point)) {
-        pinned = false;
-        setExpanded(null);
-      }
-    }
+    if (!point || !pillAt(point)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setView("B");
   }, true);
 
-  document.addEventListener("pointermove", (event) => {
-    if (VIEWS[state.view].wires !== "hover") return;
-    const id = moduleAt(event.clientX, event.clientY);
-    if (id === state.hover) return;
-    state.hover = id;
-    redraw();
-  }, { passive: true });
-
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Tab" || event.ctrlKey || event.altKey || event.metaKey) return;
-    // Shift+Tab cycles View C's pill slot; while C is disabled it is left alone (normal focus navigation).
-    if (event.shiftKey && !ENABLED_VIEWS.includes("C")) return;
+    if (event.key !== "Tab" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
     if (typeof nodeGraphEventTargetIsTextEditable === "function" && nodeGraphEventTargetIsTextEditable(event.target)) return;
-    if (event.repeat) { event.preventDefault(); return; }
     event.preventDefault();
-    if (event.shiftKey) window.toggleNodeGraphIoViewC();
-    else window.toggleNodeGraphIoView();
+    if (!event.repeat) window.toggleNodeGraphIoView();
   }, true);
 
   if (document.body) applyBodyState();
