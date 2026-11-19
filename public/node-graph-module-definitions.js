@@ -23379,8 +23379,9 @@ const nodeGraphModuleDefinitions = (
     layout: "scopeFace",
     // Dry same-name thru (X→X … B→B) so the face can sit in-line. Efficient
     // Live resolves these past the observer at native compile time.
-    outputs: ["X", "Y", "R", "G", "B"],
-    outputLabels: { X: "X", Y: "Y", R: "R", G: "G", B: "B" },
+    // rgba: the drawn picture (premultiplied RGBA on the picture device), only produced while a cable leaves it.
+    outputs: ["X", "Y", "R", "G", "B", "rgba"],
+    outputLabels: { X: "X", Y: "Y", R: "R", G: "G", B: "B", rgba: "📺" },
     parameters: [],
     visualInputs: [
       { key: "vectorRgbX", label: "X", port: "X" },

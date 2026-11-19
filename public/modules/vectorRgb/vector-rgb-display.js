@@ -504,6 +504,10 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     if (typeof trails.presentTo === "function") {
       trails.presentTo(canvas, ctx, bg);
     }
+    // The rgba out: the finished picture, published only while a cable leaves it.
+    if (typeof nodeGraphPicturePublishCanvas === "function") {
+      nodeGraphPicturePublishCanvas(slot.nodeId, canvas);
+    }
   }
 }
 
