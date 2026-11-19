@@ -26217,13 +26217,13 @@ body[data-io-collapse="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) 
   display: none !important;
 }
 
-/* IO view C, pill slot "top": a strip one jack row tall between the title and the display (the shell track is one row
+/* IO pill views (View A; disabled View C), pill slot "top": a strip one jack row tall between the title and the display (the shell track is one row
    taller, see sizing, so the display keeps its height). */
-body[data-io-view="C"][data-io-slot="top"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
+body[data-io-panel="1"][data-io-slot="top"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell {
   padding-top: 15px;
   box-sizing: border-box;
 }
 /* Slot "mid": a strip between the display and the sliders (the first row of the slider section). */
-body[data-io-view="C"][data-io-slot="mid"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .dsp-node-body {
+body[data-io-panel="1"][data-io-slot="mid"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .dsp-node-body {
   padding-top: 15px;
 }

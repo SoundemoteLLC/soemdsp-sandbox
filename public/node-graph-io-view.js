@@ -21,12 +21,16 @@
   //             always keep their modulation (purple) colour
   //   collapseUnused  unconnected jacks leave the rail, so the connected ones stack up from the top
   //                   (module sizes do not change: that is only where the jacks sit)
+  // Only the views in ENABLED_VIEWS can be reached. A is the IO pills in a strip between the title and the display
+  // (click a pill to go to B); B is the full jacks and names. The others are kept, switched off.
+  const ENABLED_VIEWS = ["A", "B"];
   const VIEWS = {
-    A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: true },
+    A: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true },
+    // Disabled: the earlier quiet A (no jacks, no labels, unconnected jacks collapsed to the top).
+    QUIET: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: true },
     B: { jacks: true, labels: "full", wires: "all", veil: 0.55, wireColor: "to", collapseUnused: false },
-    // C: one pill per side at the bottom of the module wall (inputs left, outputs right); every cable comes out of
-    //    its side's pill. Click or hover opens that side's panel (drawn in the top layer, no module resizes) with
-    //    every jack and its full name.
+    // Disabled C: the same pills as A, with Shift+Tab cycling the pill slot (bottom, mid, top). Each pill side opens
+    //    its panel (drawn in the top layer, no module resizes) with every jack and its full name.
     C: { jacks: false, labels: "off", wires: "all", veil: 0, wireColor: "from", collapseUnused: false, panel: true },
   };
 
@@ -37,9 +41,9 @@
 
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === "A" || saved === "B" || saved === "C") state.view = saved;
+    if (ENABLED_VIEWS.includes(saved)) state.view = saved;
     const slot = window.localStorage.getItem(SLOT_KEY);
-    if (SLOTS.includes(slot)) state.slot = slot;
+    if (SLOTS.includes(slot) && ENABLED_VIEWS.includes("C")) state.slot = slot;
   } catch { /* storage unavailable: keep the default */ }
 
   function applyBodyState() {
@@ -47,6 +51,7 @@
     if (!body) return;
     body.setAttribute("data-io-view", state.view);
     body.setAttribute("data-io-slot", state.slot);
+    body.setAttribute("data-io-panel", VIEWS[state.view].panel ? "1" : "0");
     body.setAttribute("data-io-collapse", VIEWS[state.view].collapseUnused ? "1" : "0");
   }
 
@@ -79,7 +84,7 @@
   }
 
   function setView(view) {
-    const next = view === "B" || view === "C" ? view : "A";
+    const next = ENABLED_VIEWS.includes(view) ? view : "A";
     if (next === state.view) return state.view;
     state.view = next;
     state.hover = "";
@@ -127,6 +132,7 @@
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
   /** Shift+Tab: enter View C; in View C it cycles the pill slot (bottom, mid, top). Tab leaves C. */
   window.toggleNodeGraphIoViewC = () => {
+    if (!ENABLED_VIEWS.includes("C")) return state.view;
     if (state.view !== "C") return setView("C");
     state.slot = SLOTS[(SLOTS.indexOf(state.slot) + 1) % SLOTS.length];
     try { window.localStorage.setItem(SLOT_KEY, state.slot); } catch { /* ignore */ }
@@ -140,7 +146,7 @@
     return state.view;
   };
   window.setNodeGraphIoPillSlot = (slot) => {
-    if (!SLOTS.includes(slot)) return state.slot;
+    if (!SLOTS.includes(slot) || !ENABLED_VIEWS.includes("C")) return state.slot;
     state.slot = slot;
     try { window.localStorage.setItem(SLOT_KEY, slot); } catch { /* ignore */ }
     state.hover = "";
@@ -237,6 +243,13 @@
     const point = pointOf(event);
     if (!point) return;
     const pill = pillAt(point);
+    if (pill && pill.panel && state.view === "A") {
+      // The compacted IO in View A: a click opens View B (every jack and its full name).
+      event.preventDefault();
+      event.stopPropagation();
+      setView("B");
+      return;
+    }
     if (pill) {
       // Click the pill: keep the list open (click again to close).
       pinned = true;
@@ -263,6 +276,8 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Tab" || event.ctrlKey || event.altKey || event.metaKey) return;
+    // Shift+Tab cycles View C's pill slot; while C is disabled it is left alone (normal focus navigation).
+    if (event.shiftKey && !ENABLED_VIEWS.includes("C")) return;
     if (typeof nodeGraphEventTargetIsTextEditable === "function" && nodeGraphEventTargetIsTextEditable(event.target)) return;
     if (event.repeat) { event.preventDefault(); return; }
     event.preventDefault();
