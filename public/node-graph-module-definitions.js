@@ -212,6 +212,7 @@ const nodeGraphNodeLabels = Object.freeze({
   spectralDelay: "Spectral Delay",
   materialResonator: "Material Resonator",
   dispersion: "Dispersion",
+  spectralCrossSynthesis: "Spectral Cross-Synthesis",
   spectralSmear: "Spectral Smear",
   earlyReflectionConvolution: "Early Reflection Convolution",
   stftGate: "STFT Gate",
@@ -7543,6 +7544,84 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "%",
         "tooltip": "Delayed dry stereo versus reflected sound. Direct path is excluded from the IR; dry and wet share 256 samples of convolution buffering latency. Ready becomes high after the first kernel is built; Error reports an invalid or over-capacity request."
+      }
+    ],
+  },
+  spectralCrossSynthesis: {
+    planRole: "processor", planFreeRun: true, defaultWidthGu: 14,
+    inputs: ["Voice L", "Voice R", "Synth L", "Synth R"],
+    outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
+    bypassMap: [{ out: "Mono", in: "Synth L" }, { out: "Left", in: "Synth L" }, { out: "Right", in: "Synth R" }],
+    displayType: "scope1dTrace",
+    face: [
+      { kind: "cells", params: [["amount", "Transfer"], ["widthHz", "Envelope Width"]], h: 40 },
+      { kind: "cells", params: [["attackMs", "Attack"], ["releaseMs", "Release"]], h: 40 },
+      { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Output Gain"]], h: 40 },
+    ],
+    parameters: [
+      {
+        "key": "amount",
+        "label": "Transfer",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": ".5",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Spectral-envelope transfer amount. Zero reconstructs Synth; one replaces its broad power envelope with Voice's while retaining Synth fine structure and phase. Not an audio crossfade. Silent Synth stays silent."
+      },
+      {
+        "key": "widthHz",
+        "label": "Envelope Width",
+        "defaultValue": "300",
+        "min": "0",
+        "mid": "300",
+        "max": "4000",
+        "step": "any",
+        "unit": "Hz",
+        "tooltip": "Full width in Hz of the power-envelope averaging neighborhood. Zero transfers individual-bin magnitudes; wider neighborhoods preserve more Synth harmonic fine structure. Fractional bin widths interpolate continuously. FFT is fixed at 2048 samples, hop 512."
+      },
+      {
+        "key": "attackMs",
+        "label": "Attack",
+        "defaultValue": "5",
+        "min": "0",
+        "mid": "10",
+        "max": "1000",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Rising spectral power-envelope time constant, in milliseconds, measured once per 512-sample hop. Zero is immediate at the frame rate. Both Voice and Synth envelope estimates use this setting."
+      },
+      {
+        "key": "releaseMs",
+        "label": "Release",
+        "defaultValue": "50",
+        "min": "0",
+        "mid": "50",
+        "max": "2000",
+        "step": "any",
+        "unit": "ms",
+        "tooltip": "Falling spectral power-envelope time constant in milliseconds. Higher values retain the Voice envelope longer, but do not freeze Synth phase or create sound without Synth input."
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": ".5",
+        "max": "1",
+        "step": "any",
+        "tooltip": "Delayed dry Synth to cross-synthesized output. Dry and wet are aligned to the fixed 2048-sample reference delay. Voice is never mixed directly into the output."
+      },
+      {
+        "key": "gainDb",
+        "label": "Output Gain",
+        "defaultValue": "0",
+        "min": "-24",
+        "mid": "0",
+        "max": "24",
+        "step": "any",
+        "unit": "dB",
+        "tooltip": "Explicit final output gain in dB. No automatic loudness matching, hidden limiter or clipping. Envelope replacement can increase individual spectral components."
       }
     ],
   },

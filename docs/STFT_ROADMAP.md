@@ -143,8 +143,11 @@ them simultaneously. Proposed order follows musical value and implementation ris
 
 ### 4. Spectral Cross-Synthesis
 
-- [ ] Voice L/R and Synth L/R; envelope transfer amount and spectral resolution.
-- [ ] Explicit magnitude/envelope donor versus phase donor; no ambiguous routing.
+- [x] Voice L/R and Synth L/R; Transfer, Envelope Width (Hz), Attack/Release (ms),
+  Mix and explicit output gain. Fixed 2048 FFT / 512 hop v1.
+- [x] Voice supplies broad power envelope; Synth supplies fine structure/phase.
+  No built-in carrier or IIR bands. See [SPECTRAL_CROSS_SYNTHESIS.md](SPECTRAL_CROSS_SYNTHESIS.md).
+- [ ] Listening acceptance; FFT-size handoff and worst-case host callback proof.
 - [ ] Later: envelope whitening, transient blend, formant shift.
 - Proof: donor ownership is audible and measurable; silent donors have defined
   behavior; stereo and dry alignment remain correct.

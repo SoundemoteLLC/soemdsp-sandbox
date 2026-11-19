@@ -12,6 +12,12 @@ if (!(Test-Path -LiteralPath $clang)) {
 # instead of one repeated clang++ invocation per module. Add a new module by
 # adding one entry here (Name, Exports, and Simd only if it uses <wasm_simd128.h>).
 $modules = @(
+  @{ Name = "spectral_cross_synthesis"; Simd = $false; Exports = @(
+    "soemdsp_spectral_cross_synthesis_create", "soemdsp_spectral_cross_synthesis_destroy", "soemdsp_spectral_cross_synthesis_reset",
+    "soemdsp_spectral_cross_synthesis_sample", "soemdsp_spectral_cross_synthesis_right", "soemdsp_spectral_cross_synthesis_error",
+    "soemdsp_spectral_cross_synthesis_latency", "soemdsp_spectral_cross_synthesis_version",
+    "soemdsp_spectral_cross_synthesis_metadata_json", "soemdsp_spectral_cross_synthesis_metadata_json_size"
+  ) }
   @{ Name = "dispersion"; Simd = $false; Exports = @(
     "soemdsp_dispersion_create", "soemdsp_dispersion_destroy", "soemdsp_dispersion_reset", "soemdsp_dispersion_sample",
     "soemdsp_dispersion_right", "soemdsp_dispersion_error", "soemdsp_dispersion_state_energy", "soemdsp_dispersion_group_delay_ms",

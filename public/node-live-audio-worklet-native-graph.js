@@ -299,6 +299,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   spectralDelay: 275,
   materialResonator: 276,
   dispersion: 277,
+  spectralCrossSynthesis: 278,
   stftContrast: 270,
   stftGate: 271,
 });
@@ -645,6 +646,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     const ids={frequency:10,stages:22,spreadOct:31,curve:13,direction:21,stereoOct:1,mix:40,filterMode:11,tuningMode:54,lowFreq:30,highFreq:59,freqShape:42,lowQ:20,highQ:50,qShape:47,outputGainDb:90};
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
   }
+  if(t==="spectralCrossSynthesis") {
+    const ids={amount:13,widthHz:31,attackMs:42,releaseMs:50,mix:40,gainDb:90};
+    if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
+  }
   if (t === "materialResonator") {
     const ids={material:21,modes:22,frequency:10,decay:52,dampingHz:59,inharmonicity:13,position:30,stereoSpread:1,inputGainDb:90,mix:40};
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
@@ -976,7 +981,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (t === "earlyReflectionConvolution" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "spectralDelay" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "materialResonator" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
-  if(t==="dispersion"&&p==="error")return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
+  if((t==="dispersion"||t==="spectralCrossSynthesis")&&p==="error")return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "sturmianGrid") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "snare") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -1662,7 +1667,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
     if (p === "freeze") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE_CV;
     if (p === "recapture") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
   }
-  if (tDst === "vocoder") {
+  if (tDst === "vocoder" || tDst === "spectralCrossSynthesis") {
     if (p === "voice l" || p === "mod l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "voice r" || p === "mod r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "synth l" || p === "car l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_L;
@@ -6208,6 +6213,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("stages",P.NATIVE_GRAPH_PARAM_STAGES,disc("stages",50));push("direction",P.NATIVE_GRAPH_PARAM_MODE,disc("direction",0));
       push("filterMode",P.NATIVE_GRAPH_PARAM_WAVEFORM,disc("filterMode",1));push("tuningMode",P.NATIVE_GRAPH_PARAM_TIMING_MODE,disc("tuningMode",1));
       for(const[key,value]of Object.entries({frequency:300,spreadOct:2,curve:0,stereoOct:0,mix:1,lowFreq:15,highFreq:8000,freqShape:0,lowQ:1,highQ:1,qShape:0,outputGainDb:0}))push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
+      continue;
+    }
+    if(type==="spectralCrossSynthesis") {
+      for(const[key,value]of Object.entries({amount:1,widthHz:300,attackMs:5,releaseMs:50,mix:1,gainDb:0}))
+        push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
       continue;
     }
     if (type === "materialResonator") {

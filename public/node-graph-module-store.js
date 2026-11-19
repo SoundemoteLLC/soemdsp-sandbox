@@ -1116,6 +1116,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Stereo energy-preserving lattice disperser: distributed allpass corners, low/high-delay direction, curve and stereo offsets. No IR files, FFT buffering or lookahead.",
     notes: ["dispersion", "allpass", "group delay", "chirp", "lattice", "phase", "native"],
   },
+  spectralCrossSynthesis: {
+    browserEmoji: "🌊", category: "space", label: "Spectral Cross-Synthesis",
+    description: "Voice envelope onto external Synth fine structure and phase. Stereo native STFT with envelope width in Hz, attack/release, transfer and aligned dry/wet.",
+    notes: ["spectral", "STFT", "cross synthesis", "voice", "synth", "native"],
+  },
   materialResonator: {
     browserEmoji: "🌊",
     category: "space", label: "Material Resonator",
@@ -4003,6 +4008,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   spectralDelay: {
     source: "native_modules/spectral_delay/spectral_delay.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_delay/spectral_delay.cpp",
+  },
+  spectralCrossSynthesis: {
+    source: "native_modules/spectral_cross_synthesis/spectral_cross_synthesis.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_cross_synthesis/spectral_cross_synthesis.cpp",
   },
   spectralBlur: {
     source: "native_modules/spectral_blur/spectral_blur.cpp",
