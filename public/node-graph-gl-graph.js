@@ -1105,6 +1105,12 @@ function nodeGraphGlGraphJackHoles(jacks, plate, plateStyle, camera, device) {
   return holes;
 }
 
+/** The IO view has the jack cutouts switched off (View A). */
+function nodeGraphGlGraphIoJacksOff() {
+  const cfg = typeof nodeGraphIoViewConfig === "function" ? nodeGraphIoViewConfig() : null;
+  return Boolean(cfg && cfg.jacks === false);
+}
+
 /** Module opted in to drawing its jacks and labels over its display (definition.ioOverlay). */
 function nodeGraphGlGraphIoOverlay(id) {
   const type = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id)?.type : "";
@@ -1139,7 +1145,8 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     const jack = allJacks[j];
     if (jack.id !== plate.id || jack.rail) continue;
     // The plate keeps its jack notches, so its stroke wraps each jack instead of crossing it; the display is
-    // cut the same way afterwards (nodeGraphGlGraphDrawJackHalves).
+    // cut the same way afterwards (nodeGraphGlGraphDrawJackHalves). The IO view can switch jacks off.
+    if (mode === "" && nodeGraphGlGraphIoJacksOff()) continue;
     // Connected, or a wire is being dragged out of it right now.
     const lit = jack.lit || nodeGraphGlGraphJackDragging(jack);
     plateJacks.push({
@@ -3198,7 +3205,7 @@ function nodeGraphGlGraphPresent(options = {}) {
           });
           if (picture) {
             picture.pin = pin;
-            picture.holes = nodeGraphGlGraphJackHoles(
+            picture.holes = nodeGraphGlGraphIoJacksOff() ? [] : nodeGraphGlGraphJackHoles(
               chromeById?.get(face.id)?.jacks || [],
               group.plates.find((p) => p.id === face.id) || null,
               plateStyle,
@@ -3213,13 +3220,14 @@ function nodeGraphGlGraphPresent(options = {}) {
         if (inks) for (let i = 0; i < group.displays.length; i += 1) inks.set(group.displays[i].canvas, { layer: ink, group });
       }
       // View B: a dark veil over each whole module, under its jacks, labels and wire dots.
-      if (typeof nodeGraphIoView === "function" && nodeGraphIoView() === "B") {
+      const veilAlpha = typeof nodeGraphIoViewConfig === "function" ? Number(nodeGraphIoViewConfig().veil) || 0 : 0;
+      if (veilAlpha > 0) {
         const veil = nodeGraphGlLinesLayer(batch);
         if (veil) {
           for (let i = 0; i < group.plates.length; i += 1) {
             const plate = group.plates[i];
             if (!nodeGraphGlGraphIoOverlay(plate.id)) continue;
-            nodeGraphGlLinesRect(veil, toX(plate.x), toY(plate.y), plate.w * layoutZoom, plate.h * layoutZoom, [0, 0, 0, 0.55]);
+            nodeGraphGlLinesRect(veil, toX(plate.x), toY(plate.y), plate.w * layoutZoom, plate.h * layoutZoom, [0, 0, 0, veilAlpha]);
           }
         }
       }
@@ -3231,7 +3239,9 @@ function nodeGraphGlGraphPresent(options = {}) {
         ioLayer = ioLayer || nodeGraphGlLinesLayer(batch);
         if (!ioLayer) break;
         nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
-        nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "rim");
+        if (!nodeGraphGlGraphIoJacksOff()) {
+          nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "rim");
+        }
         nodeGraphGlGraphDrawLabels(ioLayer, toX, toY, layoutZoom, cssW, cssH);
         nodeGraphGlGraphState.chrome = chromeAll;
       }

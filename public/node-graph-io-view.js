@@ -11,6 +11,17 @@
 (() => {
   "use strict";
 
+  // One row per view; each is a setting, so a view is changed by editing its row.
+  //   jacks   the half-circle jack cutouts (on the plate and through the display)
+  //   labels  jack names: "off" | "short" | "full"
+  //   dots    the wire end dots (always drawn where a cable ends)
+  //   wires   "all" | "hover" (only cables at the hovered module) | "none"
+  //   veil    alpha of the dark veil over each module under its IO (0 = none)
+  const VIEWS = {
+    A: { jacks: false, labels: "off", wires: "all", veil: 0 },
+    B: { jacks: true, labels: "full", wires: "all", veil: 0.55 },
+  };
+
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
   const state = { view: "A", hover: "" };
 
@@ -55,25 +66,30 @@
   }
 
   window.nodeGraphIoView = () => state.view;
+  window.nodeGraphIoViewConfig = () => VIEWS[state.view];
   window.setNodeGraphIoView = setView;
   window.toggleNodeGraphIoView = () => setView(state.view === "A" ? "B" : "A");
 
-  /** View A hides a cable unless the pointer is over a module at one of its ends. Its jack dots stay. */
+  /** A cable is hidden (its jack dots stay) per the view's `wires` setting. */
   window.nodeGraphIoViewHidesWire = (sourceNode, destinationNode) => {
-    if (state.view !== "A") return false;
+    const mode = VIEWS[state.view].wires;
+    if (mode === "all") return false;
+    if (mode === "none") return true;
     const h = state.hover;
     return !(h && (String(sourceNode) === h || String(destinationNode) === h));
   };
 
-  /** Jack label text for the current view: short in A (the shared rail short-label rule), full in B. */
+  /** Jack label text for the current view ("" = none), short by the shared rail short-label rule. */
   window.nodeGraphIoViewLabelText = (text) => {
     const full = String(text || "");
-    if (state.view !== "A" || full.length <= 4 || typeof nodeGraphRailShortLabel !== "function") return full;
+    const mode = VIEWS[state.view].labels;
+    if (mode === "off") return "";
+    if (mode === "full" || full.length <= 4 || typeof nodeGraphRailShortLabel !== "function") return full;
     return nodeGraphRailShortLabel(full) || full;
   };
 
   document.addEventListener("pointermove", (event) => {
-    if (state.view !== "A") return;
+    if (VIEWS[state.view].wires !== "hover") return;
     const id = moduleAt(event.clientX, event.clientY);
     if (id === state.hover) return;
     state.hover = id;
