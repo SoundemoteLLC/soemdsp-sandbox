@@ -117,11 +117,21 @@
       event.preventDefault();
       apply(event);
     };
-    pad.addEventListener("pointerdown", (event) => {
+    // The GL graph owns pointer input on the workspace (every module element is pointer-events:none there), so its hit test calls
+    // this too (nodeGraphXyParamPadPointerDown); the DOM listener below covers a pad outside the GL graph.
+    const onDown = (event) => {
       if (event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
       if (locked()) return;
+      // Native dblclick never arrives through the GL hit layer: a second press within 350 ms resets.
+      const now = performance.now();
+      if (pad._xyLastDown && now - pad._xyLastDown < 350) {
+        pad._xyLastDown = 0;
+        resetPad(pad);
+        return;
+      }
+      pad._xyLastDown = now;
       const cur = read(pad);
       if (!cur) return;
       drag = {
@@ -139,13 +149,15 @@
       window.addEventListener("pointerup", finish, true);
       window.addEventListener("pointercancel", finish, true);
       apply(event);
-    });
-    pad.addEventListener("dblclick", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      resetPad(pad);
-    });
+    };
+    pad._xyPointerDown = onDown;
+    pad.addEventListener("pointerdown", onDown);
   }
+
+  /** Start a pad drag from a pointerdown the GL hit layer routed to this pad. */
+  window.nodeGraphXyParamPadPointerDown = function (pad, event) {
+    if (pad && typeof pad._xyPointerDown === "function") pad._xyPointerDown(event);
+  };
 
   function decorate(row, node, type, parameter, spec) {
     const axis = spec.axis === "y" ? "y" : "x";

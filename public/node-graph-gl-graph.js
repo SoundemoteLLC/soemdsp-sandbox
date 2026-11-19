@@ -4126,6 +4126,16 @@ function nodeGraphGlHitPointerDown(event) {
   if (event.target instanceof Element && event.target.closest(".node-text-box-body, .node-text-box-input")) return;
   const point = nodeGraphGlHitPoint(event);
   if (!point) return;
+  // XY parameter pads (node-graph-xy-param-pad.js): their DOM boxes are pointer-events:none like the rest of the module.
+  if (event.button === 0 && typeof nodeGraphXyParamPadPointerDown === "function") {
+    const padEl = nodeGraphGlHitChromeBoxes(point, nodeGraphGlGraphState.chrome?.xyPads, (item) => item.el);
+    if (padEl) {
+      event.preventDefault();
+      event.stopPropagation();
+      nodeGraphXyParamPadPointerDown(padEl, event);
+      return;
+    }
+  }
   const hit = nodeGraphGlHitTest(point.x, point.y);
   if (!hit) {
     const wire = nodeGraphGlHitWireAt(point.x, point.y);
