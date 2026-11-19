@@ -2686,7 +2686,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   viewOut: {
     category: "rgba",
-    description: "Screen Space In: the circuit view as a picture on 📺 (last frame on screen). Into effects, then Screen Space Out for feedback.",
+    description: "Screen Space In: the circuit view as a picture on 📺 (one frame behind). Wire it through effects into Screen Space Out; straight In to Out changes nothing.",
     notes: ["screen space", "view", "feedback", "picture"],
   },
   screenOut: {

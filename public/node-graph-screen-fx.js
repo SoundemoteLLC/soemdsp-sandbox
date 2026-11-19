@@ -1,11 +1,12 @@
 // Circuit view on the 📺 picture pipeline (one path):
-//   Screen Space In     source: last frame's on-screen circuit view on its 📺 out.
+//   Screen Space In     source: the circuit view (before Screen Space Out replaces it) on its 📺 out, one frame behind.
 //   Screen Space Out   sink: its 📺 in replaces the circuit area on screen.
 //   Screen Space Shader  picture effect: 📺 in -> GLSL -> 📺 out, like Aberration.
 // Each frame: the GL graph's workspace canvases (plates, cables, dots, faces)
 // composite into one scene texture; the screen is Screen Space Out's picture, or the
-// scene when there is none; that final picture lands on #nodeScreenFxCanvas and
-// is copied into Screen Space In's ping-pong pair for the next frame. Every texture is
+// scene when there is none; that final picture lands on #nodeScreenFxCanvas. The scene itself
+// is copied into Screen Space In's ping-pong pair for the next frame, so In -> Out shows the
+// circuit unchanged (feedback is up to the effects in between). Every texture is
 // double-buffered: nothing is read and written in the same frame.
 
 const NODE_GRAPH_SCREEN_FX_MAX = 4096;
@@ -390,14 +391,15 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
       nodeGraphScreenFxDraw(kit, st.screen, kit.copy, [screen.texture]);
       final = st.screen;
     }
-    // 4. Screen Space In: this frame's screen into the view texture nobody reads now, published for the next frame.
+    // 4. Screen Space In: this frame's SCENE (not the final screen) into the view texture nobody reads now, published for the
+    // next frame. Using the final screen here made In -> Out a closed loop that never took in a new frame (frozen view).
     if (nodes.viewOuts.length) {
       st.views[0] = nodeGraphScreenFxSurface(gl, w, h, st.views[0]);
       st.views[1] = nodeGraphScreenFxSurface(gl, w, h, st.views[1]);
       const view = st.views[st.viewIndex];
       gl.useProgram(kit.copy);
       gl.uniform1i(kit.copyTex, 0);
-      nodeGraphScreenFxDraw(kit, view, kit.copy, [final.texture]);
+      nodeGraphScreenFxDraw(kit, view, kit.copy, [st.scene.texture]);
       for (const id of nodes.viewOuts) {
         if (typeof nodeGraphPicturePublish === "function") nodeGraphPicturePublish(id, view.texture, w, h, { byReference: true });
       }
