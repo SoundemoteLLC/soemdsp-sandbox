@@ -188,8 +188,8 @@ $notesPath = Join-Path $env:TEMP "soemdsp-release-notes-$Version.md"
 Write-Utf8NoBom $notesPath ($notesBody.TrimEnd() + "`n")
 Write-Host ""
 Write-Host "== Plugin release" -ForegroundColor Cyan
-$pluginArgs = @("-Version", $Version, "-NotesFile", $notesPath)
-if ($NoWait) { $pluginArgs += "-NoWait" } else { $pluginArgs += @("-WaitMinutes", "$WaitMinutes") }
+$pluginArgs = @{ Version = $Version; NotesFile = $notesPath; WaitMinutes = $WaitMinutes }
+if ($NoWait) { $pluginArgs["NoWait"] = $true }
 & (Join-Path $PSScriptRoot "release_plugin.ps1") @pluginArgs
 if ($LASTEXITCODE -ne 0) { throw "release_plugin.ps1 failed." }
 

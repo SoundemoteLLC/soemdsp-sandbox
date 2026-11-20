@@ -37,12 +37,17 @@ if (-not $SkipIo) {
     if ($DryRun) {
         Write-Host "  dry-run: would publish soundemote-io via soundemote_io.ps1 -Mode publish"
     } else {
-        $ioArgs = @("-Mode", "publish", "-SkipBuildBump")
-        if ($SkipNativeBuild) { $ioArgs += "-SkipNativeBuild" }
-        if ($SkipSmoke) { $ioArgs += "-SkipSmoke" }
-        if ($SkipSandboxCommit) { $ioArgs += "-SkipSandboxCommit" }
-        if (-not [string]::IsNullOrWhiteSpace($Build)) { $ioArgs += @("-Message", "Sandbox Alpha $Version (build $Build)") }
-        Write-Host "  soundemote_io.ps1 $($ioArgs -join ' ')"
+        $ioArgs = @{
+            Mode = "publish"
+            SkipBuildBump = $true
+            SkipNativeBuild = [bool]$SkipNativeBuild
+            SkipSmoke = [bool]$SkipSmoke
+            SkipSandboxCommit = [bool]$SkipSandboxCommit
+        }
+        if (-not [string]::IsNullOrWhiteSpace($Build)) {
+            $ioArgs["Message"] = "Sandbox Alpha $Version (build $Build)"
+        }
+        Write-Host "  soundemote_io.ps1 -Mode publish (SkipBuildBump/SkipNativeBuild=$SkipNativeBuild/SkipSmoke=$SkipSmoke/SkipSandboxCommit=$SkipSandboxCommit)"
         & (Join-Path $PSScriptRoot "soundemote_io.ps1") @ioArgs
         if ($LASTEXITCODE -ne 0) { throw "soundemote_io.ps1 publish failed (exit $LASTEXITCODE)." }
     }
