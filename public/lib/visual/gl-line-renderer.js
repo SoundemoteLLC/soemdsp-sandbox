@@ -412,17 +412,32 @@ void main() {
   }
 
   const VEIL_FS = `
-precision mediump float;
+precision highp float;
 varying vec2 vPx;
 uniform vec4 uRect;
 uniform float uPeriod;
+uniform float uFeather;
+uniform float uAlpha;
+// The app's Expo skirt (APP_POLICY section 3): 1 at t = 0 falling to 0 at t = 1.
+float expoSkirt(float t) {
+  return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+}
 void main() {
-  if (vPx.x < uRect.x || vPx.y < uRect.y || vPx.x > uRect.x + uRect.z || vPx.y > uRect.y + uRect.w) discard;
-  float period = max(uPeriod, 1.0);
-  float band = mod(vPx.x + vPx.y, period);
-  if (band < 0.0) band += period;
-  if (band > period * 0.5) discard;
-  gl_FragColor = vec4(0.886, 0.659, 0.427, 0.34);
+  float f = max(uFeather, 0.01);
+  // Distance inside the plate to its nearest edge: the stripes end on an anti-aliased edge too.
+  float inside = min(min(vPx.x - uRect.x, uRect.x + uRect.z - vPx.x), min(vPx.y - uRect.y, uRect.y + uRect.w - vPx.y));
+  if (inside < -f) discard;
+  float period = max(uPeriod, 2.0);
+  float half_ = period * 0.5;
+  // Along the stripe normal (x + y), from the plate's corner so the pattern does not swim; q is the offset from the nearest stripe centre.
+  float u = (vPx.x - uRect.x) + (vPx.y - uRect.y);
+  float q = mod(u + half_ * 0.5, period) - half_;
+  // Perpendicular distance past the stripe's edge (negative inside it); the stripe is half a period wide in x + y.
+  float d = (abs(q) - half_ * 0.5) * 0.70710678118;
+  float a = expoSkirt(clamp((d + f * 0.5) / f, 0.0, 1.0));
+  a *= 1.0 - expoSkirt(clamp((inside + f * 0.5) / f, 0.0, 1.0));
+  if (a <= 0.003) discard;
+  gl_FragColor = vec4(0.886, 0.659, 0.427, uAlpha * a);
 }
 `;
   // Module lights, on the GPU. One pass over the view: for every module an inverse-square falloff of
@@ -452,6 +467,8 @@ uniform float uGridDark;
 uniform highp vec4 uGridLamp;
 // The mouse as a module-like light: 1 = it reveals the grid as brightly as a module does (0 = not at all).
 uniform float uGridReflect;
+// Grid line strength around the mouse (uGridRgba.a is the strength around modules).
+uniform float uGridMouseA;
 // TEMPORARY dial-in: x = push the lines at the mouse toward full white (0..1), y = how far the mouse light reaches, in SCREEN (device)
 // px, so it does not change with the zoom.
 uniform vec2 uGridLampMore;
@@ -490,7 +507,8 @@ void main() {
       acc.a += (1.0 - acc.a) * a1;
     }
     // Stroke light: the module's own shape (distance to its rounded rectangle), inverse-square.
-    float u = max(sd, 0.0) / max(uGlow[i].x, 1.0);
+    // Its own reach (uStrokeRgb.w, set by the module glow spread); the module light's reach when none is given.
+    float u = max(sd, 0.0) / max(uStrokeRgb[i].w > 0.5 ? uStrokeRgb[i].w : uGlow[i].x, 1.0);
     if (u < 1.0) {
       float fall = (1.0 / (1.0 + (u / 0.3) * (u / 0.3))) * (1.0 - smoothstep(0.55, 1.0, u));
       float a2 = uGlow[i].z * fall;
@@ -507,11 +525,13 @@ void main() {
     vec2 dist = min(fd, cellDev - fd);
     vec2 lineCov = clamp(vec2(1.0) - dist, 0.0, 1.0);
     float cov = max(lineCov.x * smoothstep(4.0, 12.0, cellDev.x), lineCov.y * smoothstep(4.0, 12.0, cellDev.y));
+    // What the modules reveal and what the mouse reveals are kept apart: each has its own line strength.
     float rv = reveal * uModuleAmt;
+    float mouseRv = 0.0;
     if (uMouse.w > 0.0) {
       float mt = length(vPx - uMouse.xy) / max(uMouse.z, 1.0);
       float mr = uMouse.w * (1.0 / (1.0 + (mt / 0.35) * (mt / 0.35))) * (1.0 - smoothstep(0.6, 1.0, mt));
-      rv = 1.0 - (1.0 - rv) * (1.0 - clamp(mr, 0.0, 1.0));
+      mouseRv = clamp(mr, 0.0, 1.0);
     }
     // The mouse is a light like a module: it reveals the grid with the same falloff, over the same reach and at the same line
     // strength a module does (uGridReflect scales it; 1 = exactly as bright as around a module), wherever it is, in a lit room or
@@ -528,8 +548,10 @@ void main() {
     }
     float gridF = 1.0 - uGridDark * (1.0 - lit);
     vec3 gridRgb = mix(uGridRgba.rgb, vec3(1.0), 0.45 * lit * lit);
-    rv = 1.0 - (1.0 - rv) * (1.0 - clamp(lampRev, 0.0, 1.0));
-    float gridA = cov * mix(uGridRgba.a * rv * gridF, 1.0, clamp(lampRev, 0.0, 1.0) * clamp(uGridLampMore.x, 0.0, 1.0));
+    mouseRv = 1.0 - (1.0 - mouseRv) * (1.0 - clamp(lampRev, 0.0, 1.0));
+    float aModule = uGridRgba.a * rv * gridF;
+    float aMouse = uGridMouseA * mouseRv * gridF;
+    float gridA = cov * mix(1.0 - (1.0 - aModule) * (1.0 - aMouse), 1.0, clamp(lampRev, 0.0, 1.0) * clamp(uGridLampMore.x, 0.0, 1.0));
     acc.rgb += (1.0 - acc.a) * gridRgb * gridA;
     acc.a += (1.0 - acc.a) * gridA;
   }
@@ -939,6 +961,7 @@ void main() {
         lightGridDark: gl.getUniformLocation(lightProgram, "uGridDark"),
         lightGridLamp: gl.getUniformLocation(lightProgram, "uGridLamp"),
         lightGridReflect: gl.getUniformLocation(lightProgram, "uGridReflect"),
+        lightGridMouseA: gl.getUniformLocation(lightProgram, "uGridMouseA"),
         lightGridLampMore: gl.getUniformLocation(lightProgram, "uGridLampMore"),
         lightModuleAmt: gl.getUniformLocation(lightProgram, "uModuleAmt"),
         lightMouse: gl.getUniformLocation(lightProgram, "uMouse"),
@@ -953,6 +976,8 @@ void main() {
         veilPx: veilProgram ? gl.getAttribLocation(veilProgram, "pixel") : -1,
         veilRect: veilProgram ? gl.getUniformLocation(veilProgram, "uRect") : null,
         veilPeriod: veilProgram ? gl.getUniformLocation(veilProgram, "uPeriod") : null,
+        veilFeather: veilProgram ? gl.getUniformLocation(veilProgram, "uFeather") : null,
+        veilAlpha: veilProgram ? gl.getUniformLocation(veilProgram, "uAlpha") : null,
         veilCamPixel: veilProgram ? gl.getUniformLocation(veilProgram, "uPixel") : null,
         veilCamCam: veilProgram ? gl.getUniformLocation(veilProgram, "uCam") : null,
         veilCamVp: veilProgram ? gl.getUniformLocation(veilProgram, "uVp") : null,
@@ -3402,7 +3427,13 @@ void main() {
       gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
       drawPulseTrains(batch);
     }
-    if (batch.outlines?.length) drawOutlines(batch);
+    if (batch.outlines?.length) {
+      // The outline shader writes straight (non-premultiplied) colour, so it needs the normal over-blend. Without this it ran with
+      // whatever the previous draw left set (the lights pass leaves premultiplied blending), which drew every module stroke at full
+      // brightness whatever its alpha: the module stroke alpha only worked as on / off.
+      gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
+      drawOutlines(batch);
+    }
     drawLayer(true);
     if (batch.roundRects?.length) {
       gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
@@ -3633,17 +3664,21 @@ void main() {
     if (!(bright > 0) && !(strokeBright > 0) && !grid) return;
     const levelOf = typeof global.nodeGraphModuleStrokeFollowLevel === "function" ? global.nodeGraphModuleStrokeFollowLevel : null;
     const loudOf = typeof global.nodeGraphStrokeLoudColor === "function" ? global.nodeGraphStrokeLoudColor : null;
+    const glowLv = typeof global.nodeGraphModuleGlowLevels === "function" ? global.nodeGraphModuleGlowLevels() : { rest: 0.155, loud: 0.16, spread: 0.505 };
     for (let i = 0; i < items.length; i += 1) {
       const it = items[i];
       const k = levelOf ? levelOf(it.id) : 0;
-      const loud = k > 0 && loudOf ? loudOf(it.id) : null;
+      // A selected module keeps its selected colour while it animates (it only gets brighter), so it still reads as selected.
+      const loud = k > 0 && loudOf && !it.selected ? loudOf(it.id) : null;
       rect.set([it.x, it.y, it.w, it.h], i * 4);
-      glow.set([it.reach, 0.16 * bright, strokeBright * (0.1 + 0.25 * k), it.round || 0], i * 4);
+      // A module that is not animating (no signal) has no glow: it ramps in over the first part of the level.
+      const gate = Math.min(1, k * 8);
+      glow.set([it.reach, 0.16 * bright, strokeBright * gate * (glowLv.rest + glowLv.loud * k), it.round || 0], i * 4);
       stroke.set([
         loud ? it.base[0] + (loud[0] - it.base[0]) * k : it.base[0],
         loud ? it.base[1] + (loud[1] - it.base[1]) * k : it.base[1],
         loud ? it.base[2] + (loud[2] - it.base[2]) * k : it.base[2],
-        0,
+        (it.glowReach > 0 ? it.glowReach : it.reach) * glowLv.spread,
       ], i * 4);
     }
     gl.useProgram(s.lightProgram);
@@ -3674,6 +3709,7 @@ void main() {
       const lamp = typeof global.nodeGraphRoomLightUniform === "function" ? global.nodeGraphRoomLightUniform() : null;
       if (s.lightGridReflect) gl.uniform1f(s.lightGridReflect, Math.max(0, Math.min(4, Number(grid.reflect) || 0)));
       if (s.lightGridLampMore) gl.uniform2f(s.lightGridLampMore, Math.max(0, Math.min(1, Number(grid.lampBright) || 0)), Math.max(1, (lo.gridMinX || 140) * (Number(grid.spread) || 1) * Math.max(0.25, Number(grid.lampReach) || 1) * scalePx));
+      if (s.lightGridMouseA) gl.uniform1f(s.lightGridMouseA, Math.max(0, Math.min(1, Number.isFinite(Number(grid.mouseAlpha)) ? Number(grid.mouseAlpha) : Number(grid.rgba[3]))));
       if (s.lightGridDark) gl.uniform1f(s.lightGridDark, gridDark);
       if (s.lightGridLamp) gl.uniform4f(s.lightGridLamp, lamp ? lamp[0] : 0, lamp ? lamp[1] : 0, lamp ? lamp[2] : 1, lamp ? lamp[3] : 0);
     }
@@ -3708,8 +3744,12 @@ void main() {
   function nodeGraphGlLinesVeil(batch, x, y, w, h, period) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
+    // The stripe period in the batch's own units; drawVeils picks the final one from the screen zoom.
     if (period > 0) batch.veilPeriod = period * k;
-    batch.veils.push({ x: x * k, y: y * k, w: w * k, h: h * k });
+    // The plate's edges on whole device pixels, so the pattern and its edge sit on the pixel grid.
+    const x0 = Math.round(x * k);
+    const y0 = Math.round(y * k);
+    batch.veils.push({ x: x0, y: y0, w: Math.round((x + w) * k) - x0, h: Math.round((y + h) * k) - y0 });
   }
 
   function drawVeils(batch) {
@@ -3728,7 +3768,18 @@ void main() {
     // coverage (ONE, ONE_MINUS_SRC_ALPHA) so the canvas stays opaque there.
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    if (s.veilPeriod) gl.uniform1f(s.veilPeriod, batch.veilPeriod > 0 ? batch.veilPeriod : 18);
+    // Everything is decided in screen pixels. A camera batch holds world units, so one screen CSS px is 1 / zoom of them; a plain batch is
+    // already in device pixels (scale per CSS px).
+    const camZoom = batch.camera ? (batch.camera.zoom > 0 ? batch.camera.zoom : 1) : 1;
+    const unitsPerCssPx = batch.camera ? 1 / camZoom : (batch.scale || 1);
+    // Anti-aliasing: always 1 CSS px of Expo skirt, however far in or out (it never grows into a glow).
+    if (s.veilFeather) gl.uniform1f(s.veilFeather, unitsPerCssPx);
+    // The stripes belong to the module: the same spacing in world units (the design that reads well between zoom 0.5 and 0.3: a 90 px
+    // period), measured from the plate's corner, so they scale and move with it and never shift against it. Nothing here compensates for
+    // zoom; the plain-batch period (screen px) is the same world period times the zoom, unrounded.
+    if (s.veilPeriod) gl.uniform1f(s.veilPeriod, batch.veilPeriod > 0 ? batch.veilPeriod : 67);
+    // UI Dev "under construction alpha".
+    if (s.veilAlpha) gl.uniform1f(s.veilAlpha, Math.max(0, Math.min(1, Number.isFinite(Number(global.nodeGraphUnderConstructionAlpha)) ? Number(global.nodeGraphUnderConstructionAlpha) : 0.4)));
     for (let n = 0; n < batch.veils.length; n += 1) {
       const shape = batch.veils[n];
       const x0 = shape.x;
@@ -3840,7 +3891,10 @@ void main() {
         if (k > 0) {
           const loud = (typeof globalThis.nodeGraphStrokeLoudColor === "function" && globalThis.nodeGraphStrokeLoudColor(shape.nodeId)) || [1, 1, 1, 1];
           const loudA = loud.length > 3 ? loud[3] : 1;
-          pc = [col[0] + (loud[0] - col[0]) * k, col[1] + (loud[1] - col[1]) * k, col[2] + (loud[2] - col[2]) * k, baseA + (loudA - baseA) * k];
+          // A selected module keeps its selected colour while it animates: only the brightness (alpha) follows the loudness, so
+          // the stroke still reads as selected.
+          const to = shape.selected ? col : loud;
+          pc = [col[0] + (to[0] - col[0]) * k, col[1] + (to[1] - col[1]) * k, col[2] + (to[2] - col[2]) * k, baseA + (loudA - baseA) * k];
         }
       }
       // Stroke glow rim: the stroke colour moving toward the loud colour with the module level, at a

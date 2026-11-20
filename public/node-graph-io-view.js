@@ -1,11 +1,13 @@
 // IO view (Tab): how a module's jacks and labels show.
 //
 //   A  (default)  The compacted IO: one pill per side in a strip between the title and the display. Cables end at the
-//                 pills. Click a pill to go to B.
+//                 pills. Click a pill to go to B (a side with one jack starts that jack's wire instead).
 //   B             Full jacks, full names, every cable, and a dark veil over each whole module with the jacks, labels and
 //                 wire dots on top of it, so the names stay readable over a display or sliders. A crowded edge shows
 //                 every jack at once.
 //
+// A pill click opens B as a wiring view: it closes again by itself when the cable gesture ends (connected, dropped in empty space,
+// or cancelled) and on Esc. B opened with Tab stays until Tab is pressed again.
 // Tab toggles A and B. Shift+Tab shows / hides the cables in A (their jack dots stay); B always shows every cable.
 // The view and the cable setting are UI settings, saved in the browser (not in the patch).
 
@@ -28,7 +30,7 @@
 
   const STORAGE_KEY = "soemdsp-sandbox.ioView.v1";
   const WIRES_KEY = "soemdsp-sandbox.ioWiresHidden.v1";
-  const state = { view: "A", wiresHidden: false };
+  const state = { view: "A", wiresHidden: false, wiring: false, sawGesture: false, watch: 0 };
 
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -71,19 +73,62 @@
     }
   }
 
+  /** A cable gesture is going on: a drag from a jack, a cable armed by a click, or a selected cable being moved. */
+  function cableGestureActive() {
+    const m = typeof nodeGraphMvp === "object" ? nodeGraphMvp : null;
+    return Boolean(m && (m.wireDragging || m.portConnectionMode || m.portMovePointer));
+  }
+
+  function refreshHelp() {
+    if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp("");
+  }
+
+  function stopWiring() {
+    state.wiring = false;
+    state.sawGesture = false;
+    if (state.watch) window.cancelAnimationFrame(state.watch);
+    state.watch = 0;
+  }
+
+  /** Watches the cable gesture of a wiring view: when one has been going on and is over, View B closes. */
+  function watchWiring() {
+    state.watch = 0;
+    if (!state.wiring || state.view !== "B") return;
+    if (cableGestureActive()) state.sawGesture = true;
+    else if (state.sawGesture) {
+      setView("A");
+      return;
+    }
+    state.watch = window.requestAnimationFrame(watchWiring);
+  }
+
+  /** Opened by a pill click: View B for one wiring job. */
+  function enterWiringView() {
+    state.wiring = true;
+    state.sawGesture = false;
+    setView("B");
+    refreshHelp();
+    if (!state.watch) state.watch = window.requestAnimationFrame(watchWiring);
+  }
+
   function setView(view) {
     const next = view === "B" ? "B" : "A";
     if (next === state.view) return state.view;
+    // Any switch other than the one that opens the wiring view ends it (Tab pins B or leaves it, the gesture end closes it).
+    if (!(next === "B" && state.wiring)) stopWiring();
     state.view = next;
     try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
     applyBodyState();
     resyncModuleSizes();
     refreshGeometry();
     redraw();
+    refreshHelp();
     return state.view;
   }
 
   window.nodeGraphIoView = () => state.view;
+  /** One line of help while a pill click's wiring view is open (read by the interaction help bar). */
+  window.nodeGraphIoViewHintText = () => (state.wiring && state.view === "B" ? "Wiring view: Esc or Tab goes back to the normal view." : "");
   window.nodeGraphIoViewConfig = () => VIEWS[state.view];
   /** The strip (grid cells) at the top of each module's shell, between the title and the display. */
   window.nodeGraphIoViewStripGu = (type) => (
@@ -117,6 +162,12 @@
     for (let i = pills.length - 1; i >= 0; i -= 1) {
       const pill = pills[i];
       const side = pill.io === "output" ? -1 : 1;
+      // The same hitbox as an expanded jack: a square on the jack's centre (the wall), so both halves of the circle hit, with the
+      // jack hit radius as its half size at the least.
+      const jackRadius = typeof nodeGraphJackHitRadiusPx === "function" ? nodeGraphJackHitRadiusPx() : 8;
+      const reach = Math.max(pill.r || 0, jackRadius);
+      if (Math.max(Math.abs(point.x - pill.x), Math.abs(point.y - pill.y)) <= reach) return pill;
+      // And the old strip inward of it, where the pill's count sits.
       const w = pill.r * 3.4;
       const x0 = side > 0 ? pill.x : pill.x - w;
       if (point.x >= x0 && point.x <= x0 + w && Math.abs(point.y - pill.y) <= pill.r) return pill;
@@ -124,14 +175,33 @@
     return null;
   }
 
+  /** The wire drag of a side's only jack. false when it cannot be found (the press then opens View B instead). */
+  function startWireFromOnlyJack(event, pill) {
+    const handler = nodeGraphWireInteractions?.handlePortPointerDown;
+    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(pill.id) : null;
+    if (typeof handler !== "function" || typeof nodeGraphGlHitRetarget !== "function" || !el) return false;
+    const ports = [...el.querySelectorAll(`.node-io-column.${pill.io} .node-port`)];
+    if (ports.length !== 1) return false;
+    handler(nodeGraphGlHitRetarget(event, ports[0]));
+    return Boolean(nodeGraphMvp?.wireDragging || nodeGraphMvp?.portMovePointer || nodeGraphMvp?.portConnectionMode);
+  }
+
   // A click on a pill (View A) opens View B: every jack and its full name.
   document.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || typeof nodeGraphGlGraphState !== "object" || state.view !== "A") return;
     const point = pointOf(event);
-    if (!point || !pillAt(point)) return;
+    const pill = point ? pillAt(point) : null;
+    if (!pill) return;
     event.preventDefault();
     event.stopPropagation();
-    setView("B");
+    // A side with one jack has nothing to choose from: the press starts that jack's wire at once (View A stays as it is).
+    if (pill.count === 1 && startWireFromOnlyJack(event, pill)) return;
+    enterWiringView();
+  }, true);
+
+  // Esc closes a wiring view (the cable gesture's own Esc, which cancels the cable, runs as usual).
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.wiring && state.view === "B") setView("A");
   }, true);
 
   document.addEventListener("keydown", (event) => {

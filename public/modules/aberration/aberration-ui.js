@@ -16,6 +16,9 @@ function createNodeGraphAberrationBody(node, type) {
 }
 
 function nodeGraphAberrationShouldAnimate(face) {
+  // While the Viewport is on, the circuit view itself is the picture: it keeps being drawn when the project is paused (speed 0) or the
+  // Display Settings freeze is on, or moving around the view would only refresh now and then.
+  if (typeof nodeGraphScreenFxState === "object" && nodeGraphScreenFxState?.active) return !nodeGraphVideoGraphShouldSleep(face?.dataset?.node || "");
   if (typeof scopePaintIsVisualPaused === "function" && scopePaintIsVisualPaused()) {
     return false;
   }

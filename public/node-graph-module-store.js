@@ -2752,13 +2752,13 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   viewOut: {
     category: "rgba",
-    description: "Screen Space In: the circuit view as a picture on 📺 (one frame behind). Wire it through effects into Screen Space Out; straight In to Out changes nothing.",
-    notes: ["screen space", "view", "feedback", "picture"],
+    description: "Viewport In: the circuit view as a picture on 📺 (one frame behind). Wire it through effects into Viewport Out; straight In to Out changes nothing.",
+    notes: ["viewport", "viewport in", "screen space", "view", "feedback", "picture"],
   },
   screenOut: {
     category: "rgba",
-    description: "Screen Space Out: its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
-    notes: ["screen space", "screen", "feedback", "picture"],
+    description: "Viewport Out: its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
+    notes: ["viewport", "viewport out", "screen space", "screen", "feedback", "picture"],
   },
   rgbaHsla: {
     category: "rgba",

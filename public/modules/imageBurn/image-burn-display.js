@@ -346,7 +346,10 @@ function nodeGraphImageBurnDrawGl(face, ctx, w, h, opts) {
     || typeof nodeGraphImageBurnGlPresentTo !== "function") {
     return false;
   }
-  const renderer = nodeGraphImageBurnGlEnsure(face, w, h);
+  // Render at the size of the picture coming in (the whole screen for Viewport In), not the small face; the face shows it scaled down.
+  const rw = opts.textureIn?.width > 0 ? opts.textureIn.width : w;
+  const rh = opts.textureIn?.height > 0 ? opts.textureIn.height : h;
+  const renderer = nodeGraphImageBurnGlEnsure(face, rw, rh);
   if (!renderer) {
     return false;
   }
@@ -494,8 +497,11 @@ function drawNodeGraphImageBurnFaceItem(renderer, item, pixelRatio) {
 
   // Transport pause only. A quiet patch must still fade Hang / Burn / Blur.
   const speed = Number(nodeGraphMvp?.live?.speedMultiplier);
-  const paused = (typeof scopePaintIsVisualPaused === "function" && scopePaintIsVisualPaused())
-    || (Number.isFinite(speed) && speed <= 0);
+  // While Viewport In / Out are in the patch the circuit view is the picture being worked on, so the effect keeps running with the engine
+  // stopped (it would otherwise hold its last frame and the screen would freeze).
+  const screenLive = typeof nodeGraphScreenFxState === "object" && nodeGraphScreenFxState?.active === true;
+  const paused = !screenLive && ((typeof scopePaintIsVisualPaused === "function" && scopePaintIsVisualPaused())
+    || (Number.isFinite(speed) && speed <= 0));
 
   // Residual + dry flash both in the GL present (Brightness never hides burn).
   const stampReady = imageReady || Boolean(textureIn?.texture);

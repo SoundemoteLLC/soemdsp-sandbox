@@ -49,10 +49,13 @@ function nodeGraphSelectionHelpText() {
 
 function composeNodeInteractionHelpText(text = "") {
   const selectionText = nodeGraphSelectionHelpText();
-  if (!selectionText) {
+  // The wiring view (a pill click opened View B): tell new users how to leave it.
+  const viewHint = typeof nodeGraphIoViewHintText === "function" ? nodeGraphIoViewHintText() : "";
+  const extra = [selectionText, viewHint].filter(Boolean).join("\n");
+  if (!extra) {
     return text;
   }
-  return text ? `${text}\n${selectionText}` : selectionText;
+  return text ? `${text}\n${extra}` : extra;
 }
 
 function normalizeNodeInteractionButtonLabel(value = "") {

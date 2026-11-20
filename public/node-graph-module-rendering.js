@@ -477,6 +477,28 @@ function nodeGraphModuleLayoutClassNames(type, definition, layout) {
 }
 
 function appendNodeGraphModuleIoSection(article, ioSection, node, inputPorts, outputPorts) {
+  // LayoutA is retired into LayoutB: a LayoutB article keeps its jacks in a shell beside the face and never shows a separate IO strip
+  // (CSS hides it). Many render paths were written as "face, then IO strip"; for those the face just built is moved into a shell with
+  // the jack columns, and the strip is dropped, so every module has its IO.
+  if (article.classList.contains("chrome-layout-b") && !article.querySelector(":scope > .node-solid-module-shell")) {
+    const type = article.dataset.nodeType || "";
+    const children = [...article.children];
+    let face = null;
+    for (let i = children.length - 1; i >= 0; i -= 1) {
+      const c = children[i];
+      if (c.classList.contains("dsp-node-header") || c.classList.contains("node-module-lip")) continue;
+      face = c;
+      break;
+    }
+    if (!face) {
+      face = document.createElement("div");
+      face.className = "node-module-face";
+      article.append(face);
+    }
+    const shell = createNodeGraphLayoutBShell(node, type, face, null, inputPorts, outputPorts);
+    article.append(shell);
+    return;
+  }
   const proxy = createNodeGraphIoProxySection(node, inputPorts, outputPorts);
   if (proxy) {
     ioSection.append(proxy);

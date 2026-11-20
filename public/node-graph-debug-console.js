@@ -497,12 +497,14 @@
     s.id = "seDebugStyles";
     s.textContent = `
       #seDebugButton{width:40px;height:auto;align-self:stretch;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
-        font-size:17px;line-height:1;border:1px solid #c0392b;border-radius:7px;cursor: var(--node-dot-cursor);
-        background:linear-gradient(#e74c3c,#c0392b);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);position:relative;padding:0;}
+        font-size:17px;line-height:1;border:1px solid #3a4250;border-radius:7px;cursor: var(--node-dot-cursor);
+        background:linear-gradient(#4a5262,#343b48);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);position:relative;padding:0;}
       #seDebugButton:hover{filter:brightness(1.12);}
       #seDebugButton[aria-pressed="true"]{outline:2px solid #fff3;}
       /* Release build: same button, neutral instead of alarm-red -- see seBuildMode(). */
       #seDebugButton.se-release-build{border-color:#3a4250;background:linear-gradient(#4a5262,#343b48);}
+      /* Red only while there is an error in the log (the badge counts them). */
+      #seDebugButton.se-has-errors{border-color:#c0392b;background:linear-gradient(#e74c3c,#c0392b);}
       #seDebugButton .se-badge{position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:9px;
         background:#000;color:#ff6b6b;font:700 10px/16px ui-monospace,monospace;text-align:center;display:none;border:1px solid #ff6b6b;}
       #seDebugPanel{position:fixed;z-index:2147483646;right:14px;bottom:14px;width:640px;height:380px;min-width:340px;min-height:200px;
@@ -933,6 +935,7 @@
     if (!els.badge) return;
     els.badge.textContent = String(errorCount);
     els.badge.style.display = errorCount > 0 ? "block" : "none";
+    els.btn?.classList.toggle("se-has-errors", errorCount > 0);
   }
   function showPanel(open) {
     if (!els.panel) return;

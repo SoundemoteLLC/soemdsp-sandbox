@@ -281,6 +281,16 @@
     // The keep over one step: a point from the start of this frame's chunk has decayed by it by the end of the chunk
     // (age 0), one at the end has not (age 1). 1 = no age shading. See DOT_FRAG.
     uniform mediump float uAgeKeep;
+    // The decay the stored energy really has over one step (STEP_FRAG): the first 0.5 of energy decays at the Ghost (tail)
+    // rate, only what is above it at the Trail (hot) rate. A stamp is shaded by the same two-part decay, by its own energy,
+    // so it matches the energy the previous frame left at the same place. (Shading by the hot rate alone matched only
+    // energy above 0.5: at a lower Bright every frame joint stepped, and read as a dot.)
+    uniform mediump float uAgeKeepTail;
+    float ageDecayEnergy(float e, float age) {
+      float hot = pow(max(uAgeKeep, 0.0001), 1.0 - age);
+      float tail = pow(max(uAgeKeepTail, 0.0001), 1.0 - age);
+      return min(e, 0.5) * tail + max(e - 0.5, 0.0) * hot;
+    }
     // Build-up joins: (x) the chunk's first segment starts flat, (y) its last segment ends flat, so the frame joint is
     // drawn once (round caps there overlap and, added up frame after frame, show as a bright dot at every join).
     uniform mediump vec2 uButt;
@@ -329,8 +339,7 @@
       // Decay runs once per frame, so a chunk drawn at one brightness shows as a flat band per frame. Shade it by the decay
       // each point would have had by now (its age runs along the chunk), so the trail fades smoothly along its length.
       float age = clamp(mix(vAges.x, vAges.y, t), 0.0, 1.0);
-      float ageShade = pow(max(uAgeKeep, 0.0001), 1.0 - age);
-      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area * ageShade;
+      float e = ageDecayEnergy(clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area, age);
       float tRaw = segmentLengthSquared > 0.000001 ? dot(vPosition - vStart, segment) / segmentLengthSquared : 0.5;
       if (uButt.x > 0.5 && vAges.x < 0.00001 && tRaw < 0.0) e = 0.0;
       if (uButt.y > 0.5 && vAges.y > 0.99999 && tRaw > 1.0) e = 0.0;
@@ -395,6 +404,16 @@
     // How much a stamp from the START of this frame's chunk has already decayed by the end of it (the keep over one
     // step); a stamp at the end of the chunk (age 1) has not decayed at all. 1 = no age shading.
     uniform float uAgeKeep;
+    // The decay the stored energy really has over one step (STEP_FRAG): the first 0.5 of energy decays at the Ghost (tail)
+    // rate, only what is above it at the Trail (hot) rate. A stamp is shaded by the same two-part decay, by its own energy,
+    // so it matches the energy the previous frame left at the same place. (Shading by the hot rate alone matched only
+    // energy above 0.5: at a lower Bright every frame joint stepped, and read as a dot.)
+    uniform float uAgeKeepTail;
+    float ageDecayEnergy(float e, float age) {
+      float hot = pow(max(uAgeKeep, 0.0001), 1.0 - age);
+      float tail = pow(max(uAgeKeepTail, 0.0001), 1.0 - age);
+      return min(e, 0.5) * tail + max(e - 0.5, 0.0) * hot;
+    }
     uniform sampler2D uStamp;
     varying vec2 vOffset;
     varying vec2 vUv;
@@ -433,16 +452,16 @@
       // Decay runs once per frame, so a chunk stamped at one brightness shows as a flat band per frame. Stamps carry their
       // place in the chunk (0 oldest .. 1 newest): shade them by the decay they would have had by now, so the trail
       // fades smoothly along its length instead of in steps.
-      float ageShade = pow(max(uAgeKeep, 0.0001), 1.0 - clamp(vAge, 0.0, 1.0));
+      float ageClamped = clamp(vAge, 0.0, 1.0);
       if (uStampCustom > 0.5) {
-        float e = clamp(tex, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * ageShade;
+        float e = ageDecayEnergy(clamp(tex, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0), ageClamped);
         gl_FragColor = vec4(e, e, e, e);
         return;
       }
       // Built-in: same flat core + Expo shoulder as the ribbon, zero at R.
       float aa = max(0.55, min(1.25, R * 0.06));
       float profile = phosphorShoulder(r, R, aa, soft);
-      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area * ageShade;
+      float e = ageDecayEnergy(clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0) * area, ageClamped);
       gl_FragColor = vec4(e, e, e, e);
     }
   `;
@@ -728,6 +747,7 @@
         aCorner: gl.getAttribLocation(beamProgram, "aCorner"),
         aAges: gl.getAttribLocation(beamProgram, "aAges"),
         uAgeKeep: gl.getUniformLocation(beamProgram, "uAgeKeep"),
+        uAgeKeepTail: gl.getUniformLocation(beamProgram, "uAgeKeepTail"),
         uButt: gl.getUniformLocation(beamProgram, "uButt"),
         uCanvasSize: gl.getUniformLocation(beamProgram, "uCanvasSize"),
         uRadius: gl.getUniformLocation(beamProgram, "uRadius"),
@@ -747,6 +767,7 @@
         aCorner: gl.getAttribLocation(dotProgram, "aCorner"),
         aAge: gl.getAttribLocation(dotProgram, "aAge"),
         uAgeKeep: gl.getUniformLocation(dotProgram, "uAgeKeep"),
+        uAgeKeepTail: gl.getUniformLocation(dotProgram, "uAgeKeepTail"),
         uCanvasSize: gl.getUniformLocation(dotProgram, "uCanvasSize"),
         uRadius: gl.getUniformLocation(dotProgram, "uRadius"),
         uBrightness: gl.getUniformLocation(dotProgram, "uBrightness"),
@@ -1253,6 +1274,9 @@
     if (renderer.beam.uAgeKeep) {
       gl.uniform1f(renderer.beam.uAgeKeep, vertexStride === 7 ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.ageKeep, 1))) : 1);
     }
+    if (renderer.beam.uAgeKeepTail) {
+      gl.uniform1f(renderer.beam.uAgeKeepTail, vertexStride === 7 ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.ageKeepTail, options.ageKeep ?? 1))) : 1);
+    }
     if (renderer.beam.uButt) {
       gl.uniform2f(renderer.beam.uButt, vertexStride === 7 && options.buttStart ? 1 : 0, vertexStride === 7 && options.buttEnd ? 1 : 0);
     }
@@ -1350,6 +1374,9 @@
         gl.disableVertexAttribArray(renderer.dot.aAge);
         gl.vertexAttrib1f(renderer.dot.aAge, 1);
       }
+    }
+    if (renderer.dot.uAgeKeepTail) {
+      gl.uniform1f(renderer.dot.uAgeKeepTail, vertexStride === 4 ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.ageKeepTail, options.ageKeep ?? 1))) : 1);
     }
     if (renderer.dot.uAgeKeep) {
       gl.uniform1f(renderer.dot.uAgeKeep, vertexStride === 4 ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.ageKeep, 1))) : 1);
@@ -1659,6 +1686,7 @@
     const { gl } = renderer;
     // No decay step (early returns): nothing to shade by.
     renderer.lastAgeKeep = 1;
+    renderer.lastAgeKeepTail = 1;
     const fade = fadeAmountFromTrail(trail);
     const keep = Math.max(0, 1 - fade);
     const keepSlow = ghostKeepAmount(ghostAmt, keep);
@@ -1718,6 +1746,8 @@
       gl.uniform1f(renderer.step.uFrames, stepFrames);
       // The hot decay over this step: the stamps deposited right after are shaded by it (see DOT_FRAG, uAgeKeep).
       renderer.lastAgeKeep = Math.pow(Math.max(0, keep), stepFrames);
+      // The dim tail (the first 0.5 of energy) decays at the Ghost rate: the same max() the step shader takes.
+      renderer.lastAgeKeepTail = Math.pow(Math.max(0, Math.max(keep, Math.min(keepSlow, 0.9998))), stepFrames);
     }
     gl.uniform1f(renderer.step.uGain, useMask ? Math.max(0, Math.min(1.5, depositGain)) : 0);
     gl.uniform1f(renderer.step.uUseMask, useMask);
@@ -1842,6 +1872,7 @@
           vertices: depositVertices,
           vertexStride: options.ageDecay === true && !Array.isArray(vertices) ? 4 : 3,
           ageKeep: renderer.lastAgeKeep,
+          ageKeepTail: renderer.lastAgeKeepTail,
           radius,
           brightness,
           blur,
@@ -1856,6 +1887,7 @@
           vertices: depositVertices,
           vertexStride: options.ageDecay === true && !Array.isArray(vertices) ? 7 : 5,
           ageKeep: renderer.lastAgeKeep,
+          ageKeepTail: renderer.lastAgeKeepTail,
           buttStart: options.accumulate === true && options.bridged === true,
           buttEnd: options.accumulate === true,
           radius,

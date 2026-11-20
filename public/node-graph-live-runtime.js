@@ -4232,7 +4232,8 @@ function nodeGraphLiveSetKeepPlayingWhenUnfocused(on) {
   if (!nodeGraphMvp?.live) return;
   nodeGraphMvp.live.keepPlayingWhenUnfocused = Boolean(on);
   if (typeof renderNodeGraphLiveControls === "function") {
-    renderNodeGraphLiveControls(true);
+    // Forced: the chrome signature does not include this setting, so an unforced redraw left the play button's lock stale.
+    renderNodeGraphLiveControls(Boolean(nodeGraphMvp.live.node), { force: true });
   }
 }
 
@@ -4245,8 +4246,8 @@ function nodeGraphLiveToggleKeepPlayingWhenUnfocused() {
   if (typeof setNodeInteractionHelp === "function") {
     setNodeInteractionHelp(
       next
-        ? "Keep playing when unfocused (Ã¢â€“Â¶Ã¢â€“Â¶)."
-        : "Pause when leaving tab.",
+        ? "Play when unfocused: on (the play button shows ▶🔒)."
+        : "Play when unfocused: off (pauses when you leave the tab).",
     );
   }
 }

@@ -437,6 +437,27 @@ function handleNodeGraphKeydown(event) {
     if (typeof toggleNodeGraphPerformanceView === "function") toggleNodeGraphPerformanceView();
     return;
   }
+  // Shift+Space = Stop (the Stop button). Ctrl+Space = play when unfocused on / off (Ctrl+click on the Play button).
+  if (!event.altKey && event.code === "Space" && (event.shiftKey !== (event.ctrlKey || event.metaKey))
+    && !(typeof window !== "undefined" && window.soemdspPluginHost)
+    && !nodeGraphEventTargetIsTextEditable(event.target)) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.shiftKey) {
+      if (typeof nodeGraphTransportHandleAction === "function") nodeGraphTransportHandleAction("stop");
+    } else if (typeof nodeGraphLiveToggleKeepPlayingWhenUnfocused === "function") {
+      nodeGraphLiveToggleKeepPlayingWhenUnfocused();
+    }
+    return;
+  }
+  // Home / End = the transport's first and last buttons (restart, forward), the same as clicking them.
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && (event.key === "Home" || event.key === "End")
+    && typeof nodeGraphTransportHandleAction === "function"
+    && !(typeof window !== "undefined" && window.soemdspPluginHost)) {
+    event.preventDefault();
+    nodeGraphTransportHandleAction(event.key === "Home" ? "restart" : "forward");
+    return;
+  }
   // Space toggles simulation play/pause when not typing.
   // Text inputs are excluded above so module search and name fields can take spaces.
   if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.code === "Space") {

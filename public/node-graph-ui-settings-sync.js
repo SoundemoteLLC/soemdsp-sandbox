@@ -669,33 +669,45 @@ function bindNodeUiDevModuleTitlePadding() {
 }
 
 function bindNodeUiDevModuleIdleStroke() {
-  // Click a colour's hex text in UI Dev to copy it; the text reads "copied!" for a second.
+  // Click a value in UI Dev to copy it (a colour's hex text, or a slider's number without its unit); the text reads "copied!" for a second.
   if (!document.documentElement.dataset.uiDevHexCopyBound) {
     document.documentElement.dataset.uiDevHexCopyBound = "true";
     document.addEventListener("click", (event) => {
       const out = event.target?.closest?.("output[for]");
       if (!out || !out.closest("#nodeUiDevPanel, .node-ui-dev, [id^='nodeUiDev']")) return;
       const input = document.getElementById(out.getAttribute("for") || "");
-      if (input?.type !== "color") return;
-      const hex = out.dataset.hexCopyValue || out.textContent.trim();
-      if (!/^#[0-9a-f]{3,8}$/i.test(hex)) return;
-      out.dataset.hexCopyValue = hex;
+      if (!input) return;
+      const shown = out.dataset.hexCopyValue || out.textContent.trim();
+      let copy = "";
+      if (input.type === "color") {
+        if (!/^#[0-9a-f]{3,8}$/i.test(shown)) return;
+        copy = shown;
+      } else if (input.type === "range" || input.type === "number") {
+        const m = /^-?\d+(?:\.\d+)?/.exec(shown);
+        if (!m) return;
+        copy = m[0];
+      } else {
+        return;
+      }
+      out.dataset.hexCopyValue = shown;
       const done = () => {
         out.textContent = "copied!";
         clearTimeout(out._hexCopyTimer);
         out._hexCopyTimer = setTimeout(() => {
-          out.textContent = input.value || out.dataset.hexCopyValue;
+          // A colour returns to its current hex; a number to what it read (or its fresh text if it changed meanwhile).
+          if (input.type === "color") out.textContent = input.value || out.dataset.hexCopyValue;
+          else if (out.textContent === "copied!") out.textContent = out.dataset.hexCopyValue;
           delete out.dataset.hexCopyValue;
         }, 1000);
       };
       const fallback = () => {
         const t = document.createElement("textarea");
-        t.value = hex; t.style.position = "fixed"; t.style.opacity = "0";
+        t.value = copy; t.style.position = "fixed"; t.style.opacity = "0";
         document.body.appendChild(t); t.select();
         try { document.execCommand("copy"); } catch (_) {}
         t.remove();
       };
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(hex).catch(fallback);
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(copy).catch(fallback);
       else fallback();
       done();
     });
@@ -1047,37 +1059,149 @@ function nodeUiDevSpreadRatioFromPercent(value, fallback = 78) {
   return Math.max(0.4, Math.min(2.2, Math.max(40, Math.min(220, percent)) / 100));
 }
 
+// UI Dev "under construction": the stripes over under-construction (and bypassed) modules. Read by the GL renderer each draw.
+var nodeGraphUnderConstructionAlpha = 0.4;
+var nodeGraphUnderConstructionSpacing = 67;
+
+// UI Dev "lighting: loudness": module glow (the stroke light around a module) at rest and what loudness adds.
+/**
+ * UI Dev numbers show and keep at most 2 decimals. The generic slider code puts every slider on step "any", so a step attribute
+ * cannot do it: a slider's value is rounded to 0.01 as it moves, and every readout beside it is rewritten to at most 2 decimals
+ * (a stored 18.909091 reads 18.91).
+ */
+function nodeUiDevRoundDecimals(text) {
+  return String(text).replace(/-?\d+\.\d{3,}/g, (m) => String(Math.round(Number.parseFloat(m) * 100) / 100));
+}
+
+function limitNodeUiDevNumberDecimals() {
+  if (window.__nodeUiDevDecimalsBound) return;
+  window.__nodeUiDevDecimalsBound = true;
+  const roundInput = (input) => {
+    const v = Number(input.value);
+    const r = Math.round(v * 100) / 100;
+    if (Number.isFinite(v) && v !== r) input.value = String(r);
+  };
+  const fixOutput = (out) => {
+    const text = out.textContent;
+    const next = nodeUiDevRoundDecimals(text);
+    if (next !== text) out.textContent = next;
+  };
+  // The value is rounded before any other handler reads it.
+  document.addEventListener("input", (event) => {
+    const el = event.target;
+    if (el instanceof HTMLInputElement && el.type === "range" && el.closest(".node-ui-dev-control")) roundInput(el);
+  }, true);
+  const sweep = () => {
+    for (const el of document.querySelectorAll(".node-ui-dev-control input[type='range']")) roundInput(el);
+    for (const out of document.querySelectorAll(".node-ui-dev-control output")) fixOutput(out);
+  };
+  sweep();
+  const host = document.querySelector(".node-user-ui-settings-uidev-host") || document.getElementById("nodeUiDevHelper") || document.body;
+  new MutationObserver((records) => {
+    for (const r of records) {
+      const node = r.target.nodeType === 3 ? r.target.parentElement : r.target;
+      const out = node?.closest?.(".node-ui-dev-control output");
+      if (out) fixOutput(out);
+    }
+  }).observe(host, { subtree: true, childList: true, characterData: true });
+}
+
+function syncNodeUiDevModuleGlowControls() {
+  const restEl = document.getElementById("nodeUiDevModuleGlow");
+  const loudEl = document.getElementById("nodeUiDevModuleGlowLoudness");
+  const rest = Math.max(0, Math.min(100, nodeGraphFiniteNumber(restEl?.value, 15.5)));
+  const loud = Math.max(0, Math.min(100, nodeGraphFiniteNumber(loudEl?.value, 16)));
+  const spread = Math.max(10, Math.min(1000, nodeGraphFiniteNumber(document.getElementById("nodeUiDevModuleGlowSpread")?.value, 50.5)));
+  const spreadOut = document.getElementById("nodeUiDevModuleGlowSpreadValue");
+  if (spreadOut) spreadOut.textContent = `${spread}%`;
+  const restOut = document.getElementById("nodeUiDevModuleGlowValue");
+  const loudOut = document.getElementById("nodeUiDevModuleGlowLoudnessValue");
+  if (restOut) restOut.textContent = `${rest}%`;
+  if (loudOut) loudOut.textContent = `${loud}%`;
+  const ws = document.getElementById("nodeGraphWorkspace");
+  ws?.style.setProperty("--node-module-glow", String(rest / 100));
+  ws?.style.setProperty("--node-module-glow-loud", String(loud / 100));
+  ws?.style.setProperty("--node-module-glow-spread", String(spread / 100));
+  nodeGraphUiDevRefreshGlGraph();
+}
+
+function bindNodeUiDevModuleGlowControls() {
+  for (const id of ["nodeUiDevModuleGlow", "nodeUiDevModuleGlowLoudness", "nodeUiDevModuleGlowSpread"]) {
+    const input = document.getElementById(id);
+    if (!input || input.dataset.glowBound === "true") continue;
+    input.dataset.glowBound = "true";
+    input.addEventListener("input", syncNodeUiDevModuleGlowControls);
+    input.addEventListener("change", syncNodeUiDevModuleGlowControls);
+  }
+  syncNodeUiDevModuleGlowControls();
+}
+
+function syncNodeUiDevUnderConstructionControls() {
+  const alphaEl = document.getElementById("nodeUiDevUnderConstructionAlpha");
+  const spacingEl = document.getElementById("nodeUiDevUnderConstructionSpacing");
+  const alpha = Math.max(0, Math.min(100, nodeGraphFiniteNumber(alphaEl?.value, 40)));
+  const spacing = Math.max(10, Math.min(240, nodeGraphFiniteNumber(spacingEl?.value, 67)));
+  const alphaOut = document.getElementById("nodeUiDevUnderConstructionAlphaValue");
+  const spacingOut = document.getElementById("nodeUiDevUnderConstructionSpacingValue");
+  if (alphaOut) alphaOut.textContent = `${alpha}%`;
+  if (spacingOut) spacingOut.textContent = `${spacing} px`;
+  nodeGraphUnderConstructionAlpha = alpha / 100;
+  nodeGraphUnderConstructionSpacing = spacing;
+  nodeGraphUiDevRefreshGlGraph();
+}
+
+function bindNodeUiDevUnderConstructionControls() {
+  for (const id of ["nodeUiDevUnderConstructionAlpha", "nodeUiDevUnderConstructionSpacing"]) {
+    const input = document.getElementById(id);
+    if (!input || input.dataset.ucBound === "true") continue;
+    input.dataset.ucBound = "true";
+    input.addEventListener("input", syncNodeUiDevUnderConstructionControls);
+    input.addEventListener("change", syncNodeUiDevUnderConstructionControls);
+  }
+  syncNodeUiDevUnderConstructionControls();
+}
+
 function syncNodeUiDevModuleLightGridControls() {
   const lightBrightEl = document.getElementById("nodeUiDevModuleLightBrightness");
   const lightSpreadEl = document.getElementById("nodeUiDevModuleLightSpread");
   const gridBrightEl = document.getElementById("nodeUiDevMinimumGridBrightness");
   const gridDimEl = document.getElementById("nodeUiDevGridDimReflect");
+  const gridMouseOffEl = document.getElementById("nodeUiDevGridMouseLightOff");
+  const gridMouseOnEl = document.getElementById("nodeUiDevGridMouseLightOn");
   const gridSpreadEl = document.getElementById("nodeUiDevGridSpread");
   const lightBrightOut = document.getElementById("nodeUiDevModuleLightBrightnessValue");
   const lightSpreadOut = document.getElementById("nodeUiDevModuleLightSpreadValue");
   const gridBrightOut = document.getElementById("nodeUiDevMinimumGridBrightnessValue");
   const gridDimOut = document.getElementById("nodeUiDevGridDimReflectValue");
   const gridSpreadOut = document.getElementById("nodeUiDevGridSpreadValue");
+  const gridMouseOffOut = document.getElementById("nodeUiDevGridMouseLightOffValue");
+  const gridMouseOnOut = document.getElementById("nodeUiDevGridMouseLightOnValue");
 
   // 100% is the default look; up to 300% for a much stronger module light.
-  const lightBright = Math.max(0, Math.min(300, nodeGraphFiniteNumber(lightBrightEl?.value, 100)));
+  const lightBright = Math.max(0, Math.min(300, nodeGraphFiniteNumber(lightBrightEl?.value, 25)));
   // Module light spread: 10% (a tight rim) up to 220%.
-  const lightSpread = Math.max(10, Math.min(220, nodeGraphFiniteNumber(lightSpreadEl?.value, 10)));
+  const lightSpread = Math.max(10, Math.min(220, nodeGraphFiniteNumber(lightSpreadEl?.value, 115)));
   const gridBright = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridBrightEl?.value, 48)));
   const gridDim = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridDimEl?.value, 40)));
-  const gridSpread = Math.max(40, Math.min(220, nodeGraphFiniteNumber(gridSpreadEl?.value, 220)));
+  const gridSpread = Math.max(40, Math.min(220, nodeGraphFiniteNumber(gridSpreadEl?.value, 137)));
+  const gridMouseOff = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridMouseOffEl?.value, 40)));
+  const gridMouseOn = Math.max(0, Math.min(100, nodeGraphFiniteNumber(gridMouseOnEl?.value, 48)));
 
   if (lightBrightOut) lightBrightOut.textContent = `${lightBright}%`;
   if (lightSpreadOut) lightSpreadOut.textContent = `${lightSpread}%`;
   if (gridBrightOut) gridBrightOut.textContent = `${gridBright}%`;
   if (gridDimOut) gridDimOut.textContent = `${gridDim}%`;
   if (gridSpreadOut) gridSpreadOut.textContent = `${gridSpread}%`;
+  if (gridMouseOffOut) gridMouseOffOut.textContent = `${gridMouseOff}%`;
+  if (gridMouseOnOut) gridMouseOnOut.textContent = `${gridMouseOn}%`;
 
   const ws = document.getElementById("nodeGraphWorkspace");
   ws?.style.setProperty("--node-module-light-brightness", String(lightBright / 100));
   ws?.style.setProperty("--node-module-light-spread", String(Math.max(0.1, Math.min(2.2, lightSpread / 100))));
   ws?.style.setProperty("--node-grid-line-alpha", String(gridBright / 100));
   ws?.style.setProperty("--node-grid-line-alpha-dim", String(gridDim / 100));
+  ws?.style.setProperty("--node-grid-mouse-alpha", String(gridMouseOn / 100));
+  ws?.style.setProperty("--node-grid-mouse-alpha-dim", String(gridMouseOff / 100));
   ws?.style.setProperty("--node-grid-reveal-spread", String(nodeUiDevSpreadRatioFromPercent(gridSpread)));
   // Never paint a full-workspace grid. Reveal is radius-around-modules only.
   ws?.style.setProperty("--node-min-grid-brightness-alpha", "0");
@@ -1091,11 +1215,16 @@ function syncNodeUiDevModuleLightGridControls() {
 }
 
 function bindNodeUiDevModuleLightGridControls() {
+  limitNodeUiDevNumberDecimals();
+  bindNodeUiDevUnderConstructionControls();
+  bindNodeUiDevModuleGlowControls();
   for (const id of [
     "nodeUiDevModuleLightBrightness",
     "nodeUiDevModuleLightSpread",
     "nodeUiDevMinimumGridBrightness",
     "nodeUiDevGridDimReflect",
+    "nodeUiDevGridMouseLightOff",
+    "nodeUiDevGridMouseLightOn",
     "nodeUiDevGridSpread",
   ]) {
     const input = document.getElementById(id);

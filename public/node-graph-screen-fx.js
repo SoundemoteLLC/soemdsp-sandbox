@@ -1,11 +1,11 @@
 // Circuit view on the 📺 picture pipeline (one path):
-//   Screen Space In     source: the circuit view (before Screen Space Out replaces it) on its 📺 out, one frame behind.
-//   Screen Space Out   sink: its 📺 in replaces the circuit area on screen.
+//   Viewport In     source: the circuit view (before Viewport Out replaces it) on its 📺 out, one frame behind.
+//   Viewport Out   sink: its 📺 in replaces the circuit area on screen.
 //   Screen Space Shader  picture effect: 📺 in -> GLSL -> 📺 out, like Aberration.
 // Each frame: the GL graph's workspace canvases (plates, cables, dots, faces)
-// composite into one scene texture; the screen is Screen Space Out's picture, or the
+// composite into one scene texture; the screen is Viewport Out's picture, or the
 // scene when there is none; that final picture lands on #nodeScreenFxCanvas. The scene itself
-// is copied into Screen Space In's ping-pong pair for the next frame, so In -> Out shows the
+// is copied into Viewport In's ping-pong pair for the next frame, so In -> Out shows the
 // circuit unchanged (feedback is up to the effects in between). Every texture is
 // double-buffered: nothing is read and written in the same frame.
 
@@ -22,7 +22,7 @@ const nodeGraphScreenFxState = {
   status: new Map(), // nodeId -> label text
   frames: 0,
   raf: 0,
-  // Peek (hold P): the screen shows the plain circuit while Screen Space Out's chain keeps running.
+  // Peek (hold P): the screen shows the plain circuit while Viewport Out's chain keeps running.
   peek: false,
 };
 
@@ -346,7 +346,7 @@ function nodeGraphScreenFxRunShader(kit, id, script, w, h, now) {
 
 /**
  * True when the picture chain behind this node is fed all the way back: every effect on the way has its 📺 in connected to a
- * live source (Screen Space In, a Vector RGB, ...; not a disabled one). An effect with nothing plugged in only makes black, so Screen Space Out ignores
+ * live source (Viewport In, a Vector RGB, ...; not a disabled one). An effect with nothing plugged in only makes black, so Viewport Out ignores
  * such a chain and the plain circuit shows (the shaders are off).
  */
 function nodeGraphScreenFxChainFed(nodeId) {
@@ -360,7 +360,7 @@ function nodeGraphScreenFxChainFed(nodeId) {
     seen.add(id);
     const def = nodeGraphModuleDefinitions?.[typeOf.get(id)];
     if (!def || !Array.isArray(def.inputs) || !def.inputs.includes("rgba")) {
-      // A source. A disabled one (Screen Space In bypassed) makes nothing new: its last picture would just sit there, frozen.
+      // A source. A disabled one (Viewport In bypassed) makes nothing new: its last picture would just sit there, frozen.
       return !(typeof nodeGraphNodeIsBypassed === "function" && nodeGraphNodeIsBypassed(id));
     }
     const feeds = table.inlets.get(`${id}\u0000rgba`);
@@ -410,10 +410,10 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
       if (face?.texture) nodeGraphScreenFxDraw(kit, st.scene, kit.layer, [face.texture]);
     }
     gl.disable(gl.BLEND);
-    // 3. Screen: Screen Space Out's picture, else the plain scene.
+    // 3. Screen: Viewport Out's picture, else the plain scene.
     let screen = null;
     for (const id of (st.peek ? [] : nodes.screenOuts)) {
-      // Screen Space Out only replaces the screen while its chain is fed. With nothing plugged into an effect on the way (Screen
+      // Viewport Out only replaces the screen while its chain is fed. With nothing plugged into an effect on the way (Screen
       // Space In disconnected) it would only be black, so the shaders are simply off: the plain circuit shows.
       if (!nodeGraphScreenFxChainFed(id)) continue;
       screen = typeof nodeGraphPictureRead === "function" ? nodeGraphPictureRead(id, "rgba") : null;
@@ -427,7 +427,7 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
       nodeGraphScreenFxDraw(kit, st.screen, kit.copy, [screen.texture]);
       final = st.screen;
     }
-    // 4. Screen Space In: this frame's SCENE (not the final screen) into the view texture nobody reads now, published for the
+    // 4. Viewport In: this frame's SCENE (not the final screen) into the view texture nobody reads now, published for the
     // next frame. Using the final screen here made In -> Out a closed loop that never took in a new frame (frozen view).
     if (nodes.viewOuts.length) {
       st.views[0] = nodeGraphScreenFxSurface(gl, w, h, st.views[0]);
@@ -452,13 +452,33 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
   return final;
 }
 
+/**
+ * More than one Viewport In / Out in a patch works (it never breaks) but is not controllable yet: every Viewport In publishes the
+ * same view, and the first Viewport Out (patch order) whose chain is fed is the one shown. Say so once, in the debug error log, until
+ * the set of modules changes (video mixing will make this a real choice).
+ */
+function nodeGraphScreenFxReportDuplicates(nodes) {
+  const st = nodeGraphScreenFxState;
+  const many = nodes.viewOuts.length > 1 || nodes.screenOuts.length > 1;
+  const key = many ? `in:${nodes.viewOuts.join(",")}|out:${nodes.screenOuts.join(",")}` : "";
+  if (key === st.duplicatesReported) return;
+  st.duplicatesReported = key;
+  if (!many) return;
+  console.error(
+    `Viewport: this patch has ${nodes.viewOuts.length} Viewport In (${nodes.viewOuts.join(", ") || "none"}) and `
+    + `${nodes.screenOuts.length} Viewport Out (${nodes.screenOuts.join(", ") || "none"}). Use one of each for now: every Viewport In `
+    + "shows the same view, and only the first Viewport Out whose chain is connected is shown. Which one is not controllable yet.",
+  );
+}
+
 function nodeGraphScreenFxTick() {
   const st = nodeGraphScreenFxState;
   st.raf = requestAnimationFrame(nodeGraphScreenFxTick);
   const host = document.getElementById("nodeGraphWorkspace");
   if (!host) return;
   const nodes = nodeGraphScreenFxNodes();
-  // The circuit view is a picture only while Screen Space In or Screen Space Out is in the patch.
+  nodeGraphScreenFxReportDuplicates(nodes);
+  // The circuit view is a picture only while Viewport In or Viewport Out is in the patch.
   const onScreen = (nodes.viewOuts.length > 0 || nodes.screenOuts.length > 0)
     && host.classList.contains("gl-graph-on") && host.clientWidth > 0;
   nodeGraphScreenFxSetActive(host, onScreen);

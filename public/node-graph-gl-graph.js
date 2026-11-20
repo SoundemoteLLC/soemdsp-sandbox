@@ -1044,6 +1044,8 @@ const NODE_FACE_LIGHT = 0.6;
 const NODE_DRAWING_FLOOR = 0.9;
 // Smooth light out of a module's stroke: falloff radius in screen px, and its peak strength at the edge.
 const NODE_STROKE_GLOW_REACH_PX = 16;
+// The module glow (stroke light) reaches as far as a module heatmap of this spread would: 100% on the module glow spread is this.
+const NODE_GLOW_BASE_SPREAD = 0.1;
 const NODE_STROKE_GLOW_ALPHA = 0.85;
 // Cables never go fully dark with the room: this much of them stays visible at full dark.
 const NODE_CABLE_FLOOR = 0.35;
@@ -1859,7 +1861,7 @@ function nodeGraphGlGraphDrawVeils(target, plates, toX, toY, zoom) {
     if (!nodeGraphGlGraphPlateVeiled(plate)) continue;
     layer = layer || nodeGraphGlLinesLayer(target);
     if (!layer) return;
-    nodeGraphGlLinesVeil(layer, toX(plate.x), toY(plate.y), plate.w * zoom, plate.h * zoom, 18 * zoom);
+    nodeGraphGlLinesVeil(layer, toX(plate.x), toY(plate.y), plate.w * zoom, plate.h * zoom, (typeof nodeGraphUnderConstructionSpacing === "number" ? nodeGraphUnderConstructionSpacing : 67) * zoom);
   }
 }
 
@@ -2020,6 +2022,10 @@ const NODE_GRAPH_ROUTE_LANE0 = 9;     // lane 0 above the row's top edge (world 
 const NODE_GRAPH_ROUTE_LANE_PITCH = 6; // between lanes
 const NODE_GRAPH_ROUTE_PITCH = 3.5;    // between parallel verticals in a gap
 const NODE_GRAPH_ROUTE_RADIUS = 5;     // corner radius (square-ish)
+// Cables avoiding each other: parallel verticals in a gap, lanes above a row and turn-up points are staggered so routed cables do
+// not lie on top of one another. OFF (all cables of a route share one line, bundled in the centre); set to true to bring it back.
+const NODE_GRAPH_ROUTE_SEPARATE_CABLES = false;
+const NODE_GRAPH_ROUTE_SEP = NODE_GRAPH_ROUTE_SEPARATE_CABLES ? 1 : 0;
 
 function nodeGraphGlGraphRoundedPolyline(pts, radius) {
   const out = [pts[0].x, pts[0].y];
@@ -2152,7 +2158,7 @@ function nodeGraphGlGraphAutoRoutes(items) {
       .map((e) => e[0]);
     const pitch = Math.min(NODE_GRAPH_ROUTE_PITCH, Math.max(1.5, (Math.max(first.gapW, 6) - 4) / Math.max(1, dsts.length)));
     for (const g of list) {
-      const gx = g.srcEdge + g.gapW / 2 + (dsts.indexOf(g.dst.id) - (dsts.length - 1) / 2) * pitch;
+      const gx = g.srcEdge + g.gapW / 2 + (dsts.indexOf(g.dst.id) - (dsts.length - 1) / 2) * pitch * NODE_GRAPH_ROUTE_SEP;
       routes.set(g.it.key, nodeGraphGlGraphRoundedPolyline([
         { x: g.ax, y: g.ay }, { x: gx, y: g.ay }, { x: gx, y: g.by }, { x: g.bx, y: g.by },
       ], NODE_GRAPH_ROUTE_RADIUS));
@@ -2168,7 +2174,7 @@ function nodeGraphGlGraphAutoRoutes(items) {
   }
   for (const list of rows.values()) {
     const dsts = [...new Map(list.map((c) => [c.dst.id, c.dst.x])).entries()].sort((p, q) => p[1] - q[1]).map((e) => e[0]);
-    for (const c of list) c.lane = c.top - NODE_GRAPH_ROUTE_LANE0 - dsts.indexOf(c.dst.id) * NODE_GRAPH_ROUTE_LANE_PITCH;
+    for (const c of list) c.lane = c.top - NODE_GRAPH_ROUTE_LANE0 - dsts.indexOf(c.dst.id) * NODE_GRAPH_ROUTE_LANE_PITCH * NODE_GRAPH_ROUTE_SEP;
   }
   // Turn-up x per source module: one per (source, destination) bundle; a bundle from lower jacks turns up farther right.
   const bySrc = new Map();
@@ -2183,7 +2189,11 @@ function nodeGraphGlGraphAutoRoutes(items) {
     const pitch = Math.min(NODE_GRAPH_ROUTE_PITCH, Math.max(1.5, (gap - 8) / Math.max(1, order.length)));
     order.forEach((bundle, r) => {
       for (const c of bundle.cs) {
-        c.xs = Math.max(c.ax + 2, Math.min(c.srcRight + gap - 3, c.ax + 3 + r * pitch));
+        // Separate cables: turn up just right of the jack, each bundle a step farther. Not separating: every cable turns up in the
+        // middle of the gap beside the source, on the same vertical as the straight gap runs (they are centred there too).
+        c.xs = NODE_GRAPH_ROUTE_SEPARATE_CABLES
+          ? Math.max(c.ax + 2, Math.min(c.srcRight + gap - 3, c.ax + 3 + r * pitch))
+          : Math.max(c.ax + 2, Math.min(c.srcRight + gap - 3, c.srcRight + gap / 2));
       }
     });
   }
@@ -2329,6 +2339,8 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
       ? normalizeNodeGraphWireType(wire?.wireType)
       : "ribbon",
     index: Number.isInteger(index) ? index : -1,
+    // The port the cable leaves from: cables from one port are drawn together (one Z order), see nodeGraphGlGraphWireDrawOrder.
+    srcKey: `${fromNode || ""}|${wire?.sourcePort || ""}`,
     xy: ((kind === "signal" || kind === "modulation") && nodeGraphGlGraphState.autoRoutes?.get((kind === "signal" ? "s" : "m") + index))
       || nodeGraphGlGraphShape(from, to, wire, tolerance),
     // A param wire (an end on a rail IO box) has its own width and a tiny
@@ -2374,6 +2386,29 @@ function nodeGraphGlGraphPushWireJackDots(wires, color, ends) {
 }
 
 /** The jack element of a wire end, for the layout-visibility check (null = none laid out). */
+/**
+ * The order cables are drawn in (indices into `wires`). Cables leaving one port are one group and are drawn one after the other,
+ * so another port's cable never lies between them (it would cross over some of a port's cables and under others, which reads as
+ * clutter). Groups keep the order they first appear in. Modulation cables, the thin ones, are drawn after every other cable.
+ */
+function nodeGraphGlGraphWireDrawOrder(wires) {
+  const order = [];
+  for (const modulation of [false, true]) {
+    const first = new Map();
+    const idx = [];
+    for (let i = 0; i < wires.length; i += 1) {
+      const w = wires[i];
+      if ((w.kind === "modulation") !== modulation) continue;
+      const key = w.srcKey || `#${i}`;
+      if (!first.has(key)) first.set(key, i);
+      idx.push(i);
+    }
+    idx.sort((a, b) => (first.get(wires[a].srcKey || `#${a}`) - first.get(wires[b].srcKey || `#${b}`)) || (a - b));
+    order.push(...idx);
+  }
+  return order;
+}
+
 function nodeGraphGlGraphWireJackEl(node, port, io) {
   if (io === "modulation") {
     const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;
@@ -2538,6 +2573,11 @@ function nodeGraphGlGraphRebuild(options = {}) {
     const drag = nodeGraphMvp.wireDragging;
     if (drag?.active && drag.from && drag.cursorPoint) {
       const dragColor = endpointColor(drag.endpoint);
+      // Both ends take the dot the grabbed jack has once it is wired (square or round, rail size), so the wire being dragged
+      // is the same size as the ones already placed.
+      const dragPort = drag.endpoint?.port || drag.endpoint?.param || drag.endpoint?.graphInput || "";
+      const dragSquare = square(drag.endpoint?.node, dragPort, drag.endpoint?.io);
+      const dragRail = drag.endpoint?.io === "output" ? rail(drag.endpoint?.node, dragPort) : false;
       nodeGraphGlGraphPushWire(
         wires,
         nodeGraphGlGraphDragFrom(drag.from, drag.endpoint),
@@ -2545,12 +2585,12 @@ function nodeGraphGlGraphRebuild(options = {}) {
         dragColor,
         zoom,
         null,
-        false,
-        false,
+        dragSquare,
+        dragSquare,
         "",
         -1,
-        false,
-        false,
+        dragRail,
+        dragRail,
         "",
         drag.endpoint?.node,
       );
@@ -2672,6 +2712,11 @@ function nodeGraphGlGraphWireBakeUpdate(p) {
       if (y < y0) y0 = y;
       if (y > y1) y1 = y;
     }
+  }
+  // Same Z order as the vector path: cables from one port together, modulation cables last.
+  {
+    const rank = new Map(nodeGraphGlGraphWireDrawOrder(st.wires).map((idx, pos) => [st.wires[idx], pos]));
+    list.sort((a, b) => (rank.get(a.wire) ?? 0) - (rank.get(b.wire) ?? 0));
   }
   if (!list.length || !Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) {
     nodeGraphGlGraphWireBakeDrop();
@@ -2808,6 +2853,11 @@ function nodeGraphGlGraphWireLiveBakeUpdate(p) {
       if (y < y0) y0 = y;
       if (y > y1) y1 = y;
     }
+  }
+  // Same Z order as the vector path: cables from one port together, modulation cables last.
+  {
+    const rank = new Map(nodeGraphGlGraphWireDrawOrder(st.wires).map((idx, pos) => [st.wires[idx], pos]));
+    list.sort((a, b) => (rank.get(a.wire) ?? 0) - (rank.get(b.wire) ?? 0));
   }
   if (!list.length || !Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) {
     nodeGraphGlGraphWireLiveBakeDrop();
@@ -3432,6 +3482,8 @@ function nodeGraphGlGraphPresent(options = {}) {
   // module in front hides the dots of the one behind (cables stay under).
   const stackedIds = new Set((nodeGraphGlGraphState.stack?.entries || []).map((entry) => entry.plate.id));
   const endsByNode = new Map();
+  // The free end of a cable being dragged (at the pointer): drawn through the same layers as every placed dot, on top of the modules.
+  const cursorEnds = [];
   // UIDEV pixelate wire dots on zoom: stacked dots come from per-module bakes.
   const dotBake = nodeGraphGlGraphDotBakeWanted(view, frameCamera)
     ? nodeGraphGlGraphDotBakeUpdate({
@@ -3453,7 +3505,10 @@ function nodeGraphGlGraphPresent(options = {}) {
       [0, 0, 0, Math.min(roomDarkUnderWires, 1 - NODE_CABLE_FLOOR)],
     );
   }
-  for (let i = 0; i < nodeGraphGlGraphState.wires.length; i += 1) {
+  // Cables from one port share a Z order; modulation cables (the thin ones) are drawn after every other cable.
+  const wireOrder = nodeGraphGlGraphWireDrawOrder(nodeGraphGlGraphState.wires);
+  for (let oi = 0; oi < wireOrder.length; oi += 1) {
+    const i = wireOrder[oi];
     const wire = nodeGraphGlGraphState.wires[i];
     const src = wire.xy;
     if (!src || src.length < 4) continue;
@@ -3546,6 +3601,10 @@ function nodeGraphGlGraphPresent(options = {}) {
         let own = endsByNode.get(dot.node);
         if (!own) endsByNode.set(dot.node, (own = []));
         own.push(end);
+      } else if (wire.index === -1 && wire.kind === "" && !wire.dotOnly && !dot.node) {
+        // A cable being dragged out: its loose end is drawn like the placed dots (same layer and blend, so the same edge and
+        // colour), not on the max-blend contact canvas, where its edge was jagged and its colour differed.
+        cursorEnds.push(end);
       } else {
         nodeGraphGlGraphDrawWireEnd(contactBatch, end, wireFeather);
       }
@@ -3600,24 +3659,28 @@ function nodeGraphGlGraphPresent(options = {}) {
     && (typeof nodeGraphHeatmapWantsLight !== "function" || nodeGraphHeatmapWantsLight()
       || (typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid()))) {
     const spread = typeof nodeGraphHeatmapFloatProperty === "function"
-      ? Math.max(0.1, Math.min(2.2, nodeGraphHeatmapFloatProperty(host, "--node-module-light-spread", 0.78))) : 0.78;
+      ? Math.max(0.1, Math.min(2.2, nodeGraphHeatmapFloatProperty(host, "--node-module-light-spread", 1.15))) : 1.15;
     const gridMinX = (typeof nodeGraphGridWidth === "function" ? nodeGraphGridWidth() : 28) * 5;
     const gridMinY = (typeof nodeGraphGridHeight === "function" ? nodeGraphGridHeight() : 28) * 5;
     const look = typeof nodeGraphModulePlateLook === "function" ? nodeGraphModulePlateLook() : null;
     const items = [];
+    const glowSpread = typeof nodeGraphModuleGlowLevels === "function" ? nodeGraphModuleGlowLevels().spread : 1;
     const plates = nodeGraphGlGraphState.plates || [];
     const wantsLight = typeof nodeGraphHeatmapWantsLight !== "function" || nodeGraphHeatmapWantsLight();
     for (let i = 0; i < plates.length; i += 1) {
       if (!wantsLight && !(typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid())) break;
       const plate = plates[i];
       const reach = 0.45 * spread * Math.max(gridMinX, 1.18 * Math.max(plate.w, plate.h));
-      // Skip modules whose light cannot reach the view.
-      if (plate.x + plate.w + reach < cam.x || plate.x - reach > cam.x + cssW / zoom
-        || plate.y + plate.h + reach < cam.y || plate.y - reach > cam.y + cssH / zoom) continue;
+      // Skip modules whose light cannot reach the view (the module glow can reach farther than the module light).
+      // The module glow's reach has its own size (the module glow spread slider), not the module heatmap spread's.
+      const glowReach = NODE_GLOW_BASE_SPREAD * Math.max(gridMinX, 1.18 * Math.max(plate.w, plate.h)) * 0.45;
+      const reachAll = Math.max(reach, glowReach * glowSpread);
+      if (plate.x + plate.w + reachAll < cam.x || plate.x - reachAll > cam.x + cssW / zoom
+        || plate.y + plate.h + reachAll < cam.y || plate.y - reachAll > cam.y + cssH / zoom) continue;
       const selected = typeof nodeGraphNodeElement === "function"
         && nodeGraphNodeElement(plate.id)?.classList.contains("selected");
       const base = selected ? borderOn : borderIdle;
-      items.push({ x: plate.x, y: plate.y, w: plate.w, h: plate.h, id: plate.id, base: [base[0], base[1], base[2]], reach, round: look ? look.topRadius : 0 });
+      items.push({ x: plate.x, y: plate.y, w: plate.w, h: plate.h, id: plate.id, glowReach, selected: selected === true, base: [base[0], base[1], base[2]], reach, round: look ? look.topRadius : 0 });
     }
     nodeGraphGlLinesLights(batch, items, { spread, gridMinX, gridMinY });
   }
@@ -3788,6 +3851,14 @@ function nodeGraphGlGraphPresent(options = {}) {
       }
       nodeGraphGlGraphDrawVeils(batch, group.plates, toX, toY, layoutZoom);
       nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, layoutZoom, group.plates);
+    }
+    if (cursorEnds.length) {
+      const straight = typeof nodeGraphWireDotShadows === "function" && !nodeGraphWireDotShadows();
+      const layer = nodeGraphGlLinesLayer(batch);
+      if (layer) {
+        if (straight) layer.quadBlend = "straight";
+        for (let d = 0; d < cursorEnds.length; d += 1) nodeGraphGlGraphDrawWireEnd(layer, cursorEnds[d], wireFeather);
+      }
     }
   } finally {
     nodeGraphGlGraphState.chrome = chromeAll;

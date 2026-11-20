@@ -623,7 +623,8 @@ function finishNodeGraphZoomInput(input, options = {}) {
   } else {
     applyNodeGraphZoom();
   }
-  button.focus({ preventScroll: true });
+  // The readout is plain again: focus is not handed back to the button (a focused toolbar button keeps its dark hover look until you click away).
+  if (document.activeElement === button || button.contains(document.activeElement)) button.blur();
 }
 
 function beginNodeGraphZoomInput(event) {

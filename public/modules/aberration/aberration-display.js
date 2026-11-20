@@ -44,7 +44,7 @@ function nodeGraphAberrationEnsureCanvas(face) {
 }
 
 function nodeGraphAberrationCircuitLive() {
-  // While Screen Space In / Out are in the patch the circuit view is the picture being worked on, so a screen effect keeps working with the
+  // While Viewport In / Out are in the patch the circuit view is the picture being worked on, so a screen effect keeps working with the
   // engine stopped (it would otherwise sit on a wiped black frame and the screen would go black).
   if (typeof nodeGraphScreenFxState === "object" && nodeGraphScreenFxState?.active) return true;
   try {
@@ -94,7 +94,7 @@ function drawNodeGraphAberrationFaceItem(_renderer, item) {
     nodeGraphGlLinesFillBlack(canvas);
     return;
   }
-  // Render at the size of the picture coming in (the whole screen for Screen Space In), not the small face; the face shows it scaled down.
+  // Render at the size of the picture coming in (the whole screen for Viewport In), not the small face; the face shows it scaled down.
   const renderer = nodeGraphAberrationGlEnsure(canvas, picture?.width > 0 ? picture.width : canvas.width, picture?.height > 0 ? picture.height : canvas.height);
   if (!renderer) {
     nodeGraphGlLinesFillBlack(canvas);

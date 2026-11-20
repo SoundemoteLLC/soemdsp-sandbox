@@ -5524,6 +5524,24 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   container-type: inline-size;
 }
 
+/* Hotkeys that belong together sit in one group: the stroke is between groups, not between the rows of one. */
+.node-hotkeys-group {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  /* With the row's own 2px, the space at a group's top and bottom is 12px: twice the 6px every row used to have, so groups stand well apart. */
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(127, 199, 217, 0.12);
+}
+
+/* Rows of one group sit close together. */
+.node-hotkeys-group .node-hotkeys-row {
+  border-bottom: 0;
+  min-height: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
 .node-hotkeys-row {
   display: grid;
   /* The key column is as wide as its key; the description takes the rest and wraps. */
@@ -5590,8 +5608,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 .node-hotkeys-row .key-char { min-width: 1.9em; padding: 0 0.3em; }
 .node-hotkeys-row .key-mod { min-width: 2.6em; }
 .node-hotkeys-row .key-wide { min-width: 3.1em; }
-/* The spacebar: as long as the key column allows. */
-.node-hotkeys-row .key-space { min-width: 6.2em; letter-spacing: 0.08em; }
+/* The spacebar: the same size as a wide key like Home (it used to take the whole key column). */
+.node-hotkeys-row .key-space { min-width: 4em; padding: 0 0.4em 0.2em; letter-spacing: 0; }
 .node-hotkeys-row .key-sep { font-style: normal; font-weight: 600; opacity: 0.6; padding: 0 1px; }
 .node-hotkeys-row .keycap { isolation: isolate; }
 
@@ -5703,6 +5721,13 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   font-size: clamp(0.98rem, 1.28vw, 1.28rem);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
+}
+
+/* After typing a zoom the button takes focus back; it shows no focus stroke (the readout stays plain). */
+#nodeZoomResetButton:focus,
+#nodeZoomResetButton:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .node-zoom-reset-input {

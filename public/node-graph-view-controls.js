@@ -1487,6 +1487,19 @@ function nodeGraphHotkeysDrawKeycaps() {
         kbd.append(cap);
         continue;
       }
+      if (name === "wheel") {
+        // The mouse wheel: the mouse with its wheel lit and an up / down arrow beside it.
+        cap.className = "key-mouse";
+        cap.setAttribute("role", "img");
+        cap.setAttribute("aria-label", "mouse wheel");
+        cap.innerHTML = '<svg viewBox="0 0 34 32" width="2.1em" height="2em" aria-hidden="true">'
+          + '<rect x="3" y="2" width="18" height="28" rx="9" fill="none" stroke="currentColor" stroke-width="2"/>'
+          + '<path d="M3 13h18" fill="none" stroke="currentColor" stroke-width="2"/>'
+          + '<rect x="10" y="4.5" width="4" height="9" rx="2" fill="currentColor"/>'
+          + '<path d="M28 4l4.5 6h-9zM28 28l4.5-6h-9z" fill="currentColor"/></svg>';
+        kbd.append(cap);
+        continue;
+      }
       const kind = name === "space"
         ? "key-space"
         : (name === "tab" || name === "shift" || name === "enter" ? "key-wide"

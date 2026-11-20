@@ -1,6 +1,6 @@
 // Kaleidoscope — folds a picture into wedges around a centre and feeds the result back into itself: each frame the module's own previous
 // picture is zoomed, turned and shifted by a small step (once per frame, so the patterns do not depend on frame timing), faded, and added to the
-// new folded picture. A picture effect module (📺 in, 📺 out), nothing global. Wire it after Screen Space In, before the analog effects.
+// new folded picture. A picture effect module (📺 in, 📺 out), nothing global. Wire it after Viewport In, before the analog effects.
 registerNodeGraphChromelessModule("kaleidoscope", {
   label: "Kaleidoscope",
   solidModule: false,

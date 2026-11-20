@@ -12,17 +12,21 @@
 #   - the site patch catalog is written by the site's own generator (npm run catalog)
 #
 # Options (append to the .cmd):
-#   -SkipNativeBuild   reuse the last WASM build (faster)
-#   -SkipSmoke         skip the sandbox smoke test (it only reports, never blocks)
-#   -NoBrowser         preview: do not open the browser
-#   -Port 8080         preview: dev server port
-#   -Message "..."     custom soundemote-io commit message
+#   -SkipNativeBuild    reuse the last WASM build (faster)
+#   -SkipSmoke          skip the sandbox smoke test (it only reports, never blocks)
+#   -SkipBuildBump      keep the current server.py BUILD_NUMBER (release_bump_version.ps1 already set it)
+#   -SkipSandboxCommit  do not bump, rebuild the catalog, or commit/push the sandbox repo (already released)
+#   -NoBrowser          preview: do not open the browser
+#   -Port 8080          preview: dev server port
+#   -Message "..."      custom soundemote-io commit message
 param(
   [Parameter(Mandatory = $true)]
   [ValidateSet("preview", "publish", "patches")]
   [string]$Mode,
   [switch]$SkipNativeBuild,
   [switch]$SkipSmoke,
+  [switch]$SkipBuildBump,
+  [switch]$SkipSandboxCommit,
   [switch]$NoBrowser,
   [int]$Port = 8080,
   [string]$Message = ""
@@ -198,7 +202,7 @@ if ($Mode -eq "patches") {
 }
 
 # ---------------------------------------------------------------- full build (preview + publish)
-if ($Mode -eq "publish") {
+if ($Mode -eq "publish" -and -not $SkipBuildBump -and -not $SkipSandboxCommit) {
   $build = Bump-Build
   Write-Host ""
   Write-Host "  build number -> $build"
@@ -213,8 +217,12 @@ if (!$SkipNativeBuild) {
   Step "Skipping native module build"
 }
 
-Step "Regenerating native module catalog"
-Run "Native module catalog" { python (Join-Path $sandbox "scripts\generate_native_modules_catalog.py") }
+if (-not $SkipSandboxCommit) {
+  Step "Regenerating native module catalog"
+  Run "Native module catalog" { python (Join-Path $sandbox "scripts\generate_native_modules_catalog.py") }
+} else {
+  Step "Skipping sandbox catalog regen"
+}
 
 if (!$SkipSmoke) {
   Step "Smoke test (reports only, never blocks)"
@@ -224,7 +232,7 @@ if (!$SkipSmoke) {
   Step "Skipping smoke test"
 }
 
-if ($Mode -eq "publish") {
+if ($Mode -eq "publish" -and -not $SkipSandboxCommit) {
   Step "Committing sandbox build $build"
   # Tracked build outputs only (-u): server.py build number, rebuilt .wasm, catalogs.
   Invoke-Git $sandbox add -u -- server.py public/native-modules-catalog.json native_modules patches

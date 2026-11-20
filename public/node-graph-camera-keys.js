@@ -2,7 +2,7 @@
 //   W A S D   move the camera (pan) while held; it eases in and out
 //   Q / E     zoom out / in while held, toward the mouse cursor (like the wheel); the middle of the screen when the mouse is off the workspace
 //   Wheel     while a camera key is held, changes the camera speed (remembered); it does not zoom then
-//   R (hold)  peek: the plain circuit view while Screen Space Out's effect chain keeps running; release and the effect is back
+//   R (hold)  peek: the plain circuit view while Viewport Out's effect chain keeps running; release and the effect is back
 // Keys act only when no modifier is held and the user is not typing. Shift+D is the constraint guide (D alone moved here).
 
 (() => {
@@ -115,7 +115,7 @@
     }
   }
 
-  // Peek: Screen Space Out's chain keeps running; the screen shows the plain circuit while P is held.
+  // Peek: Viewport Out's chain keeps running; the screen shows the plain circuit while P is held.
   function peek(on) {
     if (typeof nodeGraphScreenFxState === "object" && nodeGraphScreenFxState) nodeGraphScreenFxState.peek = on;
   }

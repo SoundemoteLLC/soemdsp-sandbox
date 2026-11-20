@@ -6,7 +6,7 @@
   <title>soemdsp-sandbox</title>
   <link rel="icon" href="./public/favicon.svg?v=ico-1" type="image/svg+xml">
   <script src="./public/boot-plugin-host.js?v=boot-plugin-1"></script>
-  <link rel="stylesheet" href="./public/styles.css?v=mp-wave-midi-cc-4-sg-overhaul-1-sg-gl-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-vthick-1-vcur-1-cmcur-1-mp-face-gl-1-mp-scale-1-sg-fix-1-topbar-1-titlefit-1-chrome-1-cbstroke-1-layerui-1-tileblend-1-canvasbg-1-facebox-1-plugrow-5-cols-4p2nlntrd-clkui1-bg19-stg5-stg6-stg7-facesliders-1-modface4-hukeep1-stgsel1-modface8-modface9pvrgstns5gw16-xypbs-xyf-allb17-abc1-hk6">
+  <link rel="stylesheet" href="./public/styles.css?v=mp-wave-midi-cc-4-sg-overhaul-1-sg-gl-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-vthick-1-vcur-1-cmcur-1-mp-face-gl-1-mp-scale-1-sg-fix-1-topbar-1-titlefit-1-chrome-1-cbstroke-1-layerui-1-tileblend-1-canvasbg-1-facebox-1-plugrow-5-cols-4p2nlntrd-clkui1-bg19-stg5-stg6-stg7-facesliders-1-modface4-hukeep1-stgsel1-modface8-modface9pvrgstns5gw16-xypbs-xyf-allb17-abc1-hk6-zf1-hk12">
   <link rel="stylesheet" href="./public/modules/portal/portal-ui.css?v=inlet-outlet-layout-1">
   <link rel="stylesheet" href="./public/modules/keypad/keypad-ui.css?v=keypad-press-once-1">
   <link rel="stylesheet" href="./public/modules/patch/patch-ui.css?v=patch-face-1">
@@ -486,28 +486,52 @@
         </div>
         <div id="nodeHotkeysUnifiedNavHost" class="node-unified-window-nav-host" aria-label="Floating window pages"></div>
         <div class="node-hotkeys-list">
-          <div class="node-hotkeys-row"><kbd>? / `</kbd><span>Command Center</span></div>
-          <div class="node-hotkeys-row"><kbd>Ctrl+Z</kbd><span>Undo</span></div>
-          <div class="node-hotkeys-row"><kbd>Ctrl+Y</kbd><span>Redo (or Ctrl+Shift+Z)</span></div>
-          <div class="node-hotkeys-row"><kbd>Tab</kbd><span>Show / hide inputs and outputs</span></div>
-          <div class="node-hotkeys-row"><kbd>Shift+Tab</kbd><span>Show / hide wires (in the compacted view)</span></div>
-          <div class="node-hotkeys-row"><kbd>F</kbd><span>Canvas: off → Perform → Arrange → off</span></div>
-          <div class="node-hotkeys-row"><kbd>Shift+F</kbd><span>Mini Canvas: off → Perform → Arrange → off</span></div>
-          <div class="node-hotkeys-row"><kbd>V</kbd><span>Hide / show bars</span></div>
-          <div class="node-hotkeys-row"><kbd>T</kbd><span>Stick transport (overrides V hide)</span></div>
-          <div class="node-hotkeys-row"><kbd>Ctrl+Mouse</kbd><span>Click on play button: keep project playing when unfocused</span></div>
-          <div class="node-hotkeys-row"><kbd>Alt+Mouse</kbd><span>Click enables or disables a module</span></div>
-          <div class="node-hotkeys-row"><kbd>Shift+Mouse</kbd><span>Click # locks view to grid</span></div>
-          <div class="node-hotkeys-row"><kbd>Z</kbd><span>Center view on modules (selection, else all) at current zoom</span></div>
-          <div class="node-hotkeys-row"><kbd>W / A / S / D</kbd><span>Camera: move (smooth, eases in and out)</span></div>
-          <div class="node-hotkeys-row"><kbd>Q / E</kbd><span>Camera: zoom out / in, toward the mouse cursor (smooth)</span></div>
-          <div class="node-hotkeys-row"><kbd>Mouse</kbd><span>Wheel while holding a camera key: camera speed</span></div>
-          <div class="node-hotkeys-row"><kbd>R</kbd><span>Hold: peek at the plain circuit view past Screen Space Out</span></div>
-          <div class="node-hotkeys-row"><kbd>Space</kbd><span>Pause / play</span></div>
-          <div class="node-hotkeys-row"><kbd>Del</kbd><span>Delete selection</span></div>
-          <div class="node-hotkeys-row"><kbd>Shift+D</kbd><span>Debug</span></div>
-          <div class="node-hotkeys-row"><kbd>Ctrl</kbd><span>Snake: keep / add trail</span></div>
-          <div class="node-hotkeys-row"><kbd>Shift</kbd><span>Snake: mirror trail</span></div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>? / `</kbd><span>Command Center</span></div>
+            <div class="node-hotkeys-row"><kbd>Ctrl+Z</kbd><span>Undo</span></div>
+            <div class="node-hotkeys-row"><kbd>Ctrl+Y</kbd><span>Redo (or Ctrl+Shift+Z)</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>Tab</kbd><span>Show / hide inputs and outputs</span></div>
+            <div class="node-hotkeys-row"><kbd>Shift+Tab</kbd><span>Show / hide wires (in the compacted view)</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>F</kbd><span>Canvas: off → Perform → Arrange → off</span></div>
+            <div class="node-hotkeys-row"><kbd>Shift+F</kbd><span>Mini Canvas: off → Perform → Arrange → off</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>V</kbd><span>Hide / show bars</span></div>
+            <div class="node-hotkeys-row"><kbd>T</kbd><span>Stick transport (overrides V hide)</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>Ctrl+Mouse</kbd><span>Click on play button: play when unfocused on / off</span></div>
+            <div class="node-hotkeys-row"><kbd>Alt+Mouse</kbd><span>Click enables or disables a module</span></div>
+            <div class="node-hotkeys-row"><kbd>Shift+Mouse</kbd><span>Click # locks view to grid</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>Z</kbd><span>Center view on modules (selection, else all) at current zoom</span></div>
+            <div class="node-hotkeys-row"><kbd>W / A / S / D</kbd><span>Camera: move (smooth, eases in and out)</span></div>
+            <div class="node-hotkeys-row"><kbd>Q / E</kbd><span>Camera: zoom out / in, toward the mouse cursor (smooth)</span></div>
+            <div class="node-hotkeys-row"><kbd>Wheel</kbd><span>While holding a camera key: camera speed</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>R</kbd><span>Hold: peek at the plain circuit view past Viewport Out</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>Space</kbd><span>Pause / play</span></div>
+            <div class="node-hotkeys-row"><kbd>Shift+Space</kbd><span>Stop</span></div>
+            <div class="node-hotkeys-row"><kbd>Ctrl+Space</kbd><span>Play when unfocused on / off (the play button shows ▶🔒 while it is on)</span></div>
+            <div class="node-hotkeys-row"><kbd>, / .</kbd><span>Reset hit on every Reset inlet (playback keeps going)</span></div>
+            <div class="node-hotkeys-row"><kbd>Home / End</kbd><span>⏮ restart / ⏭ forward (forward does nothing yet)</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>Del</kbd><span>Delete selection</span></div>
+            <div class="node-hotkeys-row"><kbd>Shift+D</kbd><span>Debug</span></div>
+          </div>
+          <div class="node-hotkeys-group">
+            <div class="node-hotkeys-row"><kbd>Ctrl</kbd><span>Snake: keep / add trail</span></div>
+            <div class="node-hotkeys-row"><kbd>Shift</kbd><span>Snake: mirror trail</span></div>
+          </div>
         </div>
         <button
           id="nodeHotkeysPageResizeHandle"
@@ -1279,7 +1303,7 @@
             </div>
           </label>
           <label class="node-ui-dev-control">
-            <span>module light brightness</span>
+            <span>module heatmap brightness</span>
             <div class="node-ui-dev-control-row">
               <input
                 id="nodeUiDevModuleLightBrightness"
@@ -1287,12 +1311,12 @@
                 min="0"
                 max="300"
                 step="1"
-                value="100">
-              <output id="nodeUiDevModuleLightBrightnessValue" for="nodeUiDevModuleLightBrightness">100%</output>
+                value="25">
+              <output id="nodeUiDevModuleLightBrightnessValue" for="nodeUiDevModuleLightBrightness">25%</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
-            <span>module light spread</span>
+            <span>module heatmap spread</span>
             <div class="node-ui-dev-control-row">
               <input
                 id="nodeUiDevModuleLightSpread"
@@ -1300,26 +1324,12 @@
                 min="10"
                 max="220"
                 step="1"
-                value="10">
-              <output id="nodeUiDevModuleLightSpreadValue" for="nodeUiDevModuleLightSpread">10%</output>
+                value="115">
+              <output id="nodeUiDevModuleLightSpreadValue" for="nodeUiDevModuleLightSpread">115%</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
-            <span>grid bright reflect</span>
-            <div class="node-ui-dev-control-row">
-              <input
-                id="nodeUiDevMinimumGridBrightness"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="48"
-                title="Grid line strength when the room is lit (crossfades to grid dim reflect as the dimmer goes up).">
-              <output id="nodeUiDevMinimumGridBrightnessValue" for="nodeUiDevMinimumGridBrightness">48%</output>
-            </div>
-          </label>
-          <label class="node-ui-dev-control">
-            <span>grid dim reflect</span>
+            <span>light off grid brightness around module</span>
             <div class="node-ui-dev-control-row">
               <input
                 id="nodeUiDevGridDimReflect"
@@ -1327,9 +1337,51 @@
                 min="0"
                 max="100"
                 step="1"
-                value="40"
-                title="Grid line strength when the room light is fully down (crossfades from grid bright reflect as the dimmer goes up).">
-              <output id="nodeUiDevGridDimReflectValue" for="nodeUiDevGridDimReflect">40%</output>
+                value="34"
+                title="Grid line brightness around modules when the light is fully off (the room is dark). Crossfades from light on grid brightness around module as the light goes down.">
+              <output id="nodeUiDevGridDimReflectValue" for="nodeUiDevGridDimReflect">34%</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>light off grid brightness around mouse</span>
+            <div class="node-ui-dev-control-row">
+              <input
+                id="nodeUiDevGridMouseLightOff"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="0"
+                title="Grid line brightness around the mouse when the light is fully off (the room is dark). Crossfades from light on grid brightness around mouse as the light goes down.">
+              <output id="nodeUiDevGridMouseLightOffValue" for="nodeUiDevGridMouseLightOff">0%</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>light on grid brightness around module</span>
+            <div class="node-ui-dev-control-row">
+              <input
+                id="nodeUiDevMinimumGridBrightness"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="16"
+                title="Grid line brightness around modules when the light is on (the room is lit). Crossfades to light off grid brightness around module as the light goes down.">
+              <output id="nodeUiDevMinimumGridBrightnessValue" for="nodeUiDevMinimumGridBrightness">16%</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>light on grid brightness around mouse</span>
+            <div class="node-ui-dev-control-row">
+              <input
+                id="nodeUiDevGridMouseLightOn"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="1"
+                title="Grid line brightness around the mouse when the light is on (the room is lit). Crossfades to light off grid brightness around mouse as the light goes down.">
+              <output id="nodeUiDevGridMouseLightOnValue" for="nodeUiDevGridMouseLightOn">1%</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
@@ -1341,9 +1393,9 @@
                 min="40"
                 max="220"
                 step="1"
-                value="220"
+                value="137"
                 title="How far around each module the grid is revealed.">
-              <output id="nodeUiDevGridSpreadValue" for="nodeUiDevGridSpread">220%</output>
+              <output id="nodeUiDevGridSpreadValue" for="nodeUiDevGridSpread">137%</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
@@ -1358,6 +1410,34 @@
                 value="16"
                 title="How many module units each drawn grid box covers. 1 is a line every unit. Higher removes lines so the boxes get bigger. Modules still snap to 1 unit.">
               <output id="nodeUiDevGridDivisionMultiplyValue" for="nodeUiDevGridDivisionMultiply">16×</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>under construction alpha</span>
+            <div class="node-ui-dev-control-row">
+              <input
+                id="nodeUiDevUnderConstructionAlpha"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="40"
+                title="How strong the stripes over an under-construction (or bypassed) module are.">
+              <output id="nodeUiDevUnderConstructionAlphaValue" for="nodeUiDevUnderConstructionAlpha">40%</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>under construction spacing</span>
+            <div class="node-ui-dev-control-row">
+              <input
+                id="nodeUiDevUnderConstructionSpacing"
+                type="range"
+                min="10"
+                max="240"
+                step="1"
+                value="67"
+                title="Distance from one stripe to the next, in the module's own pixels (the bars are half of it). The stripes belong to the module, so they scale with it.">
+              <output id="nodeUiDevUnderConstructionSpacingValue" for="nodeUiDevUnderConstructionSpacing">67 px</output>
             </div>
           </label>
           <div class="node-color-row" style="--color-row-cells:3" data-color-row-cells="3">
@@ -1399,8 +1479,8 @@
                 min="0"
                 max="100"
                 step="1"
-                value="31">
-              <output id="nodeUiDevModuleStrokeAlphaValue" for="nodeUiDevModuleStrokeAlpha">31%</output>
+                value="35">
+              <output id="nodeUiDevModuleStrokeAlphaValue" for="nodeUiDevModuleStrokeAlpha">35%</output>
             </div>
           </label>
           <div class="node-color-row" style="--color-row-cells:2" data-color-row-cells="2">
@@ -1424,8 +1504,8 @@
                 min="0"
                 max="100"
                 step="1"
-                value="100">
-              <output id="nodeUiDevModuleSelectedStrokeAlphaValue" for="nodeUiDevModuleSelectedStrokeAlpha">100%</output>
+                value="85">
+              <output id="nodeUiDevModuleSelectedStrokeAlphaValue" for="nodeUiDevModuleSelectedStrokeAlpha">85%</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
@@ -1530,6 +1610,48 @@
                 step="1"
                 value="31">
               <output id="nodeUiDevStrokeLoudAlphaValue" for="nodeUiDevStrokeLoudAlpha">31%</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>module glow</span>
+            <div class="node-ui-dev-control-row">
+              <input
+                id="nodeUiDevModuleGlow"
+                type="range"
+                min="0"
+                max="100"
+                step="0.01"
+                value="15.5"
+                title="The light a module's stroke casts around it when it is quiet (stroke colour). Loudness adds to this: see module glow loudness.">
+              <output id="nodeUiDevModuleGlowValue" for="nodeUiDevModuleGlow">15.5%</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>module glow loudness</span>
+            <div class="node-ui-dev-control-row">
+              <input
+                id="nodeUiDevModuleGlowLoudness"
+                type="range"
+                min="0"
+                max="100"
+                step="0.01"
+                value="16"
+                title="How much more the module glow shines at full output level, on top of module glow.">
+              <output id="nodeUiDevModuleGlowLoudnessValue" for="nodeUiDevModuleGlowLoudness">16%</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>module glow spread</span>
+            <div class="node-ui-dev-control-row">
+              <input
+                id="nodeUiDevModuleGlowSpread"
+                type="range"
+                min="10"
+                max="1000"
+                step="0.01"
+                value="50.5"
+                title="How far the module glow reaches from the module. 100% is the normal size; push it far out for a wide, soft, bokeh-like glow.">
+              <output id="nodeUiDevModuleGlowSpreadValue" for="nodeUiDevModuleGlowSpread">50.5%</output>
             </div>
           </label>
                                                             <label class="node-ui-dev-control">
@@ -1691,8 +1813,8 @@
           <label class="node-ui-dev-control">
             <span>wire dot light in the dark</span>
             <div class="node-ui-dev-control-row">
-              <input id="nodeUiDevWireDotDarkLight" type="range" value="35">
-              <output id="nodeUiDevWireDotDarkLightValue" for="nodeUiDevWireDotDarkLight">35%</output>
+              <input id="nodeUiDevWireDotDarkLight" type="range" value="69">
+              <output id="nodeUiDevWireDotDarkLightValue" for="nodeUiDevWireDotDarkLight">69%</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
@@ -3432,9 +3554,9 @@
   <script data-boot-defer type="text/plain" src="./public/modules/place/place-register.js?v=place-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/screenShake/screen-shake-register.js?v=shake-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/crtRaster/crt-raster-register.js?v=crt-2"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/analogSignal/analog-signal-register.js?v=analog-7"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/analogSignal/analog-signal-register.js?v=analog-7-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/analogDistortion/analog-distortion-register.js?v=distort-2"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/kaleidoscope/kaleidoscope-register.js?v=kaleido-5"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/kaleidoscope/kaleidoscope-register.js?v=kaleido-5-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/chromaColor/chroma-color-register.js?v=wash-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/bloomGlow/bloom-glow-register.js?v=wash-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/rgbFractal/rgb-fractal-register.js?v=picture-io-1"></script>
@@ -3458,7 +3580,7 @@
   <script data-boot-defer type="text/plain" src="./public/modules/portal/portal-outlet-register.js?v=portal-mlr-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/simulationTime/simulation-time-register.js?v=sim-time-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/patch/patch-register.js?v=patch-buttons-on-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-definitions.js?v=formant-voice-1-reseq-purr-3-vamp-mp10x5-vleg-lshift-rect-sg-overhaul-1-sg-gl-1-amp-linexp-compact-fvrow-subpw-mp-hide-face-1-circspec-1-addspawn-1-hostt-1-tip-1-rmsstroke-hyp2-ad4-velvet-split-2-sw-1-amp-2-aa-dvel-3-clkhz-2-snhit-1-beats-1-vbip-1-vrbknobs1-v12s2-v6s1-ctaw1-skw1-gap1-trand1-clk68-stg9-vrow1-skw09-mixout0-ehatn1-pq-gl-1-tcurv1-vtaps1-pq-gl-6-vbin1-mixamp-1-cpluck1-rngsep1-lowcut1-nseed1-bump1-edge1-mnoclip1-vflt1-shapes3-mping1-vfltdef1-nconv1-ncface1-crmg1-vrg-ssns-cm1-radial-reverse1-radial-settings1-levels1-polar-burn1-sweep-hang2-merge-ae614772-wash1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-definitions.js?v=formant-voice-1-reseq-purr-3-vamp-mp10x5-vleg-lshift-rect-sg-overhaul-1-sg-gl-1-amp-linexp-compact-fvrow-subpw-mp-hide-face-1-circspec-1-addspawn-1-hostt-1-tip-1-rmsstroke-hyp2-ad4-velvet-split-2-sw-1-amp-2-aa-dvel-3-clkhz-2-snhit-1-beats-1-vbip-1-vrbknobs1-v12s2-v6s1-ctaw1-skw1-gap1-trand1-clk68-stg9-vrow1-skw09-mixout0-ehatn1-pq-gl-1-tcurv1-vtaps1-pq-gl-6-vbin1-mixamp-1-cpluck1-rngsep1-lowcut1-nseed1-bump1-edge1-mnoclip1-vflt1-shapes3-mping1-vfltdef1-nconv1-ncface1-crmg1-vrg-ssns-cm1-radial-reverse1-radial-settings1-levels1-polar-burn1-sweep-hang2-merge-ae614772-wash1-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/emo/emo-compiler.js?v=emo-1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/emo/emo-module.js?v=emo-shader-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-plan-roles.js?v=pt-reverse-1"></script>
@@ -3513,10 +3635,10 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-settings-text-fit.js?v=title-fit-2d-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-default-preset.js?v=plugin-ui-persist-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-script-status.js?v=dbgpanel-rm-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-view-controls.js?v=2026.11.14.3-keys1-hk1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-geometry.js?v=zp4-4-zp-hoverg2ml2f3gpugridlc-sknd1-gr1-gf2-gm1-gt2-gk-gdr2"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-view-controls.js?v=2026.11.14.3-keys1-hk1-hk7"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-geometry.js?v=zp4-4-zp-hoverg2ml2f3gpugridlc-sknd1-gr1-gf2-gm1-gt2-gk-gdr2-gg2-gl2-d2-hm1-hm1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-viewport-perf.js?v=textbox-host-cleanup-20261101-zp-hover-fb1-bootflush-2-modface1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-zoom.js?v=all-sync-1-z-center-1-zoomrace-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-zoom.js?v=all-sync-1-z-center-1-zoomrace-1-zf2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-view.js?v=perf-20261015-zoomrace-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-camera-view.js?v=snake-gl-1-fb1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-marquee-selection.js?v=mini-round2-1"></script>
@@ -3526,10 +3648,10 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-actions.js?v=io-ch-3-sg-overhaul-1-sg-gl-1-sg-drag-2-cbz-1-collapse-indep-1-hukeep1-raise1"></script>
   <!-- node-graph-code-screen.js loaded by node-graph-code-screen-loader.js on demand -->
     <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-residual.js?v=burn-03-1dk"></script>
-  <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-energy-gl.js?v=ghost-cont-20261019-fb1bkdbacsk5gsaa6-age3"></script>
+  <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-energy-gl.js?v=ghost-cont-20261019-fb1bkdbacsk5gsaa6-age3-at1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-drawer.js?v=no-burn-1-fb1gsst5"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/display-layer-compositor.js?v=allow-gl-20261016c"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-phosphor-energy-gl.js?v=no-burn-1bkdbacsk5gsaa6"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-phosphor-energy-gl.js?v=no-burn-1bkdbacsk5gsaa6-at1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/trace/trace-meet-glsl.js?v=meet-glsl-1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/trace/trace-stroke.js?v=meet-glsl-1-white-1-g-1-rbw1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/trace/trace-woscope.js?v=ds-order-dots-1-fb2-bl1"></script>
@@ -3583,7 +3705,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-graph-query.js?v=superlove-sync-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-settings.js?v=scope-sync-off-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-lifecycle.js?v=pause-hold-3"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-video-graph.js?v=place-1-so-ssk-crt1-as1-ad1-kal1-wash1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-video-graph.js?v=place-1-so-ssk-crt1-as1-ad1-kal1-wash1-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-paint-gate.js?v=2026.11.11.47-vamp-fb1-pausedisp-1-pq-gl-1-cpluck2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-canvas.js?v=allow-gl-20261016b"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-waterfall-gl.js?v=stack-layers-1-fb1-g-1"></script>
@@ -3618,33 +3740,33 @@
   <script data-boot-defer type="text/plain" src="./public/modules/rgbShape/rgb-shape-ui.js?v=gl-nofb-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/rgbPicture/rgb-picture-ui.js?v=rgb-picture-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/rgbPicture/rgb-picture-display.js?v=gl-port-2"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/imageBurn/image-burn-ui.js?v=vg-4"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/videoFeedback/video-feedback-ui.js?v=vg-4"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/videoDelay/video-delay-ui.js?v=vg-4"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/aberration/aberration-ui.js?v=aberration-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/screenBend/screen-bend-ui.js?v=screen-bend-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/place/place-ui.js?v=place-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/screenShake/screen-shake-ui.js?v=shake-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/crtRaster/crt-raster-ui.js?v=crt-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/analogSignal/analog-signal-ui.js?v=analog-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/analogDistortion/analog-distortion-ui.js?v=distort-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/kaleidoscope/kaleidoscope-ui.js?v=kaleido-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/chromaColor/chroma-color-ui.js?v=wash-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/bloomGlow/bloom-glow-ui.js?v=wash-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/imageBurn/image-burn-ui.js?v=vg-4-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/videoFeedback/video-feedback-ui.js?v=vg-4-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/videoDelay/video-delay-ui.js?v=vg-4-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/aberration/aberration-ui.js?v=aberration-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/screenBend/screen-bend-ui.js?v=screen-bend-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/place/place-ui.js?v=place-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/screenShake/screen-shake-ui.js?v=shake-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/crtRaster/crt-raster-ui.js?v=crt-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/analogSignal/analog-signal-ui.js?v=analog-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/analogDistortion/analog-distortion-ui.js?v=distort-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/kaleidoscope/kaleidoscope-ui.js?v=kaleido-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/chromaColor/chroma-color-ui.js?v=wash-1-pl1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/bloomGlow/bloom-glow-ui.js?v=wash-1-pl1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/picture-device.js?v=screen-fx-1-dc-host-1-fb1-st-bp"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/display-canvas.js?v=vg-8-dc-host-1-fb1"></script>
-  <script data-boot-defer type="text/plain" src="./public/lib/visual/gl-line-renderer.js?v=stack-layers-1-dc-host-1-fb1-wf-fade-1-wirecurve-1-tileblend-1-round-4-follow1camso3harbnlckqvrlampglowshbsngpu2gridtxtflbaa-sknd1-jnoloud1-toprnd1-dvblur2-crmg1-gl8-cm1-jackcut5"></script>
+  <script data-boot-defer type="text/plain" src="./public/lib/visual/gl-line-renderer.js?v=stack-layers-1-dc-host-1-fb1-wf-fade-1-wirecurve-1-tileblend-1-round-4-follow1camso3harbnlckqvrlampglowshbsngpu2gridtxtflbaa-sknd1-jnoloud1-toprnd1-dvblur2-crmg1-gl8-cm1-jackcut5-vp5-gg1-uc4-ob1-gl2-d2-hm1-hm1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/reverbEffect/sabrina-reverb-gl.js?v=sabrina-clap-port-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/sabrinaReverb/sabrina-preset-browser.js?v=presets-off-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/pulseTrain/pulse-train-preset-browser.js?v=pt-noaa-1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/glyph-sdf-atlas.js?v=sdf-atlas-1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/color-widget-plane-gl.js?v=allow-gl-20261016d-fb1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/imageBurn/image-burn-gl.js?v=float-nr-20261019-fb1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/imageBurn/image-burn-display.js?v=size-mod-1-fb1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/imageBurn/image-burn-display.js?v=size-mod-1-fb1-sf1-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/tSeries/torch-face-display.js?v=torch-buf-1-fb1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/tSeries/t-series-crossfade-display.js?v=float-nr-20261019-fb1-merge-ae614772"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/videoFeedback/video-feedback-gl.js?v=vg-8-scircle-1-scircle2-reverse2-cutout1-inner-restore1-merge-ae614772"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/videoFeedback/video-feedback-display.js?v=vg-6-fb1-scircle-1-scircle2-reverse2-cutout1-inner-restore1-merge-ae614772"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/videoFeedback/video-feedback-display.js?v=vg-6-fb1-scircle-1-scircle2-reverse2-cutout1-inner-restore1-merge-ae614772-sf1-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/videoDelay/video-delay-gl.js?v=vg-8"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/aberration/aberration-gl.js?v=aberration-1-4k"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/screenBend/screen-bend-gl.js?v=screen-bend-1-sgbv2-4k-sh1"></script>
@@ -3656,17 +3778,17 @@
   <script data-boot-defer type="text/plain" src="./public/modules/kaleidoscope/kaleidoscope-gl.js?v=kaleido-3"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/chromaColor/chroma-color-gl.js?v=wash-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/bloomGlow/bloom-glow-gl.js?v=wash-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/videoDelay/video-delay-display.js?v=vg-6-fb1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/aberration/aberration-display.js?v=aberration-1-fb1-hr-lv-rng1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/screenBend/screen-bend-display.js?v=screen-bend-1-fb1-hr-sgb-lv-sh1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/place/place-display.js?v=place-1-fb1-hr-lv"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/screenShake/screen-shake-display.js?v=shake-1-lv"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/crtRaster/crt-raster-display.js?v=crt-2"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/analogSignal/analog-signal-display.js?v=analog-6"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/analogDistortion/analog-distortion-display.js?v=distort-2"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/kaleidoscope/kaleidoscope-display.js?v=kaleido-4"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/chromaColor/chroma-color-display.js?v=wash-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/modules/bloomGlow/bloom-glow-display.js?v=wash-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/videoDelay/video-delay-display.js?v=vg-6-fb1-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/aberration/aberration-display.js?v=aberration-1-fb1-hr-lv-rng1-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/screenBend/screen-bend-display.js?v=screen-bend-1-fb1-hr-sgb-lv-sh1-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/place/place-display.js?v=place-1-fb1-hr-lv-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/screenShake/screen-shake-display.js?v=shake-1-lv-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/crtRaster/crt-raster-display.js?v=crt-2-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/analogSignal/analog-signal-display.js?v=analog-6-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/analogDistortion/analog-distortion-display.js?v=distort-2-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/kaleidoscope/kaleidoscope-display.js?v=kaleido-4-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/chromaColor/chroma-color-display.js?v=wash-1-vp"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/bloomGlow/bloom-glow-display.js?v=wash-1-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/rgbFractal/rgb-fractal-gl.js?v=vg-8bk"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/rgbFractal/rgb-fractal-ui.js?v=vg-7a"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/rgbFractal/rgb-fractal-display.js?v=fm-goni-hue-1"></script>
@@ -3696,7 +3818,7 @@
   <script data-boot-defer type="text/plain" src="./public/modules/portal/portal-settings.js?v=portal-lanes-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/portal/portal-ui.js?v=inlet-outlet-layout-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-header-rendering.js?v=io-ch-1-altdbl-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-rendering.js?v=step-graph-layout-a-face-1-dvel-3-pq-gl-1-ncface1-allb1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-rendering.js?v=step-graph-layout-a-face-1-dvel-3-pq-gl-1-ncface1-allb1-io1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/emo/emo-display.js?v=wf-ink-1-fb1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-frame.js?v=paint-layout-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-history.js?v=circuit-patches-3"></script>
@@ -3727,7 +3849,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-semath.js?v=gate-up-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ear-protection.js?v=emo-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-patch-load-fault.js?v=disconnect-invalid-wire-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-debug-console.js?v=mini-round2-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-debug-console.js?v=mini-round2-1-dr1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-diagnostics.js?v=uc-silence-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-rendered-audio.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-rendered-player.js?v=allow-gl-20261016a"></script>
@@ -3739,23 +3861,23 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-trace-router.js?v=no-self-burst-1780321400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-rendering.js?v=pt-reverse-2-stg7"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-stroke-builder.js?v=snake-gl-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=stack-layers-1-sg-overhaul-1-sg-gl-1-sg-drag-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-wf-fade-1-vcur-1-wirepx-1-wiredotpx-1-wirecurve-1-tcollapse-1-pausedisp-1-cbz-1-cap-1-altdbl-1-round-8msk-ambwp2blampscnglowt75shbsnmlgpu2gridtxtflbspwdot-sknd1-wlit1-jlit2-wdot1-jnoloud2-clkui2-txtrv1-jdrag1-jin55-stg5-stg6-hidwdot1-vslider2-stgsel1-jackdot1-vstack1-toprnd1-glowmix1-crmg1-lamp1-gr1-gf2-cs-xypbchsl-xyf-cm1-ioov1-ioview17-rt7-gr1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-io-view.js?v=ioview-18"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-screen-fx.js?v=screen-out-1-ssn-bcdsfgh-cm1-peek1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=stack-layers-1-sg-overhaul-1-sg-gl-1-sg-drag-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-wf-fade-1-vcur-1-wirepx-1-wiredotpx-1-wirecurve-1-tcollapse-1-pausedisp-1-cbz-1-cap-1-altdbl-1-round-8msk-ambwp2blampscnglowt75shbsnmlgpu2gridtxtflbspwdot-sknd1-wlit1-jlit2-wdot1-jnoloud2-clkui2-txtrv1-jdrag1-jin55-stg5-stg6-hidwdot1-vslider2-stgsel1-jackdot1-vstack1-toprnd1-glowmix1-crmg1-lamp1-gr1-gf2-cs-xypbchsl-xyf-cm1-ioov1-ioview17-rt7-gr1-dd1-vp5-uc4-gl2-rs1-mt3-hm1-hm1-ce1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-io-view.js?v=ioview-21"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-screen-fx.js?v=screen-out-1-ssn-bcdsfgh-cm1-peek1-dup1-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-render-output.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-debug-copy.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-execution-debug-api.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-tooltips.js?v=scope-sync-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-interaction-help.js?v=tooltip-min-12-canvas-name"></script>
-  <script data-boot-defer type="text/plain" src="./public/presets/useruisettings.js?v=2026.11.11.49-wirepx-1-wiredotpx-1-mstk1-bg19-mstk2-grid1-gr1-gm1-cm1-gdr2"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=cell-slider-1-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-pre-1-hex12capvmhadkbncqdrsmlcorgspwdfst-wlit1-jlit2-wdot1-jin25-jnw1-mstk1-bg19-jin55-mstk2-toprnd1-toprnd22gfx10-crmg1-grid12-gr1-gm1-gt2-gk-cm1-gdr2"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-interaction-help.js?v=tooltip-min-12-canvas-name-wv1"></script>
+  <script data-boot-defer type="text/plain" src="./public/presets/useruisettings.js?v=2026.11.11.49-wirepx-1-wiredotpx-1-mstk1-bg19-mstk2-grid1-gr1-gm1-cm1-gdr2-gg1-uc4-gl2-d2-gs1-hm1-hm1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=cell-slider-1-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-pre-1-hex12capvmhadkbncqdrsmlcorgspwdfst-wlit1-jlit2-wdot1-jin25-jnw1-mstk1-bg19-jin55-mstk2-toprnd1-toprnd22gfx10-crmg1-grid12-gr1-gm1-gt2-gk-cm1-gdr2-gg1-uc4-gl2-d2-gs1-hm1-hm1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-utils.js?v=slider-unit-color-1780307400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-user-ui-settings-controls.js?v=cell-slider-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-panels.js?v=uidev-page-1-cols-1org"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-persistence.js?v=cell-slider-1-round-1-jlit4-modface1-toprnd1-cm1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=tooltip-min-12-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-live-1-pre-1-hex12capxdvmsnhxadkcorbnckqdrsmp2mlgpuinlcspwdfst-wlit1-jlit4-wdot1-mstk1-bg19-mstk2-toprnd1-toprnd22-glowmix1sfgfx7-crmg1-gr1-gm1-gt2-gk-cm1-gdr2"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-shortcuts.js?v=pt-preset-2-sg-fix-1-cam1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-camera-keys.js?v=cam-3"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=tooltip-min-12-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-live-1-pre-1-hex12capxdvmsnhxadkcorbnckqdrsmp2mlgpuinlcspwdfst-wlit1-jlit4-wdot1-mstk1-bg19-mstk2-toprnd1-toprnd22-glowmix1sfgfx7-crmg1-gr1-gm1-gt2-gk-cm1-gdr2-gg1-uc4-gl2-d4-gs1-hm1-hm1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-shortcuts.js?v=pt-preset-2-sg-fix-1-cam1-hk7"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-camera-keys.js?v=cam-3-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-text.js?v=live-plan-preserve-20260634"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-controls.js?v=slider-unit-color-1780307400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-meter-controls.js?v=audio-overrun-meter-2"></script>
@@ -3763,7 +3885,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-evidence.js?v=perf4-20261015"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-control-rendering.js?v=pp-local-3"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-default-patch.js?v=btn-smooth-off-1-mp-hide-face-1-collapse-indep-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-store.js?v=sequence-department-sturmian-1-velvet-split-2-dvel-3-cpluck1-mping1-nconv1-ncface1-crmg1-ssn-bs-cm1-wash2"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-store.js?v=sequence-department-sturmian-1-velvet-split-2-dvel-3-cpluck1-mping1-nconv1-ncface1-crmg1-ssn-bs-cm1-wash2-vp"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/polyphony-voices.js?v=2026.11.11.45"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/note-mask-128.js?v=pq-oct-st-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-chord-memory.js?v=kbd-gl-1"></script>
@@ -3910,7 +4032,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-pulse-train-display.js?v=pe-face-20261110-fb1-vbip-1-lrvel1-dvblur1-cm1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-velvet-taps-display.js?v=dvel-taps-3-vrbknobs1-v12s1-v6s1-skw1-gap1-trand1-tcurv1-vtaps1-vbin1-vaa1-lrvel1-vbrt1-vmin1-vhold1-vrel1-vfit1-voff1-vblk1-vflt1-vfltdef1-nconv1-dvblur1-dvblur2-dvtail1-crmg1-cm1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-noise-conv-display.js?v=ncface2-cm1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-live-runtime.js?v=2026.11.15.4-budget-follow1xdmoelns-lvlports1-dvel-3-snhit-1-beats-1-vbip-1-vrbknobs1-v12s2-v6s1-skw1-stg6-gap1-stg7-trand1-stg10-stg11-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-cpluck2-cnoclip1-lowcut1-nseed1-bump1-edge1-vfit1-voff1-mnoclip1-strokestop1-vblk1-vflt1-shapes3-mping1-vfltdef1-nconv1-ncface1-kickaa1-crmg1-cm1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-live-runtime.js?v=2026.11.15.4-budget-follow1xdmoelns-lvlports1-dvel-3-snhit-1-beats-1-vbip-1-vrbknobs1-v12s2-v6s1-skw1-stg6-gap1-stg7-trand1-stg10-stg11-stg14-ehatn1-stg16-tcurv1-vtaps1-cpluck1-cpluck2-cnoclip1-lowcut1-nseed1-bump1-edge1-vfit1-voff1-mnoclip1-strokestop1-vblk1-vflt1-shapes3-mping1-vfltdef1-nconv1-ncface1-kickaa1-crmg1-cm1-kp1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-controller-bootstrap.js?v=wire-break-trigger-0129"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-canvas-fit.js?v=no-phone-box-1-canvas-name-tileblend-1-canvasbg-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-screen-solo.js?v=one-stroke-1-dc-host-1-scircle-1"></script>

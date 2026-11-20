@@ -1388,6 +1388,14 @@
       "emoji": ""
     },
     {
+      "slug": "screen_shader_test",
+      "label": "screen_shader_test",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/screen_shader_test.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "shapedresonator",
       "label": "shapedresonator",
       "name": "",

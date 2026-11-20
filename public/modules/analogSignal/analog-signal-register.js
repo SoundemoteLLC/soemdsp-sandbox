@@ -1,6 +1,6 @@
 // Analog Signal — the artifacts of an analog video signal, before it reaches the tube: scanline jitter, a slow sideways sway, a light
 // grain, ringing after sharp edges (in a direction you set) and bandwidth bleed. The hum bars and the magnet are Analog Distortion's. A picture effect module (📺 in, 📺 out), nothing global. Put it right
-// after Screen Space In, ahead of Aberration, Screen Glass and CRT Raster, so the glass and the raster act on the disturbed picture.
+// after Viewport In, ahead of Aberration, Screen Glass and CRT Raster, so the glass and the raster act on the disturbed picture.
 registerNodeGraphChromelessModule("analogSignal", {
   label: "Analog Signal",
   solidModule: false,

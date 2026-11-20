@@ -732,7 +732,7 @@ function updateNodeGraphGridHeatmap(options = {}) {
   const visibleNodes = [...surface.querySelectorAll(".dsp-node:not(.removed):not([hidden])")];
   const lightSpread = Math.max(
     0.4,
-    Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-spread", 0.78)),
+    Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-spread", 1.15)),
   );
   const gridSpread = Math.max(
     0.4,
@@ -740,7 +740,7 @@ function updateNodeGraphGridHeatmap(options = {}) {
   );
   const lightBright = Math.max(
     0,
-    Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-brightness", 1)),
+    Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-brightness", 0.25)),
   );
   const roomDim = typeof nodeGraphRoomDim === "function"
     ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDim())))
@@ -847,6 +847,9 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
         // The grid's strength: "grid bright reflect" in a lit room, "grid dim reflect" in a dark one (crossfaded by the dimmer).
         alphaBright: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha", 0.48),
         alphaDim: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-line-alpha-dim", 0.4),
+        // "light on / off grid brightness around mouse": how strong the lines are around the mouse (apart from around modules).
+        mouseAlphaBright: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-mouse-alpha", 0.48),
+        mouseAlphaDim: nodeGraphHeatmapFloatProperty(workspace, "--node-grid-mouse-alpha-dim", 0.4),
         spread: Math.max(0.4, Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78))),
         mouseSpread: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread"))),
         mouseBase: Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount"))),
@@ -865,6 +868,7 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
   return {
     cell: b.cell,
     rgba: [b.rgba[0], b.rgba[1], b.rgba[2], b.alphaBright + (b.alphaDim - b.alphaBright) * roomDim],
+    mouseAlpha: b.mouseAlphaBright + (b.mouseAlphaDim - b.mouseAlphaBright) * roomDim,
     spread: b.spread,
     moduleAmt: Math.max(NODE_GRID_DARK_FLOOR, 1 - deep),
     mouse: active ? mouse : null,
@@ -880,15 +884,24 @@ globalThis.nodeGraphGridLightParams = function nodeGraphGridLightParams() {
 // of the light survives the room being dark.
 globalThis.nodeGraphModuleLightBrightness = function nodeGraphModuleLightBrightness() {
   const workspace = document.getElementById("nodeGraphWorkspace");
-  const lightBright = Math.max(0, Math.min(3, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-brightness", 1)));
+  const lightBright = Math.max(0, Math.min(3, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-brightness", 0.25)));
   const deep = typeof nodeGraphRoomDimDeep === "function" ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDimDeep()))) : 0;
   return lightBright * Math.max(NODE_GRID_DARK_FLOOR, 1 - deep);
 };
-// The stroke light's strength: the same brightness setting, but not dimmed by the room (the module
-// stroke and its loudness animation stay at full strength under the dimmer).
+// The stroke light's strength. Not the module heatmap brightness any more (the module glow sliders set the glow's own strength) and
+// not dimmed by the room: the module stroke and its loudness animation stay at full strength under the dimmer.
 globalThis.nodeGraphModuleStrokeLightBrightness = function nodeGraphModuleStrokeLightBrightness() {
+  return 1;
+};
+// UI Dev "module glow" / "module glow loudness": the stroke light's strength at rest and the most loudness adds to it.
+globalThis.nodeGraphModuleGlowLevels = function nodeGraphModuleGlowLevels() {
   const workspace = document.getElementById("nodeGraphWorkspace");
-  return Math.max(0, Math.min(3, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-brightness", 1)));
+  return {
+    rest: Math.max(0, Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-module-glow", 0.155))),
+    loud: Math.max(0, Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-module-glow-loud", 0.16))),
+    // How far the glow reaches, as a multiple of the normal reach.
+    spread: Math.max(0.1, Math.min(10, nodeGraphHeatmapFloatProperty(workspace, "--node-module-glow-spread", 0.505))),
+  };
 };
 var nodeGraphHeatmapBoundsCache = new WeakMap();
 

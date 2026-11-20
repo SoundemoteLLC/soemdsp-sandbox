@@ -82,11 +82,15 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: false, id: "nodeUiDevShowOriginMarker", key: "showOriginMarker", type: "boolean" },
   // Floor for fit-to-box tip text. The fitter never goes below this; longer tips clip.
   { defaultValue: 12, id: "nodeUiDevTooltipTextSize", key: "tooltipTextSize", max: 96, min: 12, type: "number" },
-  { defaultValue: 100, id: "nodeUiDevModuleLightBrightness", key: "moduleLightBrightness", max: 300, min: 0, type: "number" },
-  { defaultValue: 48, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, step: 0.5, type: "number" },
-  { defaultValue: 40, id: "nodeUiDevGridDimReflect", key: "gridDimReflect", max: 100, min: 0, step: 0.5, type: "number" },
+  { defaultValue: 25, id: "nodeUiDevModuleLightBrightness", key: "moduleLightBrightness", max: 300, min: 0, type: "number" },
+  { defaultValue: 16, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, step: 0.5, type: "number" },
+  { defaultValue: 34, id: "nodeUiDevGridDimReflect", key: "gridDimReflect", max: 100, min: 0, step: 0.5, type: "number" },
+  { defaultValue: 0, id: "nodeUiDevGridMouseLightOff", key: "gridMouseLightOff", max: 100, min: 0, step: 1, type: "number" },
+  { defaultValue: 1, id: "nodeUiDevGridMouseLightOn", key: "gridMouseLightOn", max: 100, min: 0, step: 1, type: "number" },
+  { defaultValue: 40, id: "nodeUiDevUnderConstructionAlpha", key: "underConstructionAlpha", max: 100, min: 0, step: 1, type: "number" },
+  { defaultValue: 67, id: "nodeUiDevUnderConstructionSpacing", key: "underConstructionSpacing", max: 240, min: 10, step: 1, type: "number" },
   {
-    defaultValue: 220,
+    defaultValue: 137,
     id: "nodeUiDevGridSpread",
     key: "gridSpread",
     max: 220,
@@ -103,7 +107,7 @@ const nodeUiDevSettingControls = Object.freeze([
     step: 1,
     type: "number",
   },
-  { defaultValue: 10, id: "nodeUiDevModuleLightSpread", key: "moduleLightSpread", max: 220, min: 10, type: "number" },
+  { defaultValue: 115, id: "nodeUiDevModuleLightSpread", key: "moduleLightSpread", max: 220, min: 10, type: "number" },
   {
     defaultValue: 0.85,
     id: "nodeUiDevUsedPortBrightness",
@@ -170,7 +174,7 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: 100, id: "nodeUiDevModuleFillAlpha", key: "moduleFillAlpha", max: 100, min: 0, type: "number" },
   { defaultValue: "#030113", id: "nodeUiDevModuleTitleFillColor", key: "moduleTitleFillColor", type: "color" },
   { defaultValue: "#6922ec", id: "nodeUiDevModuleStrokeColor", key: "moduleStrokeColor", type: "color" },
-  { defaultValue: 31, id: "nodeUiDevModuleStrokeAlpha", key: "moduleStrokeAlpha", max: 100, min: 0, type: "number" },
+  { defaultValue: 35, id: "nodeUiDevModuleStrokeAlpha", key: "moduleStrokeAlpha", max: 100, min: 0, type: "number" },
   { defaultValue: "#f9aeae", id: "nodeUiDevModuleSelectedStrokeColor", key: "moduleSelectedStrokeColor", type: "color" },
   // Module corners, top and bottom apart. Shape: 0 Round, 1 Squircle, 2 Pill (full end, ignores Radius).
   { defaultValue: 1, id: "nodeUiDevModuleTopShape", key: "moduleTopShape", max: 2, min: 0, step: 1, type: "number" },
@@ -184,8 +188,11 @@ const nodeUiDevSettingControls = Object.freeze([
   // The loud stroke (the first cable's colour): how much brighter than the cable, and how opaque.
   { defaultValue: 0, id: "nodeUiDevStrokeLoudBrightness", key: "strokeLoudBrightness", max: 100, min: 0, step: 1, type: "number" },
   { defaultValue: 31, id: "nodeUiDevStrokeLoudAlpha", key: "strokeLoudAlpha", max: 100, min: 0, step: 1, type: "number" },
+  { defaultValue: 15.5, id: "nodeUiDevModuleGlow", key: "moduleGlow", max: 100, min: 0, step: 0.01, type: "number" },
+  { defaultValue: 16, id: "nodeUiDevModuleGlowLoudness", key: "moduleGlowLoudness", max: 100, min: 0, step: 0.01, type: "number" },
+  { defaultValue: 50.5, id: "nodeUiDevModuleGlowSpread", key: "moduleGlowSpread", max: 1000, min: 10, step: 0.01, type: "number" },
   { defaultValue: 92, id: "nodeUiDevStrokeAnimate", key: "strokeAnimate", max: 100, min: 0, step: 1, type: "number" },
-  { defaultValue: 100, id: "nodeUiDevModuleSelectedStrokeAlpha", key: "moduleSelectedStrokeAlpha", max: 100, min: 0, type: "number" },
+  { defaultValue: 85, id: "nodeUiDevModuleSelectedStrokeAlpha", key: "moduleSelectedStrokeAlpha", max: 100, min: 0, type: "number" },
   { defaultValue: "#cfdde5", id: "nodeUiDevSliderLabelColor", key: "sliderLabelColor", type: "color" },
   { defaultValue: "#ffffff", id: "nodeUiDevSliderValueColor", key: "sliderValueColor", type: "color" },
   { defaultValue: "#7fc7d9", id: "nodeUiDevSliderUnitColor", key: "sliderUnitColor", type: "color" },
@@ -223,7 +230,7 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: 3.3, id: "nodeUiDevParamWireDotSize", key: "paramWireDotSize", max: 12, min: 0, step: 0.01, type: "number" },
   // Light the cables, and apart their end dots, keep in a fully dark room, 0 (black shadow wires) to 100%.
   { defaultValue: 35, id: "nodeUiDevWireDarkLight", key: "wireDarkLight", max: 100, min: 0, step: 1, type: "number" },
-  { defaultValue: 35, id: "nodeUiDevWireDotDarkLight", key: "wireDotDarkLight", max: 100, min: 0, step: 1, type: "number" },
+  { defaultValue: 69, id: "nodeUiDevWireDotDarkLight", key: "wireDotDarkLight", max: 100, min: 0, step: 1, type: "number" },
   // Wire end dot brightness when lit: 0 = black, 100% = its colour, above lifts toward white (alpha kept).
   { defaultValue: 100, id: "nodeUiDevWireDotLitLight", key: "wireDotLitLight", max: 200, min: 0, step: 1, type: "number" },
   // Jack ring light: connected and unconnected, 100% = the jack's own colour, lower shows less of it over the
@@ -249,7 +256,7 @@ const nodeUiDevSettingSections = Object.freeze([
     ],
   },
   {
-    title: "lighting",
+    title: "lighting: module & mouse",
     ids: [
       "nodeUiDevModuleLightBrightness",
       "nodeUiDevModuleLightSpread",
@@ -275,6 +282,9 @@ const nodeUiDevSettingSections = Object.freeze([
       "nodeUiDevStrokeAnimate",
       "nodeUiDevStrokeLoudBrightness",
       "nodeUiDevStrokeLoudAlpha",
+      "nodeUiDevModuleGlow",
+      "nodeUiDevModuleGlowLoudness",
+      "nodeUiDevModuleGlowSpread",
     ],
   },
   {
@@ -305,15 +315,24 @@ const nodeUiDevSettingSections = Object.freeze([
     ],
   },
   {
-    title: "grid",
+    title: "lighting: grid",
     ids: [
-      "nodeUiDevMinimumGridBrightness",
       "nodeUiDevGridDimReflect",
+      "nodeUiDevGridMouseLightOff",
+      "nodeUiDevMinimumGridBrightness",
+      "nodeUiDevGridMouseLightOn",
       "nodeUiDevGridSpread",
       "nodeUiDevGridDivisionMultiply",
       "nodeUiDevGridColor",
       "nodeUiDevViewGridVisible",
       "nodeUiDevViewGridLightVisible",
+    ],
+  },
+  {
+    title: "under construction",
+    ids: [
+      "nodeUiDevUnderConstructionAlpha",
+      "nodeUiDevUnderConstructionSpacing",
     ],
   },
   {
