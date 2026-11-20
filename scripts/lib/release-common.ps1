@@ -173,7 +173,7 @@ function Get-PublicDownloadUrl([string]$Version, [string]$Filename) {
 }
 
 function Get-ReleaseAssets([string]$Repo, [string]$Tag) {
-    $result = Invoke-GhQuiet release view $Tag -R $Repo --json tagName,isDraft,url,assets
+    $result = Invoke-GhQuiet release view $Tag -R $Repo --json 'tagName,isDraft,url,assets'
     if ($result.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($result.Output)) { return $null }
     try { return ($result.Output | ConvertFrom-Json) } catch { return $null }
 }

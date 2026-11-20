@@ -109,7 +109,7 @@ if ($view.ExitCode -ne 0) {
 }
 
 Start-Sleep -Seconds 8
-$runs = Invoke-GhQuiet run list -R $pluginRepo --workflow "Release Sandbox" -L 5 --json databaseId,status,conclusion,headBranch,event,url,displayTitle,createdAt
+$runs = Invoke-GhQuiet run list -R $pluginRepo --workflow "Release Sandbox" -L 5 --json 'databaseId,status,conclusion,headBranch,event,url,displayTitle,createdAt'
 $runList = @()
 if ($runs.ExitCode -eq 0 -and $runs.Output) { $runList = @($runs.Output | ConvertFrom-Json) }
 $match = $runList | Where-Object { $_.headBranch -eq $tag -or $_.displayTitle -like "*$tag*" } | Select-Object -First 1
@@ -124,7 +124,7 @@ if (-not $match) { return }
 
 $deadline = (Get-Date).AddMinutes($WaitMinutes)
 while ((Get-Date) -lt $deadline) {
-    $infoRes = Invoke-GhQuiet run view $match.databaseId -R $pluginRepo --json status,conclusion,url
+    $infoRes = Invoke-GhQuiet run view $match.databaseId -R $pluginRepo --json 'status,conclusion,url'
     if ($infoRes.ExitCode -eq 0) {
         $info = $infoRes.Output | ConvertFrom-Json
         Write-Host "  Actions: $($info.status) $($info.conclusion) $($info.url)"
