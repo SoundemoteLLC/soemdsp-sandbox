@@ -469,7 +469,8 @@ function nodeGraphGlGraphRebuildChrome() {
         rgba,
       });
     }
-    // A pill is drawn like a jack: a cutout with a dot in it and its count beside it. The pseudo-jack gives the cutout.
+    // A pill is drawn like a jack: a cutout with a dot in it. The pseudo-jack gives the cutout. Its count is kept for the
+    // one-jack click (node-graph-io-view.js) but is not drawn.
     const pushPill = (pill) => {
       pills.push(pill);
       jacks.push({
@@ -1247,7 +1248,8 @@ function nodeGraphGlGraphIoActiveRegions() {
 
 /**
  * View A: the compacted IO. Each module has one pill per side (inputs left, outputs right) in the strip between the
- * title and the display. Returns { input?, output? }, each { x, y, count }; null when the view has no pills. A module
+ * title and the display. Returns { input?, output? }, each { x, y, count }; null when the view has no pills. count is
+ * not shown: it only lets a side with one jack start that jack's wire on a press (node-graph-io-view.js). A module
  * whose strip cannot be measured has no pills (its cables keep to the real jacks: a position is never guessed).
  */
 function nodeGraphGlGraphIoPills(id) {
@@ -1366,23 +1368,14 @@ function nodeGraphGlGraphDrawIoRegion(layer, reg, el, toX, toY, zoom) {
   }
 }
 
-/** The pill's contents: a dot inside its jack cutout (the cutout itself is a pseudo-jack) and the count beside it. */
+/** The pill's contents: a dot inside its jack cutout (the cutout itself is a pseudo-jack) when a jack on that side has a
+ *  cable. No count is drawn: the cutout already says the IO is collapsed. */
 function nodeGraphGlGraphDrawPill(batch, pill, toX, toY, zoom) {
-  const side = pill.io === "output" ? -1 : 1;
   const cx = toX(pill.x);
   const cy = toY(pill.y);
   const r = pill.r * zoom;
   const accent = [0.45, 0.62, 1, 1];
   if (pill.connected) nodeGraphGlLinesDot(batch, cx, cy, r * 0.42, 0.75, accent);
-  if (typeof nodeGraphGlLinesText === "function") {
-    nodeGraphGlLinesText(batch, String(pill.count), cx + side * (r + 3 * zoom), cy, nodeGraphGlGraphTextOpts({
-      px: Math.max(1, 11 * zoom),
-      rgba: [0.78, 0.86, 1, 1],
-      align: side > 0 ? "left" : "right",
-      baseline: "middle",
-      weight: 600,
-    }));
-  }
 }
 
 /** Module opted in to drawing its jacks and labels over its display (definition.ioOverlay). */

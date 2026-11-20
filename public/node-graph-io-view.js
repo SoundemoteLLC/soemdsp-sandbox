@@ -167,7 +167,7 @@
       const jackRadius = typeof nodeGraphJackHitRadiusPx === "function" ? nodeGraphJackHitRadiusPx() : 8;
       const reach = Math.max(pill.r || 0, jackRadius);
       if (Math.max(Math.abs(point.x - pill.x), Math.abs(point.y - pill.y)) <= reach) return pill;
-      // And the old strip inward of it, where the pill's count sits.
+      // And the strip inward of it (where a count used to be drawn): a bigger target, nothing is drawn there.
       const w = pill.r * 3.4;
       const x0 = side > 0 ? pill.x : pill.x - w;
       if (point.x >= x0 && point.x <= x0 + w && Math.abs(point.y - pill.y) <= pill.r) return pill;
