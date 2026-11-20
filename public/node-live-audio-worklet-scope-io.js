@@ -57,8 +57,25 @@ NodeLiveAudioProcessor.prototype.visualWriteStride = function visualWriteStride(
 };
 
 // Bake scope capture lists on setPlan — sample loop must not walk plan objects.
-NodeLiveAudioProcessor.prototype.compileScopeCapture = function compileScopeCapture() {
+// modulations (optional): the plan's MOD cables when this.modulationConnections is not rebuilt yet (a wire edit).
+NodeLiveAudioProcessor.prototype.compileScopeCapture = function compileScopeCapture(modulations = null) {
     const rates = this.scopeCaptureRates || Object.create(null);
+    // MOD sources: a "latest value" ring (stride > 1) writes the MEAN of each stride instead of one point, so a reader at frame
+    // rate (picture modules, nodeGraphPictureParam) sees what the stride was exposed to and a fast source cannot alias.
+    const modSources = new Set();
+    if (Array.isArray(modulations)) {
+      for (let i = 0; i < modulations.length; i += 1) {
+        const source = modulations[i]?.sourceNode;
+        if (source) modSources.add(String(source));
+      }
+    } else if (this.modulationConnections instanceof Map) {
+      for (const list of this.modulationConnections.values()) {
+        for (let i = 0; i < (list?.length || 0); i += 1) {
+          const source = list[i]?.sourceNode;
+          if (source) modSources.add(String(source));
+        }
+      }
+    }
     const captureNodeIds = Array.isArray(this.scopeCaptureNodeIds) && this.scopeCaptureNodeIds.length
       ? this.scopeCaptureNodeIds
       : (this.order || []);
@@ -71,7 +88,7 @@ NodeLiveAudioProcessor.prototype.compileScopeCapture = function compileScopeCapt
       if (captureType === "output") {
         continue;
       }
-      nodes.push({ nodeId, writeHz: rates[nodeId] });
+      nodes.push({ nodeId, writeHz: rates[nodeId], mean: modSources.has(String(nodeId)) });
     }
     this.compiledScopeNodes = nodes;
     if (!(this._visualPortNodeIds instanceof Set)) {
@@ -125,6 +142,40 @@ NodeLiveAudioProcessor.prototype.compileScopeCapture = function compileScopeCapt
     this.compiledVisualSinks = compiled;
 };
 
+/** Running sum for a stride mean: a number, or per port for an output object (non-finite samples are skipped). */
+NodeLiveAudioProcessor.prototype.accumulateScopeMean = function accumulateScopeMean(sum, output) {
+    if (typeof output === "number") {
+      const base = typeof sum === "number" ? sum : 0;
+      return Number.isFinite(output) ? base + output : base;
+    }
+    if (!output || typeof output !== "object") {
+      return sum;
+    }
+    const acc = sum && typeof sum === "object" ? sum : Object.create(null);
+    for (const port in output) {
+      if (!Object.prototype.hasOwnProperty.call(output, port)) continue;
+      const v = Number(output[port]);
+      if (Number.isFinite(v)) acc[port] = (acc[port] || 0) + v;
+    }
+    return acc;
+};
+
+/** The stride mean from accumulateScopeMean's sum and the number of samples it holds. */
+NodeLiveAudioProcessor.prototype.scopeMeanValue = function scopeMeanValue(sum, count) {
+    const n = Math.max(1, count | 0);
+    if (typeof sum === "number") {
+      return sum / n;
+    }
+    if (!sum || typeof sum !== "object") {
+      return 0;
+    }
+    const out = {};
+    for (const port in sum) {
+      out[port] = sum[port] / n;
+    }
+    return out;
+};
+
 NodeLiveAudioProcessor.prototype.captureModuleScopeFrame = function captureModuleScopeFrame(frameValues = null, frame = 0, frames = 1) {
     const engineRate = Math.max(1, nodeGraphFiniteNumber(this.engineSampleRate, nodeGraphFiniteNumber(sampleRate, 44100)));
     this.scopeSampleStride = 1;
@@ -140,7 +191,22 @@ NodeLiveAudioProcessor.prototype.captureModuleScopeFrame = function captureModul
           continue;
         }
         const stride = this.visualWriteStride(entry.writeHz, engineRate);
-        if (!(stride > 0) || (this.scopeCounter % stride) !== 0) {
+        if (!(stride > 0)) {
+          continue;
+        }
+        if (entry.mean && stride > 1) {
+          // MOD source: every sample counts toward the value written at the end of the stride (its mean).
+          entry.meanSum = this.accumulateScopeMean(entry.meanSum, this.nodeOutputs.get(nodeId));
+          entry.meanCount = (entry.meanCount || 0) + 1;
+          if ((this.scopeCounter % stride) !== 0) {
+            continue;
+          }
+          this.captureModuleScopeOutput(nodeId, this.scopeMeanValue(entry.meanSum, entry.meanCount));
+          entry.meanSum = null;
+          entry.meanCount = 0;
+          continue;
+        }
+        if ((this.scopeCounter % stride) !== 0) {
           continue;
         }
         this.captureModuleScopeOutput(nodeId, this.nodeOutputs.get(nodeId));

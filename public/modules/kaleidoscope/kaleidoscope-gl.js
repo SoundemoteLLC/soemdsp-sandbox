@@ -75,14 +75,14 @@ const NODE_GRAPH_KALEIDOSCOPE_MAX = 4096;
       // The fold (in aspect-corrected coordinates, centre at the origin).
       vec2 p = (vUv - uCenter) * vec2(aspect, 1.0);
       float r = length(p);
-      float wedge = 6.28318530718 / max(uSegments, 2.0);
+      float wedge = 6.28318530718 / uSegments;
       float th = atan(p.y, p.x) - uAngle;
       th = mod(th, wedge);
       if (uMirror < 0.5) th = abs(th - 0.5 * wedge) ;
       th += uAngle;
       vec2 f = vec2(cos(th), sin(th)) * r;
       // Which part of the incoming picture the wedge looks at: a zoom about the centre and a slide.
-      vec2 q = (f / max(uSrcZoom, 0.05)) / vec2(aspect, 1.0) + uCenter + uSrcOff * 0.5;
+      vec2 q = (f / uSrcZoom) / vec2(aspect, 1.0) + uCenter + uSrcOff * 0.5;
       // The previous output, stepped: scaled about the centre, turned, shifted (per frame).
       float cs = cos(uRotate);
       float sn = sin(uRotate);
@@ -294,14 +294,15 @@ const NODE_GRAPH_KALEIDOSCOPE_MAX = 4096;
     gl.bindTexture(gl.TEXTURE_2D, renderer.shown.texture);
     gl.uniform1i(device.uPrev, 1);
     gl.activeTexture(gl.TEXTURE0);
-    gl.uniform1f(device.uSegments, Math.max(2, Number(options.segments) || 6));
+    // Values arrive bounded by the parameter definitions (nodeGraphPictureParams); nothing is limited here.
+    gl.uniform1f(device.uSegments, Number(options.segments));
     gl.uniform1f(device.uAngle, Number(options.angle) || 0);
     gl.uniform1f(device.uMirror, options.mirror ? 1 : 0);
     // The XY pad is -1 .. 1; the centre is that point of the picture (0 .. 1).
     gl.uniform2f(device.uCenter, (Number(options.centerX) || 0) * 0.5 + 0.5, (Number(options.centerY) || 0) * 0.5 + 0.5);
-    gl.uniform1f(device.uInput, Number.isFinite(Number(options.input)) ? Number(options.input) : 1);
+    gl.uniform1f(device.uInput, Number(options.input) || 0);
     gl.uniform1f(device.uDecay, Number(options.decay) || 0);
-    gl.uniform1f(device.uZoom, Math.max(0.5, Number(options.zoom) || 1));
+    gl.uniform1f(device.uZoom, Number(options.zoom));
     gl.uniform1f(device.uRotate, Number(options.rotate) || 0);
     gl.uniform2f(device.uShift, Number(options.shiftX) || 0, Number(options.shiftY) || 0);
     gl.uniform1f(device.uBlend, Number(options.blend) || 0);
@@ -310,7 +311,7 @@ const NODE_GRAPH_KALEIDOSCOPE_MAX = 4096;
     gl.uniform1f(device.uSat, Number(options.saturation) || 0);
     gl.uniform1f(device.uPunch, Number(options.punch) || 0);
     gl.uniform2f(device.uSrcOff, Number(options.srcX) || 0, Number(options.srcY) || 0);
-    gl.uniform1f(device.uSrcZoom, Number.isFinite(Number(options.srcZoom)) ? Number(options.srcZoom) : 1);
+    gl.uniform1f(device.uSrcZoom, Number(options.srcZoom));
     gl.uniform1f(device.uFrame, Number(options.frame) || 0);
     gl.uniform2f(device.uSize, renderer.width, renderer.height);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

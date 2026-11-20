@@ -1,20 +1,5 @@
-function nodeGraphKaleidoscopeReadParam(nodeId, key, fallback) {
-  if (typeof nodeGraphReadNodeNumber === "function") {
-    const n = nodeGraphReadNodeNumber(nodeId, key);
-    if (Number.isFinite(n)) return n;
-  }
-  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  const raw = Number(node?.params?.[key]);
-  return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphKaleidoscopeClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
-}
+// Degrees to radians (a unit conversion, not a limit).
+const NODE_GRAPH_KALEIDOSCOPE_RAD_PER_DEG = Math.PI / 180;
 
 function nodeGraphKaleidoscopeEnsureCanvas(face) {
   if (!face) return null;
@@ -82,30 +67,32 @@ function drawNodeGraphKaleidoscopeFaceItem(_renderer, item) {
     return;
   }
   if (nodeGraphKaleidoscopeCircuitLive() && typeof nodeGraphKaleidoscopeGlStep === "function") {
-    const read = (key, fallback, lo = 0, hi = 1) => nodeGraphKaleidoscopeClamp(nodeGraphKaleidoscopeReadParam(nodeId, key, fallback), lo, hi);
+    // This frame's values: knob + MOD (the mean of each cable over the frame), limited only by the definitions
+    // (nodeGraphPictureParams). Below are unit conversions only: degrees to radians, percent to a fraction, degrees of hue to turns.
+    const p = nodeGraphPictureParams(nodeId, nodeGraphPictureParamKeys("kaleidoscope"));
     nodeGraphKaleidoscopeGlStep(canvas, {
       nodeId,
-      segments: Math.round(read("segments", 6, 2, 32)),
-      angle: read("angle", 0, -1, 1) * Math.PI,
-      mirror: nodeGraphKaleidoscopeReadParam(nodeId, "mirror", 0) >= 0.5 ? 1 : 0,
-      centerX: read("centerX", 0, -1, 1),
-      centerY: read("centerY", 0, -1, 1),
-      input: read("input", 1),
-      decay: read("decay", 0.85),
-      // Per frame steps: Zoom is up to 5% a frame, Rotate up to 0.5 rad (about 29 degrees) a frame, Shift up to 2% of the picture a frame.
-      zoom: 1 + read("zoom", 0.1, -1, 1) * 0.05,
-      rotate: read("rotate", 0.05, -1, 1) * 0.5,
-      shiftX: read("shiftX", 0, -1, 1) * 0.02,
-      shiftY: read("shiftY", 0, -1, 1) * 0.02,
-      blend: Math.round(read("blend", 0, 0, 3)),
-      // Hue turns the previous frame's colours by up to 0.05 of a turn (18 degrees) each frame; Blur is up to ~2.5 px of softening a frame.
-      hue: read("hue", 0, -1, 1) * 0.05,
-      blur: read("blur", 0),
-      saturation: read("saturation", 0, -1, 1),
-      punch: read("punch", 0),
-      srcX: read("srcX", 0, -1, 1),
-      srcY: read("srcY", 0, -1, 1),
-      srcZoom: read("srcZoom", 1, 0.25, 8),
+      segments: p.segments,
+      angle: p.angle * NODE_GRAPH_KALEIDOSCOPE_RAD_PER_DEG,
+      mirror: p.mirror,
+      centerX: p.centerX,
+      centerY: p.centerY,
+      input: p.input,
+      decay: p.decay,
+      // Per frame steps (the feedback runs once per frame): Zoom in % a frame, Rotate in degrees a frame, Shift in % of the picture a frame.
+      zoom: 1 + p.zoom / 100,
+      rotate: p.rotate * NODE_GRAPH_KALEIDOSCOPE_RAD_PER_DEG,
+      shiftX: p.shiftX / 100,
+      shiftY: p.shiftY / 100,
+      blend: p.blend,
+      // Hue turns the previous frame's colours by this many degrees each frame (the shader takes turns).
+      hue: p.hue / 360,
+      blur: p.blur,
+      saturation: p.saturation,
+      punch: p.punch,
+      srcX: p.srcX,
+      srcY: p.srcY,
+      srcZoom: p.srcZoom,
       frame: (face._kaleidoscopeFrame = ((face._kaleidoscopeFrame || 0) + 1) % 65536),
       picture,
     });

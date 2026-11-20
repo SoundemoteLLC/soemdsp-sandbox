@@ -34,6 +34,7 @@ registerNodeGraphChromelessModule("crtRaster", {
     },
     parameters: [
       {
+        constraint: "gpu",
         defaultValue: "4",
         key: "pitch",
         label: "Pitch",
@@ -43,7 +44,7 @@ registerNodeGraphChromelessModule("crtRaster", {
         min: "2",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Picture rows per scanline, a whole number so the lines sit on the pixel grid and never beat against it. 2 is the finest.",
+        tooltip: "Picture rows per scanline, a whole number so the lines sit on the pixel grid and never beat against it. 2 is the finest. Modulated, it steps from one whole number to the next.",
       },
       {
         defaultValue: "0.6",

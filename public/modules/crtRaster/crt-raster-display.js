@@ -1,21 +1,3 @@
-function nodeGraphCrtRasterReadParam(nodeId, key, fallback) {
-  if (typeof nodeGraphReadNodeNumber === "function") {
-    const n = nodeGraphReadNodeNumber(nodeId, key);
-    if (Number.isFinite(n)) return n;
-  }
-  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  const raw = Number(node?.params?.[key]);
-  return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphCrtRasterClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
-}
-
 function nodeGraphCrtRasterEnsureCanvas(face) {
   if (!face) return null;
   for (const leftover of face.querySelectorAll(":scope > .node-module-scope-local-fallback-canvas")) {
@@ -82,11 +64,13 @@ function drawNodeGraphCrtRasterFaceItem(_renderer, item) {
     return;
   }
   if (nodeGraphCrtRasterCircuitLive() && typeof nodeGraphCrtRasterGlStep === "function") {
+    // This frame's values: knob + MOD, limited only by the definitions (Pitch is a whole number of rows with a GPU limit).
+    const p = nodeGraphPictureParams(nodeId, nodeGraphPictureParamKeys("crtRaster"));
     nodeGraphCrtRasterGlStep(canvas, {
       nodeId,
-      pitch: Math.round(nodeGraphCrtRasterClamp(nodeGraphCrtRasterReadParam(nodeId, "pitch", 4), 2, 12)),
-      depth: nodeGraphCrtRasterClamp(nodeGraphCrtRasterReadParam(nodeId, "depth", 0.6), 0, 4),
-      beam: nodeGraphCrtRasterClamp(nodeGraphCrtRasterReadParam(nodeId, "beam", 0.6), 0, 10),
+      pitch: p.pitch,
+      depth: p.depth,
+      beam: p.beam,
       picture,
     });
   }

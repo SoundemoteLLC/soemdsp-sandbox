@@ -42,7 +42,7 @@ const NODE_GRAPH_CRT_RASTER_MAX = 4096;
       }
       // Position inside the line, 0 .. 1 (0.5 is the middle of the beam). vUv.y is 0 at the bottom: the lines count from there.
       float row = vUv.y * uSize.y;
-      float f = fract(row / max(uPitch, 1.0));
+      float f = fract(row / uPitch);
       float d = abs(f - 0.5) * 2.0;
       float bright = max(col.r, max(col.g, col.b));
       // Beam width (as a share of the half line): narrow for dim light, wide for bright.
@@ -53,10 +53,10 @@ const NODE_GRAPH_CRT_RASTER_MAX = 4096;
       float profile = exp(-0.5 * (d * d) / (sigma * sigma));
       float gain = clamp(1.0 / (sigma * 1.25), 1.0, 2.4);
       // 1 = the line's middle at the picture's own level; Depth past 1 lets the middle go brighter than that (over-applied).
-      float lineCap = 1.0 + 0.6 * clamp(uDepth - 1.0, 0.0, 3.0);
+      float lineCap = 1.0 + 0.6 * max(uDepth - 1.0, 0.0);
       float lined = clamp(profile * gain, 0.0, lineCap);
       // Depth past 1 extrapolates: the gaps clip to black and the middle of each line is pushed above the picture's own level.
-      float amount = clamp(uDepth, 0.0, 4.0) * clamp(uPitch - 1.0, 0.0, 1.0);
+      float amount = uDepth * clamp(uPitch - 1.0, 0.0, 1.0);
       gl_FragColor = vec4(col * max(mix(1.0, lined, amount), 0.0), 1.0);
     }
   `;
@@ -219,7 +219,8 @@ const NODE_GRAPH_CRT_RASTER_MAX = 4096;
     gl.bindTexture(gl.TEXTURE_2D, picTex);
     gl.uniform1i(device.uPic, 0);
     gl.uniform1f(device.uHasPic, options.picture?.texture ? 1 : 0);
-    gl.uniform1f(device.uPitch, Math.max(1, Number(options.pitch) || 4));
+    // Values arrive bounded by the parameter definitions (nodeGraphPictureParams); nothing is limited here.
+    gl.uniform1f(device.uPitch, Number(options.pitch));
     gl.uniform1f(device.uDepth, Number(options.depth) || 0);
     gl.uniform1f(device.uBeam, Number(options.beam) || 0);
     gl.uniform2f(device.uSize, renderer.width, renderer.height);

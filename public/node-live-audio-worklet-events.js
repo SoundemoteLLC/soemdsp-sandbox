@@ -212,7 +212,7 @@ NodeLiveAudioProcessor.prototype.setConnections = function setConnections(plan, 
     // a new visual sink feed). The baked list only rebuilt on setPlan, so a
     // module that became a MOD source by an edit published no samples and
     // its MOD ghost sat at 0 until the patch was reloaded.
-    this.compileScopeCapture?.();
+    this.compileScopeCapture?.(Array.isArray(plan?.modulations) ? plan.modulations : null);
     if (plan?.timing && typeof this.normalizePatchTiming === "function") {
       this.timing = this.normalizePatchTiming(plan.timing);
     }

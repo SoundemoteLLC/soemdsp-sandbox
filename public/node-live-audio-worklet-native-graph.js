@@ -11668,6 +11668,8 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       if (Number.isFinite(writeHz) && writeHz > 0 && writeHz < engineRateForFaces) {
         hop = Math.max(1, Math.floor(engineRateForFaces / writeHz));
       }
+      // MOD source (compileScopeCapture): each written value is the mean of its hop, not the hop's first sample.
+      const meanHop = hop > 1 && entry.mean === true;
       // Limiter faces need Gain (Saw) / Env (Ramp) — Mono alone looks like
       // biased program audio, not the detector envelope.
       // Chaosfly X/Y live on Saw/Ramp (always stereo image, not mono-collapsed).
@@ -11798,8 +11800,23 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         let gotAgg = false;
         for (let bi = 0; bi < bindings.length; bi += 1) {
           const binding = bindings[bi];
-          const raw = Number(binding.view[Math.min(frame, binding.view.length - 1)]);
-          const sample = Number.isFinite(raw) ? raw : 0;
+          let sample;
+          if (meanHop) {
+            const end = Math.min(frame + hop, frames, binding.view.length);
+            let sum = 0;
+            let n = 0;
+            for (let k = frame; k < end; k += 1) {
+              const v = binding.view[k];
+              if (v - v === 0) {
+                sum += v;
+                n += 1;
+              }
+            }
+            sample = n ? sum / n : 0;
+          } else {
+            const raw = Number(binding.view[Math.min(frame, binding.view.length - 1)]);
+            sample = Number.isFinite(raw) ? raw : 0;
+          }
           if (!gotAgg) {
             aggregate = sample;
             gotAgg = true;
