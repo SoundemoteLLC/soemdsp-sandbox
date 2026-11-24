@@ -5,7 +5,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 48;
+  /* Above the room-dimmer veil (50) and raised floating windows
+     (Command Center stack starts at 10000). Below boot (100000). */
+  z-index: 50000;
   display: flex;
   flex-direction: column;
   height: 230px;

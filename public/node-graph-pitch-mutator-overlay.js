@@ -317,7 +317,7 @@
     const link = document.createElement("link");
     link.id = "pitchMutatorOverlayCss";
     link.rel = "stylesheet";
-    link.href = "node-graph-pitch-mutator.css?v=mutator-slice-1";
+    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-2";
     document.head.append(link);
   }
 
@@ -635,7 +635,7 @@
       button.setAttribute("aria-label", "Mutators");
       button.setAttribute("aria-pressed", ui.open ? "true" : "false");
       if (ui.open) button.classList.add("active");
-      button.textContent = "M";
+      button.textContent = "Mutators";
       button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -644,6 +644,9 @@
       nav.append(button);
       return nav;
     };
+    if (typeof root.syncNodeGraphUnifiedWindowNavBars === "function") {
+      root.syncNodeGraphUnifiedWindowNavBars();
+    }
   }
 
   function refreshNav() {
