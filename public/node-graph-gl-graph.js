@@ -125,86 +125,395 @@ function nodeGraphGlGraphLayoutBox(el, moduleEl) {
   return null;
 }
 
-function nodeGraphGlGraphRebuildPlates() {
+/* inserted by incremental-plates patch — start */
+const NODE_GRAPH_GL_MESH_MAX_FLOATS = 8 * 1024 * 1024;
+
+function nodeGraphGlGraphPlateIdList(options) {
+  if (options == null) return null;
+  if (typeof options === "string") return [options];
+  if (Array.isArray(options)) return options.map((id) => String(id || "")).filter(Boolean);
+  if (typeof options !== "object") return null;
+  if (!Object.prototype.hasOwnProperty.call(options, "ids")) return null;
+  const raw = options.ids;
+  if (raw == null) return [];
+  if (typeof raw === "string") return raw ? [raw] : [];
+  if (Array.isArray(raw) || raw instanceof Set) {
+    const out = [];
+    raw.forEach((id) => {
+      const s = String(id || "");
+      if (s) out.push(s);
+    });
+    return out;
+  }
+  const s = String(raw || "");
+  return s ? [s] : [];
+}
+
+function nodeGraphGlGraphCollectPlateAndDisplays(node) {
+  const id = String(node?.id || "");
+  if (!id) return null;
+  const geo = nodeGraphGlGraphGeometry(id);
+  const box = geo?.box;
+  if (!box || !(box.w > 1) || !(box.h > 1)) return null;
+  const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
+  if (!el || !el.isConnected || el.hidden || el.classList.contains("removed")) return null;
+  if (el.getAttribute("data-hide-module-frame") === "1") return null;
+  const textBody = el.querySelector(":scope > .node-text-box-body");
+  const style = getComputedStyle(el);
+  let fill = nodeGraphGlGraphParseCssColor(
+    style.getPropertyValue("--node-module-fill"),
+    [0.09, 0.1, 0.12, 1],
+  );
+  let onTop = false;
+  if (textBody) {
+    const layout = typeof normalizeNodeGraphTextBoxLayout === "function"
+      ? normalizeNodeGraphTextBoxLayout(node?.layout)
+      : node?.layout || {};
+    onTop = layout.showOnTop === true;
+    const bg = nodeGraphGlGraphParseCssColor(
+      style.getPropertyValue("--node-text-box-bg-color") || layout.backgroundColor,
+      [0.008, 0.016, 0.027, 1],
+    );
+    const alpha = Number.isFinite(Number(layout.backgroundAlpha))
+      ? Math.max(0, Math.min(1, Number(layout.backgroundAlpha)))
+      : Number.parseFloat(style.getPropertyValue("--node-text-box-bg-alpha")) || 0.78;
+    fill = [bg[0], bg[1], bg[2], alpha];
+  }
+  const plate = {
+    id,
+    x: box.x,
+    y: box.y,
+    w: box.w,
+    h: box.h,
+    fill,
+    selected: el.classList.contains("selected"),
+    textBox: Boolean(textBody),
+    onTop,
+  };
+  const displays = [];
+  if (!el.classList.contains("oscilloscope-hidden") && !el.classList.contains("face-track-omitted")) {
+    const canvases = el.querySelectorAll(NODE_GRAPH_DISPLAY_FACE_SELECTOR);
+    for (let c = 0; c < canvases.length; c += 1) {
+      const face = canvases[c];
+      const page = face.closest("[data-music-player-page]");
+      if (page?.hidden || face.closest("[hidden]")) continue;
+      if (face.classList.contains("node-round-shape-canvas")) continue;
+      const laid = nodeGraphGlGraphLayoutBox(face, el);
+      if (!laid) continue;
+      if ((!(face.width > 1) || !(face.height > 1)) && typeof nodeGraphDisplayCanvasSizeCss === "function") {
+        nodeGraphDisplayCanvasSizeCss(face, laid.w, laid.h);
+      }
+      displays.push({
+        canvas: face,
+        id,
+        x: box.x + laid.x,
+        y: box.y + laid.y,
+        w: laid.w,
+        h: laid.h,
+        output: String(node?.type || "") === "output",
+      });
+    }
+  }
+  return { plate, displays };
+}
+
+/**
+ * Rebuild plate, display-canvas and chrome records.
+ * No-arg / no `ids`: full rebuild (identical to the previous no-arg behaviour).
+ * `{ ids }` (or `nodeGraphGlGraphAddPlates(ids)`): rebuild only those modules and
+ * patch the cached mesh in place when that is safe. Falls back to a full rebuild
+ * if an id is unknown, the mesh cannot be patched, unrequested overlap groups
+ * would merge or split, a requested plate is an on-top text box, the tile/view
+ * path is active, or a buffer would exceed NODE_GRAPH_GL_MESH_MAX_FLOATS.
+ * Heatmap lights for newly added plates wait until the next full present.
+ */
+function nodeGraphGlGraphRebuildPlates(options) {
+  const ids = nodeGraphGlGraphPlateIdList(options);
+  if (ids) {
+    if (!ids.length) return;
+    if (nodeGraphGlGraphRebuildPlatesIncremental(ids)) return;
+  }
+  nodeGraphGlGraphRebuildPlatesFull();
+}
+
+function nodeGraphGlGraphAddPlates(ids) {
+  nodeGraphGlGraphRebuildPlates({ ids });
+}
+
+function nodeGraphGlGraphRebuildPlatesFull() {
   const plates = [];
   const displays = [];
-  // Back to front (Module Settings > Layer); hit tests read plates the same way.
   const nodes = nodeGraphModuleStackNodes(nodeGraphMvp?.patch);
   for (let i = 0; i < nodes.length; i += 1) {
-    const id = String(nodes[i]?.id || "");
-    if (!id) continue;
-    const geo = nodeGraphGlGraphGeometry(id);
-    const box = geo?.box;
-    if (!box || !(box.w > 1) || !(box.h > 1)) continue;
-    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
-    if (!el || !el.isConnected || el.hidden || el.classList.contains("removed")) continue;
-    if (el.getAttribute("data-hide-module-frame") === "1") continue;
-    const textBody = el.querySelector(":scope > .node-text-box-body");
-    const style = getComputedStyle(el);
-    let fill = nodeGraphGlGraphParseCssColor(
-      style.getPropertyValue("--node-module-fill"),
-      [0.09, 0.1, 0.12, 1],
-    );
-    let onTop = false;
-    if (textBody) {
-      const layout = typeof normalizeNodeGraphTextBoxLayout === "function"
-        ? normalizeNodeGraphTextBoxLayout(nodes[i]?.layout)
-        : nodes[i]?.layout || {};
-      onTop = layout.showOnTop === true;
-      const bg = nodeGraphGlGraphParseCssColor(
-        style.getPropertyValue("--node-text-box-bg-color") || layout.backgroundColor,
-        [0.008, 0.016, 0.027, 1],
-      );
-      const alpha = Number.isFinite(Number(layout.backgroundAlpha))
-        ? Math.max(0, Math.min(1, Number(layout.backgroundAlpha)))
-        : Number.parseFloat(style.getPropertyValue("--node-text-box-bg-alpha")) || 0.78;
-      fill = [bg[0], bg[1], bg[2], alpha];
-    }
-    plates.push({
-      id,
-      x: box.x,
-      y: box.y,
-      w: box.w,
-      h: box.h,
-      fill,
-      selected: el.classList.contains("selected"),
-      textBox: Boolean(textBody),
-      onTop,
-    });
-    // Hidden / Display Height 0: CSS already display:none on the face.
-    // Skip GL collection too so a stale layout box cannot leave a T-module
-    // (or any) face painted after the shell has collapsed.
-    if (!el.classList.contains("oscilloscope-hidden") && !el.classList.contains("face-track-omitted")) {
-      const canvases = el.querySelectorAll(NODE_GRAPH_DISPLAY_FACE_SELECTOR);
-      for (let c = 0; c < canvases.length; c += 1) {
-        const face = canvases[c];
-        const page = face.closest("[data-music-player-page]");
-        if (page?.hidden || face.closest("[hidden]")) continue;
-        if (face.classList.contains("node-round-shape-canvas")) continue;
-        const laid = nodeGraphGlGraphLayoutBox(face, el);
-        if (!laid) continue;
-        // Spawned while paused: the face box may not have a backing store yet.
-        // Size it from the layout rectangle so a black plate can be shown.
-        if ((!(face.width > 1) || !(face.height > 1)) && typeof nodeGraphDisplayCanvasSizeCss === "function") {
-          nodeGraphDisplayCanvasSizeCss(face, laid.w, laid.h);
-        }
-        displays.push({
-          canvas: face,
-          id,
-          x: box.x + laid.x,
-          y: box.y + laid.y,
-          w: laid.w,
-          h: laid.h,
-          output: String(nodes[i]?.type || "") === "output",
-        });
-      }
-    }
+    const rec = nodeGraphGlGraphCollectPlateAndDisplays(nodes[i]);
+    if (!rec) continue;
+    plates.push(rec.plate);
+    for (let d = 0; d < rec.displays.length; d += 1) displays.push(rec.displays[d]);
   }
   nodeGraphGlGraphState.plates = plates;
   nodeGraphGlGraphState.displays = displays;
   nodeGraphGlGraphState.stack = nodeGraphGlGraphStackGroups(plates, displays);
   nodeGraphGlGraphRebuildChrome();
 }
+
+function nodeGraphGlGraphInvalidateMesh() {
+  nodeGraphGlGraphState.mesh = null;
+}
+
+function nodeGraphGlGraphMeshOverCapacity(batch) {
+  if (!batch) return true;
+  const cap = NODE_GRAPH_GL_MESH_MAX_FLOATS;
+  const sizeOf = (part) => (part?.data?.length || 0)
+    + (part?.tdata?.length || 0)
+    + (part?.over?.length || 0)
+    + (part?.gdata?.length || 0);
+  let sum = sizeOf(batch);
+  if (sum > cap) return true;
+  const layers = batch.layers || [];
+  for (let i = 0; i < layers.length; i += 1) {
+    sum += sizeOf(layers[i]);
+    if (sum > cap) return true;
+  }
+  return false;
+}
+
+function nodeGraphGlGraphRebuildPlatesIncremental(ids) {
+  if (nodeGraphGlGraphState.view) return false;
+  const nodes = nodeGraphModuleStackNodes(nodeGraphMvp?.patch);
+  const known = new Set();
+  const byId = new Map();
+  for (let i = 0; i < nodes.length; i += 1) {
+    const id = String(nodes[i]?.id || "");
+    if (!id) continue;
+    known.add(id);
+    byId.set(id, nodes[i]);
+  }
+  const wanted = [];
+  const seen = new Set();
+  for (let i = 0; i < ids.length; i += 1) {
+    const id = String(ids[i] || "");
+    if (!id || seen.has(id)) continue;
+    if (!known.has(id)) return false;
+    seen.add(id);
+    wanted.push(id);
+  }
+  if (!wanted.length) return true;
+  const wantSet = new Set(wanted);
+  const state = nodeGraphGlGraphState;
+  if (!Array.isArray(state.plates) || !state.chrome?.byId) return false;
+
+  const keptPlates = [];
+  for (let i = 0; i < state.plates.length; i += 1) {
+    if (!wantSet.has(state.plates[i].id)) keptPlates.push(state.plates[i]);
+  }
+  const keptDisplays = [];
+  for (let i = 0; i < (state.displays || []).length; i += 1) {
+    if (!wantSet.has(state.displays[i].id)) keptDisplays.push(state.displays[i]);
+  }
+  const added = [];
+  for (let i = 0; i < wanted.length; i += 1) {
+    const rec = nodeGraphGlGraphCollectPlateAndDisplays(byId.get(wanted[i]));
+    if (!rec) continue;
+    added.push(rec);
+  }
+  const order = new Map();
+  for (let i = 0; i < nodes.length; i += 1) {
+    const id = String(nodes[i]?.id || "");
+    if (id) order.set(id, i);
+  }
+  const plates = keptPlates.concat(added.map((rec) => rec.plate));
+  const displays = keptDisplays.concat(added.flatMap((rec) => rec.displays));
+  plates.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  displays.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  const stack = nodeGraphGlGraphStackGroups(plates, displays);
+  if (!nodeGraphGlGraphMergeChromeForIds(wantSet, byId, nodes)) return false;
+
+  const prevGroups = (state.mesh?.plateGroupLayers || []).map((g) => g.ids.slice());
+  const canPatch = nodeGraphGlGraphCanPatchPlateMesh(prevGroups, stack.groups, wantSet, added);
+  state.plates = plates;
+  state.displays = displays;
+  state.stack = stack;
+  if (!canPatch) {
+    nodeGraphGlGraphInvalidateMesh();
+    return false;
+  }
+  if (!nodeGraphGlGraphPatchPlateMesh(stack.groups, wantSet)) {
+    nodeGraphGlGraphInvalidateMesh();
+    return false;
+  }
+  return true;
+}
+
+function nodeGraphGlGraphCanPatchPlateMesh(prevIds, newGroups, wantSet, added) {
+  const mesh = nodeGraphGlGraphState.mesh;
+  const canvas = nodeGraphGlGraphState.canvas;
+  if (!mesh || mesh.gen !== nodeGraphGlGraphState.gen || !mesh.cam) return false;
+  if (!canvas || mesh.w !== canvas.width || mesh.h !== canvas.height) return false;
+  if (!mesh.batches?.[0]?.keepMesh || !Array.isArray(mesh.plateGroupLayers)) return false;
+  if (mesh.plateGroupLayers.length === 0 && (mesh.batches[0].layers || []).length > 0) return false;
+  if (added.some((rec) => rec.plate.onTop)) return false;
+  if ((nodeGraphGlGraphState.plates || []).some((p) => wantSet.has(p.id) && p.onTop)) return false;
+  const sameIds = (a, b) => a.length === b.length && a.every((id, i) => id === b[i]);
+  // Unrequested plates must stay in the same stack order. New plates may join a
+  // non-overlapping group in the CPU stack; their layers are appended, which is
+  // visually equivalent when they do not overlap. A change in unrequested order
+  // (or a missing unrequested plate) is not safe.
+  const prevFlat = [];
+  for (let i = 0; i < prevIds.length; i += 1) {
+    for (let j = 0; j < prevIds[i].length; j += 1) {
+      if (!wantSet.has(prevIds[i][j])) prevFlat.push(prevIds[i][j]);
+    }
+  }
+  const nextFlat = [];
+  for (let i = 0; i < newGroups.length; i += 1) {
+    const plates = newGroups[i].plates;
+    for (let j = 0; j < plates.length; j += 1) {
+      if (!wantSet.has(plates[j].id)) nextFlat.push(plates[j].id);
+    }
+  }
+  return sameIds(prevFlat, nextFlat);
+}
+
+function nodeGraphGlGraphPatchPlateMesh(newGroups, wantSet) {
+  const mesh = nodeGraphGlGraphState.mesh;
+  const batch = mesh.batches[0];
+  if (!batch || typeof nodeGraphGlLinesLayer !== "function") return false;
+  const ctx = nodeGraphGlGraphIncrementalDrawCtx(mesh);
+  if (!ctx || typeof nodeGraphGlGraphDrawStackGroup !== "function") return false;
+  if (!batch.layers) batch.layers = [];
+  const startLen = batch.layers.length;
+  const meshed = new Set();
+  for (let i = 0; i < mesh.plateGroupLayers.length; i += 1) {
+    const ids = mesh.plateGroupLayers[i].ids;
+    for (let j = 0; j < ids.length; j += 1) meshed.add(ids[j]);
+  }
+  const newIds = [];
+  wantSet.forEach((id) => { if (!meshed.has(id)) newIds.push(id); });
+  if (!newIds.length) {
+    // Already in the cached mesh: keep the buffers. Chrome and geometry for
+    // these ids are updated on the CPU; a mid-gesture present can replay.
+    return true;
+  }
+  const newIdSet = new Set(newIds);
+  const drawn = [];
+  try {
+    ctx.pictures = (mesh.pictures || []).slice();
+    batch.textPixelated = ctx.pixelated;
+    for (let i = 0; i < newGroups.length; i += 1) {
+      const plates = newGroups[i].plates.filter((p) => newIdSet.has(p.id));
+      if (!plates.length) continue;
+      const displays = (newGroups[i].displays || []).filter((d) => newIdSet.has(d.id));
+      const group = { plates, displays };
+      const before = batch.layers.length;
+      nodeGraphGlGraphDrawStackGroup(batch, group, ctx);
+      if (nodeGraphGlGraphMeshOverCapacity(batch)) throw new Error("mesh capacity");
+      drawn.push({
+        ids: plates.map((p) => p.id),
+        layers: batch.layers.slice(before, batch.layers.length),
+      });
+    }
+    batch.layers.length = startLen;
+    const prefixStart = mesh.plateGroupLayers.length ? mesh.plateGroupLayers[0].layerStart : 0;
+    const suffixEnd = mesh.plateGroupLayers.length
+      ? mesh.plateGroupLayers[mesh.plateGroupLayers.length - 1].layerEnd
+      : startLen;
+    const prefix = batch.layers.slice(0, prefixStart);
+    const mid = batch.layers.slice(prefixStart, suffixEnd);
+    const suffix = batch.layers.slice(suffixEnd, startLen);
+    const nextLayers = prefix.concat(mid);
+    const nextRanges = mesh.plateGroupLayers.map((g) => ({
+      ids: g.ids.slice(),
+      layerStart: g.layerStart,
+      layerEnd: g.layerEnd,
+    }));
+    for (let i = 0; i < drawn.length; i += 1) {
+      const start = nextLayers.length;
+      nextLayers.push(...drawn[i].layers);
+      nextRanges.push({ ids: drawn[i].ids, layerStart: start, layerEnd: nextLayers.length });
+    }
+    nextLayers.push(...suffix);
+    batch.layers = nextLayers;
+    mesh.plateGroupLayers = nextRanges;
+    mesh.pictures = ctx.pictures;
+    if (ctx.inks) mesh.inks = ctx.inks;
+  } catch (err) {
+    batch.layers.length = startLen;
+    return false;
+  }
+  return true;
+}
+
+function nodeGraphGlGraphIncrementalDrawCtx(mesh) {
+  const host = document.getElementById("nodeGraphWorkspace");
+  if (!host || !nodeGraphGlGraphState.plateStyle) return null;
+  const zoom = nodeGraphGlGraphZoom();
+  const plateStyle = nodeGraphGlGraphState.plateStyle;
+  const borderIdle = nodeGraphGlGraphParseCssColor(
+    plateStyle.getPropertyValue("--node-module-idle-stroke"),
+    [0.631, 0.608, 0.608, 0.9],
+  );
+  const borderOn = nodeGraphGlGraphParseCssColor(
+    plateStyle.getPropertyValue("--node-module-selected-stroke"),
+    [0.95, 0.86, 0.45, 1],
+  );
+  const chromeAll = nodeGraphGlGraphState.chrome;
+  const ambientDark = typeof nodeGraphRoomAmbientDark === "function"
+    ? Math.max(0, Math.min(1, nodeGraphRoomAmbientDark())) : 0;
+  return {
+    toX: (x) => x,
+    toY: (y) => y,
+    layoutZoom: 1,
+    cssW: Math.max(1, host.clientWidth || 1),
+    cssH: Math.max(1, host.clientHeight || 1),
+    zoom,
+    plateStyle,
+    borderOn,
+    borderIdle,
+    chromeById: chromeAll?.byId || null,
+    chromeAll,
+    captionsById: nodeGraphGlGraphElementsById(document, ".node-plugin-momentary-button, .node-plugin-toggle-button"),
+    shapesById: nodeGraphGlGraphElementsById(document, ".node-round-shape-display"),
+    ambientDark,
+    pixelated: zoom > 2.5,
+    gesturing: typeof nodeGraphViewportHoldsDisplays === "function" && nodeGraphViewportHoldsDisplays(),
+    frameCamera: mesh.cam || nodeGraphGlGraphState.frameCamera,
+    inks: mesh.inks || new Map(),
+    pictures: mesh.pictures ? mesh.pictures.slice() : [],
+    endsByNode: new Map(),
+    dotBake: null,
+    wireFeather: 2,
+  };
+}
+
+function nodeGraphGlGraphMergeChromeForIds(wantSet, byId) {
+  const chrome = nodeGraphGlGraphState.chrome;
+  if (!chrome || !Array.isArray(NODE_GRAPH_CHROME_LISTS)) return false;
+  const host = document.getElementById("nodeGraphWorkspace");
+  let diameter = 0;
+  if (host) {
+    const probe = host.querySelector(":scope > .node-port-diameter-probe");
+    if (probe) diameter = Number.parseFloat(getComputedStyle(probe).width) || 0;
+  }
+  diameter = diameter || 14;
+  const radius = diameter * 0.5;
+  const buckets = {};
+  for (const name of NODE_GRAPH_CHROME_LISTS) {
+    chrome[name] = (chrome[name] || []).filter((item) => !wantSet.has(String(item?.id || "")));
+    buckets[name] = chrome[name];
+  }
+  for (const id of wantSet) {
+    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
+    if (!el || !el.isConnected || el.hidden) continue;
+    nodeGraphGlGraphCollectChromeForNode(id, el, byId.get(id), buckets, radius);
+  }
+  chrome.bakePx = nodeGraphGlGraphChromeBakePx(chrome);
+  chrome.byId = nodeGraphGlGraphChromeById(chrome);
+  chrome.constraints = nodeGraphGlGraphCollectConstraintBoxes();
+  return true;
+}
+
+/* inserted by incremental-plates patch — end */
+
 
 // Plates closer than this (zoom-1 px) count as overlapping: jacks and the
 // stroke reach past the plate box.
@@ -350,41 +659,18 @@ function nodeGraphGlGraphTextAnchor(el, box) {
   return { align: "left", x: box.x };
 }
 
-function nodeGraphGlGraphRebuildChrome() {
-  const titles = [];
-  const labels = [];
-  const jacks = [];
-  const sliders = [];
-  const seeds = [];
-  const keys = [];
-  const keypads = [];
-  const keyboards = [];
-  const graphs = [];
-  const headerButtons = [];
-  const pills = [];
-  const host = document.getElementById("nodeGraphWorkspace");
-  // --node-port-diameter is a calc()/round() expression, so read the resolved pixel size from a probe element.
-  let diameter = 0;
-  if (host) {
-    let probe = host.querySelector(":scope > .node-port-diameter-probe");
-    if (!probe) {
-      probe = document.createElement("div");
-      probe.className = "node-port-diameter-probe";
-      probe.setAttribute("aria-hidden", "true");
-      probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:var(--node-port-diameter);height:0;";
-      host.append(probe);
-    }
-    diameter = Number.parseFloat(getComputedStyle(probe).width) || 0;
-  }
-  diameter = diameter || 14;
-  const radius = diameter * 0.5;
-  // Back to front, like the plates: the hit test walks each list from the end.
-  const nodes = nodeGraphModuleStackNodes(nodeGraphMvp?.patch);
-  for (let i = 0; i < nodes.length; i += 1) {
-    const id = String(nodes[i]?.id || "");
-    if (nodeGraphGlGraphState.view && !nodeGraphGlGraphState.view.ids.has(id)) continue;
-    const el = id && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
-    if (!el || !el.isConnected || el.hidden) continue;
+function nodeGraphGlGraphCollectChromeForNode(id, el, node, buckets, radius) {
+  const titles = buckets.titles;
+  const labels = buckets.labels;
+  const jacks = buckets.jacks;
+  const sliders = buckets.sliders;
+  const seeds = buckets.seeds;
+  const keys = buckets.keys;
+  const keypads = buckets.keypads;
+  const keyboards = buckets.keyboards;
+  const graphs = buckets.graphs;
+  const headerButtons = buckets.headerButtons;
+  const pills = buckets.pills;
     const title = el.classList.contains("title-hidden")
       ? null
       : el.querySelector(".node-header-title");
@@ -603,6 +889,45 @@ function nodeGraphGlGraphRebuildChrome() {
       const box = nodeGraphGlGraphWorldBox(headerEls[h]);
       if (box) headerButtons.push({ id, el: headerEls[h], box });
     }
+}
+
+function nodeGraphGlGraphRebuildChrome() {
+  const titles = [];
+  const labels = [];
+  const jacks = [];
+  const sliders = [];
+  const seeds = [];
+  const keys = [];
+  const keypads = [];
+  const keyboards = [];
+  const graphs = [];
+  const headerButtons = [];
+  const pills = [];
+  const host = document.getElementById("nodeGraphWorkspace");
+  // --node-port-diameter is a calc()/round() expression, so read the resolved pixel size from a probe element.
+  let diameter = 0;
+  if (host) {
+    let probe = host.querySelector(":scope > .node-port-diameter-probe");
+    if (!probe) {
+      probe = document.createElement("div");
+      probe.className = "node-port-diameter-probe";
+      probe.setAttribute("aria-hidden", "true");
+      probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:var(--node-port-diameter);height:0;";
+      host.append(probe);
+    }
+    diameter = Number.parseFloat(getComputedStyle(probe).width) || 0;
+  }
+  diameter = diameter || 14;
+  const radius = diameter * 0.5;
+  // Back to front, like the plates: the hit test walks each list from the end.
+  const nodes = nodeGraphModuleStackNodes(nodeGraphMvp?.patch);
+  const buckets = { titles, labels, jacks, sliders, seeds, keys, keypads, keyboards, graphs, headerButtons, pills };
+  for (let i = 0; i < nodes.length; i += 1) {
+    const id = String(nodes[i]?.id || "");
+    if (nodeGraphGlGraphState.view && !nodeGraphGlGraphState.view.ids.has(id)) continue;
+    const el = id && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
+    if (!el || !el.isConnected || el.hidden) continue;
+    nodeGraphGlGraphCollectChromeForNode(id, el, nodes[i], buckets, radius);
   }
   const root = document.documentElement;
   const ghostHost = host || root;
@@ -3344,6 +3669,197 @@ function nodeGraphGlGraphDisplayAt(id, x, y) {
   return null;
 }
 
+function nodeGraphGlGraphDrawStackGroup(batch, group, ctx) {
+  const toX = ctx.toX;
+  const toY = ctx.toY;
+  const layoutZoom = ctx.layoutZoom;
+  const cssW = ctx.cssW;
+  const cssH = ctx.cssH;
+  const zoom = ctx.zoom;
+  const plateStyle = ctx.plateStyle;
+  const borderOn = ctx.borderOn;
+  const borderIdle = ctx.borderIdle;
+  const pixelated = ctx.pixelated;
+  const pictures = ctx.pictures;
+  const inks = ctx.inks;
+  const captionsById = ctx.captionsById;
+  const shapesById = ctx.shapesById;
+  const chromeAll = ctx.chromeAll;
+  const chromeById = ctx.chromeById;
+  const ambientDark = ctx.ambientDark;
+  const endsByNode = ctx.endsByNode || new Map();
+  const dotBake = ctx.dotBake;
+  const wireFeather = ctx.wireFeather;
+  const frameCamera = ctx.frameCamera;
+  const gesturing = ctx.gesturing;
+  const body = nodeGraphGlLinesLayer(batch);
+  if (!body) return;
+  // Ambient light layers, created now so they draw after the body: the dim and the module text
+  // (routed out of the body so the dim does not double up on it). The dim skips the stroke band,
+  // so the body's own stroke stays lit; no second "emit" stroke is drawn over it.
+  let dimLayer = null;
+  if (ambientDark > 0) {
+    dimLayer = nodeGraphGlLinesLayer(batch);
+    // The face (slider wells and fills) is a weak light source of its own: drawn after the dim,
+    // dimmed only a little, and it does not spill onto anything.
+    const faceLayer = nodeGraphGlLinesLayer(batch);
+    if (faceLayer) {
+      faceLayer.alphaMul = 1 - ambientDark * (1 - NODE_FACE_LIGHT);
+      body.overLayer = faceLayer;
+    }
+    const textLayer = nodeGraphGlLinesLayer(batch);
+    if (textLayer) {
+      textLayer.textDark = Math.min(ambientDark, 1 - NODE_TEXT_FLOOR);
+      body.textLayer = textLayer;
+    }
+  }
+  const captions = [];
+  const shapes = [];
+  for (let i = 0; i < group.plates.length; i += 1) {
+    const plate = group.plates[i];
+    nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
+    nodeGraphGlGraphDrawPlate(body, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle);
+    nodeGraphGlGraphDrawChrome(body, toX, toY, layoutZoom, cssW, cssH, nodeGraphGlGraphIoOverlay(plate.id));
+    const ownCaptions = captionsById.get(plate.id);
+    if (ownCaptions) captions.push(...ownCaptions);
+    const ownShapes = shapesById.get(plate.id);
+    if (ownShapes) shapes.push(...ownShapes);
+  }
+  nodeGraphGlGraphState.chrome = chromeAll;
+  if (typeof nodeGraphModuleFaceDrawAllGl === "function") {
+    nodeGraphModuleFaceDrawAllGl(body, group.plates, toX, toY, layoutZoom, cssW, cssH);
+  }
+  if (typeof nodeGraphModuleRailsDrawGl === "function") {
+    nodeGraphModuleRailsDrawGl(body, group.plates, toX, toY, layoutZoom, cssW, cssH);
+  }
+  // Ambient light: darken what the body drew inside the plate (plate, chrome, parameter face); the
+  // stroke is outside the dim. Displays and their ink are drawn after this, so they stay lit too.
+  if (ambientDark > 0) {
+    if (dimLayer) {
+      // The body (plate, chrome) is darkened; text and the face are lit layers drawn after this.
+      for (let i = 0; i < group.plates.length; i += 1) {
+        nodeGraphGlGraphState.chrome = chromeById?.get(group.plates[i].id) || chromeById?.empty || chromeAll;
+        nodeGraphGlGraphDrawPlate(dimLayer, group.plates[i], toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "dim", ambientDark);
+      }
+      nodeGraphGlGraphState.chrome = chromeAll;
+    }
+  }
+  if (group.displays.length) {
+    // Pictures (cheap zoom-1 face textures), then their screen-res ink.
+    const pics = nodeGraphGlLinesLayer(batch);
+    for (let i = 0; i < group.displays.length; i += 1) {
+      const face = group.displays[i];
+      if (!face.canvas || !(face.w > 0) || !(face.h > 0)) continue;
+      const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, layoutZoom);
+      if (!(rect.w > 1) || !(rect.h > 1)) continue;
+      if (!frameCamera && (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > cssW || rect.y > cssH)) continue;
+      // A face that pins its filter keeps it at every zoom.
+      const pin = nodeGraphGlGraphFacePin(face.canvas);
+      const hasTex = typeof nodeGraphSharedGlFaceTexture === "function"
+        ? Boolean(nodeGraphSharedGlFaceTexture(face.canvas))
+        : true;
+      if (!hasTex && typeof nodeGraphGlLinesRect === "function") {
+        // No live ink yet (dragged in while paused): still show the black screen.
+        nodeGraphGlLinesRect(pics, rect.x, rect.y, rect.w, rect.h, [0, 0, 0, 1]);
+        continue;
+      }
+      const picture = nodeGraphGlLinesImage(pics, face.canvas, rect.x, rect.y, rect.w, rect.h, {
+        nearest: pin ? pin === "nearest" : pixelated,
+        // Pan/zoom already froze the face pixels. Re-upload only when displays paint.
+        cache: gesturing,
+        alpha: 1,
+      });
+      if (picture) {
+        picture.pin = pin;
+        picture.nodeId = face.id;
+        picture.holes = nodeGraphGlGraphJackHoles(
+          chromeById?.get(face.id)?.jacks || [],
+          group.plates.find((p) => p.id === face.id) || null,
+          plateStyle,
+          frameCamera || { x: 0, y: 0, zoom: layoutZoom },
+          batch.scale || 1,
+        );
+        pictures.push(picture);
+      }
+    }
+    const ink = nodeGraphGlLinesLayer(batch);
+    nodeGraphGlGraphDrawGroupInk(ink, group, toX, toY, layoutZoom, cssW, cssH, Boolean(frameCamera));
+    if (inks) for (let i = 0; i < group.displays.length; i += 1) inks.set(group.displays[i].canvas, { layer: ink, group });
+  }
+  // View B: a dark veil over each whole module, under its jacks, labels and wire dots.
+  const veilAlpha = typeof nodeGraphIoViewConfig === "function" ? Number(nodeGraphIoViewConfig().veil) || 0 : 0;
+  if (veilAlpha > 0) {
+    const veil = nodeGraphGlLinesLayer(batch);
+    if (veil) {
+      for (let i = 0; i < group.plates.length; i += 1) {
+        const plate = group.plates[i];
+        if (!nodeGraphGlGraphIoOverlay(plate.id)) continue;
+        nodeGraphGlLinesRect(veil, toX(plate.x), toY(plate.y), plate.w * layoutZoom, plate.h * layoutZoom, [0, 0, 0, veilAlpha]);
+      }
+    }
+  }
+  // IO overlay: jacks and labels of opted-in modules, drawn over their display.
+  let ioLayer = null;
+  for (let i = 0; i < group.plates.length; i += 1) {
+    const plate = group.plates[i];
+    if (!nodeGraphGlGraphIoOverlay(plate.id)) continue;
+    ioLayer = ioLayer || nodeGraphGlLinesLayer(batch);
+    if (!ioLayer) break;
+    nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
+    nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "rim");
+    nodeGraphGlGraphDrawLabels(ioLayer, toX, toY, layoutZoom, cssW, cssH);
+    for (const pill of nodeGraphGlGraphState.chrome?.pills || []) {
+      nodeGraphGlGraphDrawPill(ioLayer, pill, toX, toY, layoutZoom);
+    }
+    nodeGraphGlGraphState.chrome = chromeAll;
+  }
+  if (endsByNode.size || dotBake) {
+    // UIDEV wire dot shadows off: the dots' soft edge lands unmultiplied
+    // where nothing is under it on this canvas, so it reads as part of the
+    // cable below instead of a dim ring (see "straight" in gl-line-renderer).
+    const dotsStraight = typeof nodeGraphWireDotShadows === "function" && !nodeGraphWireDotShadows();
+    let endsLayer = null;
+    const newEndsLayer = () => {
+      const layer = nodeGraphGlLinesLayer(batch);
+      if (layer && dotsStraight) layer.quadBlend = "straight";
+      return layer;
+    };
+    for (let i = 0; i < group.plates.length; i += 1) {
+      const bakedDots = dotBake ? dotBake.byNode.get(group.plates[i].id) : null;
+      if (bakedDots) {
+        // This module's baked dots, in its own stack (front modules cover them).
+        endsLayer = endsLayer || newEndsLayer();
+        const picture = nodeGraphGlLinesImage(endsLayer, bakedDots.canvas, bakedDots.x, bakedDots.y, bakedDots.w, bakedDots.h, {
+          nearest: pixelated,
+          cache: true,
+          alpha: 1,
+        });
+        if (picture) {
+          picture.pin = "";
+              picture.nodeId = group.plates[i].id;
+          if (dotsStraight) picture.blend = "straight";
+          pictures.push(picture);
+        }
+      }
+      const own = endsByNode.get(group.plates[i].id);
+      if (!own) continue;
+      endsLayer = endsLayer || newEndsLayer();
+      for (let d = 0; d < own.length; d += 1) nodeGraphGlGraphDrawWireEnd(endsLayer, own[d], wireFeather);
+    }
+  }
+  // Own layer, after the face textures: the button fill is part of the face picture, so a caption in the
+  // body layer would sit under it (Toggle / Momentary showed no Off / On text).
+  if (captions.length) {
+    nodeGraphGlGraphDrawButtonCaptions(nodeGraphGlLinesLayer(batch) || body, toX, toY, layoutZoom, cssW, cssH, captions);
+  }
+  // Round shapes paint their own plate: above this group's plate fill.
+  if (shapes.length) {
+    nodeGraphGlGraphDrawRoundShapes(nodeGraphGlLinesLayer(batch), toX, toY, zoom, Boolean(frameCamera), shapes);
+  }
+  nodeGraphGlGraphDrawVeils(batch, group.plates, toX, toY, layoutZoom);
+  nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, layoutZoom, group.plates);
+}
+
 function nodeGraphGlGraphPresent(options = {}) {
   // Scope frames must not rebuild cables. A failed stamp leaves the last
   // picture; falling through read the whole workspace and pinned Play at a few fps.
@@ -3648,6 +4164,7 @@ function nodeGraphGlGraphPresent(options = {}) {
   // first layer, so every module stack draws over it and only the rim outside shows.
   // Module lights on the GPU: one pass under every module stack (see the renderer). The base light is
   // the original ellipse; the stroke light follows the module's own shape.
+  let hasLights = false;
   if (!view && frameCamera && typeof nodeGraphGlLinesLights === "function"
     && (typeof nodeGraphHeatmapWantsLight !== "function" || nodeGraphHeatmapWantsLight()
       || (typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid()))) {
@@ -3676,174 +4193,28 @@ function nodeGraphGlGraphPresent(options = {}) {
       items.push({ x: plate.x, y: plate.y, w: plate.w, h: plate.h, id: plate.id, glowReach, selected: selected === true, base: [base[0], base[1], base[2]], reach, round: look ? look.topRadius : 0 });
     }
     nodeGraphGlLinesLights(batch, items, { spread, gridMinX, gridMinY });
+    hasLights = true;
   }
+  const plateGroupLayers = [];
   try {
+    const presentGroupCtx = {
+      toX, toY, layoutZoom, cssW, cssH, zoom,
+      plateStyle, borderOn, borderIdle,
+      pixelated, pictures, inks,
+      captionsById, shapesById,
+      chromeAll, chromeById,
+      ambientDark, endsByNode, dotBake, wireFeather,
+      frameCamera, gesturing,
+    };
     for (let g = 0; g < groups.length; g += 1) {
       const group = groups[g];
-      const body = nodeGraphGlLinesLayer(batch);
-      if (!body) continue;
-      // Ambient light layers, created now so they draw after the body: the dim and the module text
-      // (routed out of the body so the dim does not double up on it). The dim skips the stroke band,
-      // so the body's own stroke stays lit; no second "emit" stroke is drawn over it.
-      let dimLayer = null;
-      if (ambientDark > 0) {
-        dimLayer = nodeGraphGlLinesLayer(batch);
-        // The face (slider wells and fills) is a weak light source of its own: drawn after the dim,
-        // dimmed only a little, and it does not spill onto anything.
-        const faceLayer = nodeGraphGlLinesLayer(batch);
-        if (faceLayer) {
-          faceLayer.alphaMul = 1 - ambientDark * (1 - NODE_FACE_LIGHT);
-          body.overLayer = faceLayer;
-        }
-        const textLayer = nodeGraphGlLinesLayer(batch);
-        if (textLayer) {
-          textLayer.textDark = Math.min(ambientDark, 1 - NODE_TEXT_FLOOR);
-          body.textLayer = textLayer;
-        }
-      }
-      const captions = [];
-      const shapes = [];
-      for (let i = 0; i < group.plates.length; i += 1) {
-        const plate = group.plates[i];
-        nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
-        nodeGraphGlGraphDrawPlate(body, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle);
-        nodeGraphGlGraphDrawChrome(body, toX, toY, layoutZoom, cssW, cssH, nodeGraphGlGraphIoOverlay(plate.id));
-        const ownCaptions = captionsById.get(plate.id);
-        if (ownCaptions) captions.push(...ownCaptions);
-        const ownShapes = shapesById.get(plate.id);
-        if (ownShapes) shapes.push(...ownShapes);
-      }
-      nodeGraphGlGraphState.chrome = chromeAll;
-      if (typeof nodeGraphModuleFaceDrawAllGl === "function") {
-        nodeGraphModuleFaceDrawAllGl(body, group.plates, toX, toY, layoutZoom, cssW, cssH);
-      }
-      if (typeof nodeGraphModuleRailsDrawGl === "function") {
-        nodeGraphModuleRailsDrawGl(body, group.plates, toX, toY, layoutZoom, cssW, cssH);
-      }
-      // Ambient light: darken what the body drew inside the plate (plate, chrome, parameter face); the
-      // stroke is outside the dim. Displays and their ink are drawn after this, so they stay lit too.
-      if (ambientDark > 0) {
-        if (dimLayer) {
-          // The body (plate, chrome) is darkened; text and the face are lit layers drawn after this.
-          for (let i = 0; i < group.plates.length; i += 1) {
-            nodeGraphGlGraphState.chrome = chromeById?.get(group.plates[i].id) || chromeById?.empty || chromeAll;
-            nodeGraphGlGraphDrawPlate(dimLayer, group.plates[i], toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "dim", ambientDark);
-          }
-          nodeGraphGlGraphState.chrome = chromeAll;
-        }
-      }
-      if (group.displays.length) {
-        // Pictures (cheap zoom-1 face textures), then their screen-res ink.
-        const pics = nodeGraphGlLinesLayer(batch);
-        for (let i = 0; i < group.displays.length; i += 1) {
-          const face = group.displays[i];
-          if (!face.canvas || !(face.w > 0) || !(face.h > 0)) continue;
-          const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, layoutZoom);
-          if (!(rect.w > 1) || !(rect.h > 1)) continue;
-          if (!frameCamera && (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > cssW || rect.y > cssH)) continue;
-          // A face that pins its filter keeps it at every zoom.
-          const pin = nodeGraphGlGraphFacePin(face.canvas);
-          const hasTex = typeof nodeGraphSharedGlFaceTexture === "function"
-            ? Boolean(nodeGraphSharedGlFaceTexture(face.canvas))
-            : true;
-          if (!hasTex && typeof nodeGraphGlLinesRect === "function") {
-            // No live ink yet (dragged in while paused): still show the black screen.
-            nodeGraphGlLinesRect(pics, rect.x, rect.y, rect.w, rect.h, [0, 0, 0, 1]);
-            continue;
-          }
-          const picture = nodeGraphGlLinesImage(pics, face.canvas, rect.x, rect.y, rect.w, rect.h, {
-            nearest: pin ? pin === "nearest" : pixelated,
-            // Pan/zoom already froze the face pixels. Re-upload only when displays paint.
-            cache: gesturing,
-            alpha: 1,
-          });
-          if (picture) {
-            picture.pin = pin;
-            picture.holes = nodeGraphGlGraphJackHoles(
-              chromeById?.get(face.id)?.jacks || [],
-              group.plates.find((p) => p.id === face.id) || null,
-              plateStyle,
-              frameCamera || { x: 0, y: 0, zoom: layoutZoom },
-              batch.scale || 1,
-            );
-            pictures.push(picture);
-          }
-        }
-        const ink = nodeGraphGlLinesLayer(batch);
-        nodeGraphGlGraphDrawGroupInk(ink, group, toX, toY, layoutZoom, cssW, cssH, Boolean(frameCamera));
-        if (inks) for (let i = 0; i < group.displays.length; i += 1) inks.set(group.displays[i].canvas, { layer: ink, group });
-      }
-      // View B: a dark veil over each whole module, under its jacks, labels and wire dots.
-      const veilAlpha = typeof nodeGraphIoViewConfig === "function" ? Number(nodeGraphIoViewConfig().veil) || 0 : 0;
-      if (veilAlpha > 0) {
-        const veil = nodeGraphGlLinesLayer(batch);
-        if (veil) {
-          for (let i = 0; i < group.plates.length; i += 1) {
-            const plate = group.plates[i];
-            if (!nodeGraphGlGraphIoOverlay(plate.id)) continue;
-            nodeGraphGlLinesRect(veil, toX(plate.x), toY(plate.y), plate.w * layoutZoom, plate.h * layoutZoom, [0, 0, 0, veilAlpha]);
-          }
-        }
-      }
-      // IO overlay: jacks and labels of opted-in modules, drawn over their display.
-      let ioLayer = null;
-      for (let i = 0; i < group.plates.length; i += 1) {
-        const plate = group.plates[i];
-        if (!nodeGraphGlGraphIoOverlay(plate.id)) continue;
-        ioLayer = ioLayer || nodeGraphGlLinesLayer(batch);
-        if (!ioLayer) break;
-        nodeGraphGlGraphState.chrome = chromeById?.get(plate.id) || chromeById?.empty || chromeAll;
-        nodeGraphGlGraphDrawPlate(ioLayer, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle, "rim");
-        nodeGraphGlGraphDrawLabels(ioLayer, toX, toY, layoutZoom, cssW, cssH);
-        for (const pill of nodeGraphGlGraphState.chrome?.pills || []) {
-          nodeGraphGlGraphDrawPill(ioLayer, pill, toX, toY, layoutZoom);
-        }
-        nodeGraphGlGraphState.chrome = chromeAll;
-      }
-      if (endsByNode.size || dotBake) {
-        // UIDEV wire dot shadows off: the dots' soft edge lands unmultiplied
-        // where nothing is under it on this canvas, so it reads as part of the
-        // cable below instead of a dim ring (see "straight" in gl-line-renderer).
-        const dotsStraight = typeof nodeGraphWireDotShadows === "function" && !nodeGraphWireDotShadows();
-        let endsLayer = null;
-        const newEndsLayer = () => {
-          const layer = nodeGraphGlLinesLayer(batch);
-          if (layer && dotsStraight) layer.quadBlend = "straight";
-          return layer;
-        };
-        for (let i = 0; i < group.plates.length; i += 1) {
-          const bakedDots = dotBake ? dotBake.byNode.get(group.plates[i].id) : null;
-          if (bakedDots) {
-            // This module's baked dots, in its own stack (front modules cover them).
-            endsLayer = endsLayer || newEndsLayer();
-            const picture = nodeGraphGlLinesImage(endsLayer, bakedDots.canvas, bakedDots.x, bakedDots.y, bakedDots.w, bakedDots.h, {
-              nearest: pixelated,
-              cache: true,
-              alpha: 1,
-            });
-            if (picture) {
-              picture.pin = "";
-              if (dotsStraight) picture.blend = "straight";
-              pictures.push(picture);
-            }
-          }
-          const own = endsByNode.get(group.plates[i].id);
-          if (!own) continue;
-          endsLayer = endsLayer || newEndsLayer();
-          for (let d = 0; d < own.length; d += 1) nodeGraphGlGraphDrawWireEnd(endsLayer, own[d], wireFeather);
-        }
-      }
-      // Own layer, after the face textures: the button fill is part of the face picture, so a caption in the
-      // body layer would sit under it (Toggle / Momentary showed no Off / On text).
-      if (captions.length) {
-        nodeGraphGlGraphDrawButtonCaptions(nodeGraphGlLinesLayer(batch) || body, toX, toY, layoutZoom, cssW, cssH, captions);
-      }
-      // Round shapes paint their own plate: above this group's plate fill.
-      if (shapes.length) {
-        nodeGraphGlGraphDrawRoundShapes(nodeGraphGlLinesLayer(batch), toX, toY, zoom, Boolean(frameCamera), shapes);
-      }
-      nodeGraphGlGraphDrawVeils(batch, group.plates, toX, toY, layoutZoom);
-      nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, layoutZoom, group.plates);
+      const layerStart = (batch.layers || []).length;
+      nodeGraphGlGraphDrawStackGroup(batch, group, presentGroupCtx);
+      plateGroupLayers.push({
+        ids: group.plates.map((p) => p.id),
+        layerStart,
+        layerEnd: (batch.layers || []).length,
+      });
     }
     if (cursorEnds.length) {
       const straight = typeof nodeGraphWireDotShadows === "function" && !nodeGraphWireDotShadows();
@@ -3892,6 +4263,9 @@ function nodeGraphGlGraphPresent(options = {}) {
       wireScale: scale,
       pictures,
       inks,
+      plateGroupLayers,
+      hasLights,
+      keepable: true,
     };
   }
   if (view?.hold) {
