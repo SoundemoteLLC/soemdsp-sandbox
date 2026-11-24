@@ -139,13 +139,13 @@ function drawNodeGraphAdditiveWaveformDisplay(section) {
   }
 
   const nodeId = section.dataset.node;
-  // Spectral Oscillator: the exact cycle of its own Shape / A / B (no Graph input).
+  // Spectral Oscillator: the exact cycle of its own Shape / A / B / Gibbs (no Graph input).
   const spectral = section.dataset.nodeType === "spectralOsc" && typeof spectralOscBakeCycle === "function";
   const graph = spectral ? null : nodeGraphAdditiveWaveformReadGraph(nodeId);
   if (spectral) {
     const N = Math.max(64, Math.min(256, Math.round(w)));
     const p = node?.params || {};
-    const key = `spectral|${N}|${p.shape}|${p.shapeA}|${p.shapeB}`;
+    const key = `spectral|${N}|${p.shape}|${p.shapeA}|${p.shapeB}|${p.gibbs}`;
     if (!section._wave || section._wave.length !== N || section._bakeKey !== key) {
       // N - 1 points over one cycle, then the first again: the plot closes the loop.
       const cycle = spectralOscBakeCycle(p, N - 1);
