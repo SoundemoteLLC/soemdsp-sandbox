@@ -142,6 +142,8 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "wireBreak",
   "wireConnect",
   "wireDisconnect",
+  // Grid Keyboard is still a DOM face (heading + pads). Parked until a WebGL face exists.
+  "gridKeyboard",
 ]);
 
 // Types that used to be on the UC shelf and are now shipped. Always strip
@@ -233,6 +235,7 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
   metallicRatio: "Metallic-mean Ratio CV (golden/silver/…). Useful for detune, delay ratios, and spacing — parked until the modulator shelf polish pass.",
   additiveImage: "Image → Yellow Graph harmonics. Parked until the Additive image analysis pass.",
   theremin: "Parked. Pad X/Y snap into pitch and volume with no per-sample glide.",
+  gridKeyboard: "Array-mbira grid face is still DOM. Parked until a WebGL keyboard face exists.",
 });
 
 // Unified module department definitions — single source of truth for
@@ -1351,6 +1354,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Pitch ↔ Hz",
     notes: ["pitch", "hz", "frequency", "midi", "a4", "tuning", "p2f", "f2p", "convert", "musical", "pitch to hz", "hz to pitch"],
   },
+  pitchMutator: {
+    category: "musical",
+    description: "Named Pitch Mutator. Freq Out looks up a log-Hz lane; one bound knob is a slider-space offset lane.",
+    label: "Pitch Mutator",
+    notes: ["pitch", "mutator", "frequency", "hz", "gate", "velocity", "lane", "keyframe", "musical"],
+  },
   ampDb: {
     category: "math",
     description: "Convert linear amplitude ↔ dB (20·log10). dB→Amp: 10^(dB/20). Amp→dB: 20·log10(amp). 0 dB = 1.",
@@ -1563,9 +1572,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   gridKeyboard: {
     category: "controller",
-    description: "Array-mbira grid: fifths left-to-right from F, octaves bottom-to-top, MIDI 0–127. Same blue Play / gold Arp latch as Keyboard.",
+    description: "Under construction. Array-mbira grid: fifths left-to-right from F, octaves bottom-to-top, MIDI 0–127. Same blue Play / gold Arp latch as Keyboard.",
     label: "Grid Keyboard",
-    notes: ["grid", "array mbira", "circle of fifths", "keyboard", "play keys", "arp keys", "chord memory", "controller"],
+    notes: ["under construction", "grid", "array mbira", "circle of fifths", "keyboard", "play keys", "arp keys", "chord memory", "controller"],
   },
   pitchModWheel: {
     category: "controller",
@@ -3536,6 +3545,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },
   pitchHz: {
+    source: "native_modules/graph_engine/graph_engine.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
+  },
+  pitchMutator: {
     source: "native_modules/graph_engine/graph_engine.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },

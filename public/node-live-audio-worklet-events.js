@@ -354,6 +354,10 @@ NodeLiveAudioProcessor.prototype.setParams = function setParams(nodes, message =
           ? node.stepRegister
           : null;
       }
+      if (Object.hasOwn(node, "_mutatorFreqLut") || node.type === "pitchMutator") {
+        current._mutatorFreqLut = node._mutatorFreqLut || current._mutatorFreqLut || null;
+        current.mutator = node.mutator || current.mutator || null;
+      }
       if (Object.hasOwn(node, "chordMemory")) {
         current.chordMemory = node.chordMemory && typeof node.chordMemory === "object"
           ? node.chordMemory
@@ -392,6 +396,9 @@ NodeLiveAudioProcessor.prototype.setParams = function setParams(nodes, message =
     // Efficient mode: push Control targets into native graph (no recompile).
     if (this.efficientProduct && typeof this.syncNativeGraphParams === "function") {
       this.syncNativeGraphParams();
+    }
+    if (this.efficientProduct && typeof this.syncNativeMutatorFreqLuts === "function") {
+      this.syncNativeMutatorFreqLuts();
     }
     if (this.efficientProduct && typeof this.publishEfficientControllerBiasTargets === "function") {
       try {

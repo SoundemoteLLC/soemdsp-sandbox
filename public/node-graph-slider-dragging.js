@@ -491,6 +491,14 @@ function scheduleNodeSliderDragAutosave() {
 
 function commitNodeSliderDragValue(slider, status = "parameter changed") {
   clearNodeSliderDragAutosaveTimer();
+  if (typeof pitchMutatorMaybeInterceptSlider === "function") {
+    const domainRaw = Number(slider?.dataset?.domainValue);
+    if (pitchMutatorMaybeInterceptSlider(slider, domainRaw, { commit: true, interaction: "commit" })) {
+      markNodeGraphRenderPending();
+      scheduleNodeGraphLiveParameterSync();
+      return;
+    }
+  }
   const domainRaw = Number(slider?.dataset?.domainValue);
   syncNodeGraphPatchParameterFromSlider(slider, {
     domainValue: Number.isFinite(domainRaw) ? domainRaw : undefined,
@@ -526,6 +534,15 @@ function setNodeSliderValue(slider, value, options = {}) {
         return;
       }
     }
+  }
+  if (typeof pitchMutatorMaybeInterceptSlider === "function"
+    && pitchMutatorMaybeInterceptSlider(slider, value, { ...options, commit: false })) {
+    if (options.interaction === "drag") {
+      scheduleNodeSliderReadoutUpdate(slider, Number(slider.dataset.domainValue));
+    } else if (typeof syncNodeSliderReadout === "function") {
+      syncNodeSliderReadout(slider);
+    }
+    return;
   }
   const isDrag = options.interaction === "drag";
   const domain = normalizeNodeSliderValue(slider, value);

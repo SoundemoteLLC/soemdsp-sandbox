@@ -850,6 +850,16 @@ function validateNodeGraphPatch(patch) {
     if (type === "audioPlayer" && Object.hasOwn(node, "playlist") && typeof nodeGraphAudioPlayerPlaylistNormalize === "function") {
       normalizedNode.playlist = nodeGraphAudioPlayerPlaylistNormalize(node.playlist);
     }
+    if (type === "pitchMutator") {
+      const E = (typeof PitchMutatorEngine !== "undefined") ? PitchMutatorEngine : null;
+      if (E) {
+        normalizedNode.mutator = E.normalizeMutatorState(node.mutator);
+        normalizedNode.color = E.normalizeColor(node.color);
+      } else {
+        if (node.mutator) normalizedNode.mutator = node.mutator;
+        if (node.color) normalizedNode.color = node.color;
+      }
+    }
     if (type === "audioPlayer") {
       normalizedNode._mpFaceVis = 2;
     }

@@ -208,7 +208,10 @@ function readNodeGraphLiveEffectiveParam(
   frames,
   frameValues,
 ) {
-  const base = readNodeGraphLiveSmoothedParam(runtime, node, key, fallback, frame, frames);
+  let base = readNodeGraphLiveSmoothedParam(runtime, node, key, fallback, frame, frames);
+  if (typeof pitchMutatorApplyToBase === "function") {
+    base = pitchMutatorApplyToBase(node, key, base, node?.paramMeta?.[key] || {});
+  }
   const modulations = runtime.modulationConnections?.get(nodeGraphParameterKey(node?.id, key));
   const metadata = node?.paramMeta?.[key] || {};
   // Fold / outputDomain early-out SSOT: nodeGraphParamFoldOrBase.

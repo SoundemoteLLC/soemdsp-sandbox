@@ -2661,6 +2661,7 @@ static const int kTypeVocoder = 269;
 static const int kTypeSpectralBlur = 272;
 static const int kTypeSpectralCrossSynthesis = 278;
 static const int kTypeSpectralWarp = 279;
+static const int kTypePitchMutator = 280; // Pitch Mutator: log2(Hz) LUT -> Freq Out
 static const int kTypeSpectralFreeze = 273;
 static const int kTypeEarlyReflectionConvolution = 274;
 static const int kTypeSpectralDelay = 275;
@@ -3042,6 +3043,11 @@ struct Node {
   int stepRegAaWave;
   unsigned char stepRegAaReady;
   PurrState purr; // Purr (inline DSP, not a native pool)
+  // Pitch Mutator (type 280): Frequency-lane table is log2(Hz), one entry per MIDI note.
+  float mutatorFreqLut[128];
+  unsigned char mutatorFreqLutValid;
+  double mutatorLutLastX;
+  double mutatorLutLastY;
 };
 
 enum SinkKind : unsigned char { kSinkPort = 0, kSinkControl = 1 };
@@ -3843,6 +3849,10 @@ static inline double phase_offset_cycles(
 
 static void init_node_defaults(Node& n, int typeId) {
   n.typeId = typeId;
+  n.mutatorFreqLutValid = 0;
+  n.mutatorLutLastX = -1.0e9;
+  n.mutatorLutLastY = 0.0;
+  for (int mutI = 0; mutI < 128; mutI++) n.mutatorFreqLut[mutI] = 0.0f;
   n.bypassed = false;
   n.vactrolAmp = 1.0;
   n.vactrolAmpInit = false;
@@ -4016,7 +4026,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeCrossover5) ? 150.0
       : (typeId == kTypeCrossover6) ? 100.0
       : (typeId == kTypeAudioPlayer || typeId == kTypeSamplePlayer) ? 1.0 // speed ×
-: (typeId == kTypePitchHz || typeId == kTypePitchManager) ? 440.0 // A4 tuning Hz
+: (typeId == kTypePitchHz || typeId == kTypePitchManager || typeId == kTypePitchMutator) ? 440.0 // A4 / playhead Hz
       : (typeId == kTypeVelvetNoise) ? 2500.0 // density Hz
       : (typeId == kTypeVelvetReverb) ? 64.0 // Taps (tap count)
             : 220.0,
@@ -7292,6 +7302,46 @@ static void process_b2u(Circuit& g, Node& node, int frames) {
 // Pitch â†” Hz: In is pitch (mode 0) or Hz (mode 1). tuning = A4 reference (MIDI 69).
 // pitchToFreq: tuning * 2^((pitch - 69) / 12)
 // freqToPitch: 69 + 12 * log2(hz / tuning); non-finite/â‰¤0 → 0
+
+static void process_pitch_mutator(Circuit& g, Node& node, int frames) {
+  // Ports: Gate=Trigger thru, Freq=kPortF (in via mix, out to buf), Velocity=kPortMorph thru.
+  // frequency slot: playhead Hz when Freq In is unwired.
+  const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const bool liveGate = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const bool liveVel = mix_live_port(g, node, kPortMorph, frames, g.mixMorph);
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double gate = liveGate ? g.mixTrigger[f] : 0.0;
+    const double vel = liveVel ? g.mixMorph[f] : 0.0;
+    double inHz = liveF ? g.mixF[f] : control_audio(g, node.frequency, f);
+    double outHz = 0.0;
+    if (node.mutatorFreqLutValid && inHz > 0.0 && inHz == inHz) {
+      const double note = 69.0 + 12.0 * (dsp_ln(inHz / 440.0) * k1zLN2);
+      if (note == node.mutatorLutLastX) {
+        outHz = node.mutatorLutLastY;
+      } else {
+        double x = note;
+        if (x < 0.0) x = 0.0;
+        if (x > 127.0) x = 127.0;
+        const int i = (int)x;
+        const int i1 = (i < 127) ? (i + 1) : 127;
+        const double frac = x - (double)i;
+        const double logv = (double)node.mutatorFreqLut[i]
+          + ((double)node.mutatorFreqLut[i1] - (double)node.mutatorFreqLut[i]) * frac;
+        outHz = dsp_exp(logv * 0.6931471805599453);
+        node.mutatorLutLastX = note;
+        node.mutatorLutLastY = outHz;
+      }
+    } else if (inHz > 0.0 && inHz == inHz) {
+      // No keys: passthrough so an empty lane does not invent a pitch.
+      outHz = inHz;
+    }
+    node.buf[kPortMono][f] = outHz;
+    node.buf[kPortLeft][f] = gate;
+    node.buf[kPortRight][f] = vel;
+  }
+}
+
 static void process_pitch_hz(Circuit& g, Node& node, int frames) {
   mix_node_inputs(g, node, frames);
   for (int f = 0; f < frames; f++) {
@@ -20174,6 +20224,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_fm(g, node, frames);
       return;
     }
+    if (node.typeId == kTypePitchMutator) {
+      process_pitch_mutator(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypePitchHz) {
       process_pitch_hz(g, node, frames);
       return;
@@ -20587,6 +20641,29 @@ extern "C" float* soemdsp_graph_yellow_pan_ptr(int handle, unsigned int nodeHash
 
 // Bubble Cutoff sample-accurate strip: host writes Float32[0..frames) then set.
 // Returns 1 on success. frames<=0 clears the strip (quantum cutoff path).
+
+extern "C" int soemdsp_graph_set_mutator_freq_lut(int handle, unsigned int nodeHash, int valid) {
+  Circuit* g = get(handle);
+  if (!g) return 0;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0) return 0;
+  Node& node = g->nodes[idx];
+  if (node.typeId != kTypePitchMutator) return 0;
+  node.mutatorFreqLutValid = valid ? 1 : 0;
+  node.mutatorLutLastX = -1.0e9;
+  return 1;
+}
+
+extern "C" float* soemdsp_graph_mutator_freq_lut_ptr(int handle, unsigned int nodeHash) {
+  Circuit* g = get(handle);
+  if (!g) return nullptr;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0) return nullptr;
+  Node& node = g->nodes[idx];
+  if (node.typeId != kTypePitchMutator) return nullptr;
+  return node.mutatorFreqLut;
+}
+
 extern "C" int soemdsp_graph_set_yellow_cutoff_strip(
   int handle, unsigned int nodeHash, int frames
 ) {

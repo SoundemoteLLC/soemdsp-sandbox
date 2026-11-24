@@ -188,6 +188,9 @@ function nodeGraphBuildLiveParameterNodes(activeNodeIds = null, bypassedNodes = 
         paramMeta[parameter.key] = nodeGraphReadPatchParameterMetadata(node, parameter.key);
       }
       nodeGraphInjectSpectrogramWorkletParams(node, params);
+      if (typeof pitchMutatorApplyLiveParams === "function") {
+        pitchMutatorApplyLiveParams(node, params);
+      }
       const runtimeNode = {
         id: node.id,
         paramMeta,
@@ -283,6 +286,14 @@ function nodeGraphBuildLiveParameterNodes(activeNodeIds = null, bypassedNodes = 
       if (node.type === "script" && typeof nodeGraphEmoCopyRuntime === "function") {
         nodeGraphEmoCopyRuntime(node, runtimeNode);
       }
+      if (node.type === "pitchMutator") {
+        runtimeNode.color = node.color;
+        runtimeNode.mutator = node.mutator;
+        if (node._mutatorFreqLut) runtimeNode._mutatorFreqLut = node._mutatorFreqLut;
+        else if (typeof pitchMutatorFreqLutForNode === "function") {
+          runtimeNode._mutatorFreqLut = pitchMutatorFreqLutForNode(node);
+        }
+      }
       return runtimeNode;
     });
 }
@@ -319,6 +330,9 @@ function nodeGraphBuildLiveParameterNodesForPatch(patch, activeNodeIds = null, b
         ) || nodeGraphParameterDefinitionMetadata(parameter);
       }
       nodeGraphInjectSpectrogramWorkletParams(node, params);
+      if (typeof pitchMutatorApplyLiveParams === "function") {
+        pitchMutatorApplyLiveParams(node, params);
+      }
       const runtimeNode = {
         id: node.id,
         paramMeta,
@@ -411,6 +425,14 @@ function nodeGraphBuildLiveParameterNodesForPatch(patch, activeNodeIds = null, b
       }
       if (node.type === "script" && typeof nodeGraphEmoCopyRuntime === "function") {
         nodeGraphEmoCopyRuntime(node, runtimeNode);
+      }
+      if (node.type === "pitchMutator") {
+        runtimeNode.color = node.color;
+        runtimeNode.mutator = node.mutator;
+        if (node._mutatorFreqLut) runtimeNode._mutatorFreqLut = node._mutatorFreqLut;
+        else if (typeof pitchMutatorFreqLutForNode === "function") {
+          runtimeNode._mutatorFreqLut = pitchMutatorFreqLutForNode(node);
+        }
       }
       return runtimeNode;
     });

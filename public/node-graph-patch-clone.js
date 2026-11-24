@@ -941,6 +941,16 @@ function cloneNodeGraphPatch(patch) {
         ...(node.type === "audioPlayer" && node.playlist && typeof nodeGraphAudioPlayerPlaylistNormalize === "function"
           ? { playlist: nodeGraphAudioPlayerPlaylistNormalize(node.playlist) }
           : {}),
+        ...(node.type === "pitchMutator"
+          ? {
+              mutator: (typeof PitchMutatorEngine !== "undefined"
+                ? PitchMutatorEngine.normalizeMutatorState(node.mutator)
+                : (node.mutator && typeof node.mutator === "object" ? { ...node.mutator } : node.mutator)),
+              color: (typeof PitchMutatorEngine !== "undefined"
+                ? PitchMutatorEngine.normalizeColor(node.color)
+                : node.color),
+            }
+          : {}),
         paramMeta: normalizeNodeGraphParamMetaForNode(node.type, node.paramMeta),
         ...(Object.keys(normalizeNodeGraphPatchPortMeta(node.portMeta)).length
           ? { portMeta: normalizeNodeGraphPatchPortMeta(node.portMeta) }

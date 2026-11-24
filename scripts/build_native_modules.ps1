@@ -176,6 +176,7 @@ $modules = @(
     "soemdsp_graph_yellow_phase_ptr",
     "soemdsp_graph_yellow_amplitude_ptr",
     "soemdsp_graph_yellow_pan_ptr",
+    "soemdsp_graph_set_mutator_freq_lut", "soemdsp_graph_mutator_freq_lut_ptr",
     "soemdsp_graph_set_yellow_cutoff_strip",
     "soemdsp_graph_yellow_cutoff_strip_ptr",
     "soemdsp_graph_max_block_frames", "soemdsp_graph_version"

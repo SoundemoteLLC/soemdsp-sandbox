@@ -301,6 +301,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   dispersion: 277,
   spectralCrossSynthesis: 278,
   spectralWarp: 279,
+  pitchMutator: 280,
   stftContrast: 270,
   stftGate: 271,
 });
@@ -980,6 +981,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const t = String(type || "").trim();
+  if (t === "pitchMutator") {
+    if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "velocity") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+  }
   if (t === "stftGate" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "spectralFreeze" && p === "held") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "earlyReflectionConvolution" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
@@ -1668,6 +1674,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const tDst = String(type || "").trim();
+  if (tDst === "pitchMutator") {
+    if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
+    if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_F;
+    if (p === "velocity") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
+  }
   if (tDst === "spectralFreeze") {
     if (p === "freeze") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE_CV;
     if (p === "recapture") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
@@ -8215,6 +8226,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
 
+    if (type === "pitchMutator") {
+      push("playheadHz", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("playheadHz", 440));
+      continue;
+    }
     if (type === "pitchHz") {
       push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
       push("tuning", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("tuning", 440));
@@ -8624,6 +8639,41 @@ NodeLiveAudioProcessor.prototype.syncNativeYellowCutoffStrips =
   };
 
 // Efficient blob has no JS DSP evaluators — keep minimal state factories here.
+NodeLiveAudioProcessor.prototype.syncNativeMutatorFreqLuts = function syncNativeMutatorFreqLuts() {
+  const native = this.nativeGraph;
+  if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) return;
+  if (!native?.soemdsp_graph_set_mutator_freq_lut || !native?.soemdsp_graph_mutator_freq_lut_ptr || !native.memory?.buffer) {
+    return;
+  }
+  const nodes = this.nodes;
+  if (!nodes || typeof nodes.forEach !== "function" && typeof nodes.values !== "function") return;
+  const list = typeof nodes.values === "function" ? nodes.values() : [];
+  for (const node of list) {
+    if (!node || node.type !== "pitchMutator") continue;
+    const hash = this.fnv1aHash32(node.id);
+    const baked = node._mutatorFreqLut;
+    const valid = !!(baked && baked.valid && baked.table && baked.table.length >= 128);
+    let ok = 0;
+    try {
+      ok = native.soemdsp_graph_set_mutator_freq_lut(this.nativeGraphHandle, hash, valid ? 1 : 0) | 0;
+    } catch (_e) {
+      ok = 0;
+    }
+    if (!ok || !valid) continue;
+    let ptr = 0;
+    try {
+      ptr = native.soemdsp_graph_mutator_freq_lut_ptr(this.nativeGraphHandle, hash) | 0;
+    } catch (_e) {
+      ptr = 0;
+    }
+    if (!(ptr > 0)) continue;
+    try {
+      const src = baked.table.length === 128 ? baked.table : baked.table.subarray(0, 128);
+      new Float32Array(native.memory.buffer, ptr, 128).set(Float32Array.from(src));
+    } catch (_e) { /* keep previous table */ }
+  }
+};
+
 NodeLiveAudioProcessor.prototype.createVibratoGeneratorState = function createVibratoGeneratorState() {
   return { nativeHandle: 0, lastReset: 0 };
 };
@@ -11023,6 +11073,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "fm") return ["f", "Out", "Mono", "ƒ"];
     if (type === "pitchHz") return ["Out", "Mono", "In"];
     if (type === "pitchManager") return ["f", "ƒ", "Out", "Mono"];
+    if (type === "pitchMutator") return ["f", "ƒ", "Out", "Mono"];
     if (type === "helmholtzPitch" || type === "edgeDetector") return ["Frequency", "f", "ƒ", "Out", "Mono"];
     if (type === "ampDb") return ["Out", "Mono", "In"];
     if (type === "lutCell") return ["Out"];

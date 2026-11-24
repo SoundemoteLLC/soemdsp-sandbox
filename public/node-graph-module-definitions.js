@@ -184,6 +184,7 @@ const nodeGraphNodeLabels = Object.freeze({
   playerMode: "Player Mode",
   fm: "Freq Manager",
   pitchHz: "Pitch ↔ Hz",
+  pitchMutator: "Pitch Mutator",
   pitchManager: "Pitch Manager",
   ampDb: "Amp ↔ dB",
   passiveFilter: "Passive Filter",
@@ -11109,6 +11110,32 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         unit: "Hz",
         tooltip: "A4 reference Hz. MIDI pitch 69 maps to this frequency." },
+    ] },
+  pitchMutator: {
+    planRole: "processor",
+    planFreeRun: true,
+    defaultWidthGu: 7,
+    displayHeightGu: 3,
+    defaultUi: {
+      buttonsHidden: true,
+      oscilloscopeHidden: true },
+    inputLabels: { f: "ƒ" },
+    outputLabels: { f: "ƒ" },
+    inputs: ["Gate", "f", "Velocity"],
+    outputs: ["Gate", "f", "Velocity"],
+    digitalInputs: ["Gate"],
+    digitalOutputs: ["Gate"],
+    parameters: [
+      {
+        defaultValue: "440",
+        key: "playheadHz",
+        label: "Playhead",
+        max: "20000",
+        mid: "440",
+        min: "0.001",
+        step: "any",
+        unit: "Hz",
+        visible: false }
     ] },
   pitchManager: {
     planRole: "processor",
