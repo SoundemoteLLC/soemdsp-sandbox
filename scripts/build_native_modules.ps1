@@ -644,7 +644,7 @@ $modules = @(
     "soemdsp_spectral_osc_phase", "soemdsp_spectral_osc_out",
     "soemdsp_spectral_osc_table_ptr", "soemdsp_spectral_osc_table_len",
     "soemdsp_spectral_osc_table_harmonics", "soemdsp_spectral_osc_gain",
-    "soemdsp_spectral_osc_busy", "soemdsp_spectral_osc_table_count",
+    "soemdsp_spectral_osc_busy", "soemdsp_spectral_osc_table_count", "soemdsp_spectral_osc_hold",
     "soemdsp_spectral_osc_version", "soemdsp_spectral_osc_metadata_json",
     "soemdsp_spectral_osc_metadata_json_size"
   ) }

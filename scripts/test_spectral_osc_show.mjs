@@ -137,7 +137,8 @@ for (let s = 0; s < 8; s++) {
   }
 }
 check(exactOk, "display bake = the exact formula cycle for every shape and Gibbs");
-check(/\|\$\{p\.gibbs\}`/.test(read("public/modules/additiveGenerator/additive-waveform-display.js")), "display re-bakes when Gibbs moves (bake key)");
+check(/\|\$\{p\.cycleMode\}`/.test(read("public/modules/additiveGenerator/additive-waveform-display.js")), "display re-bakes when Cycle mode changes (Single trigger shows the shape with its DC)");
+check(/\|\$\{p\.gibbs\}/.test(read("public/modules/additiveGenerator/additive-waveform-display.js")), "display re-bakes when Gibbs moves (bake key)");
 check(peakOk, "display peak <= 1: the plot (0.42 h per unit) never clips");
 const disp = read("public/modules/additiveGenerator/additive-waveform-display.js");
 check(/nodeType === "spectralOsc"/.test(disp) && /spectralOscBakeCycle\(/.test(disp), "the Additive waveform display draws spectralOsc from spectralOscBakeCycle");

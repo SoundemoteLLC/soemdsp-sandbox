@@ -34,7 +34,7 @@
 //
 // Shapes (A, B are the two 0..1 controls):
 //   0 Center Edge  A Edge   (ramp 0->1, edge 1->-1 at A, ramp -1->0; Additive CenterSaw series), B Sine
-//   1 Pulse        A Width  (+1 / -1, DC removed),                                               B Sine
+//   1 Pulse        A Width  (+1 / -1; DC only in Single trigger),                                B Sine
 //   2 Trisaw       A Peak   (0 -> 1 at A/2 -> -1 at 1-A/2 -> 0; Additive Trisaw: 0.5 triangle, 1 = Center Edge), B Sine
 //   3 Formant      A Formant (peak at harmonic 2^(7A), 1..128), B Width (0.1..3 octaves, Gaussian in log2 n), cosine phase
 //   4 Comb         A Spacing (notch every 2^(1+4A) harmonics, 2..32), B Depth (0 = saw, 1 = full notches)
@@ -48,8 +48,17 @@
 //   7 Bell         A Stretch, B Sine: hum (harmonic 1) plus bell partials (prime, tierce, quint,
 //                  nominal, ... ratios 1, 1.2, 1.5, 2, 2.5, 3, 4.2, 5.4 to the prime) at
 //                  1 + (2 ratio - 1) S, S = 1 .. 4, split between their two nearest harmonics.
-// Every shape is scaled to peak 1 (DC removed), measured on the built tables, so
-// Sine 1 is a unit sine and the output never exceeds Amplitude.
+// Every shape is scaled to peak 1, measured on the built tables, so Sine 1 is a
+// unit sine and the output never exceeds Amplitude (scale only, never an offset).
+//
+// DC: Free run is DC-free (harmonics 1..K). Single trigger keeps the shape's own DC,
+// so a triggered cycle starts and ends where the shape does instead of jumping out
+// of silence: Center Edge / Pulse / Trisaw / Comb start at 0, and their DC is the
+// value that puts each band-limited table's start exactly there (it tends to the
+// true mean, e.g. Edge - 0.5 for Center Edge, as K grows; the plain mean would leave
+// a 1/K offset from smoothing the corner at the cycle start). Sine weights it by r
+// (the Poisson weight of harmonic 0), so Sine 1 is still a pure sine. Asym Sine
+// keeps its formula's mean; Formant, Glass and Bell are partial sums with no DC.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/math/analog_filter_trig.h>
@@ -96,6 +105,7 @@ struct State {
   int lastTable;
   double builtShape, builtA, builtB, builtG;
   double tShape, tA, tB, tG;
+  int builtKeep, tKeep, bKeep;  // keep DC (Single trigger)
   // Rebuild in progress into bank 1 - live: step -1 = spectrum, then tables top down.
   int building;
   int buildStep;
@@ -314,6 +324,7 @@ static void build_spectrum(int shape, double A, double B, double* sa, double* sb
     }
     fft_forward(kFft);
     const double sc = 2.0 / (double)kFft;
+    sa[0] = gRe[0] / (double)kFft;  // the formula's mean (kept in Single trigger)
     for (int n = 1; n <= kMaxK; n += 1) { sa[n] = sc * gRe[n]; sb[n] = -sc * gIm[n]; }
     return;
   }
@@ -352,12 +363,22 @@ static double taper(int n, int K, double gibbs) {
   return dsp_exp(-kTaperA * dsp_exp(p * dsp_ln(x)));
 }
 
+// Single-trigger DC of a table with top harmonic K (see the header).
+static double table_dc(const State& st, int shape, double B, double G, int K) {
+  if (shape == 5) return st.specA[0];
+  if (shape == 3 || shape >= 6) return 0.0;
+  double s = 0.0;  // the Sine-0 table's start: sum of its cosine terms
+  for (int n = 1; n <= K; n += 1) s += st.specA[n] * taper(n, K, G);
+  return -s * (shape_has_sine(shape) ? sine_r(B) : 1.0);
+}
+
 // Build table j from the spectrum into dst; updates min/max.
-static void build_table(const State& st, int shape, double B, double G, int j, float* dst, double* mn, double* mx) {
+static void build_table(const State& st, int shape, double B, double G, int keepDc, int j, float* dst, double* mn, double* mx) {
   const int len = gTab[j].len;
   const int K = gTab[j].k;
   const double r = shape_has_sine(shape) ? sine_r(B) : 1.0;
   for (int i = 0; i < len; i += 1) { gRe[i] = 0.0; gIm[i] = 0.0; }
+  if (keepDc) gRe[0] = table_dc(st, shape, B, G, K);
   double rp = 1.0;  // r^(n-1)
   for (int n = 1; n <= K; n += 1) {
     const double g = taper(n, K, G) * rp;
@@ -392,17 +413,17 @@ static int shape_index(double s) {
   return v;
 }
 
-static void build_full(State& st, int bank, int shape, double A, double B, double G) {
+static void build_full(State& st, int bank, int shape, double A, double B, double G, int keepDc) {
   double mn = 0.0, mx = 0.0;
   build_spectrum(shape, A, B, st.specA, st.specB);
   for (int j = kTableCount - 1; j >= 0; j -= 1) {
-    build_table(st, shape, B, G, j, st.tables[bank] + gTab[j].offset, &mn, &mx);
+    build_table(st, shape, B, G, keepDc, j, st.tables[bank] + gTab[j].offset, &mn, &mx);
   }
   st.gain[bank] = bank_gain(mn, mx);
 }
 
 static bool target_differs(const State& st) {
-  return st.tShape != st.builtShape || dsp_fabs(st.tA - st.builtA) > 1e-7
+  return st.tShape != st.builtShape || st.tKeep != st.builtKeep || dsp_fabs(st.tA - st.builtA) > 1e-7
     || dsp_fabs(st.tB - st.builtB) > 1e-7 || dsp_fabs(st.tG - st.builtG) > 1e-7;
 }
 
@@ -476,6 +497,7 @@ extern "C" int soemdsp_spectral_osc_create() {
     s.lastTable = 0;
     s.builtShape = s.builtA = s.builtB = s.builtG = 0.0;
     s.tShape = 0.0; s.tA = 0.5; s.tB = 0.0; s.tG = 0.0;
+    s.builtKeep = s.tKeep = s.bKeep = 0;
     s.building = 0;
     s.buildStep = 0;
     s.fadeLeft = 0;
@@ -504,18 +526,20 @@ extern "C" void soemdsp_spectral_osc_retrigger(int handle, double h) {
   st->phase = soemdsp::math::partial_reset_phase(st->phase, 0.0, h, 1.0);
 }
 
-// Latest Shape / A / B / Gibbs. The first call builds the bank at once; later
-// changes rebuild in soemdsp_spectral_osc_work.
-extern "C" void soemdsp_spectral_osc_set_target(int handle, double shape, double A, double B, double gibbs) {
+// Latest Shape / A / B / Gibbs / keep DC (1 = Single trigger). The first call builds
+// the bank at once; later changes (Cycle mode too) rebuild in soemdsp_spectral_osc_work.
+extern "C" void soemdsp_spectral_osc_set_target(int handle, double shape, double A, double B, double gibbs, double keepDc) {
   State* st = slot(handle);
   if (!st) return;
   st->tShape = (double)shape_index(shape);
   st->tA = clampd(A, 0.0, 1.0);
   st->tB = clampd(B, 0.0, 1.0);
   st->tG = clampd(gibbs, 0.0, 1.0);
+  st->tKeep = keepDc >= 0.5 ? 1 : 0;  // NaN / missing -> Free run
   if (!st->built) {
-    build_full(*st, st->live, (int)st->tShape, st->tA, st->tB, st->tG);
+    build_full(*st, st->live, (int)st->tShape, st->tA, st->tB, st->tG, st->tKeep);
     st->builtShape = st->tShape; st->builtA = st->tA; st->builtB = st->tB; st->builtG = st->tG;
+    st->builtKeep = st->tKeep;
     st->built = 1;
   }
 }
@@ -530,6 +554,7 @@ extern "C" int soemdsp_spectral_osc_work(int handle, double sampleRate) {
     st.building = 1;
     st.buildStep = -1;
     st.bShape = st.tShape; st.bA = st.tA; st.bB = st.tB; st.bG = st.tG;
+    st.bKeep = st.tKeep;
     st.bMin = 0.0; st.bMax = 0.0;
   }
   if (st.building) {
@@ -542,7 +567,7 @@ extern "C" int soemdsp_spectral_osc_work(int handle, double sampleRate) {
     int spent = 0;
     while (st.buildStep >= 0 && spent < kBuildPointsPerCall) {
       const int j = st.buildStep;
-      build_table(st, (int)st.bShape, st.bB, st.bG, j, st.tables[back] + gTab[j].offset, &st.bMin, &st.bMax);
+      build_table(st, (int)st.bShape, st.bB, st.bG, st.bKeep, j, st.tables[back] + gTab[j].offset, &st.bMin, &st.bMax);
       spent += gTab[j].len;
       st.buildStep -= 1;
     }
@@ -550,6 +575,7 @@ extern "C" int soemdsp_spectral_osc_work(int handle, double sampleRate) {
       st.gain[back] = bank_gain(st.bMin, st.bMax);
       st.live = back;
       st.builtShape = st.bShape; st.builtA = st.bA; st.builtB = st.bB; st.builtG = st.bG;
+      st.builtKeep = st.bKeep;
       st.building = 0;
       const double sr = sampleRate > 1.0 ? sampleRate : 44100.0;
       st.fadeLen = (int)(kFadeSeconds * sr);
@@ -593,6 +619,13 @@ extern "C" double soemdsp_spectral_osc_sample(
   return y;
 }
 
+// A silent sample (Single trigger, stopped): the crossfade still runs, so a rebuild
+// made while idle (e.g. switching Cycle mode) is complete before the next hit.
+extern "C" void soemdsp_spectral_osc_hold(int handle) {
+  State* st = slot(handle);
+  if (st && st->fadeLeft > 0) st->fadeLeft -= 1;
+}
+
 extern "C" double soemdsp_spectral_osc_phase(int handle) {
   State* st = slot(handle);
   return st ? st->lastPhase : 0.0;
@@ -627,6 +660,6 @@ extern "C" int soemdsp_spectral_osc_busy(int handle) {
   return st ? ((st->building || st->fadeLeft > 0) ? 1 : 0) : 0;
 }
 
-extern "C" int soemdsp_spectral_osc_version() { return 2; }
+extern "C" int soemdsp_spectral_osc_version() { return 3; }
 extern "C" const char* soemdsp_spectral_osc_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_spectral_osc_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

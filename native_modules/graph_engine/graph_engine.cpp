@@ -544,12 +544,13 @@ extern "C" double soemdsp_sample_player_phase(int handle);
 extern "C" int soemdsp_spectral_osc_create();
 extern "C" void soemdsp_spectral_osc_destroy(int handle);
 extern "C" void soemdsp_spectral_osc_retrigger(int handle, double h);
-extern "C" void soemdsp_spectral_osc_set_target(int handle, double shape, double a, double b, double gibbs);
+extern "C" void soemdsp_spectral_osc_set_target(int handle, double shape, double a, double b, double gibbs, double keepDc);
 extern "C" int soemdsp_spectral_osc_work(int handle, double sampleRate);
 extern "C" double soemdsp_spectral_osc_sample(
   int handle, double frequencyHz, double phaseOffset, double amplitude, double engineSampleRate
 );
 extern "C" double soemdsp_spectral_osc_phase(int handle);
+extern "C" void soemdsp_spectral_osc_hold(int handle);
 
 extern "C" int soemdsp_transport_create();
 extern "C" void soemdsp_transport_destroy(int handle);
@@ -15404,7 +15405,8 @@ static void process_spectral_osc(Circuit& g, Node& node, int frames) {
     control_effective(node.waveform),
     control_effective(node.shape),
     control_effective(node.resonance),
-    control_effective(node.width)  // Gibbs
+    control_effective(node.width),  // Gibbs
+    single ? 1.0 : 0.0  // Single trigger keeps the shape's DC (rebuild + crossfade on change)
   );
   soemdsp_spectral_osc_work(node.nativeHandle, sr);
   for (int f = 0; f < frames; f++) {
@@ -15422,7 +15424,8 @@ static void process_spectral_osc(Circuit& g, Node& node, int frames) {
       node.lastReset = rv;
     }
     if (single && !single_cycle_gate(node, restart)) {
-      // Stopped: silent, phase held.
+      // Stopped: silent, phase held; a pending crossfade still runs.
+      soemdsp_spectral_osc_hold(node.nativeHandle);
       node.buf[kPortMono][f] = 0.0;
       node.buf[kPortLeft][f] = 0.0;
       node.buf[kPortRight][f] = 0.0;

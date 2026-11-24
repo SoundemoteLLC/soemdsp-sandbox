@@ -33,7 +33,7 @@ const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(
   fs.readFileSync(path.join(root, "public", "modules", "spectralOsc", "spectral-osc-math.js"), "utf8")
-    + "\nthis.M = { SPECTRAL_OSC_SHAPES, SPECTRAL_OSC_TABLE_K, spectralOscShapeCoef, spectralOscSpectrum, spectralOscHarmonics, spectralOscCycle, spectralOscBakeCycle, spectralOscGain, spectralOscTaper, spectralOscFft, spectralOscAsymValue, spectralOscAsymSkewK };",
+    + "\nthis.M = { SPECTRAL_OSC_SHAPES, SPECTRAL_OSC_TABLE_K, spectralOscShapeCoef, spectralOscSpectrum, spectralOscHarmonics, spectralOscCycle, spectralOscDc, spectralOscBakeCycle, spectralOscGain, spectralOscTaper, spectralOscFft, spectralOscAsymValue, spectralOscAsymSkewK };",
   ctx,
 );
 const M = ctx.M;
@@ -97,10 +97,10 @@ function tables(g) {
   return { tabs: out, gain: x.soemdsp_spectral_osc_gain(hd) };
 }
 const builtCache = new Map();
-function built(shape, A, B, G = 0) {
-  const key = `${shape}|${A}|${B}|${G}`;
+function built(shape, A, B, G = 0, cycle = 0) {
+  const key = `${shape}|${A}|${B}|${G}|${cycle}`;
   if (builtCache.has(key)) return builtCache.get(key);
-  const g = makeGraph({ shape, A, B, G });
+  const g = makeGraph({ shape, A, B, G, cycle });
   run(g, 128);
   const t = tables(g);
   x.soemdsp_graph_destroy(g.h);
@@ -219,6 +219,90 @@ for (const A of [0, 0.5, 1]) for (const B of [0, 0.5, 1]) { cases.push([6, A, B]
   check(above < 1e-6, `every table holds harmonics 1..K only (largest above K: ${dB(above).toFixed(1)} dB, float noise)`);
 }
 
+// ---- 2b. Single trigger keeps the DC; Free run is DC-free ----------------------
+const meanOf = (a) => { let s = 0; for (const v of a) s += v; return s / a.length; };
+const EDGES = [0, 0.001, 0.01, 0.03, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 0.99, 0.999, 1];
+const pickFor = (hz) => { const H = SR / 2 / hz; let j = 0; while (j + 1 < TABLES && KS[j + 1] <= H) j++; return j; };
+{
+  // Free run: every table of every shape has zero mean.
+  let worstMean = 0;
+  for (const [s, A, B] of cases) {
+    const t = built(s, A, B, 0);
+    t.tabs.forEach((tab) => { worstMean = Math.max(worstMean, Math.abs(meanOf(tab)) * t.gain); });
+  }
+  check(worstMean < 1e-6, `Free run stays DC-free: every table of all 8 shapes has mean ${worstMean.toExponential(1)} (x gain)`);
+  // Single trigger tables = the JS formula with its DC.
+  let worst = 0;
+  for (const G of [0, 0.5, 1]) for (const [s, A, B] of cases.filter((c, i) => i % 3 === 0)) {
+    const t = built(s, A, B, G, 1);
+    const sp = M.spectralOscSpectrum(s, A, B);
+    for (const j of [0, 4, 9, 15, 21, 27]) {
+      const ref = M.spectralOscCycle(s, A, B, KS[j], LENS[j], G, sp, true);
+      const pk = peakOf(ref);
+      if (pk > 1e-9) worst = Math.max(worst, maxDiff(ref, t.tabs[j]) / pk);
+    }
+  }
+  check(worst < 1e-4, `Single trigger: native tables equal the JS formula incl. DC (Gibbs 0 / 0.5 / 1): max err ${worst.toExponential(2)} of peak`);
+  // Center Edge: the start (= the end, t = 1) of every table, scaled to the output.
+  const startStep = (B, G, js) => {
+    let w = 0, at = "";
+    for (const A of EDGES) {
+      const t = built(0, A, B, G, 1);
+      for (const j of js) { const v = Math.abs(t.tabs[j][0] * t.gain); if (v > w) { w = v; at = `Edge ${A}, K ${KS[j]}`; } }
+    }
+    return { w, at };
+  };
+  const all = [...Array(TABLES).keys()];
+  const s0 = startStep(0, 0, all), s0g = startStep(0, 1, all);
+  check(s0.w < 1e-6 && s0g.w < 1e-6, `Single trigger, Center Edge, Sine 0: every table starts and ends at 0 for Edge 0..1 (worst ${s0.w.toExponential(1)} at Gibbs 0, ${s0g.w.toExponential(1)} at Gibbs 1; float rounding)`);
+  console.log(`STEP  Center Edge, Sine 0: <= ${s0.w.toExponential(1)} at every pitch, Edge 0..1`);
+  for (const B of [0.25, 0.5, 0.75, 1]) {
+    const r = startStep(B, 0, all);
+    const at100 = startStep(B, 0, [pickFor(100), pickFor(100) - 1]);
+    const at1k = startStep(B, 0, [pickFor(1000), pickFor(1000) - 1]);
+    console.log(`STEP  Center Edge, Sine ${B}: start/end step <= ${r.w.toFixed(4)} over all pitches (${r.at}); ${at100.w.toFixed(4)} at 100 Hz, ${at1k.w.toFixed(4)} at 1 kHz (Edge 0..1)`);
+  }
+  // Rendered: a hit starts at exactly 0; the cycle's last sample is one sample short of the end.
+  {
+    const freq = 480; // 100-sample cycle
+    let first = 0, last = 0;
+    for (const A of EDGES) {
+      const gr = makeGraph({ shape: 0, A, B: 0, freq, cycle: 1, reset: true });
+      const y = run(gr, 400, 1, PORT_MONO, (f) => { if (f === 199) x.soemdsp_graph_set_param(gr.h, 1, P_OFFSET, 0); if (f === 200) x.soemdsp_graph_set_param(gr.h, 1, P_OFFSET, 1); });
+      x.soemdsp_graph_destroy(gr.h);
+      first = Math.max(first, Math.abs(y[200]));
+      last = Math.max(last, Math.abs(y[299]));
+    }
+    check(first < 1e-6, `rendered Single trigger, Center Edge Sine 0: the hit's first sample is 0 for every Edge (worst ${first.toExponential(1)})`);
+    console.log(`STEP  rendered at 480 Hz (100-sample cycle): last sample before silence <= ${last.toFixed(4)} (the ramp one sample before it reaches 0, not an offset)`);
+  }
+  // True DC kept: the top table's mean is the shape's mean.
+  let dcErr = 0;
+  for (const A of [0.1, 0.3, 0.5, 0.7, 0.9]) dcErr = Math.max(dcErr, Math.abs(meanOf(built(0, A, 0, 0, 1).tabs[TABLES - 1]) - (A - 0.5)));
+  const asymMean = (() => { let s = 0; const k = M.spectralOscAsymSkewK(0.85); for (let i = 0; i < 65536; i++) s += M.spectralOscAsymValue(0.2, k, i / 65536); return s / 65536; })();
+  const asymErr = Math.abs(meanOf(built(5, 0.2, 0.85, 0, 1).tabs[TABLES - 1]) - asymMean);
+  check(dcErr < 3e-3 && asymErr < 1e-6, `Single trigger keeps the true DC: Center Edge mean -> Edge - 0.5 (err ${dcErr.toExponential(1)} at K 1024, ~2/K from the start correction), Asym Sine = formula mean ${asymMean.toFixed(4)} (err ${asymErr.toExponential(1)})`);
+  // Sine 1 is still a pure sine; peak <= 1 (scale only).
+  let sineDc = 0, over = 0;
+  for (const s of [0, 1, 2]) for (const A of [0.05, 0.5, 0.95]) { const t = built(s, A, 1, 0, 1); t.tabs.forEach((tab) => { sineDc = Math.max(sineDc, Math.abs(meanOf(tab))); }); }
+  for (const s of [0, 1, 2, 3, 4, 5, 6, 7]) for (const A of [0, 0.03, 0.5, 0.97, 1]) { const t = built(s, A, 0, 0, 1); t.tabs.forEach((tab) => { over = Math.max(over, peakOf(tab) * t.gain - 1); }); }
+  check(sineDc < 1e-7 && over < 1e-6, `Single trigger: Sine 1 stays a pure sine (DC ${sineDc.toExponential(1)}); every shape peak <= 1 (excess ${Math.max(0, over).toExponential(1)})`);
+  // Switching Cycle mode rebuilds with the usual crossfade.
+  {
+    const gs = makeGraph({ shape: 0, A: 0.2, B: 0, cycle: 0 });
+    run(gs, 128);
+    gs.set(P_TIMING, 1);
+    let sawBusy = false, settle = -1;
+    for (let b = 0; b < 40; b++) { run(gs, 128); const busy = x.soemdsp_spectral_osc_busy(gs.handle()); if (busy) sawBusy = true; if (sawBusy && !busy && settle < 0) settle = b + 1; }
+    const tS = tables(gs), ref = built(0, 0.2, 0, 0, 1);
+    gs.set(P_TIMING, 0);
+    run(gs, 128 * 40);
+    const tF = tables(gs), refF = built(0, 0.2, 0, 0, 0);
+    x.soemdsp_graph_destroy(gs.h);
+    const same = (p, q) => p.tabs.every((tab, j) => maxDiff(tab, q.tabs[j]) === 0) && p.gain === q.gain;
+    check(sawBusy && settle > 0 && same(tS, ref) && same(tF, refF), `switching Cycle mode rebuilds the tables with the crossfade, also while idle and silent (settled after ${settle} blocks) and back`);
+  }
+}
 // ---- 3. no overshoot at Gibbs 0 --------------------------------------------
 {
   let worstIdeal = 0;
@@ -365,6 +449,17 @@ function turns(tab, tol) {
     if (!(maxDiff(bake, ref.map((v) => v * g)) < 1e-12 && peakOf(bake) <= 1 + 1e-12)) ok = false;
   }
   check(ok, "face bake is the exact formula cycle incl. Gibbs (no clipping: peak <= 1)");
+  let okS = true;
+  for (const [s, A, B, G] of [[0, 0.2, 0, 0], [0, 0.9, 0.5, 0], [1, 0.3, 0, 0.5], [5, 0.2, 0.8, 0]]) {
+    const bake = M.spectralOscBakeCycle({ shape: s, shapeA: A, shapeB: B, gibbs: G, cycleMode: 1 }, 255);
+    const ref = M.spectralOscCycle(s, A, B, 85, 255, G, null, true);
+    let mn = 0, mx = 0; for (const v of ref) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
+    const g = M.spectralOscGain(s, mn, mx);
+    if (!(maxDiff(bake, ref.map((v) => v * g)) < 1e-12 && peakOf(bake) <= 1 + 1e-12)) okS = false;
+  }
+  const ce = M.spectralOscBakeCycle({ shape: 0, shapeA: 0.2, shapeB: 0, gibbs: 0, cycleMode: 1 }, 255);
+  check(okS && Math.abs(ce[0]) < 1e-12 && Math.abs(meanOf(M.spectralOscBakeCycle({ shape: 0, shapeA: 0.2, shapeB: 0, gibbs: 0 }, 255))) < 1e-9,
+    `face bake shows the true shape per mode: Single trigger keeps the DC (Center Edge starts at ${ce[0].toExponential(1)}), Free run DC-free`);
 }
 
 // ---- 9. aliasing: sweep pitch, FFT, energy off the harmonic bins -------------
@@ -411,6 +506,14 @@ function measureAlias(ex, shapes, Gs) {
 }
 
 // ---- 10. Cycle: Free run / Single trigger, Reset is a partial-reset trigger ---
+// y = alpha x + beta (same cycle, DC kept and rescaled): worst residual of the least-squares fit.
+function affineErr(y, xs) {
+  const n = y.length; let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++) { sx += xs[i]; sy += y[i]; sxx += xs[i] * xs[i]; sxy += xs[i] * y[i]; }
+  const a = (n * sxy - sx * sy) / (n * sxx - sx * sx), b = (sy - a * sx) / n;
+  let w = 0; for (let i = 0; i < n; i++) w = Math.max(w, Math.abs(y[i] - (a * xs[i] + b)));
+  return w;
+}
 function gatesFor(hits) {
   const g = new Map();
   for (const [frame, height] of hits) { if (!g.has(frame - 1)) g.set(frame - 1, 0); g.set(frame, height); }
@@ -430,10 +533,10 @@ function renderGates(opts, hits, frames, port = PORT_MONO) {
   const single = renderGates({ ...opts, cycle: 1 }, [[200, 1], [700, 1], [740, 1]], frames);
   const free = renderGates({ ...opts, cycle: 0 }, [[200, 1]], frames);
   check(single.slice(0, 200).every((v) => v === 0), "Single trigger: silent before the first Reset hit");
-  check(maxDiff(single.slice(200, 300), free.slice(200, 300)) < 1e-12 && single.slice(200, 300).some((v) => Math.abs(v) > 0.5), "Single trigger: the hit plays exactly the free-run cycle from phase 0");
+  check(affineErr(single.slice(200, 300), free.slice(200, 300)) < 1e-6 && single.slice(200, 300).some((v) => Math.abs(v) > 0.5), "Single trigger: the hit plays the free-run cycle from phase 0 (plus its DC, rescaled)");
   check(single.slice(301, 700).every((v) => v === 0), "Single trigger: silent after one cycle until the next hit");
   const restart = renderGates({ ...opts, cycle: 0 }, [[740, 1]], frames);
-  check(maxDiff(single.slice(740, 840), restart.slice(740, 840)) < 1e-12 && single.slice(841, 1200).every((v) => v === 0), "Single trigger: a hit mid-cycle restarts the cycle");
+  check(affineErr(single.slice(740, 840), restart.slice(740, 840)) < 1e-6 && single.slice(841, 1200).every((v) => v === 0), "Single trigger: a hit mid-cycle restarts the cycle");
   check(free.slice(0, 200).some((v) => Math.abs(v) > 0.5) && free.slice(300, 1200).some((v) => Math.abs(v) > 0.5), "Free run: plays before and after hits");
   const ph = renderGates({ ...opts, cycle: 0 }, [[40, 0.5]], 100, PORT_SAW);
   check(Math.abs(ph[40] - 0.2) < 1e-9 && Math.abs(ph[39] - 0.39) < 1e-9, `Reset height 0.5 at phase 0.4 lands on 0.2 (got ${ph[40].toFixed(6)})`);

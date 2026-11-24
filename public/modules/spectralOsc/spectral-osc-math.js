@@ -3,8 +3,9 @@
 // 8192-point FFT of its exact formula; Glass / Bell: partial lists split between
 // neighbouring harmonics), the band-limit taper exp(-a (n/(K+1))^p) (Gibbs 0:
 // p = 2, a positive single-humped kernel, no Gibbs ringing; Gibbs 1: brick wall)
-// and the Sine rolloff r^(n-1), r = 1 - Sine^3. The face draws
-// spectralOscBakeCycle: the exact cycle for the current Shape / A / B / Gibbs.
+// and the Sine rolloff r^(n-1), r = 1 - Sine^3. Single trigger keeps the shape's DC
+// (spectralOscDc; Free run is DC-free). The face draws spectralOscBakeCycle: the
+// exact cycle for the current Shape / A / B / Gibbs / Cycle mode.
 
 const SPECTRAL_OSC_SHAPES = Object.freeze(["Center Edge", "Pulse", "Trisaw", "Formant", "Comb", "Asym Sine", "Glass", "Bell"]);
 // Face labels of the two controls, per shape.
@@ -169,6 +170,7 @@ function spectralOscSpectrum(shape, A, B, asymFft = SPECTRAL_OSC_ASYM_FFT) {
     for (let j = 0; j < asymFft; j += 1) re[j] = spectralOscAsymValue(sharp, k, j / asymFft);
     spectralOscFft(re, im);
     const sc = 2 / asymFft;
+    sa[0] = re[0] / asymFft; // the formula's mean (kept in Single trigger)
     for (let n = 1; n <= SPECTRAL_OSC_MAX_K; n += 1) { sa[n] = sc * re[n]; sb[n] = -sc * im[n]; }
   } else if (s === 6) {
     const p = 1.2 + 0.8 * spectralOscClamp(A, 0, 1);
@@ -220,13 +222,31 @@ function spectralOscHarmonics(shape, A, B, K, gibbs = 0, spectrum = null) {
   return out;
 }
 
-/** One cycle (length points) of the table with top harmonic K, unscaled. */
-function spectralOscCycle(shape, A, B, K, length, gibbs = 0, spectrum = null) {
+/**
+ * Single-trigger DC of the table with top harmonic K. Center Edge / Pulse / Trisaw /
+ * Comb start at 0: the DC puts the band-limited (Sine 0) table's start exactly there
+ * (-> the true mean as K grows), weighted by r for Sine so Sine 1 stays a pure sine.
+ * Asym Sine: its formula's mean. Formant / Glass / Bell: none.
+ */
+function spectralOscDc(shape, A, B, K, gibbs = 0, spectrum = null) {
+  const s = spectralOscShapeIndex(shape);
+  const sp = spectrum || spectralOscSpectrum(s, A, B);
+  if (s === 5) return sp.a[0];
+  if (s === 3 || s >= 6) return 0;
+  let v = 0;
+  for (let n = 1; n <= Math.min(K, SPECTRAL_OSC_MAX_K); n += 1) v += sp.a[n] * spectralOscTaper(n, K, gibbs);
+  return -v * (spectralOscHasSine(s) ? spectralOscSineR(B) : 1);
+}
+
+/** One cycle (length points) of the table with top harmonic K, unscaled (keepDc: Single trigger). */
+function spectralOscCycle(shape, A, B, K, length, gibbs = 0, spectrum = null, keepDc = false) {
   const out = new Float64Array(length);
-  const hs = spectralOscHarmonics(shape, A, B, K, gibbs, spectrum).filter((h) => Math.abs(h.a) + Math.abs(h.b) > 1e-14);
+  const sp = spectrum || spectralOscSpectrum(shape, A, B);
+  const hs = spectralOscHarmonics(shape, A, B, K, gibbs, sp).filter((h) => Math.abs(h.a) + Math.abs(h.b) > 1e-14);
+  const dc = keepDc ? spectralOscDc(shape, A, B, K, gibbs, sp) : 0;
   for (let j = 0; j < length; j += 1) {
     const t = j / length;
-    let y = 0;
+    let y = dc;
     for (const h of hs) {
       const th = 2 * Math.PI * ((h.n * t) % 1);
       y += h.a * Math.cos(th) + h.b * Math.sin(th);
@@ -247,19 +267,20 @@ function spectralOscGain(shape, min, max) {
 let spectralOscBakeSpectrumKey = "";
 let spectralOscBakeSpectrum = null;
 
-/** The face cycle: floor(length / 3) harmonics at `length` points, gain applied. */
+/** The face cycle: floor(length / 3) harmonics at `length` points, gain applied; Single trigger (cycleMode 1) keeps the DC. */
 function spectralOscBakeCycle(params, length = 256) {
   const shape = spectralOscShapeIndex(params?.shape);
   const A = spectralOscClamp(params?.shapeA ?? 0.5, 0, 1);
   const B = spectralOscClamp(params?.shapeB ?? 0, 0, 1);
   const G = spectralOscClamp(params?.gibbs ?? 0, 0, 1);
+  const keepDc = Number(params?.cycleMode) >= 0.5;
   const key = `${shape}|${A}|${B}`;
   if (key !== spectralOscBakeSpectrumKey) {
     spectralOscBakeSpectrum = spectralOscSpectrum(shape, A, B);
     spectralOscBakeSpectrumKey = key;
   }
   const K = Math.max(8, Math.floor(length / 3));
-  const out = spectralOscCycle(shape, A, B, K, length, G, spectralOscBakeSpectrum);
+  const out = spectralOscCycle(shape, A, B, K, length, G, spectralOscBakeSpectrum, keepDc);
   let mn = 0;
   let mx = 0;
   for (let i = 0; i < out.length; i += 1) { if (out[i] < mn) mn = out[i]; if (out[i] > mx) mx = out[i]; }

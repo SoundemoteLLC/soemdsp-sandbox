@@ -21214,6 +21214,8 @@ const nodeGraphModuleDefinitions = (
         step: "any" },
       {
         // Same as PolyBLEP / Sinc Cycle: Single trigger plays one cycle per Reset hit.
+        // Single trigger also keeps the shape's DC (Free run is DC-free), so a hit starts
+        // and ends at the shape's own start (0 for Center Edge) instead of jumping.
         choices: ["Free run", "Single trigger"],
         defaultValue: "0",
         displayChoices: true,
