@@ -317,7 +317,7 @@
     const link = document.createElement("link");
     link.id = "pitchMutatorOverlayCss";
     link.rel = "stylesheet";
-    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-2";
+    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-3";
     document.head.append(link);
   }
 
@@ -453,15 +453,17 @@
         '<span>' + swatches + "</span>",
         '<button type="button" class="pm-btn" data-pm="close">Close</button>',
       "</div>",
+      '<div class="pm-tools">',
+        '<button type="button" class="pm-btn" data-pm="arm" aria-pressed="' + (node && node._mutatorArmed ? "true" : "false") + '">Arm</button>',
+        '<button type="button" class="pm-btn" data-pm="pin">Pin Keyframe</button>',
+        '<button type="button" class="pm-btn" data-pm="autopin" aria-pressed="' + (state && state.autoPin ? "true" : "false") + '">Auto-Pin</button>',
+        '<button type="button" class="pm-btn" data-pm="snap" aria-pressed="' + (state && state.snap ? "true" : "false") + '">Snap</button>',
+      "</div>",
       '<div class="pm-body">',
         '<div class="pm-lanes">',
-          '<button type="button" class="pm-btn" data-pm="arm" aria-pressed="' + (node && node._mutatorArmed ? "true" : "false") + '">Arm</button>',
-          '<button type="button" class="pm-btn" data-pm="pin">Pin Keyframe</button>',
-          '<button type="button" class="pm-btn" data-pm="autopin" aria-pressed="' + (state && state.autoPin ? "true" : "false") + '">Auto-Pin</button>',
-          '<button type="button" class="pm-btn" data-pm="snap" aria-pressed="' + (state && state.snap ? "true" : "false") + '">Snap</button>',
           lanes.join(""),
         "</div>",
-        '<div class="pm-plot-wrap"><svg data-pm="plot"></svg><div class="pm-kbd">' + kbd + "</div></div>",
+        '<div class="pm-plot-wrap"><svg data-pm="plot"></svg></div>',
         '<div class="pm-side">',
           "<div>Playhead " + escapeHtml(midiName(x)) + " (" + (Number.isFinite(x) ? x.toFixed(2) : "") + ")</div>",
           state && state.activeLane === "freq"
@@ -470,6 +472,7 @@
           "<div>Wire Freq Out into a FREQUENCY input. Arm, then turn one knob to bind.</div>",
         "</div>",
       "</div>",
+      '<div class="pm-kbd">' + kbd + "</div>",
     ].join("");
     drawPlot(el.querySelector("[data-pm=plot]"), node);
   }

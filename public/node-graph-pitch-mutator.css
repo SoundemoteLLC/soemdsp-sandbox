@@ -10,9 +10,11 @@
   z-index: 50000;
   display: flex;
   flex-direction: column;
-  height: 230px;
-  min-height: 160px;
-  max-height: 45vh;
+  height: min(300px, calc(100dvh - 8px));
+  min-height: 0;
+  max-height: calc(100dvh - 8px);
+  box-sizing: border-box;
+  overflow: hidden;
   background: #161616;
   color: #eee;
   border-top: 2px solid var(--pitch-mutator-color, #c45a7a);
@@ -84,13 +86,24 @@
   padding: 3px 6px;
 }
 
+.pm-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-bottom: 1px solid #333;
+}
+
 .pm-body {
   display: grid;
-  grid-template-columns: 220px 1fr 280px;
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) minmax(160px, 240px);
   gap: 8px;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 6px 8px 8px;
+  padding: 6px 8px;
+  overflow: hidden;
 }
 
 .pm-lanes,
@@ -99,6 +112,7 @@
   flex-direction: column;
   gap: 6px;
   min-height: 0;
+  overflow: auto;
 }
 
 .pm-chip,
@@ -130,12 +144,17 @@
 
 .pm-plot-wrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .pm-plot-wrap svg {
+  flex: 1 1 auto;
   width: 100%;
+  min-height: 0;
   height: 100%;
   display: block;
   background: #101010;
@@ -144,11 +163,17 @@
 
 .pm-kbd {
   display: flex;
-  height: 44px;
-  border-radius: 4px;
+  flex: 0 0 48px;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  border-radius: 0;
   overflow: hidden;
   border: 1px solid #333;
-  margin-top: 4px;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  margin: 0;
 }
 
 .pm-key {
