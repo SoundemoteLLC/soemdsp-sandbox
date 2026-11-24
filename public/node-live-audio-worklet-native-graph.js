@@ -8407,6 +8407,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("slopeEnd", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("slopeEnd", 32));
       push("skew", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("skew", 1));
       push("curve", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("curve", 0));
+      // Cycle: 0 Free run / 1 Single trigger (one fundamental cycle per Reset hit), timingMode slot (as PolyBLEP).
+      push("cycleMode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("cycleMode", 0));
       continue;
     }
     if (type === "additiveLinearFilter" || type === "additiveAnalogFilter") {
