@@ -263,11 +263,20 @@ function drawNodeGraphBlitDisplayInner(section) {
   const count = typeof nodeGraphMathCycleSampleCount === "function"
     ? nodeGraphMathCycleSampleCount(innerW, harmonics)
     : Math.max(64, Math.min(120000, Math.ceil(Math.max(innerW * 8, Math.min(harmonics, innerW) * 24))));
-  const samples = nodeGraphBlitMathCycle({
-    frequency: f,
-    amplitude,
-    waveform,
-  }, count);
+  // The closed-form cycle is the expensive part of a BLIT face (tens of ms at
+  // high harmonic counts). Wake from the viewport cull, resize and Play frames
+  // redraw with the same inputs, so keep the last cycle (pan-popin-1).
+  const cycleKey = `${waveform}|${f}|${amplitude}|${count}|${sr}`;
+  let samples = section._blitCycleKey === cycleKey ? section._blitCycleSamples : null;
+  if (!samples) {
+    samples = nodeGraphBlitMathCycle({
+      frequency: f,
+      amplitude,
+      waveform,
+    }, count);
+    section._blitCycleKey = cycleKey;
+    section._blitCycleSamples = samples;
+  }
 
   // Display Settings > Line blur (lineSmoothing, CSS px skirt) drives the drawer blur.
   const blur = typeof nodeGraphLineSmoothingPx === "function"

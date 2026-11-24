@@ -775,6 +775,16 @@ function nodeGraphControllerButtonModuleParameters() {
   ];
 }
 
+// Step Graph + Smooth Graph faces (node-graph-module-face.js): the Mode and
+// Lock Ends switches share the top row; every other param keeps a row of its
+// own, in definition order. `rows` = [[key, label], ...].
+function nodeGraphGraphModuleFace(rows) {
+  return [
+    { kind: "cells", params: [["mode", "Mode"], ["lockEndpointY", "Lock Ends"]], horizontal: true, h: 40 },
+    ...rows.map((cell) => ({ kind: "cells", params: [cell], horizontal: true, h: 30 })),
+  ];
+}
+
 const nodeGraphModuleDefinitions = (
   typeof finalizeNodeGraphModuleDefinitionsChrome === "function"
     ? finalizeNodeGraphModuleDefinitionsChrome
@@ -806,6 +816,10 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   smoothGraph: {
+    face: nodeGraphGraphModuleFace([
+      ["smoothingMode", "Curve"], ["tension", "Tension"], ["steps", "Steps"],
+      ["rate", "Rate"], ["phase", "Phase"], ["inputMin", "In Min"], ["inputMax", "In Max"],
+    ]),
     planRole: "processor",
     chrome: NodeGraphModuleChromeLayout.LayoutB,
     // Default face height (was hardcoded 4×moduleScopeHeightGu = 8). Min is 1gu app-wide.
@@ -871,6 +885,10 @@ const nodeGraphModuleDefinitions = (
   // endpoint) + per-node contour `c`. Global Skew % is remaining-room toward
   // +/-1 and ghosts the effective curve (legacy curveOffset).
   stepGraph: {
+    face: nodeGraphGraphModuleFace([
+      ["skewOffset", "Skew %"], ["steps", "Steps"],
+      ["rate", "Rate"], ["phase", "Phase"], ["inputMin", "In Min"], ["inputMax", "In Max"],
+    ]),
     planRole: "processor",
     chrome: NodeGraphModuleChromeLayout.LayoutA,
     displayHeightGu: 8,

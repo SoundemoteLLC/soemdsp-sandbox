@@ -164,18 +164,14 @@ assert(glSrc.includes("255 / 255, 236 / 255, 181 / 255"), "phase cursor is cream
 assert(glSrc.includes("playRgba") && glSrc.includes("if (playheadX !== null)"),
   "live playhead still draws in playheadColor");
 
-// --- Spinner arrows are hidden on the XY number fields, fields stay type=number. ---
+// --- The face has no DOM point fields (WebGL face policy); the point editor
+// lives on Display Settings and is checked by test_graph_point_editor.mjs. ---
 const css = fs.readFileSync(path.join(root, "public", "styles.css"), "utf8");
-assert(
-  css.includes('.node-module-graph-point-strip-input[type="number"]')
-  && css.includes("-webkit-inner-spin-button")
-  && css.includes("appearance: textfield"),
-  "point-strip number inputs hide spinner arrows",
-);
+assert(!css.includes(".node-module-graph-point-strip"), "no point-strip CSS left on the face");
+const rendering = fs.readFileSync(path.join(root, "public", "node-graph-module-rendering.js"), "utf8");
+assert(!rendering.includes("mountNodeGraphGraphPointStrip"), "graph faces mount no DOM point strip");
 const extras = fs.readFileSync(path.join(root, "public", "node-graph-graph-face-extras.js"), "utf8");
-assert(
-  extras.includes('input.type = "number"') && extras.includes('input.inputMode = "decimal"'),
-  "XY fields stay editable number inputs",
-);
+assert(extras.includes("function applyNodeGraphGraphPointField(") && !extras.includes('input.type = "number"'),
+  "point edits go through the shared field API, not face number inputs");
 
 console.log("test_step_smooth_graph_fixes: ok");

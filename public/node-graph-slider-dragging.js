@@ -489,8 +489,33 @@ function scheduleNodeSliderDragAutosave() {
   }, 400);
 }
 
+// Value sinks: a hidden range input that is not a module parameter (e.g. a
+// Step / Smooth Graph point field on Display Settings) still drags through
+// this engine with every modifier; the sink receives the values instead of
+// the patch parameter write. sink.set(value, options) applies live and may
+// return the value it actually kept (a limit of its own); sink.commit(value,
+// status) records; sink.edit(surface) opens its own type-in.
+const nodeSliderValueSinks = new WeakMap();
+
+function registerNodeSliderValueSink(slider, sink) {
+  if (slider && typeof slider === "object" && sink) {
+    nodeSliderValueSinks.set(slider, sink);
+  }
+}
+
+function nodeSliderValueSink(slider) {
+  return slider && typeof slider === "object" ? nodeSliderValueSinks.get(slider) || null : null;
+}
+
 function commitNodeSliderDragValue(slider, status = "parameter changed") {
   clearNodeSliderDragAutosaveTimer();
+  const valueSink = nodeSliderValueSink(slider);
+  if (valueSink) {
+    if (typeof valueSink.commit === "function") {
+      valueSink.commit(Number(slider.dataset.domainValue), status);
+    }
+    return;
+  }
   if (typeof pitchMutatorMaybeInterceptSlider === "function") {
     const domainRaw = Number(slider?.dataset?.domainValue);
     if (pitchMutatorMaybeInterceptSlider(slider, domainRaw, { commit: true, interaction: "commit" })) {
@@ -519,6 +544,28 @@ function nodeSliderCtrlClickDefaultValue(slider) {
 }
 
 function setNodeSliderValue(slider, value, options = {}) {
+  const valueSink = nodeSliderValueSink(slider);
+  if (valueSink) {
+    const domain = normalizeNodeSliderValue(slider, value);
+    slider.dataset.domainValue = String(domain);
+    slider.value = String(domain);
+    const applied = Number(typeof valueSink.set === "function" ? valueSink.set(domain, options) : domain);
+    if (Number.isFinite(applied) && applied !== domain) {
+      // The sink held its own limit: keep the value there and move each live
+      // drag's anchor so motion back off the limit responds at once.
+      const shift = nodeSliderTravelFromValue(slider, applied) - nodeSliderTravelFromValue(slider, domain);
+      slider.dataset.domainValue = String(applied);
+      slider.value = String(applied);
+      if (Number.isFinite(shift)) {
+        for (const drag of nodeGraphSliderDrags.values()) {
+          if (drag.slider === slider) {
+            drag.startTravel += shift;
+          }
+        }
+      }
+    }
+    return;
+  }
   if (window.soemdspPerformMode && window.soemdspPerform && typeof window.soemdspPerform._handleControllerWrite === "function") {
     const nodeId = window.soemdspPerform._nodeIdFromSlider
       ? window.soemdspPerform._nodeIdFromSlider(slider)
@@ -1141,7 +1188,10 @@ function nodeSliderKnobDragMetrics(surface) {
     if (!rect || !(rect.width > 1) || !(rect.height > 1)) {
       return null;
     }
-    return { rect, travelWidth: Math.max(8, axis === "vertical" ? rect.height : rect.width), visualScale: 1, axis };
+    // data-slider-drag-span: pixels for the full range (small fields stay usable).
+    const span = Number(surface.dataset.sliderDragSpan);
+    const travelWidth = span > 0 ? span : (axis === "vertical" ? rect.height : rect.width);
+    return { rect, travelWidth: Math.max(8, travelWidth), visualScale: 1, axis };
   }
   if (!surface?.classList?.contains("node-knob-face")) {
     return null;
@@ -1248,6 +1298,15 @@ function beginNodeSliderSurfaceEdit(surface) {
   if (typeof nodeGraphPatchIsLocked === "function" && nodeGraphPatchIsLocked()) {
     return;
   }
+  // A value-sink field opens its own type-in.
+  const sinkSlider = document.getElementById(surface.dataset?.sliderTarget || "");
+  const valueSink = nodeSliderValueSink(sinkSlider);
+  if (valueSink) {
+    if (typeof valueSink.edit === "function") {
+      valueSink.edit(surface);
+    }
+    return;
+  }
   // Knob: face-local type-in (canvas-safe). Never the Bias body row readout.
   if (surface.classList.contains("node-knob-face")) {
     if (typeof beginNodeGraphKnobFaceValueEdit === "function") {
@@ -1331,10 +1390,14 @@ function stepNodeSliderFromKeyboard(event) {
   }
 
   setNodeSliderValue(slider, quantizeNodeSliderDragValue(slider, nextValue));
-  syncNodeGraphPatchParameterFromSlider(slider, {
-    record: true,
-    status: "parameter changed",
-  });
+  if (nodeSliderValueSink(slider)) {
+    commitNodeSliderDragValue(slider);
+  } else {
+    syncNodeGraphPatchParameterFromSlider(slider, {
+      record: true,
+      status: "parameter changed",
+    });
+  }
   event.preventDefault();
   event.stopPropagation();
   return true;
@@ -1598,7 +1661,7 @@ function beginNodeSliderDrag(event) {
   }
   nodeGraphDragDotBegin(surface);
   // soemdspPerformDragBegin
-  if (window.soemdspPerformMode && window.soemdspPerform && slider) {
+  if (window.soemdspPerformMode && window.soemdspPerform && slider && !nodeSliderValueSink(slider)) {
     const nodeId = window.soemdspPerform._nodeIdFromSlider
       ? window.soemdspPerform._nodeIdFromSlider(slider)
       : String(slider?.dataset?.node || "").trim();
@@ -1716,7 +1779,7 @@ function dragNodeSlider(event) {
 function endNodeSliderDrag(event, explicitDrag = null) {
   const drag = explicitDrag || nodeSliderDragForEvent(event);
   // soemdspPerformEndHook
-  if (window.soemdspPerformMode && drag?.slider && window.soemdspPerform?._handleControllerWrite) {
+  if (window.soemdspPerformMode && drag?.slider && !nodeSliderValueSink(drag.slider) && window.soemdspPerform?._handleControllerWrite) {
     const nodeId = window.soemdspPerform._nodeIdFromSlider
       ? window.soemdspPerform._nodeIdFromSlider(drag.slider)
       : String(drag.slider?.dataset?.node || "").trim();

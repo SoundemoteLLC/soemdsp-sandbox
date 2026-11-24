@@ -13763,81 +13763,110 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   min-height: 0;
 }
 
-.node-module-graph-point-strip {
+/* Step / Smooth Graph point editor (Display Settings page). The face has no
+   point fields: it is the WebGL picture only. */
+.node-graph-point-editor {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.node-graph-point-editor-head {
   display: flex;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 0.5rem;
-  box-sizing: border-box;
-  width: 100%;
-  padding: 0.2rem 0.35rem 0.28rem;
-  border-top: 1px solid rgba(128, 224, 224, 0.16);
-  background: rgba(2, 8, 12, 0.92);
-  color: rgba(210, 236, 236, 0.88);
-  font-size: 0.68rem;
-  line-height: 1.1;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.85;
 }
 
-.node-module-graph-point-strip-field {
-  display: inline-flex;
+.node-graph-point-editor-which {
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  opacity: 0.8;
+}
+
+.node-graph-point-editor-empty {
+  display: none;
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+.node-graph-point-editor.is-empty .node-graph-point-editor-empty {
+  display: block;
+}
+
+.node-graph-point-editor-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.28rem;
-  min-width: 0;
-  flex: 1 1 0;
+  gap: 0.3rem 0.6rem;
 }
 
-.node-module-graph-point-strip-label {
-  flex: 0 0 auto;
-  opacity: 0.72;
-  letter-spacing: 0.02em;
+.node-graph-point-editor-label {
+  font-size: 0.72rem;
+  opacity: 0.75;
 }
 
-.node-module-graph-point-strip-input,
-.node-module-graph-point-strip-field select {
+.node-graph-point-editor-value,
+.node-graph-point-editor-select {
   box-sizing: border-box;
-  width: 100%;
   min-width: 0;
   min-height: 1.55rem;
-  height: 1.55rem;
   margin: 0;
-  padding: 0.12rem 0.22rem;
   border: 1px solid rgba(128, 224, 224, 0.22);
   border-radius: 3px;
   background: #040a0e;
   color: rgba(230, 248, 248, 0.95);
   font: inherit;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
 
-.node-module-graph-point-strip-field select {
-  appearance: auto;
-  flex: 1 1 auto;
+.node-graph-point-editor-value {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0.12rem 0.4rem;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
 }
 
-.node-module-graph-point-strip-input:focus,
-.node-module-graph-point-strip-field select:focus {
+.node-graph-point-editor-value:focus-visible,
+.node-graph-point-editor-select:focus-visible {
   outline: 1px solid rgba(255, 236, 181, 0.55);
   outline-offset: 0;
-  border-color: rgba(255, 236, 181, 0.45);
 }
 
-.node-module-graph-point-strip-input:read-only {
-  opacity: 0.55;
+.node-graph-point-editor-value.is-locked {
+  cursor: default;
+  opacity: 0.45;
+  pointer-events: none;
 }
 
-/* Hide number-field spinner arrows so X/Y (and Tension/Skew) can use the
-   full input width. The fields stay type=number and remain editable. */
-.node-module-graph-point-strip-input[type="number"] {
-  appearance: textfield;
-  -moz-appearance: textfield;
+.node-graph-point-editor-select {
+  padding: 0.12rem 0.3rem;
 }
 
-.node-module-graph-point-strip-input[type="number"]::-webkit-outer-spin-button,
-.node-module-graph-point-strip-input[type="number"]::-webkit-inner-spin-button {
-  appearance: none;
-  -webkit-appearance: none;
+.node-graph-point-editor-select:disabled {
+  opacity: 0.45;
+}
+
+.node-graph-point-editor-typein {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
   margin: 0;
+  padding: 0 0.4rem;
+  border: 0;
+  border-radius: 3px;
+  outline: 1px solid rgba(255, 236, 181, 0.55);
+  background: #071219;
+  color: inherit;
+  font: inherit;
 }
 
 /* EQ / filter-curve plots: keep square clip (never plate-squircle). */

@@ -754,7 +754,7 @@ function nodeGraphTaperFromContour(c) {
 /** Step Graph Skew % (contour offset, -1..+1) uses the contour taper. */
 function nodeSliderUsesContourTaper(slider) {
   const key = String(slider?.dataset?.param || "");
-  return key === "skewOffset" || key === "curveOffset";
+  return key === "skewOffset" || key === "curveOffset" || slider?.dataset?.contourTaper === "true";
 }
 
 /** Travel 0..1 -> domain on a contour-taper slider (reverse honored). */

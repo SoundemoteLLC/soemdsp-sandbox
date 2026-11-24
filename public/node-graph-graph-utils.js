@@ -1886,7 +1886,15 @@ function nodeGraphGraphEdgeHandleAtClient(target, clientX, clientY) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
     return null;
   }
-  const moduleEl = target.closest(".dsp-node");
+  // In GL mode the module plate below the plot has no DOM under the pointer
+  // (the press lands on the wire canvas), so find the graph module by rect.
+  const moduleEl = target.closest(".dsp-node")
+    || [...document.querySelectorAll(".dsp-node .node-module-graph-face .node-module-graph-display")]
+      .map((el) => el.closest(".dsp-node"))
+      .find((el) => {
+        const box = el?.getBoundingClientRect?.();
+        return box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+      });
   const display = moduleEl?.querySelector?.(".node-module-graph-face .node-module-graph-display");
   if (!display || target.closest("input, textarea, select, [contenteditable='true'], .node-header-title, .node-module-graph-point-strip")) {
     return null;

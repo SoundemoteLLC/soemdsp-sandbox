@@ -17,7 +17,7 @@ const utils = fs.readFileSync(path.join(ROOT, "public/node-graph-graph-utils.js"
 check(/function nodeGraphGraphEdgeHandleAtClient\(/.test(utils) && /addEventListener\("pointerdown", handleNodeGraphGraphEdgePointerDown, true\)/.test(utils),
   "graph utils route plot-edge presses to the point (document capture)");
 for (const html of ["public/index.html", "public/perform.html"]) {
-  check(/node-graph-graph-utils\.js\?v=[^"]*sg-edge-1"/.test(fs.readFileSync(path.join(ROOT, html), "utf8")), `${html} bumps graph utils`);
+  check(/node-graph-graph-utils\.js\?v=[^"]*sg-edge-1[^"]*"/.test(fs.readFileSync(path.join(ROOT, html), "utf8")), `${html} bumps graph utils`);
 }
 let fixtureSame = false;
 try { execSync("git diff --quiet HEAD -- scripts/fixtures/keyboard-face-gl-draw-ops.json", { cwd: ROOT }); fixtureSame = true; } catch { fixtureSame = false; }

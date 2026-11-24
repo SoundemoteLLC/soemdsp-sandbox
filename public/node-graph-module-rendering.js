@@ -944,7 +944,8 @@ function createNodeGraphModuleElement(type, node) {
       );
     }
   } else if (definition.layout === "graph") {
-    // Graph face + numeric point strip. LayoutB: ports beside the face.
+    // Graph face (WebGL picture; points are edited on Display Settings).
+    // LayoutB: ports beside the face.
     // LayoutA (Step Graph): ports above the face. A Layout B shell on a
     // Layout A article is tagged band "shell", which Layout A does not
     // reserve — applyNodeGraphModuleLayout then hides it, leaving a blank face.
@@ -966,9 +967,6 @@ function createNodeGraphModuleElement(type, node) {
         : null,
     });
     graphFace.append(graphSection);
-    if (typeof mountNodeGraphGraphPointStrip === "function") {
-      mountNodeGraphGraphPointStrip(graphFace, patchNode);
-    }
     if (chrome.portsBeside) {
       article.append(createNodeGraphLayoutBShell(node, type, graphFace, null, inputPorts, outputPorts));
     } else {

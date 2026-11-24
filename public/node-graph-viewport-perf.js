@@ -539,6 +539,11 @@ function applyNodeGraphViewportCssLight(options = {}) {
       minIntervalMs: gesturing ? 48 : 0,
     });
   }
+  // pan-popin-1: modules scrolling into view mid-gesture still wake (budgeted,
+  // nearest first) instead of staying blank until pointer-up / settle.
+  if (gesturing) {
+    scheduleNodeGraphViewportGesturePopIn();
+  }
 }
 
 function nodeGraphWirePlanCacheKey() {
@@ -599,6 +604,10 @@ function flushNodeGraphViewportHeavyChrome(options = {}) {
   // rebuild below skipped faces of modules that were still asleep (display:none
   // has no layout box) and nothing rebuilt them once they woke.
   nodeGraphViewportCullFlushNow();
+  if (typeof scheduleNodeGraphViewportGesturePopIn === "function") {
+    if (nodeGraphViewportPopIn.raf) { window.cancelAnimationFrame(nodeGraphViewportPopIn.raf); nodeGraphViewportPopIn.raf = 0; }
+    if (nodeGraphViewportPopIn.timer) { window.clearTimeout(nodeGraphViewportPopIn.timer); nodeGraphViewportPopIn.timer = 0; }
+  }
   // Republish modules that are on screen. Offscreen modules stay display:none
   // and keep the attaches they already have, so their cables still have ends.
   if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
@@ -612,6 +621,8 @@ function flushNodeGraphViewportHeavyChrome(options = {}) {
       skipSelection: false,
     });
   }
+  // pan-popin-2: plates popped in mid-gesture were patched in incrementally.
+  nodeGraphViewportPopInSettleFull();
   if (typeof scheduleNodeGraphModuleScopeDraw === "function") {
     scheduleNodeGraphModuleScopeDraw();
   }
@@ -1153,14 +1164,186 @@ function scheduleNodeGraphViewportWakeRebuild() {
   if (typeof nodeGraphGlGraphRebuildPlates !== "function") return;
   nodeGraphViewportWakeRebuildRaf = window.requestAnimationFrame(() => {
     nodeGraphViewportWakeRebuildRaf = 0;
-    // Mid-gesture the settle pass rebuilds everything once.
-    if (nodeGraphViewportGestureActive()) return;
+    // Mid-gesture: the pop-in pass rebuilds once for every module woken this
+    // frame (the settle pass still rebuilds everything once at the end).
+    if (nodeGraphViewportGestureActive()) {
+      nodeGraphViewportPopIn.rebuild = true;
+      scheduleNodeGraphViewportGesturePopIn();
+      return;
+    }
     if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
       nodeGraphModuleGeometryPublishVisible();
     }
     nodeGraphGlGraphRebuildPlates();
     if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
   });
+}
+
+// pan-popin-1 (Argi): a module that scrolls into view while a pan, touch
+// pan, pinch or wheel zoom is still held used to stay blank (culled
+// display:none, no GL face) until pointer-up or the wheel settle, because the
+// frozen-HTML gesture (ZP-4) skips the cull and the GL rebuild. Now one pass a
+// frame wakes the culled modules that are on screen, nearest the view centre
+// first, at most POPIN_MAX modules or POPIN_BUDGET_MS of wake work, then
+// rebuilds the GL plates once. pan-popin-2: only the woken modules' plates
+// (nodeGraphGlGraphRebuildPlates({ ids })); before that the rebuild was a whole-patch pass (about
+// 20-40 ms on a 60-module patch, headless), so passes are at least
+// POPIN_MIN_INTERVAL_MS apart: modules entering in a burst share one.
+// The cull margin wakes a module a little before it reaches the edge.
+// Nothing sleeps mid-gesture; the settle pass still culls.
+const NODE_GRAPH_VIEWPORT_POPIN_MAX = 24;
+const NODE_GRAPH_VIEWPORT_POPIN_BUDGET_MS = 8;
+const NODE_GRAPH_VIEWPORT_POPIN_MIN_INTERVAL_MS = 100;
+const nodeGraphViewportPopIn = {
+  raf: 0, timer: 0, rebuild: false, lastAt: 0, lastWoke: 0, lastMs: 0,
+  // pan-popin-2: plates added incrementally this gesture; the settle pass owes
+  // a full rebuild + present so heatmap lights catch up on them.
+  partial: false, partialGen: 0, lastMode: "",
+};
+
+/** Awake on-screen modules the GL plate list does not have yet (woken outside the pop-in pass). */
+function nodeGraphViewportPopInPlatelessIds() {
+  const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
+  if (!state || !Array.isArray(state.plates)) return null;
+  const have = new Set(state.plates.map((plate) => String(plate?.id || "")));
+  const out = [];
+  nodeGraphViewportCullForEachNode(null, ".dsp-node:not(.viewport-asleep):not(.removed)", (element) => {
+    if (element.hidden) return;
+    const id = String(element.dataset?.node || "");
+    if (id && !have.has(id)) out.push(id);
+  });
+  return out;
+}
+
+/** Settle: if this gesture only patched plates in, do the full rebuild + present it skipped. */
+function nodeGraphViewportPopInSettleFull() {
+  if (!nodeGraphViewportPopIn.partial) return;
+  nodeGraphViewportPopIn.partial = false;
+  const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
+  // drawNodeGraphWires (full) normally did it already: a full GL rebuild bumps gen.
+  if (state && (state.gen || 0) !== nodeGraphViewportPopIn.partialGen) return;
+  if (typeof nodeGraphGlGraphRebuildPlates !== "function") return;
+  if (typeof nodeGraphGlGraphInvalidateMesh === "function") nodeGraphGlGraphInvalidateMesh();
+  nodeGraphGlGraphRebuildPlates();
+  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+}
+
+function scheduleNodeGraphViewportGesturePopIn() {
+  if (nodeGraphViewportPopIn.raf || nodeGraphViewportPopIn.timer || typeof window === "undefined") return;
+  const wait = NODE_GRAPH_VIEWPORT_POPIN_MIN_INTERVAL_MS
+    - ((performance.now?.() || Date.now()) - nodeGraphViewportPopIn.lastAt);
+  const frame = () => {
+    nodeGraphViewportPopIn.raf = window.requestAnimationFrame(() => {
+      nodeGraphViewportPopIn.raf = 0;
+      nodeGraphViewportGesturePopIn();
+    });
+  };
+  if (wait > 0 && nodeGraphViewportPopIn.lastAt) {
+    nodeGraphViewportPopIn.timer = window.setTimeout(() => {
+      nodeGraphViewportPopIn.timer = 0;
+      frame();
+    }, wait);
+    return;
+  }
+  frame();
+}
+
+/** Culled modules inside the live view (+ cull margin), nearest the centre first. Cached sizes only. */
+function nodeGraphViewportPopInCandidates() {
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  if (!workspace) return [];
+  const zoom = Math.max(
+    0.0001,
+    typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphFiniteNumber(nodeGraphMvp?.zoom, 1)),
+  );
+  const origin = typeof nodeGraphRenderedOriginOffset === "function"
+    ? nodeGraphRenderedOriginOffset()
+    : { x: 0, y: 0 };
+  const box = typeof nodeGraphWorkspaceLayoutMetrics === "function"
+    ? nodeGraphWorkspaceLayoutMetrics(workspace)
+    : { width: workspace.clientWidth, height: workspace.clientHeight };
+  const boxW = nodeGraphFiniteNumber(box.width);
+  const boxH = nodeGraphFiniteNumber(box.height);
+  if (boxW < 32 || boxH < 32) return [];
+  const margin = 96;
+  const ox = nodeGraphFiniteNumber(origin.x);
+  const oy = nodeGraphFiniteNumber(origin.y);
+  const left = (0 - margin - ox) / zoom;
+  const top = (0 - margin - oy) / zoom;
+  const right = (boxW + margin - ox) / zoom;
+  const bottom = (boxH + margin - oy) / zoom;
+  const cx = (boxW / 2 - ox) / zoom;
+  const cy = (boxH / 2 - oy) / zoom;
+  const out = [];
+  nodeGraphViewportCullForEachNode(null, ".dsp-node.viewport-asleep:not(.removed)", (element) => {
+    if (element.hidden) return;
+    const width = nodeGraphFiniteNumber(element._viewportCullW, 220);
+    const height = nodeGraphFiniteNumber(element._viewportCullH, 140);
+    const x = Number.parseFloat(element.style.getPropertyValue("--node-x")) || 0;
+    const y = Number.parseFloat(element.style.getPropertyValue("--node-y")) || 0;
+    if (!(x < right && (x + width) > left && y < bottom && (y + height) > top)) return;
+    out.push({ element, d: Math.hypot(x + width / 2 - cx, y + height / 2 - cy) });
+  });
+  out.sort((a, b) => a.d - b.d);
+  return out;
+}
+
+function nodeGraphViewportGesturePopIn() {
+  if (!nodeGraphViewportGestureActive() || nodeGraphViewportCullBootOrLayoutUnsafe()) {
+    nodeGraphViewportPopIn.rebuild = false;
+    return;
+  }
+  const t0 = performance.now?.() || Date.now();
+  const candidates = nodeGraphViewportPopInCandidates();
+  const woke = [];
+  // Wake without each wake queueing its own rebuild; one rebuild below.
+  nodeGraphViewportCullFlushing = true;
+  try {
+    for (let i = 0; i < candidates.length; i += 1) {
+      if (woke.length >= NODE_GRAPH_VIEWPORT_POPIN_MAX) break;
+      if (woke.length && ((performance.now?.() || Date.now()) - t0) > NODE_GRAPH_VIEWPORT_POPIN_BUDGET_MS) break;
+      const element = candidates[i].element;
+      nodeGraphViewportCullApply(element, true);
+      if (element.classList.contains("viewport-asleep")) continue;
+      woke.push(element);
+      const id = String(element.dataset?.node || "");
+      if (id && typeof nodeGraphModuleGeometryPublishFromDom === "function") nodeGraphModuleGeometryPublishFromDom(id);
+    }
+  } finally {
+    nodeGraphViewportCullFlushing = false;
+  }
+  const wakeRebuild = nodeGraphViewportPopIn.rebuild;
+  nodeGraphViewportPopIn.rebuild = false;
+  if ((woke.length > 0 || wakeRebuild) && typeof nodeGraphGlGraphRebuildPlates === "function") {
+    nodeGraphViewportPopIn.lastAt = t0;
+    // pan-popin-2: rebuild only the woken modules' plates (MasterBot's
+    // incremental path patches the cached mesh without bumping gen, so the
+    // present below is a ~2.5 ms ReplayMesh, not a full redraw). Older
+    // gl-graph builds ignore the argument and rebuild everything.
+    let ids = woke.map((element) => String(element.dataset?.node || "")).filter(Boolean);
+    if (wakeRebuild) {
+      const plateless = nodeGraphViewportPopInPlatelessIds();
+      ids = plateless ? Array.from(new Set(ids.concat(plateless))) : null;
+    }
+    const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
+    const genBefore = state ? (state.gen || 0) : 0;
+    if (ids && ids.length && typeof nodeGraphGlGraphAddPlates === "function") {
+      nodeGraphGlGraphRebuildPlates({ ids });
+      nodeGraphViewportPopIn.lastMode = "ids";
+      if (!nodeGraphViewportPopIn.partial) {
+        nodeGraphViewportPopIn.partial = true;
+        nodeGraphViewportPopIn.partialGen = genBefore;
+      }
+    } else if (!ids || ids.length) {
+      nodeGraphGlGraphRebuildPlates();
+      nodeGraphViewportPopIn.lastMode = "full";
+    }
+    if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  }
+  nodeGraphViewportPopIn.lastWoke = woke.length;
+  nodeGraphViewportPopIn.lastMs = (performance.now?.() || Date.now()) - t0;
+  // More on screen than this frame's budget: the rest next frame.
+  if (candidates.length > woke.length && woke.length > 0) scheduleNodeGraphViewportGesturePopIn();
 }
 
 function scheduleNodeGraphViewportCullRefresh(options = {}) {

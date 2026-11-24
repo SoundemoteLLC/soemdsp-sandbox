@@ -1,10 +1,11 @@
-// Graph face extras: display-only look/view settings + bottom point strip.
+// Graph face extras: display-only look/view settings + the point field API
+// used by the Display Settings point editor (the face has no DOM fields).
 // Loads after node-graph-graph-utils.js. Code stays Graph->Code one-way.
 //
 // Curve Y is -1..+1 (see nodeGraphGraphValueMin/Max). Default Zoom shows that
 // full range so the visual bottom is -1 (min), mid is 0, and the top is +1.
-// Display settings are look/view only (zoom, thickness, colors) — the point
-// strip is a module control, not a display setting.
+// Display settings are look/view (zoom, thickness, colors); the point editor
+// on the same page edits the selected point (node-graph-graph-point-editor.js).
 const nodeGraphGraphFaceDisplaySettingsDefaults = Object.freeze({
   zoomMin: -1,
   zoomMax: 1,
@@ -424,23 +425,30 @@ renderNodeGraphGraphDisplay = function renderNodeGraphGraphDisplay(element, grap
   if (typeof nodeGraphGraphFaceGlPaintNow === "function") nodeGraphGraphFaceGlPaintNow(element);
 }
 
-function nodeGraphGraphPointStripFieldsForType(type) {
+// ---- Point fields (Display Settings point editor) ---------------------------
+// The face draws the graph only (WebGL); point values are edited on the
+// module's Display Settings page (node-graph-graph-point-editor.js). These
+// helpers are the one place that knows each graph's point fields, their
+// limits and how an edit is written, so the editor and any later caller agree.
+
+/** Point fields per graph type. Step Graph: per-point Skew + Shape. Smooth Graph: one curve Tension. */
+function nodeGraphGraphPointFieldsForType(type) {
   if (String(type || "").trim() === "smoothGraph") {
     return [
       { key: "x", label: "X" },
       { key: "y", label: "Y" },
-      { key: "tension", label: "Tension" },
+      { key: "tension", label: "Tension", scope: "curve" },
     ];
   }
   return [
     { key: "x", label: "X" },
     { key: "y", label: "Y" },
-    { key: "shape", label: "Shape", kind: "shape" },
     { key: "c", label: "Skew" },
+    { key: "shape", label: "Shape", kind: "shape" },
   ];
 }
 
-function nodeGraphGraphPointStripShapeChoices() {
+function nodeGraphGraphPointShapeChoices() {
   const keys = (typeof NODE_GRAPH_SEGMENT_SHAPES !== "undefined" && Array.isArray(NODE_GRAPH_SEGMENT_SHAPES))
     ? NODE_GRAPH_SEGMENT_SHAPES
     : ["rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
@@ -455,321 +463,217 @@ function nodeGraphGraphPointStripShapeChoices() {
   return keys.map((key) => ({ key, label: labels[key] || key }));
 }
 
-function buildNodeGraphGraphPointStrip(patchNode) {
-  const strip = document.createElement("div");
-  strip.className = "node-module-graph-point-strip";
-  strip.dataset.graphPointStrip = "true";
-  const type = String(patchNode?.type || "").trim();
-  for (const field of nodeGraphGraphPointStripFieldsForType(type)) {
-    const label = document.createElement("label");
-    label.className = "node-module-graph-point-strip-field";
-    const name = document.createElement("span");
-    name.className = "node-module-graph-point-strip-label";
-    name.textContent = field.label;
-    let input;
-    if (field.kind === "shape") {
-      input = document.createElement("select");
-      input.className = "node-module-graph-point-strip-input";
-      for (const choice of nodeGraphGraphPointStripShapeChoices()) {
-        const option = document.createElement("option");
-        option.value = choice.key;
-        option.textContent = choice.label;
-        input.append(option);
-      }
-    } else {
-      input = document.createElement("input");
-      input.type = "number";
-      input.step = "any";
-      input.inputMode = "decimal";
-      input.className = "node-module-graph-point-strip-input";
-      if (field.key === "x" || field.key === "tension") {
-        input.min = "0";
-        input.max = "1";
-      } else if (field.key === "c") {
-        input.min = "-1";
-        input.max = "1";
-      }
-    }
-    input.dataset.graphStripField = field.key;
-    input.setAttribute("aria-label", field.label);
-    if (field.key === "c" && typeof bindNodeGraphNativeSliderModifiers === "function") {
-      // Shared mouse vocabulary: Ctrl/Cmd+click resets to 0; drag (Shift /
-      // Ctrl fine) moves in the contour taper. The field shows stored c.
-      bindNodeGraphNativeSliderModifiers(input, 0, {
-        numberDrag: true,
-        toControl: nodeGraphTaperFromContour,
-        fromControl: nodeGraphContourFromTaper,
-      });
-    }
-    label.append(name, input);
-    strip.append(label);
-  }
-  return strip;
+/** Tension parameter definition (module definitions are the source of truth). */
+function nodeGraphGraphTensionDefinition(patchNode) {
+  const defs = typeof nodeGraphPatchNodeParameterDefinitions === "function"
+    ? nodeGraphPatchNodeParameterDefinitions(patchNode)
+    : (typeof nodeGraphModuleDefinitions !== "undefined" ? nodeGraphModuleDefinitions?.[patchNode?.type]?.parameters : null);
+  const def = Array.isArray(defs) ? defs.find((p) => p?.key === "tension") : null;
+  const min = Number(def?.min);
+  const max = Number(def?.max);
+  const fallback = Number(def?.defaultValue);
+  return {
+    min: Number.isFinite(min) ? min : 0,
+    max: Number.isFinite(max) && max > (Number.isFinite(min) ? min : 0) ? max : 1,
+    defaultValue: Number.isFinite(fallback) ? fallback : 1,
+  };
 }
 
-function mountNodeGraphGraphPointStrip(faceElement, patchNode) {
-  if (!faceElement) {
+function nodeGraphGraphPointZoomForNode(patchNode) {
+  return typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
+    ? nodeGraphGraphFaceDisplaySettingsForNode(patchNode)
+    : (typeof normalizeNodeGraphGraphFaceDisplaySettings === "function"
+      ? normalizeNodeGraphGraphFaceDisplaySettings()
+      : { zoomMin: -1, zoomMax: 1 });
+}
+
+/**
+ * Limits for one field of one point: { min, max, defaultValue, locked, taper }.
+ * X: 0..1 (neighbours keep the order on write; the two ends are fixed).
+ * Y: the visible zoom (same clamp as dragging the dot). Skew: -1..+1.
+ * Tension: the parameter's own min/max/default.
+ */
+function nodeGraphGraphPointFieldLimits(patchNode, graph, index, key) {
+  const nodes = graph?.nodes || [];
+  const last = nodes.length - 1;
+  if (key === "x") {
+    const lo = index > 0 ? Number(nodes[index - 1]?.x) : 0;
+    const hi = index < last ? Number(nodes[index + 1]?.x) : 1;
+    const mid = (Number.isFinite(lo) ? lo : 0) * 0.5 + (Number.isFinite(hi) ? hi : 1) * 0.5;
+    return { min: 0, max: 1, defaultValue: mid, locked: index <= 0 || index >= last };
+  }
+  if (key === "y") {
+    const zoom = nodeGraphGraphPointZoomForNode(patchNode);
+    const min = Number(zoom?.zoomMin);
+    const max = Number(zoom?.zoomMax);
+    const lo = Number.isFinite(min) ? min : -1;
+    const hi = Number.isFinite(max) && max > lo ? max : 1;
+    return { min: lo, max: hi, defaultValue: Math.max(lo, Math.min(hi, 0)), locked: false };
+  }
+  if (key === "c") {
+    return { min: -1, max: 1, defaultValue: 0, locked: false, taper: true };
+  }
+  if (key === "tension") {
+    const def = nodeGraphGraphTensionDefinition(patchNode);
+    return { min: def.min, max: def.max, defaultValue: def.defaultValue, locked: false };
+  }
+  return { min: 0, max: 1, defaultValue: 0, locked: true };
+}
+
+/** Current value of a point field ("shape" returns the shape key). */
+function nodeGraphGraphPointFieldValue(patchNode, graph, index, key) {
+  const node = graph?.nodes?.[index];
+  if (key === "tension") {
+    const t = Number(patchNode?.params?.tension);
+    return Number.isFinite(t) ? t : nodeGraphGraphTensionDefinition(patchNode).defaultValue;
+  }
+  if (key === "shape") {
+    return typeof normalizeNodeGraphGraphShape === "function"
+      ? normalizeNodeGraphGraphShape(node?.shape)
+      : String(node?.shape || "rational");
+  }
+  const n = Number(node?.[key]);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/**
+ * Write one field of point `index` on graph module `nodeId`. Same rules as a
+ * face drag: X stays between its neighbours (ends fixed), Y clamps to the
+ * visible zoom, Lock Ends keeps both ends level, Skew -1..+1, Tension to its
+ * parameter range. options.record === false applies live with no undo step
+ * (a drag's closing commit records one). Returns the value actually stored,
+ * or null when nothing was written.
+ */
+function applyNodeGraphGraphPointField(nodeId, index, field, value, options = {}) {
+  const sourceNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  if (!sourceNode || (typeof nodeGraphModuleIsGraphType === "function" && !nodeGraphModuleIsGraphType(sourceNode.type))) {
     return null;
   }
-  let strip = faceElement.querySelector(":scope > .node-module-graph-point-strip");
-  const wanted = nodeGraphGraphPointStripFieldsForType(patchNode?.type).map((field) => field.key).join(",");
-  if (strip && strip.dataset.graphStripFields !== wanted) {
-    strip.remove();
-    strip = null;
+  if (typeof nodeGraphPatchIsLocked === "function" && nodeGraphPatchIsLocked()) {
+    return null;
   }
-  if (!strip) {
-    strip = buildNodeGraphGraphPointStrip(patchNode);
-    strip.dataset.graphStripFields = wanted;
-    faceElement.append(strip);
-    bindNodeGraphGraphPointStrip(strip);
+  if (field !== "shape" && !Number.isFinite(Number(value))) {
+    return null;
   }
-  syncNodeGraphGraphPointStrip(faceElement, patchNode);
-  return strip;
-}
-
-function bindNodeGraphGraphPointStrip(strip) {
-  if (!strip || strip.dataset.bound === "true") {
-    return;
-  }
-  strip.dataset.bound = "true";
-  strip.addEventListener("keydown", (event) => {
-    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && event.target?.dataset?.graphStripField === "c") {
-      event.preventDefault();
-      nudgeNodeGraphGraphPointStripContour(event.target, event.key === "ArrowUp" ? 1 : -1, event);
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      commitNodeGraphGraphPointStripField(event.target);
-      event.target?.blur?.();
-    }
-  });
-  strip.addEventListener("change", (event) => {
-    commitNodeGraphGraphPointStripField(event.target);
-  });
-  // Shared field drags emit synthetic input events: apply live with no undo
-  // step; the drag's closing change records one. Typing commits on change.
-  strip.addEventListener("input", (event) => {
-    if (!event.isTrusted) {
-      commitNodeGraphGraphPointStripField(event.target, { record: false });
-    }
-  });
-  strip.addEventListener("pointerdown", (event) => {
-    event.stopPropagation();
-  });
-}
-
-// Skew (c) arrow nudges step in the shared contour taper (same as Skew %),
-// so equal presses stay usable near +-0.9..0.99. The field shows stored c.
-// Shift / Ctrl = fine (nodeGraphNumericDragMultiplier).
-function nudgeNodeGraphGraphPointStripContour(input, direction, event) {
-  const current = Number(input.value);
-  const scale = typeof nodeGraphNumericDragMultiplier === "function" ? nodeGraphNumericDragMultiplier(event) : 1;
-  const u = nodeGraphTaperFromContour(Number.isFinite(current) ? current : 0) + direction * 0.01 * scale;
-  input.value = String(Number(nodeGraphContourFromTaper(u).toFixed(6)));
-  commitNodeGraphGraphPointStripField(input);
-}
-
-function nodeGraphGraphPointStripOwnerFromStrip(strip) {
-  const display = strip?.closest?.(".node-module-graph-face")?.querySelector?.(".node-module-graph-display")
-    || strip?.previousElementSibling;
-  const nodeId = typeof nodeGraphGraphNodeIdFromDisplay === "function"
-    ? nodeGraphGraphNodeIdFromDisplay(display)
-    : String(display?.dataset?.graphNode || "").trim();
-  const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  return { display, nodeId, patchNode };
-}
-
-function syncNodeGraphGraphPointStrip(faceOrDisplay, patchNode = null, selectedIndex = null) {
-  const face = faceOrDisplay?.classList?.contains("node-module-graph-face")
-    ? faceOrDisplay
-    : faceOrDisplay?.closest?.(".node-module-graph-face");
-  const display = face?.querySelector?.(".node-module-graph-display")
-    || (faceOrDisplay?.classList?.contains("node-module-graph-display") ? faceOrDisplay : null);
-  const strip = face?.querySelector?.(".node-module-graph-point-strip");
-  if (!strip) {
-    return;
-  }
-  const nodeId = typeof nodeGraphGraphNodeIdFromDisplay === "function"
-    ? nodeGraphGraphNodeIdFromDisplay(display)
-    : String(display?.dataset?.graphNode || "").trim();
-  const owner = patchNode && String(patchNode.id || "") === nodeId
-    ? patchNode
-    : (typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : patchNode);
-  if (!owner || (typeof nodeGraphModuleIsGraphType === "function" && !nodeGraphModuleIsGraphType(owner.type))) {
-    return;
-  }
-  const graph = typeof nodeGraphGraphPaintDocumentForNode === "function"
-    ? nodeGraphGraphPaintDocumentForNode(owner)
-    : nodeGraphGraphForNode(owner);
-  const index = selectedIndex == null
-    ? nodeGraphGraphSelectedNodeIndex(nodeId, graph, 0)
-    : nodeGraphGraphNodeIndexFromValue(graph, selectedIndex);
-  const node = graph.nodes[index] || graph.nodes[0];
-  const values = {
-    x: node?.x,
-    y: node?.y,
-    c: node?.c,
-    tension: Number(owner?.params?.tension),
-  };
-  const shapeValue = (typeof normalizeNodeGraphGraphShape === "function"
-    ? normalizeNodeGraphGraphShape(node?.shape)
-    : String(node?.shape || "rational"));
-  for (const input of strip.querySelectorAll("[data-graph-strip-field]")) {
-    if (document.activeElement === input) {
-      continue;
-    }
-    const key = input.dataset.graphStripField;
-    if (key === "shape") {
-      input.value = shapeValue;
-      input.disabled = false;
-      continue;
-    }
-    const raw = values[key];
-    const n = Number(raw);
-    input.value = Number.isFinite(n) ? String(Number(n.toPrecision(8))) : "";
-    if (key === "y") {
-      const zoom = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
-        ? nodeGraphGraphFaceDisplaySettingsForNode(owner)
-        : (typeof normalizeNodeGraphGraphFaceDisplaySettings === "function"
-          ? normalizeNodeGraphGraphFaceDisplaySettings()
-          : { zoomMin: -1, zoomMax: 1 });
-      input.min = String(zoom.zoomMin);
-      input.max = String(zoom.zoomMax);
-    } else if (key === "c") {
-      input.min = "-1";
-      input.max = "1";
-    }
-    if (key === "x") {
-      const last = graph.nodes.length - 1;
-      input.readOnly = index <= 0 || index >= last;
-    } else {
-      input.readOnly = false;
-    }
-  }
-  strip.dataset.selectedIndex = String(index);
-}
-
-function commitNodeGraphGraphPointStripField(input, options = {}) {
-  if (!input || !input.dataset?.graphStripField) {
-    return;
-  }
-  const strip = input.closest(".node-module-graph-point-strip");
-  const { display, nodeId, patchNode: sourceNode } = nodeGraphGraphPointStripOwnerFromStrip(strip);
-  if (!sourceNode || (typeof nodeGraphModuleIsGraphType === "function" && !nodeGraphModuleIsGraphType(sourceNode.type))) {
-    return;
-  }
-  const field = input.dataset.graphStripField;
-  const raw = String(input.value ?? "").trim();
-  if (field !== "shape" && (raw === "" || raw === "-" || raw === "." || raw === "-." || /e$/i.test(raw) || /-$/.test(raw))) {
-    return;
-  }
-  const value = field === "shape" ? raw : Number(raw);
-  if (field !== "shape" && !Number.isFinite(value)) {
-    syncNodeGraphGraphPointStrip(display, sourceNode);
-    return;
-  }
-
   const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
   const targetNode = patch.nodes.find((node) => node.id === nodeId);
-  if (!targetNode || (typeof nodeGraphModuleIsGraphType === "function" && !nodeGraphModuleIsGraphType(targetNode.type))) {
-    return;
+  if (!targetNode) {
+    return null;
   }
-  const graph = nodeGraphGraphForNode(targetNode);
-  const index = nodeGraphGraphSelectedNodeIndex(nodeId, graph, Number(strip?.dataset?.selectedIndex) || 0);
+  const liveOnly = options.record === false ? { record: false, autosaveWorkingPatch: false } : {};
+  const commitOptions = (status) => (typeof nodeGraphGraphDocumentCommitOptions === "function"
+    ? nodeGraphGraphDocumentCommitOptions(status, liveOnly)
+    : { skipLivePlan: true, softDom: true, status, ...liveOnly });
 
   if (field === "tension") {
     if (String(targetNode.type) !== "smoothGraph") {
-      return;
+      return null;
     }
-    targetNode.params = {
-      ...(targetNode.params || {}),
-      tension: normalizeNodeGraphGraphNumber(value, Number(targetNode.params?.tension) ?? 1, 0, 1),
-    };
-    commitNodeGraphPatch(patch, typeof nodeGraphGraphDocumentCommitOptions === "function"
-      ? nodeGraphGraphDocumentCommitOptions("graph tension edited")
-      : { skipLivePlan: true, softDom: true, status: "graph tension edited" });
+    const def = nodeGraphGraphTensionDefinition(targetNode);
+    const tension = Math.max(def.min, Math.min(def.max, Number(value)));
+    targetNode.params = { ...(targetNode.params || {}), tension };
+    commitNodeGraphPatch(patch, commitOptions("graph tension edited"));
     if (typeof scheduleNodeGraphLiveGraphData === "function") {
       scheduleNodeGraphLiveGraphData(nodeId, targetNode.graph);
     }
-    if (typeof syncNodeGraphGraphDisplaysForNode === "function") {
-      syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
-    }
-    syncNodeGraphGraphPointStrip(display, targetNode, index);
     const slider = typeof nodeGraphNodeElement === "function"
       ? nodeGraphNodeElement(nodeId)?.querySelector?.('input[data-param="tension"]')
       : null;
     if (slider && document.activeElement !== slider) {
-      slider.value = String(targetNode.params.tension);
+      slider.value = String(tension);
+      slider.dataset.domainValue = String(tension);
       if (typeof syncNodeSliderReadout === "function") {
         syncNodeSliderReadout(slider);
       }
     }
-    return;
+    if (typeof syncNodeGraphGraphDisplaysForNode === "function") {
+      syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
+    }
+    return tension;
   }
 
+  const graph = nodeGraphGraphForNode(targetNode);
+  const at = nodeGraphGraphNodeIndexFromValue(graph, index);
   const nodes = graph.nodes.map((node) => ({ ...node }));
-  const current = nodes[index];
+  const current = nodes[at];
   if (!current) {
-    return;
+    return null;
   }
   if (field === "x") {
-    const constrained = nodeGraphGraphConstrainedNodePoint(graph, index, { x: value, y: current.y });
-    nodes[index] = normalizeNodeGraphGraphNode({ ...current, x: constrained.x }, index);
+    const constrained = nodeGraphGraphConstrainedNodePoint(graph, at, { x: Number(value), y: current.y });
+    nodes[at] = normalizeNodeGraphGraphNode({ ...current, x: constrained.x }, at);
   } else if (field === "y") {
-    const zoom = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
-      ? nodeGraphGraphFaceDisplaySettingsForNode(targetNode)
-      : nodeGraphGraphPaintZoom;
-    const nextY = nodeGraphGraphClampYToZoom(value, zoom, current.y);
-    const constrained = nodeGraphGraphConstrainedNodePoint(graph, index, { x: current.x, y: nextY });
-    nodes[index] = normalizeNodeGraphGraphNode({
+    const zoom = nodeGraphGraphPointZoomForNode(targetNode);
+    const nextY = nodeGraphGraphClampYToZoom(Number(value), zoom, current.y);
+    const constrained = nodeGraphGraphConstrainedNodePoint(graph, at, { x: current.x, y: nextY });
+    nodes[at] = normalizeNodeGraphGraphNode({
       ...current,
       y: nodeGraphGraphClampYToZoom(constrained.y, zoom, current.y),
-    }, index);
+    }, at);
   } else if (field === "c") {
     if (!nodeGraphGraphUsesPerNodeContour(targetNode.type)) {
-      return;
+      return null;
     }
-    nodes[index] = normalizeNodeGraphGraphNode({
+    nodes[at] = normalizeNodeGraphGraphNode({
       ...current,
-      c: nodeGraphGraphNormalizeContour(value, current.c),
-    }, index);
+      c: nodeGraphGraphNormalizeContour(Number(value), current.c),
+    }, at);
   } else if (field === "shape") {
     if (String(targetNode.type) !== "stepGraph") {
-      return;
+      return null;
     }
-    nodes[index] = normalizeNodeGraphGraphNode({
+    nodes[at] = normalizeNodeGraphGraphNode({
       ...current,
       shape: typeof normalizeNodeGraphGraphShape === "function"
         ? normalizeNodeGraphGraphShape(value)
         : value,
-    }, index);
+    }, at);
   } else {
-    return;
+    return null;
   }
 
   let nextGraph = normalizeNodeGraphGraph({ ...graph, nodes });
   if (typeof nodeGraphGraphEndpointYLockEnabledForNode === "function"
     && nodeGraphGraphEndpointYLockEnabledForNode(targetNode)) {
-    nextGraph = nodeGraphGraphWithLockedEndpointY(nextGraph, index);
+    nextGraph = nodeGraphGraphWithLockedEndpointY(nextGraph, at);
   }
   targetNode.graph = nextGraph;
   if (typeof syncNodeGraphGraphPhaseParameterFromCursor === "function") {
     syncNodeGraphGraphPhaseParameterFromCursor(targetNode);
   }
-  const liveOnly = options.record === false ? { record: false, autosaveWorkingPatch: false } : {};
-  commitNodeGraphPatch(patch, typeof nodeGraphGraphDocumentCommitOptions === "function"
-    ? nodeGraphGraphDocumentCommitOptions("graph point edited", liveOnly)
-    : { skipLivePlan: true, softDom: true, status: "graph point edited", ...liveOnly });
+  commitNodeGraphPatch(patch, commitOptions("graph point edited"));
   if (typeof scheduleNodeGraphLiveGraphData === "function") {
     scheduleNodeGraphLiveGraphData(nodeId, targetNode.graph);
   }
-  setNodeGraphGraphSelectedNodeIndex(nodeId, targetNode.graph, index);
+  setNodeGraphGraphSelectedNodeIndex(nodeId, targetNode.graph, at);
   if (typeof syncNodeGraphGraphDisplaysForNode === "function") {
     syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
   }
-  syncNodeGraphGraphPointStrip(display, targetNode, index);
   if (typeof syncNodeGraphGraphControls === "function") {
-    syncNodeGraphGraphControls(targetNode.graph, index, { nodeId, face: false });
+    syncNodeGraphGraphControls(targetNode.graph, at, { nodeId, face: false });
+  }
+  return nodeGraphGraphPointFieldValue(targetNode, targetNode.graph, at, field);
+}
+
+/**
+ * Every face repaint calls this (selection, drag frames, undo): the face has
+ * no point fields any more, so it forwards to the Display Settings point
+ * editor, which follows the selected point live.
+ */
+function syncNodeGraphGraphPointStrip(faceOrDisplay, patchNode = null, selectedIndex = null) {
+  if (typeof syncNodeGraphGraphPointEditor !== "function") {
+    return;
+  }
+  const display = faceOrDisplay?.classList?.contains("node-module-graph-display")
+    ? faceOrDisplay
+    : faceOrDisplay?.querySelector?.(".node-module-graph-display");
+  const nodeId = String(
+    patchNode?.id
+    || (typeof nodeGraphGraphNodeIdFromDisplay === "function" ? nodeGraphGraphNodeIdFromDisplay(display) : "")
+    || display?.dataset?.graphNode
+    || "",
+  ).trim();
+  if (nodeId) {
+    syncNodeGraphGraphPointEditor(nodeId, selectedIndex);
   }
 }

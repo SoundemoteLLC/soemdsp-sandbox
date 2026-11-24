@@ -35,6 +35,10 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
     && typeof syncNodeGraphStampPreview === "function") {
     syncNodeGraphStampPreview(host, node?.traceDisplaySettings || {});
   }
+  // Step / Smooth Graph: the selected point's editor sits above the look rows.
+  if (type === "graphFace" && typeof mountNodeGraphGraphPointEditor === "function") {
+    mountNodeGraphGraphPointEditor(host, node);
+  }
   if (type === "keypadFace") {
     if (typeof bindNodeGraphKeypadDisplaySettingsBody === "function") {
       bindNodeGraphKeypadDisplaySettingsBody(host);
