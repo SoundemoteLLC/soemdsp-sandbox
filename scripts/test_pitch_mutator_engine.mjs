@@ -30,7 +30,21 @@ function almost(a, b, eps = 1e-9) {
 assert(E, "engine loaded");
 assert(typeof curve01 === "function", "segment curves loaded");
 assert(E.LUT_SIZE === 128, "128-entry LUT");
-assert(E.KEYBOARD_SPAN.min === 24 && E.KEYBOARD_SPAN.max === 96, "default C1-C7 span");
+assert(E.KEYBOARD_SPAN.min === 0 && E.KEYBOARD_SPAN.max === 127, "keyboard span is full MIDI 0-127");
+assert(E.MIDI_RANGE.min === 0 && E.MIDI_RANGE.max === 127, "MIDI_RANGE 0-127");
+assert(E.DEFAULT_VIEW.start === 12 && E.DEFAULT_VIEW.visible === 97, "default view is C0-C8");
+assert(E.MIN_VISIBLE_KEYS === 12 && E.MAX_VISIBLE_KEYS === 128, "visible-key zoom limits");
+
+const defaultView = E.clampView({});
+assert(defaultView.start === 12 && defaultView.visible === 97, "clampView defaults to C0-C8");
+const allView = E.clampView({ start: 0, visible: 128 });
+assert(allView.start === 0 && allView.visible === 128, "clampView allows full 0-127");
+const clipped = E.clampView({ viewStart: 200, visibleKeys: 73 });
+assert(clipped.visible === 73 && clipped.start === 128 - 73, "clampView keeps the window in 0-127");
+const tooMany = E.clampView({ start: 0, visible: 999 });
+assert(tooMany.visible === 128 && tooMany.start === 0, "clampView caps visible at 128");
+const tooFew = E.clampView({ start: 60, visible: 2 });
+assert(tooFew.visible === 12, "clampView floors visible at 12");
 
 // A440 pitch law
 assert(almost(E.hzFromNote(69), 440), "A4 is 440 Hz");
@@ -104,6 +118,12 @@ keys = E.pinKey(keys, 36.2, "hz", 110, true);
 assert(keys.length === 1 && almost(keys[0].hz, 110), "pin updates existing");
 keys = E.pinKey(keys, 60, "hz", 261.63, true);
 assert(keys.length === 2 && keys[1].x === 60, "pin inserts second key");
+let ends = E.pinKey([], 0, "hz", E.hzFromNote(0), true);
+ends = E.pinKey(ends, 127, "hz", E.hzFromNote(127), true);
+assert(ends.length === 2 && ends[0].x === 0 && ends[1].x === 127, "pin at MIDI 0 and 127");
+const endBake = E.bakeFreqLane({ keys: ends });
+assert(almost(E.exp2(endBake.table[0]), E.hzFromNote(0), 1e-9), "lut holds MIDI 0");
+assert(almost(E.exp2(endBake.table[127]), E.hzFromNote(127), 1e-9), "lut holds MIDI 127");
 
 // Whole-lane offset shift, then clamp
 const shifted = E.shiftOffsets(
@@ -127,6 +147,9 @@ const state = E.normalizeMutatorState({
 });
 assert(state.freqLane.keys.length === 1, "normalize freq keys");
 assert(state.lanes[0].target.paramKey === "cutoff", "normalize target");
+assert(state.viewStart === 12 && state.visibleKeys === 97, "normalize default view");
+const viewed = E.normalizeMutatorState({ viewStart: 10, visibleKeys: 20 });
+assert(viewed.viewStart === 10 && viewed.visibleKeys === 20, "normalize keeps a valid view");
 assert(E.normalizeColor("#C45") === "#cc4455", "short color expands");
 assert(E.normalizeColor("nope") === E.DEFAULT_COLOR, "bad color falls back");
 

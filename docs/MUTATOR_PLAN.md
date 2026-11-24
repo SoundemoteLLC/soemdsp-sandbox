@@ -256,7 +256,7 @@ When this plan is accepted in code, mark `KEY_PATCHER_DESIGN.md` as superseded (
 
 One **named** Pitch Mutator module, **Freq Out**, **one knob lane**, the **horizontal overlay**, and the **Command Center Mutators toggle**.
 
-Done when: you can name the module (the tab follows), wire Freq Out into a FREQUENCY input, bind one knob, pin a low note and a high note on both the frequency lane and the knob lane, and hear the values morph in between. The overlay shows both lanes on one keyboard, with only the active lane bright. The patch reloads identically.
+Done when: you can name the module (the tab follows), wire Freq Out into a FREQUENCY input, bind one knob, pin a low note and a high note on both the frequency lane and the knob lane, and hear the values morph in between. The overlay shows both lanes on one keyboard, with only the active lane bright. The keyboard and lanes are one dense chromatic UI: graph above, equal-width note columns below, spanning MIDI 0–127, with a visible-key zoom (default C0–C8, so more of the range is on screen) and shared horizontal scroll/pan so every note can be pinned and played. The overlay is compact and DPR-sharp: slim keys, small crisp text, and hairline column marks. The patch reloads identically, including the saved view.
 
 ### Later (not the first slice)
 
@@ -264,7 +264,7 @@ Done when: you can name the module (the tab follows), wire Freq Out into a FREQU
 |-------|-------|-----------|
 | **Native path** | Offset-table hook on `Control`, Freq Out in the native graph, sample-path rule and contract check, discrete ZOH, cache keys in `index.html` / `perform.html` (`?v=` appended). | Native and live match within float tolerance in a smoke test (`scripts/test_mutator_*.mjs`), and CPU with 8 mutated params shows no measurable change. |
 | **Polyphony** | Freq In from Voice ƒ inside a Metamodule, template-shared lane tables across replicas, note-start smoother snap, B-058 verified. | A chord of C2+C6 plays two different cutoffs and two frequencies at once, with no sweep on voice reuse. |
-| **Editing depth** | Several knob lanes, per-segment shape and skew, key drag and delete, view zoom, rings and chips polished, the Mutator inspection view (colored/numbered boxes around controlled modules), copy/remap, audition from the overlay keyboard via Gate / Freq outs, more than one Mutator in a patch. | Full play-and-pin loop, including on a phone with no MIDI hardware. Ownership boxes are visible when several Mutators share the circuit. |
+| **Editing depth** | Several knob lanes, per-segment shape and skew, key drag and delete, rings and chips polished, the Mutator inspection view (colored/numbered boxes around controlled modules), copy/remap, audition from the overlay keyboard via Gate / Freq outs, more than one Mutator in a patch. (Visible-key zoom over MIDI 0–127, and the equal-width graph-plus-keyboard axis, are already in the first slice.) | Full play-and-pin loop, including on a phone with no MIDI hardware. Ownership boxes are visible when several Mutators share the circuit. |
 | **More axes** | Velocity and other axes, only after the Pitch Mutator workflow is solid. | Decided then. |
 
 ---
@@ -289,4 +289,6 @@ Related leftover from earlier drafts, also not adopted here: embedding a Sturmia
 These are not design blockers. The plan is signed off.
 
 - Does Voice Gate already carry velocity as height inside voices? (Its catalog text says 1/0.)
-- Default keyboard span in the overlay: C1–C7 (24–96) or the whole 0–127?
+- Keyboard span **decided as the full 0–127 MIDI range** with a **visible-key zoom** (default view **C0–C8**, showing more of the range; C1–C7 and 0–127 are presets). Horizontal scroll or pan reaches every note; the lanes share that axis, zoom, and scroll. The view is stored on the Mutator. (Argi, 2026-11-23.)
+- Graph and keyboard are **one chromatic UI**: graph above, keyboard strip directly below, **equal-width columns** for every MIDI note (black keys are dark in the same row, not a piano layout). Each note column lines up with that note’s x-position in the lane. Faint column lines mark the black-key notes on the graph. (Argi, 2026-11-23.)
+- The overlay is **dense and sharp** without WebGL: narrow equal key columns, a slim keyboard strip, compact labeled controls, small crisp text, and DPR-aware hairlines so more of the MIDI range fits in a smaller dock. (Argi, 2026-11-23.)

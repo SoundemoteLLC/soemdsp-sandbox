@@ -1,4 +1,4 @@
-/* Pitch Mutator first-slice overlay. No hover text. */
+/* Pitch Mutator first-slice overlay. No hover text. Dense, DPR-sharp. */
 
 #pitchMutatorOverlay {
   position: fixed;
@@ -10,7 +10,7 @@
   z-index: 50000;
   display: flex;
   flex-direction: column;
-  height: min(300px, calc(100dvh - 8px));
+  height: min(260px, calc(100dvh - 8px));
   min-height: 0;
   max-height: calc(100dvh - 8px);
   box-sizing: border-box;
@@ -18,8 +18,12 @@
   background: #161616;
   color: #eee;
   border-top: 2px solid var(--pitch-mutator-color, #c45a7a);
-  font: 12px/1.3 ui-sans-serif, system-ui, sans-serif;
+  font: 10px/1.25 ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
   user-select: none;
+  --pm-visible: 97;
+  --pm-key-count: 128;
 }
 
 #pitchMutatorOverlay[hidden] {
@@ -29,8 +33,8 @@
 .pm-overlay-chrome {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
+  gap: 6px;
+  padding: 2px 6px;
   flex: 0 0 auto;
   border-bottom: 1px solid #333;
 }
@@ -42,7 +46,7 @@
 
 .pm-tabs {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   flex: 1 1 auto;
   overflow-x: auto;
 }
@@ -53,9 +57,10 @@
   border: 1px solid #555;
   background: #222;
   color: inherit;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
   cursor: pointer;
+  font: inherit;
 }
 
 .pm-tab.active,
@@ -67,42 +72,68 @@
 }
 
 .pm-swatch {
-  width: 18px;
-  height: 18px;
+  width: 12px;
+  height: 12px;
   padding: 0;
   border-radius: 50%;
 }
 
 .pm-swatch.active {
-  outline: 2px solid #fff;
+  outline: 1px solid #fff;
   outline-offset: 1px;
 }
 
 .pm-name {
-  width: 140px;
+  width: 110px;
   background: #111;
   color: inherit;
   border: 1px solid #555;
-  padding: 3px 6px;
+  padding: 1px 4px;
+  font: inherit;
 }
 
 .pm-tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 0 0 auto;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border-bottom: 1px solid #333;
+}
+
+.pm-view {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.pm-view input[type="range"] {
+  width: 88px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  vertical-align: middle;
+}
+
+.pm-view-readout,
+.pm-view [data-pm="visible-count"] {
+  font-variant-numeric: tabular-nums;
+  color: #ccc;
+  white-space: nowrap;
 }
 
 .pm-body {
   display: grid;
-  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) minmax(160px, 240px);
-  gap: 8px;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) minmax(130px, 200px);
+  gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 6px 8px;
+  padding: 4px 6px;
   overflow: hidden;
 }
 
@@ -110,7 +141,7 @@
 .pm-side {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
   min-height: 0;
   overflow: auto;
 }
@@ -119,14 +150,15 @@
 .pm-lane-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   border: 1px solid #444;
   background: #1c1c1c;
   color: inherit;
-  padding: 6px 8px;
-  border-radius: 6px;
+  padding: 3px 5px;
+  border-radius: 3px;
   text-align: left;
   cursor: pointer;
+  font: inherit;
 }
 
 .pm-lane-btn.active {
@@ -135,20 +167,45 @@
 }
 
 .pm-chip-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--pitch-mutator-color, #c45a7a);
   flex: 0 0 auto;
+}
+
+/* Unified graph + keyboard: one scrolled chromatic axis. */
+.pm-axis-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  display: flex;
+  flex-direction: column;
+}
+
+.pm-axis-inner {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  width: calc(100% * var(--pm-key-count, 128) / var(--pm-visible, 97));
+  min-width: 100%;
 }
 
 .pm-plot-wrap {
   position: relative;
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  touch-action: none;
 }
 
 .pm-plot-wrap svg {
@@ -158,15 +215,15 @@
   height: 100%;
   display: block;
   background: #101010;
-  border-radius: 6px;
+  overflow: visible;
 }
 
 .pm-kbd {
   display: flex;
-  flex: 0 0 48px;
-  height: 48px;
-  min-height: 48px;
-  max-height: 48px;
+  flex: 0 0 22px;
+  height: 22px;
+  min-height: 22px;
+  max-height: 22px;
   border-radius: 0;
   overflow: hidden;
   border: 1px solid #333;
@@ -178,18 +235,22 @@
 
 .pm-key {
   flex: 1 1 0;
+  min-width: 0;
   border: 0;
   border-right: 1px solid #333;
   padding: 0;
   cursor: pointer;
   background: #f3f0ea;
   color: #111;
+  font: 8px/1 ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 
 .pm-key.black {
   background: #1a1a1a;
-  color: #eee;
-  flex: 0.65 1 0;
+  color: #ddd;
+  flex: 1 1 0;
 }
 
 .pm-key.audition {
@@ -200,12 +261,14 @@
 .pm-side label {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .pm-side input[type="number"],
 .pm-side input[type="range"] {
   width: 100%;
+  font: inherit;
+  box-sizing: border-box;
 }
 
 .node-unified-window-nav-button[data-unified-action="mutators"].active {

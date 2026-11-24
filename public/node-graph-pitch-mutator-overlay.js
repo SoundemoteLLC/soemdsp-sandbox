@@ -14,6 +14,10 @@
     ccInjected: false,
     navHooked: false,
     raf: 0,
+    pan: null,
+    pointers: new Map(),
+    suppressKeyClick: false,
+    viewSaveTimer: 0,
   };
 
   function engine() {
@@ -317,7 +321,7 @@
     const link = document.createElement("link");
     link.id = "pitchMutatorOverlayCss";
     link.rel = "stylesheet";
-    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-3";
+    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-4";
     document.head.append(link);
   }
 
@@ -332,6 +336,12 @@
     el.addEventListener("click", onOverlayClick);
     el.addEventListener("input", onOverlayInput);
     el.addEventListener("change", onOverlayInput);
+    el.addEventListener("scroll", onAxisScroll, true);
+    el.addEventListener("wheel", onAxisWheel, { passive: false });
+    el.addEventListener("pointerdown", onAxisPointerDown);
+    el.addEventListener("pointermove", onAxisPointerMove);
+    el.addEventListener("pointerup", onAxisPointerUp);
+    el.addEventListener("pointercancel", onAxisPointerUp);
     return el;
   }
 
@@ -349,54 +359,247 @@
     return pc === 1 || pc === 3 || pc === 6 || pc === 8 || pc === 10;
   }
 
+
+  function midiRange() {
+    const E = engine();
+    return (E && E.MIDI_RANGE) || { min: 0, max: 127 };
+  }
+
+  function noteCount() {
+    const r = midiRange();
+    return r.max - r.min + 1;
+  }
+
+  function viewOf(state) {
+    const E = engine();
+    if (E) return E.clampView(state || {});
+    return { start: 12, visible: 97 };
+  }
+
+  function viewReadout(view) {
+    return midiName(view.start) + "–" + midiName(view.start + view.visible - 1);
+  }
+
+  function persistViewSoon() {
+    if (ui.viewSaveTimer) root.clearTimeout(ui.viewSaveTimer);
+    ui.viewSaveTimer = root.setTimeout(() => {
+      ui.viewSaveTimer = 0;
+      recordChange("Mutator view");
+    }, 300);
+  }
+
+  function applyAxisView(view) {
+    const el = document.getElementById("pitchMutatorOverlay");
+    if (!el || !view) return;
+    el.style.setProperty("--pm-visible", String(view.visible));
+    el.style.setProperty("--pm-key-count", String(noteCount()));
+    const scroller = el.querySelector("[data-pm=axis]");
+    if (scroller && scroller.clientWidth > 0) {
+      const sl = view.start * (scroller.clientWidth / view.visible);
+      if (Math.abs(scroller.scrollLeft - sl) > 0.5) scroller.scrollLeft = sl;
+    }
+    const readout = el.querySelector("[data-pm=view-readout]");
+    if (readout) readout.textContent = viewReadout(view);
+    const count = el.querySelector("[data-pm=visible-count]");
+    if (count) count.textContent = String(view.visible);
+    const slider = el.querySelector('[data-pm="visible"]');
+    if (slider && Number(slider.value) !== view.visible) slider.value = String(view.visible);
+  }
+
+  function setAxisView(node, next, persist) {
+    const state = ensureState(node);
+    const E = engine();
+    if (!state || !E) return null;
+    const view = E.clampView(next);
+    state.viewStart = view.start;
+    state.visibleKeys = view.visible;
+    applyAxisView(view);
+    const plot = document.querySelector("#pitchMutatorOverlay [data-pm=plot]");
+    if (plot) drawPlot(plot, node);
+    if (persist) persistViewSoon();
+    return view;
+  }
+
+  function onAxisScroll(event) {
+    const scroller = event.target;
+    if (!scroller || scroller.getAttribute("data-pm") !== "axis") return;
+    const node = selectedNode();
+    const state = node && ensureState(node);
+    const E = engine();
+    if (!state || !E || !(scroller.clientWidth > 0)) return;
+    const start = Math.round(scroller.scrollLeft / (scroller.clientWidth / state.visibleKeys));
+    const view = E.clampView({ start: start, visible: state.visibleKeys });
+    if (view.start !== state.viewStart) {
+      state.viewStart = view.start;
+      const readout = document.querySelector("#pitchMutatorOverlay [data-pm=view-readout]");
+      if (readout) readout.textContent = viewReadout(view);
+      persistViewSoon();
+    }
+  }
+
+  function onAxisWheel(event) {
+    const axis = event.target.closest("[data-pm=axis]");
+    if (!axis) return;
+    const node = selectedNode();
+    const state = node && ensureState(node);
+    if (!state) return;
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const rect = axis.getBoundingClientRect();
+      const noteAtCursor = state.viewStart + ((event.clientX - rect.left) / Math.max(1, rect.width)) * state.visibleKeys;
+      const nextVisible = Math.round(state.visibleKeys * (event.deltaY > 0 ? 1.12 : 0.88));
+      setAxisView(node, {
+        visible: nextVisible,
+        start: noteAtCursor - ((event.clientX - rect.left) / Math.max(1, rect.width)) * nextVisible,
+      }, true);
+      return;
+    }
+    if (event.deltaX || event.deltaY) {
+      event.preventDefault();
+      axis.scrollLeft += (event.deltaX || event.deltaY);
+    }
+  }
+
+  function onAxisPointerDown(event) {
+    const axis = event.target.closest("[data-pm=axis]");
+    if (!axis) return;
+    ui.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, axis: axis });
+    if (ui.pointers.size === 2) {
+      const pts = [...ui.pointers.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const node = selectedNode();
+      const state = node && ensureState(node);
+      ui.pan = {
+        kind: "pinch",
+        axis: axis,
+        dist0: dist || 1,
+        visible0: state ? state.visibleKeys : 97,
+        midNote: state ? state.viewStart + state.visibleKeys / 2 : 60,
+      };
+      ui.suppressKeyClick = true;
+      return;
+    }
+    if (event.target.closest("[data-pm=key]")) {
+      ui.pan = { kind: "maybe-key", pointerId: event.pointerId, x: event.clientX, scroll0: axis.scrollLeft, axis: axis };
+      return;
+    }
+    if (!event.target.closest(".pm-plot-wrap") && !event.target.closest(".pm-kbd")) return;
+    event.preventDefault();
+    try { axis.setPointerCapture(event.pointerId); } catch (err) {}
+    ui.pan = { kind: "pan", pointerId: event.pointerId, x: event.clientX, scroll0: axis.scrollLeft, axis: axis };
+  }
+
+  function onAxisPointerMove(event) {
+    if (ui.pointers.has(event.pointerId)) {
+      ui.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, axis: event.target.closest("[data-pm=axis]") });
+    }
+    if (ui.pan && ui.pan.kind === "pinch" && ui.pointers.size >= 2) {
+      const pts = [...ui.pointers.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const node = selectedNode();
+      if (!node || !(ui.pan.dist0 > 0)) return;
+      const nextVisible = Math.round(ui.pan.visible0 * (ui.pan.dist0 / Math.max(dist, 1)));
+      setAxisView(node, { visible: nextVisible, start: ui.pan.midNote - nextVisible / 2 }, false);
+      return;
+    }
+    if (!ui.pan || ui.pan.pointerId !== event.pointerId) return;
+    const dx = event.clientX - ui.pan.x;
+    if (ui.pan.kind === "maybe-key") {
+      if (Math.abs(dx) < 8) return;
+      ui.pan.kind = "pan";
+      ui.suppressKeyClick = true;
+    }
+    if (ui.pan.kind === "pan") {
+      ui.pan.axis.scrollLeft = ui.pan.scroll0 - dx;
+    }
+  }
+
+  function onAxisPointerUp(event) {
+    ui.pointers.delete(event.pointerId);
+    if (ui.pan && ui.pan.kind === "pinch") {
+      if (ui.pointers.size < 2) {
+        persistViewSoon();
+        ui.pan = null;
+      }
+      return;
+    }
+    if (ui.pan && ui.pan.pointerId === event.pointerId) {
+      if (ui.pan.kind === "pan") persistViewSoon();
+      ui.pan = null;
+    }
+    if (ui.pointers.size === 0) {
+      root.setTimeout(() => { ui.suppressKeyClick = false; }, 0);
+    }
+  }
+
   function drawPlot(svg, node) {
     const E = engine();
+    if (!E || !svg) return;
     const state = node && ensureState(node);
-    if (!E || !state || !svg) return;
-    const span = E.KEYBOARD_SPAN;
-    const w = 1000;
-    const h = 220;
-    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    const range = midiRange();
+    const count = range.max - range.min + 1;
+    const wrap = svg.parentElement;
+    const cssW = Math.max(1, (wrap && wrap.clientWidth) || svg.clientWidth || 128);
+    const cssH = Math.max(1, (wrap && wrap.clientHeight) || svg.clientHeight || 80);
+    const dpr = Math.max(1, root.devicePixelRatio || 1);
+    const snap = (x) => Math.round(x * dpr) / dpr;
+    const hair = 1 / dpr;
+    svg.setAttribute("viewBox", "0 0 " + cssW + " " + cssH);
+    svg.setAttribute("width", String(cssW));
+    svg.setAttribute("height", String(cssH));
     svg.setAttribute("preserveAspectRatio", "none");
-    const xOf = (note) => ((note - span.min) / (span.max - span.min)) * w;
+    const colW = cssW / count;
+    const xCenter = (note) => (note - range.min + 0.5) * colW;
+    const xLeft = (note) => (note - range.min) * colW;
     const parts = [];
+    for (let n = range.min; n <= range.max; n++) {
+      if (!isBlack(n)) continue;
+      const x = snap(xLeft(n));
+      const w = Math.max(hair, snap(xLeft(n + 1)) - x);
+      parts.push('<rect x="' + x + '" y="0" width="' + w + '" height="' + cssH + '" fill="#ffffff" opacity="0.045" shape-rendering="crispEdges"/>');
+    }
+    for (let n = range.min; n <= range.max; n++) {
+      if (n % 12 !== 0) continue;
+      const x = snap(xLeft(n));
+      parts.push('<line x1="' + x + '" x2="' + x + '" y1="0" y2="' + cssH + '" stroke="#ffffff" stroke-width="' + hair + '" opacity="0.12" shape-rendering="crispEdges" vector-effect="non-scaling-stroke"/>');
+    }
     const drawLane = (xs, ys, color, faint) => {
       if (!xs.length) return;
       let d = "";
       for (let i = 0; i < xs.length; i++) {
         d += (i ? " L " : "M ") + xs[i].toFixed(2) + " " + ys[i].toFixed(2);
       }
-      parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + (faint ? 1.25 : 2.5) + '" opacity="' + (faint ? "0.35" : "1") + '" />');
+      parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + (faint ? 1 : 1.5) + '" opacity="' + (faint ? "0.35" : "1") + '" vector-effect="non-scaling-stroke"/>');
     };
-    const freqBake = E.bakeFreqLane(state.freqLane);
+    const freqBake = state ? E.bakeFreqLane(state.freqLane) : { valid: false };
     if (freqBake.valid) {
-      const minHz = E.hzFromNote(span.min);
-      const maxHz = E.hzFromNote(span.max);
+      const minHz = E.hzFromNote(range.min);
+      const maxHz = E.hzFromNote(range.max);
       const ys = [];
       const xs = [];
-      for (let n = span.min; n <= span.max; n++) {
+      for (let n = range.min; n <= range.max; n++) {
         const hz = E.lookupFreqHz(freqBake.table, n, true) || minHz;
         const t = (E.log2Hz(hz) - E.log2Hz(minHz)) / (E.log2Hz(maxHz) - E.log2Hz(minHz));
-        xs.push(xOf(n));
-        ys.push((1 - Math.min(1, Math.max(0, t))) * (h - 8) + 4);
+        xs.push(xCenter(n));
+        ys.push((1 - Math.min(1, Math.max(0, t))) * (cssH - 6) + 3);
       }
       drawLane(xs, ys, node.color, state.activeLane !== "freq");
     }
-    for (const lane of state.lanes) {
+    for (const lane of (state && state.lanes) || []) {
       const baked = E.bakeOffsetLane(lane);
       if (!baked.valid) continue;
       const xs = [];
       const ys = [];
-      for (let n = span.min; n <= span.max; n++) {
+      for (let n = range.min; n <= range.max; n++) {
         const off = E.lookupOffset(baked.table, n, true) || 0;
         const t = (off + 1) * 0.5;
-        xs.push(xOf(n));
-        ys.push((1 - Math.min(1, Math.max(0, t))) * (h - 8) + 4);
+        xs.push(xCenter(n));
+        ys.push((1 - Math.min(1, Math.max(0, t))) * (cssH - 6) + 3);
       }
       drawLane(xs, ys, node.color, state.activeLane !== lane.id);
     }
-    const px = xOf(soundingNote(node));
-    parts.push('<line x1="' + px.toFixed(2) + '" x2="' + px.toFixed(2) + '" y1="0" y2="' + h + '" stroke="#fff" stroke-width="1" opacity="0.55" />');
+    const px = snap(xCenter(soundingNote(node)));
+    parts.push('<line x1="' + px + '" x2="' + px + '" y1="0" y2="' + cssH + '" stroke="#fff" stroke-width="' + hair + '" opacity="0.7" shape-rendering="crispEdges" vector-effect="non-scaling-stroke"/>');
     svg.innerHTML = parts.join("");
   }
 
@@ -431,9 +634,10 @@
         );
       }
     }
-    const span = E ? E.KEYBOARD_SPAN : { min: 24, max: 96 };
+    const range = E ? (E.MIDI_RANGE || E.KEYBOARD_SPAN) : { min: 0, max: 127 };
+    const view = state ? viewOf(state) : viewOf(null);
     let kbd = "";
-    for (let n = span.min; n <= span.max; n++) {
+    for (let n = range.min; n <= range.max; n++) {
       const on = Math.round(ui.auditionNote) === n;
       kbd += '<button type="button" class="pm-key' + (isBlack(n) ? " black" : "") + (on ? " audition" : "") + '" data-pm="key" data-note="' + n + '">' +
         (n % 12 === 0 ? midiName(n) : "") + "</button>";
@@ -458,12 +662,24 @@
         '<button type="button" class="pm-btn" data-pm="pin">Pin Keyframe</button>',
         '<button type="button" class="pm-btn" data-pm="autopin" aria-pressed="' + (state && state.autoPin ? "true" : "false") + '">Auto-Pin</button>',
         '<button type="button" class="pm-btn" data-pm="snap" aria-pressed="' + (state && state.snap ? "true" : "false") + '">Snap</button>',
+        '<div class="pm-view">',
+          "<label>Keys <input type=\"range\" data-pm=\"visible\" min=\"12\" max=\"128\" step=\"1\" value=\"" + view.visible + "\"><span data-pm=\"visible-count\">" + view.visible + "</span></label>",
+          '<span class="pm-view-readout" data-pm="view-readout">' + escapeHtml(viewReadout(view)) + "</span>",
+          '<button type="button" class="pm-btn" data-pm="view-c0c8">C0–C8</button>',
+          '<button type="button" class="pm-btn" data-pm="view-c1c7">C1–C7</button>',
+          '<button type="button" class="pm-btn" data-pm="view-all">0–127</button>',
+        "</div>",
       "</div>",
       '<div class="pm-body">',
         '<div class="pm-lanes">',
           lanes.join(""),
         "</div>",
-        '<div class="pm-plot-wrap"><svg data-pm="plot"></svg></div>',
+        '<div class="pm-axis-scroll" data-pm="axis">',
+          '<div class="pm-axis-inner">',
+            '<div class="pm-plot-wrap"><svg data-pm="plot"></svg></div>',
+            '<div class="pm-kbd">' + kbd + "</div>",
+          "</div>",
+        "</div>",
         '<div class="pm-side">',
           "<div>Playhead " + escapeHtml(midiName(x)) + " (" + (Number.isFinite(x) ? x.toFixed(2) : "") + ")</div>",
           state && state.activeLane === "freq"
@@ -472,9 +688,16 @@
           "<div>Wire Freq Out into a FREQUENCY input. Arm, then turn one knob to bind.</div>",
         "</div>",
       "</div>",
-      '<div class="pm-kbd">' + kbd + "</div>",
     ].join("");
+    el.style.setProperty("--pm-visible", String(view.visible));
+    el.style.setProperty("--pm-key-count", String(range.max - range.min + 1));
     drawPlot(el.querySelector("[data-pm=plot]"), node);
+    applyAxisView(view);
+    root.requestAnimationFrame(() => {
+      applyAxisView(view);
+      const plot = el.querySelector("[data-pm=plot]");
+      if (plot) drawPlot(plot, node);
+    });
   }
 
   function escapeHtml(s) {
@@ -517,8 +740,12 @@
       return renderOverlay();
     }
     if (act === "key") {
+      if (ui.suppressKeyClick) return;
       setAuditionNote(Number(btn.getAttribute("data-note")));
     }
+    if (act === "view-c0c8" && node) setAxisView(node, { start: 12, visible: 97 }, true);
+    if (act === "view-c1c7" && node) setAxisView(node, { start: 24, visible: 73 }, true);
+    if (act === "view-all" && node) setAxisView(node, { start: 0, visible: 128 }, true);
   }
 
   function onOverlayInput(event) {
@@ -554,6 +781,14 @@
           renderOverlay();
         }
       }
+    }
+    if (act === "visible") {
+      const nextVisible = Number(el.value);
+      if (!Number.isFinite(nextVisible)) return;
+      const viewState = ensureState(node);
+      const center = viewState.viewStart + (viewState.visibleKeys - 1) / 2;
+      setAxisView(node, { visible: nextVisible, start: center - (nextVisible - 1) / 2 }, event.type === "change");
+      return;
     }
     if (act === "offset") {
       const next = Number(el.value);

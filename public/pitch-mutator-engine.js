@@ -8,7 +8,11 @@
   const A4_NOTE = 69;
   const DEFAULT_COLOR = '#c45a7a';
   const DEFAULT_NAME = 'Pitch Mutator';
-  const KEYBOARD_SPAN = Object.freeze({ min: 24, max: 96 }); // C1-C7
+  const MIDI_RANGE = Object.freeze({ min: 0, max: 127 });
+  const KEYBOARD_SPAN = MIDI_RANGE; // full MIDI range 0-127
+  const DEFAULT_VIEW = Object.freeze({ start: 12, visible: 97 }); // C0-C8, dense default
+  const MIN_VISIBLE_KEYS = 12;
+  const MAX_VISIBLE_KEYS = 128;
   const SNAP_TOLERANCE = 0.5;
   const MIN_HZ = 1e-6;
   const DEFAULT_SHAPE = 'rational';
@@ -122,17 +126,38 @@
     return DEFAULT_COLOR;
   }
 
+  function clampView(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const range = MIDI_RANGE.max - MIDI_RANGE.min + 1;
+    const visibleIn = src.visible != null ? src.visible : src.visibleKeys;
+    const startIn = src.start != null ? src.start : src.viewStart;
+    const visible = clamp(
+      Math.round(finite(visibleIn, DEFAULT_VIEW.visible)),
+      MIN_VISIBLE_KEYS,
+      Math.min(MAX_VISIBLE_KEYS, range),
+    );
+    const start = clamp(
+      Math.round(finite(startIn, DEFAULT_VIEW.start)),
+      MIDI_RANGE.min,
+      MIDI_RANGE.max - visible + 1,
+    );
+    return { start, visible };
+  }
+
   function normalizeMutatorState(raw) {
     const src = raw && typeof raw === 'object' ? raw : {};
     const lanes = Array.isArray(src.lanes)
       ? src.lanes.map((lane, i) => normalizeKnobLane(lane, i)).filter(Boolean)
       : [];
+    const view = clampView(src);
     return {
       freqLane: normalizeFreqLane(src.freqLane),
       lanes,
       autoPin: Boolean(src.autoPin),
       snap: src.snap !== false,
       activeLane: String(src.activeLane || 'freq'),
+      viewStart: view.start,
+      visibleKeys: view.visible,
     };
   }
 
@@ -323,13 +348,18 @@
     A4_NOTE,
     DEFAULT_COLOR,
     DEFAULT_NAME,
+    MIDI_RANGE,
     KEYBOARD_SPAN,
+    DEFAULT_VIEW,
+    MIN_VISIBLE_KEYS,
+    MAX_VISIBLE_KEYS,
     SNAP_TOLERANCE,
     hzFromNote,
     noteFromHz,
     log2Hz,
     exp2,
     normalizeColor,
+    clampView,
     normalizeMutatorState,
     normalizeFreqLane,
     normalizeKnobLane,
