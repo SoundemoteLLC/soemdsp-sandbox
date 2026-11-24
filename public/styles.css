@@ -3058,37 +3058,37 @@ html.soemdsp-hide-ui.body.node-patch-load-fault-open #nodePatchLoadFault {
   font: 800 0.82rem/1 "Cascadia Mono", Consolas, monospace;
 }
 
+/* Piano Keyboard face wrapper is a hit/layout box only. The circuit-builder
+   plate and keys are WebGL; this old gold-on-#080a0c CSS fill sat over them. */
 .node-keyboard-panel {
   display: grid;
-  gap: 6px;
+  gap: 0;
   width: 100%;
   min-width: 0;
-  padding: 8px;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(241, 184, 75, 0.08), transparent 48%),
-    #080a0c;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .node-keyboard-module {
-  /* Default (non-dock / non-module-face hosts): fixed piano track + signal rows. */
-  grid-template-rows: auto var(--keyboard-piano-height, 112px) auto auto;
+  /* Default: one filling row. Heading / signal / bitmask rows are gone from the piano face. */
+  grid-template-rows: minmax(0, 1fr);
   height: auto;
   min-height: 0;
   margin: 0;
   border-radius: 0;
 }
 
-/* Keyboard module face: compact controls on top, piano fills remaining vertical space.
-   Same grid when the face is reparented onto layout canvas / Meta shell. */
+/* Keyboard module face: the WebGL surface fills the face. No heading row. */
 .dsp-node.keyboard-layout > .node-keyboard-module.node-module-face,
 .node-layout-canvas-tile > .node-keyboard-module.node-module-face,
 .node-screen-solo-stage .node-keyboard-module.node-module-face,
 .node-metamodule-canvas-stage .node-keyboard-module.node-module-face {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(48px, 1fr);
   align-content: stretch;
   justify-items: stretch;
   align-self: stretch;
@@ -3097,12 +3097,12 @@ html.soemdsp-hide-ui.body.node-patch-load-fault-open #nodePatchLoadFault {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 2px 4px 4px;
-  gap: 2px;
+  padding: 0;
+  gap: 0;
   overflow: hidden;
   border: none;
   border-radius: 0;
-  background: none;
+  background: transparent;
   box-shadow: none;
 }
 
@@ -3118,7 +3118,7 @@ body.node-screen-solo-active .node-layout-canvas-tile > .node-screen-solo-face.n
 .node-layout-canvas-tile > .node-keyboard-module.node-module-face,
 .node-metamodule-canvas-stage .node-layout-canvas-tile > .node-keyboard-module {
   display: grid !important;
-  grid-template-rows: auto minmax(48px, 1fr) !important;
+  grid-template-rows: minmax(48px, 1fr) !important;
   position: absolute !important;
   inset: 0 !important;
   width: 100% !important;
@@ -3158,41 +3158,6 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-keyboard-surface,
   min-width: 0 !important;
   min-height: 0 !important;
   max-height: none !important;
-}
-
-.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-signal-bar,
-.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-bitmask-row,
-.node-layout-canvas-tile .node-keyboard-module .node-keyboard-signal-bar,
-.node-layout-canvas-tile .node-keyboard-module .node-keyboard-bitmask-row,
-.node-screen-solo-stage .node-keyboard-module .node-keyboard-signal-bar,
-.node-screen-solo-stage .node-keyboard-module .node-keyboard-bitmask-row,
-.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-signal-bar,
-.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-bitmask-row {
-  display: none !important;
-}
-
-.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-heading,
-.node-layout-canvas-tile .node-keyboard-module .node-keyboard-heading,
-.node-screen-solo-stage .node-keyboard-module .node-keyboard-heading,
-.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-heading {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  min-width: 0;
-  max-width: none;
-  padding: 2px 2px 0;
-  gap: 4px;
-  overflow: visible;
-}
-
-.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-heading > .node-keyboard-midi-controls,
-.node-layout-canvas-tile .node-keyboard-module .node-keyboard-heading > .node-keyboard-midi-controls,
-.node-screen-solo-stage .node-keyboard-module .node-keyboard-heading > .node-keyboard-midi-controls,
-.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-heading > .node-keyboard-midi-controls {
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  gap: 4px;
-  overflow: visible;
 }
 
 .dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-performance,
@@ -3370,10 +3335,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-keyboard-surface,
   white-space: nowrap;
 }
 
-.node-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading,
-.node-grid-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading,
-.dsp-node.keyboard-layout > .node-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading,
-.node-layout-canvas-tile .node-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading {
+.node-grid-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading {
   display: none !important;
 }
 
@@ -4072,52 +4034,9 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   --keyboard-readout-width: 8ch;
 }
 
-.node-keyboard-vm-debug {
-  grid-column: 1 / -1;
-  margin: 4px 8px 6px;
-  padding: 4px 6px;
-  max-height: 220px;
-  overflow: auto;
-  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: #c8d0dc;
-  background: rgba(8, 10, 14, 0.72);
-  border: 1px solid rgba(180, 190, 210, 0.18);
-  border-radius: 4px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-body.keyboard-debug-hidden .node-keyboard-vm-debug {
-  display: none;
-}
-
-/* Held-keys bitmask readout -- one square per bit (53, the largest
-   integer a double can represent exactly; see the bit-width note on
-   nodeGraphKeyboardBitmaskHasBit), black square = held. */
-.node-keyboard-bitmask-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
-  margin-top: 6px;
-  color: var(--muted);
-  font: 700 0.86rem/1 "Cascadia Mono", Consolas, monospace;
-}
-
-.node-keyboard-bitmask-row strong {
-  color: var(--text);
-  font-size: 1.3rem;
-  letter-spacing: 1px;
-  word-break: break-all;
-}
-
-/* Debug info hidden -- the keyboard's held-keys bitmask row
-   and the CPU/RAM/GPU constraint guide, whose vertical space this
-   reclaims. Toggled from the Visibility menu's "Hide Debug" button.
-   D (constraint-guide-visible) brings the chips back without Evidence. */
-body.keyboard-debug-hidden .node-keyboard-bitmask-row {
-  display: none;
-}
+/* Hide Debug: the CPU/RAM/GPU constraint guide. Toggled from the Visibility
+   menu Hide Debug button. D (constraint-guide-visible) brings the chips
+   back without Evidence. */
 body.keyboard-debug-hidden:not(.constraint-guide-visible) .node-constraint-color-guide {
   display: none;
 }
@@ -13095,6 +13014,10 @@ body.room-dimmer-on .node-room-dimmer-canvas,
   pointer-events: auto;
 }
 
+.node-graph-workspace.gl-graph-on .dsp-node .node-keyboard-panel,
+.node-graph-workspace.gl-graph-on .dsp-node .node-keyboard-module,
+.node-graph-workspace.gl-graph-on .dsp-node .node-keyboard-performance,
+.node-graph-workspace.gl-graph-on .dsp-node .node-keyboard-surface,
 .node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display,
 .node-graph-workspace.gl-graph-on .dsp-node .node-module-scope-window,
 .node-graph-workspace.gl-graph-on .dsp-node .node-module-scope-window-surface,

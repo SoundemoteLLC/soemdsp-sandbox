@@ -186,7 +186,9 @@ function applyNodeGraphKeyboardLayoutBody() {
     layoutKeyRects();
     const module = surface.closest(".node-keyboard-module");
     if (module) {
-      module.classList.toggle("show-keyboard-info", s.hideKeyboardInfo === false);
+      // Piano Keyboard no longer has a DOM info heading; keep the hide-info
+      // grid so the WebGL keys fill the face. Grid Keyboard still uses the flag.
+      module.classList.remove("show-keyboard-info");
       if (inModuleFace) {
         module.style.setProperty("--keyboard-piano-width", "100%");
         module.style.removeProperty("--keyboard-piano-height");
@@ -356,15 +358,47 @@ function buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml() {
       ? node.traceDisplaySettings
       : {}),
   });
+  const faceSettings = node?.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
+    ? node.traceDisplaySettings
+    : {};
+  const playModes = typeof nodeGraphKeyboardModes !== "undefined" && Array.isArray(nodeGraphKeyboardModes)
+    ? nodeGraphKeyboardModes
+    : ["slide", "press", "hold", "toggle", "chordMemory", "triggerPatch"];
+  const playMode = typeof nodeGraphKeyboardMode === "function"
+    ? nodeGraphKeyboardMode(faceSettings.mode)
+    : (playModes.includes(faceSettings.mode) ? faceSettings.mode : "slide");
+  const playVelMin = typeof nodeGraphKeyboardClampVel127 === "function"
+    ? nodeGraphKeyboardClampVel127(faceSettings.velMin, 127)
+    : 127;
+  const playVelMax = typeof nodeGraphKeyboardClampVel127 === "function"
+    ? nodeGraphKeyboardClampVel127(faceSettings.velMax, 127)
+    : 127;
+  const esc = nodeGraphKeyboardRangeEscapeAttr;
+  const modeOptions = playModes.map((value) => {
+    const label = typeof nodeGraphKeyboardModeLabel === "function"
+      ? nodeGraphKeyboardModeLabel(value)
+      : String(value);
+    return `<option value="${esc(value)}"${value === playMode ? " selected" : ""}>${esc(label)}</option>`;
+  }).join("");
   // Module size is Width/Height in Module Settings (and Shift+arrows).
-  // White width / keyboard height layout sliders removed — they no longer drive the face.
+  // White width / keyboard height layout sliders no longer drive the face.
+  // Mode / Min Vel / Max Vel used to sit on the face heading and covered the keys.
   return `${buildNodeGraphKeyboardRangeDisplaySettingsHtml(nodeId)}
     <div class="metadata-field-section" data-keyboard-layout-settings>
-      <div class="metadata-section-title">Keys</div>
-      <label class="metadata-checkbox-label">
-        <input type="checkbox" data-midi-key-layout="hideKeyboardInfo"${s.hideKeyboardInfo ? " checked" : ""} aria-label="Hide keyboard info">
-        <span>Hide keyboard info</span>
+      <div class="metadata-section-title">Play</div>
+      <label class="node-trace-display-line-burn-row">
+        <span>Mode</span>
+        <select data-midi-key-layout="mode" aria-label="Keyboard mode">${modeOptions}</select>
       </label>
+      <label class="node-trace-display-line-burn-row">
+        <span>Min Vel</span>
+        <input type="number" min="0" max="127" step="1" data-midi-key-layout="velMin" value="${playVelMin}" aria-label="Minimum velocity 0 to 127">
+      </label>
+      <label class="node-trace-display-line-burn-row">
+        <span>Max Vel</span>
+        <input type="number" min="0" max="127" step="1" data-midi-key-layout="velMax" value="${playVelMax}" aria-label="Maximum velocity 0 to 127">
+      </label>
+      <div class="metadata-section-title">Keys</div>
       <label class="node-trace-display-line-burn-row">
         <span>Black width</span>
         <input type="range" min="4" max="28" step="1" data-midi-key-layout="blackKeyWidth" value="${s.blackKeyWidth}" aria-label="Black key width">
@@ -456,14 +490,57 @@ function bindNodeGraphKeyboardFaceDisplaySettingsBody(host) {
     }
     syncNodeGraphKeyboardRangeDisplaySettings(host);
   });
+  const applyPlaySideEffects = (input) => {
+    const key = input?.getAttribute?.("data-midi-key-layout");
+    if (key !== "mode") {
+      return;
+    }
+    const nodeId = String(
+      host.closest?.("[data-display-settings-target-node]")?.dataset?.displaySettingsTargetNode
+      || (typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp.traceDisplaySettingsTargetNode : "")
+      || "",
+    ).trim();
+    const mode = typeof nodeGraphKeyboardMode === "function"
+      ? nodeGraphKeyboardMode(input.value)
+      : input.value;
+    if (mode !== "hold" && typeof nodeGraphKeyboardRuntime === "function") {
+      const runtime = nodeGraphKeyboardRuntime(nodeId);
+      if (runtime) runtime.pointerHeldSignal = null;
+    }
+    if (mode !== "chordMemory" && typeof nodeGraphChordMemoryClearLatchedPreviews === "function") {
+      nodeGraphChordMemoryClearLatchedPreviews(nodeId);
+    }
+    if (typeof nodeGraphChordMemoryPaintKeys === "function") {
+      nodeGraphChordMemoryPaintKeys();
+    }
+    if (typeof renderNodeGraphKeyboardHeldKeys === "function") {
+      renderNodeGraphKeyboardHeldKeys();
+    }
+    if (typeof renderNodeGraphKeyboardModeControl === "function") {
+      renderNodeGraphKeyboardModeControl();
+    }
+    if (typeof renderNodeGraphKeyboardSignal === "function") {
+      renderNodeGraphKeyboardSignal(
+        nodeId,
+        mode === "hold" && typeof nodeGraphKeyboardHeldPointerSignal === "function"
+          ? nodeGraphKeyboardHeldPointerSignal(nodeId)
+          : null,
+      );
+    }
+    if (typeof renderNodeGraphMidiKeyboardInputControls === "function") {
+      renderNodeGraphMidiKeyboardInputControls();
+    }
+  };
   host.addEventListener("input", (event) => {
     if (event.target?.matches?.("[data-midi-key-layout]")) {
       commit(false);
+      applyPlaySideEffects(event.target);
     }
   });
   host.addEventListener("change", (event) => {
     if (event.target?.matches?.("[data-midi-key-layout]")) {
       commit(true);
+      applyPlaySideEffects(event.target);
     }
   });
 }

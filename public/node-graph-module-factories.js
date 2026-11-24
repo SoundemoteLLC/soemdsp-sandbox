@@ -730,62 +730,8 @@ function createNodeGraphKeyboardBody(node = null) {
     section.dataset.node = node;
   }
   section.setAttribute("aria-label", "MIDI keyboard");
-  const heading = document.createElement("div");
-  heading.className = "node-keyboard-heading";
-  const controls = document.createElement("div");
-  controls.className = "node-keyboard-midi-controls";
-  const modeLabel = createNodeGraphMidiModeControl();
-  // Key range (octave / semitone / keys at bottom / keys at top) lives in this
-  // module's Display Settings > Range, not on the face.
-  const liveReadouts = document.createElement("span");
-  liveReadouts.className = "node-keyboard-live-readouts";
-  liveReadouts.setAttribute("aria-live", "polite");
-  for (const [key, labelText, valueText] of [
-    ["frequency", "freq", "-"],
-    ["pitch", "pitch", "-"],
-    ["midi", "midi", "-"],
-    ["velocity", "vel", "-"],
-  ]) {
-    const item = document.createElement("span");
-    item.append(document.createTextNode(`${labelText} `));
-    const value = document.createElement("strong");
-    value.dataset.keyboardSignal = key;
-    value.textContent = valueText;
-    item.append(value);
-    liveReadouts.append(item);
-  }
-  const velMinLabel = document.createElement("label");
-  velMinLabel.className = "node-keyboard-vel-field";
-  const velMinCaption = document.createElement("span");
-  velMinCaption.textContent = "Min Vel";
-  const velMinInput = document.createElement("input");
-  velMinInput.type = "number";
-  velMinInput.min = "0";
-  velMinInput.max = "127";
-  velMinInput.step = "1";
-  velMinInput.dataset.keyboardVelMin = "true";
-  velMinInput.setAttribute("aria-label", "Minimum velocity 0 to 127");
-  velMinInput.value = "127";
-  velMinLabel.append(velMinCaption, velMinInput);
-  const velMaxLabel = document.createElement("label");
-  velMaxLabel.className = "node-keyboard-vel-field";
-  const velMaxCaption = document.createElement("span");
-  velMaxCaption.textContent = "Max Vel";
-  const velMaxInput = document.createElement("input");
-  velMaxInput.type = "number";
-  velMaxInput.min = "0";
-  velMaxInput.max = "127";
-  velMaxInput.step = "1";
-  velMaxInput.dataset.keyboardVelMax = "true";
-  velMaxInput.setAttribute("aria-label", "Maximum velocity 0 to 127");
-  velMaxInput.value = "127";
-  velMaxLabel.append(velMaxCaption, velMaxInput);
-
-  // One row: Mode, Min Vel, Max Vel, live readouts.
-  // Overflow clips into the left module wall (CSS nowrap + overflow visible).
-  controls.append(modeLabel, velMinLabel, velMaxLabel, liveReadouts);
-  heading.append(controls);
-
+  // Mode, Min Vel, and Max Vel live in this module's Display Settings.
+  // Live velocity / note readouts are not shown on the face; they covered the keys.
   const performance = document.createElement("div");
   performance.className = "node-keyboard-performance";
   const surface = document.createElement("div");
@@ -795,47 +741,9 @@ function createNodeGraphKeyboardBody(node = null) {
   // bindNodeGraphKeyboardControllerModuleEvents right after mount) builds the
   // key model (keyboard-face-gl.js) from the current window; WebGL draws it.
   performance.append(surface);
-
-  const signalBar = document.createElement("div");
-  signalBar.className = "node-keyboard-signal-bar";
-  signalBar.dataset.midiKeyboardSignalBar = "true";
-  signalBar.setAttribute("aria-live", "polite");
-  const signals = [
-    ["gate", "Gate", "0"],
-    ["gatePulse", "Trigger", "0"],
-    ["octave", "Octave", "+0"],
-    ["double", "♯/♭", "-"],
-    ["velocity01", "Velocity", "-"],
-    ["frequency", "Frequency", "-"],
-  ];
-  for (const [key, labelText, valueText] of signals) {
-    const item = document.createElement("span");
-    item.append(document.createTextNode(`${labelText} `));
-    const value = document.createElement("strong");
-    value.dataset.keyboardSignal = key;
-    value.textContent = valueText;
-    item.append(value);
-    signalBar.append(item);
-  }
-  const bitmaskBar = document.createElement("div");
-  bitmaskBar.className = "node-keyboard-bitmask-row";
-  bitmaskBar.dataset.midiKeyboardBitmaskRow = "true";
-  bitmaskBar.setAttribute("aria-live", "polite");
-  const bitmaskLabel = document.createElement("span");
-  bitmaskLabel.textContent = "arp ";
-  const bitmaskValue = document.createElement("strong");
-  bitmaskValue.dataset.keyboardBitmaskValue = "true";
-  bitmaskBar.append(bitmaskLabel, bitmaskValue);
-  const vmDebug = document.createElement("div");
-  vmDebug.className = "node-keyboard-vm-debug node-debug-only";
-  vmDebug.dataset.keyboardVmDebug = "true";
-  vmDebug.setAttribute("aria-live", "polite");
-  vmDebug.textContent = "vm —";
-
-  section.append(heading, performance, signalBar, bitmaskBar, vmDebug);
+  section.append(performance);
   return section;
 }
-
 function createNodeGraphParameter(node, type, parameter) {
   const row = document.createElement("div");
   row.className = "node-parameter-row";
