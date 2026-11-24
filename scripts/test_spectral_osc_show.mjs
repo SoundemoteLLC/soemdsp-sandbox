@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Spectral Oscillator definition, face and display wiring (no browser):
-// the hidden Cycle row appears on Show, A / B face labels follow Shape, Reset
+// the hidden Cycle row appears on Show, A / B face labels follow Shape (8 shapes),
+// Gibbs sits on the face, Reset
 // uses the trigger symbol, the param definitions are the only limits (no
 // tooltips), the face bake is the exact cycle, and the worklet / pages load it.
 //   node scripts/test_spectral_osc_show.mjs
@@ -73,9 +74,10 @@ const def = defs.spectralOsc;
 check(!!def && !defs.wavetable2d, "spectralOsc is defined; wavetable2d is gone");
 check(bag.__labels.spectralOsc === "Spectral Oscillator" && !("wavetable2d" in bag.__labels), `display name "${bag.__labels.spectralOsc}"`);
 const P = Object.fromEntries((def?.parameters || []).map((p) => [p.key, p]));
-check(JSON.stringify(P.shape?.choices) === JSON.stringify([...M.SPECTRAL_OSC_SHAPES]) && P.shape.min === "0" && P.shape.max === "4",
+check(JSON.stringify(P.shape?.choices) === JSON.stringify([...M.SPECTRAL_OSC_SHAPES]) && P.shape.min === "0" && P.shape.max === "7" && P.shape.choices.length === 8,
   `Shape choices: ${JSON.stringify(P.shape?.choices)}`);
-check(["shapeA", "shapeB"].every((k) => P[k]?.min === "0" && P[k]?.max === "1"), "A / B limits 0..1 live only in the param definitions (native clamps to the same)");
+check(P.gibbs?.label === "Gibbs" && P.gibbs.defaultValue === "0" && !P.gibbs.hidden, "Gibbs param: 0..1, default 0 (smooth taper), visible");
+check(["shapeA", "shapeB", "gibbs"].every((k) => P[k]?.min === "0" && P[k]?.max === "1"), "A / B / Gibbs limits 0..1 live only in the param definitions (native clamps to the same)");
 check((def?.parameters || []).every((p) => !("tooltip" in p)) && !def?.inputTooltips && !def?.outputTooltips, "no tooltips on the module, its params or ports");
 
 // ---- trigger symbol ----
@@ -95,8 +97,8 @@ const shown = ctx.nodeGraphModuleFaceSpec("spectralOsc", node(true));
 const row = shown.find((r) => ctx.nodeGraphModuleFaceRowParams(r).includes("cycleMode"));
 check(row?.kind === "choices" && JSON.stringify(row.labels) === JSON.stringify(pbCycle.choices), "face: Show puts the Cycle row (Free run / Single trigger) on the face");
 check(h(node(true)) > h(node()) && h(node(false)) === h(node()), `face: grows on Show, closes on Hide (${h(node())} -> ${h(node(true))} px)`);
-check(keysOf(shown).filter((k) => k !== "cycleMode").join(",") === "shape,frequency,phase,shapeA,shapeB,amplitude",
-  `face: Shape, Freq | Phase, A | B | Amp (${keysOf(shown).join(",")})`);
+check(keysOf(shown).filter((k) => k !== "cycleMode").join(",") === "shape,frequency,phase,amplitude,shapeA,shapeB,gibbs",
+  `face: Shape, Freq | Phase | Amp, A | B | Gibbs (${keysOf(shown).join(",")})`);
 
 // ---- A / B labels follow Shape ----
 const labelsFor = (shape) => {
@@ -104,34 +106,38 @@ const labelsFor = (shape) => {
   const r = spec.find((x) => ctx.nodeGraphModuleFaceRowParams(x).includes("shapeA"));
   return r.params.map((c) => c[1]);
 };
-const expected = [["Edge", "Sine"], ["Width", "Sine"], ["Peak", "Sine"], ["Formant", "Width"], ["Spacing", "Depth"]];
+const expected = [
+  ["Edge", "Sine"], ["Width", "Sine"], ["Peak", "Sine"], ["Formant", "Width"],
+  ["Spacing", "Depth"], ["Sharp", "Skew"], ["Stretch", "Sine"], ["Stretch", "Sine"],
+];
 let allLabels = true;
-for (let s = 0; s < 5; s++) {
+for (let s = 0; s < 8; s++) {
   const got = labelsFor(String(s));
-  const ok = got[0] === expected[s][0] && got[1] === expected[s][1] && got[2] === "Amp";
+  const ok = got[0] === expected[s][0] && got[1] === expected[s][1] && got[2] === "Gibbs";
   if (!ok) allLabels = false;
   console.log(`      ${M.SPECTRAL_OSC_SHAPES[s].padEnd(12)} -> ${got.join(" | ")}`);
 }
-check(allLabels, "face: A / B labels follow Shape (each stands alone, Amp unchanged)");
+check(allLabels, "face: A / B labels follow Shape (each stands alone, Gibbs unchanged)");
 check(JSON.stringify(M.SPECTRAL_OSC_CONTROL_LABELS) === JSON.stringify(expected), "face labels match the math module's per-shape labels");
 const widgets = ctx.nodeGraphModuleFaceWidgets(ctx.nodeGraphModuleFaceSpec("spectralOsc", node(undefined, { shape: 3 })), 196);
 check(widgets.some((w) => w.param === "shapeA" && w.label === "Formant") && widgets.some((w) => w.param === "shapeB" && w.label === "Width"),
   "face widgets draw the per-shape labels (Formant: Formant | Width)");
-check(labelsFor(undefined).join("|") === "Edge|Sine|Amp", "face: a new node (default Shape) reads Edge | Sine");
+check(labelsFor(undefined).join("|") === "Edge|Sine|Gibbs", "face: a new node (default Shape) reads Edge | Sine");
 
 // ---- display: exact cycle, never clipped ----
 let peakOk = true, exactOk = true;
-for (let s = 0; s < 5; s++) {
-  for (const [A, B] of [[0.05, 0], [0.5, 0.5], [0.9, 1]]) {
-    const bake = M.spectralOscBakeCycle({ shape: s, shapeA: A, shapeB: B }, 200);
-    const ref = M.spectralOscCycle(s, A, B, Math.floor(200 / 3), 200);
+for (let s = 0; s < 8; s++) {
+  for (const [A, B, G] of [[0.05, 0, 0], [0.5, 0.5, 0.5], [0.9, 1, 1], [0.3, 0.2, 1]]) {
+    const bake = M.spectralOscBakeCycle({ shape: s, shapeA: A, shapeB: B, gibbs: G }, 200);
+    const ref = M.spectralOscCycle(s, A, B, Math.floor(200 / 3), 200, G);
     let mn = 0, mx = 0; for (const v of ref) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
     const g = M.spectralOscGain(s, mn, mx);
     if (Math.max(...bake.map(Math.abs)) > 1 + 1e-12) peakOk = false;
     if (bake.some((v, i) => Math.abs(v - ref[i] * g) > 1e-12)) exactOk = false;
   }
 }
-check(exactOk, "display bake = the exact formula cycle for every shape");
+check(exactOk, "display bake = the exact formula cycle for every shape and Gibbs");
+check(/\|\$\{p\.gibbs\}`/.test(read("public/modules/additiveGenerator/additive-waveform-display.js")), "display re-bakes when Gibbs moves (bake key)");
 check(peakOk, "display peak <= 1: the plot (0.42 h per unit) never clips");
 const disp = read("public/modules/additiveGenerator/additive-waveform-display.js");
 check(/nodeType === "spectralOsc"/.test(disp) && /spectralOscBakeCycle\(/.test(disp), "the Additive waveform display draws spectralOsc from spectralOscBakeCycle");
@@ -141,7 +147,7 @@ check(def?.displayType === "additiveWaveform" && def.displayModes?.[0]?.settings
 const wk = read("public/node-live-audio-worklet-native-graph.js");
 check(/spectralOsc: 180,/.test(wk) && !/wavetable2d: 180/.test(wk), "worklet type map: spectralOsc -> engine type 180");
 const push = wk.slice(wk.indexOf('if (type === "spectralOsc") {'), wk.indexOf("continue;", wk.indexOf('if (type === "spectralOsc") {')));
-for (const [k, id] of [["shape", "WAVEFORM"], ["shapeA", "SHAPE"], ["shapeB", "RESONANCE"], ["frequency", "FREQUENCY"], ["phase", "PHASE"], ["amplitude", "AMPLITUDE"], ["cycleMode", "TIMING_MODE"]]) {
+for (const [k, id] of [["shape", "WAVEFORM"], ["shapeA", "SHAPE"], ["shapeB", "RESONANCE"], ["gibbs", "WIDTH"], ["frequency", "FREQUENCY"], ["phase", "PHASE"], ["amplitude", "AMPLITUDE"], ["cycleMode", "TIMING_MODE"]]) {
   if (!push.includes(`push("${k}", P.NATIVE_GRAPH_PARAM_${id},`)) { check(false, `worklet pushes ${k} as ${id}`); }
 }
 check(Object.keys(P).every((k) => push.includes(`push("${k}",`)), "worklet pushes every param to the engine");

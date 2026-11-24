@@ -8359,10 +8359,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "spectralOsc") {
-      // Matches process_spectral_osc: waveform = Shape, shape = A, resonance = B, timingMode = Cycle.
+      // Matches process_spectral_osc: waveform = Shape, shape = A, resonance = B, width = Gibbs, timingMode = Cycle.
       push("shape", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("shape", 0));
       push("shapeA", P.NATIVE_GRAPH_PARAM_SHAPE, cont("shapeA", 0.5));
       push("shapeB", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("shapeB", 0));
+      push("gibbs", P.NATIVE_GRAPH_PARAM_WIDTH, cont("gibbs", 0));
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));

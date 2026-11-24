@@ -21089,21 +21089,25 @@ const nodeGraphModuleDefinitions = (
     parameters: [] },
   spectralOsc: {
     // Spectral Oscillator (native_modules/spectral_osc): every cycle is built from the
-    // shape's Fourier series and band-limited per octave by a Gaussian taper, so no
-    // Gibbs ringing. Hand-written face: Shape, Freq | Phase, A | B | Amp, Cycle. A and B
+    // shape's Fourier series and band-limited 3 tables per octave by a taper whose
+    // steepness is Gibbs (0 = smooth Gaussian, no ringing; 1 = brick wall, full Gibbs).
+    // Hand-written face: Shape, Freq | Phase | Amp, A | B | Gibbs, Cycle. A and B
     // mean something different per Shape, so their face labels follow it (labelsBy).
     // Cycle (hidden on spawn) has its own row, which drops out while hidden and
     // appears when the param's Show is on.
     face: [
       { kind: "cells", params: [["shape", "Shape"]], horizontal: true },
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["amplitude", "Amp"]], h: 40 },
       {
         kind: "cells",
-        params: [["shapeA", "Edge"], ["shapeB", "Sine"], ["amplitude", "Amp"]],
+        params: [["shapeA", "Edge"], ["shapeB", "Sine"], ["gibbs", "Gibbs"]],
         h: 40,
         labelsBy: {
           param: "shape",
-          labels: [["Edge", "Sine"], ["Width", "Sine"], ["Peak", "Sine"], ["Formant", "Width"], ["Spacing", "Depth"]],
+          labels: [
+            ["Edge", "Sine"], ["Width", "Sine"], ["Peak", "Sine"], ["Formant", "Width"],
+            ["Spacing", "Depth"], ["Sharp", "Skew"], ["Stretch", "Sine"], ["Stretch", "Sine"],
+          ],
         },
       },
       { kind: "choices", param: "cycleMode", labels: ["Free run", "Single trigger"], h: 26 },
@@ -21133,20 +21137,21 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Out"],
     parameters: [
       {
-        choices: ["Center Edge", "Pulse", "Trisaw", "Formant", "Comb"],
+        choices: ["Center Edge", "Pulse", "Trisaw", "Formant", "Comb", "Asym Sine", "Glass", "Bell"],
         defaultValue: "0",
         displayChoices: true,
         key: "shape",
         label: "Shape",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "4",
+        max: "7",
         mid: "0",
         min: "0",
         nonlinearSlider: false,
         step: "1" },
       {
-        // Center Edge: Edge, Pulse: Width, Trisaw: Peak, Formant: Formant, Comb: Spacing.
+        // Center Edge: Edge, Pulse: Width, Trisaw: Peak, Formant: Formant, Comb: Spacing,
+        // Asym Sine: Sharp (sharp bottom .. sine .. sharp top), Glass / Bell: Stretch.
         defaultValue: "0.5",
         key: "shapeA",
         label: "Shape A",
@@ -21156,10 +21161,22 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any" },
       {
-        // Center Edge / Pulse / Trisaw: Sine, Formant: Width, Comb: Depth.
+        // Center Edge / Pulse / Trisaw / Glass / Bell: Sine, Formant: Width, Comb: Depth,
+        // Asym Sine: Skew (0.5 = plain sine).
         defaultValue: "0",
         key: "shapeB",
         label: "Shape B",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any" },
+      {
+        // Band-limit taper steepness: 0 = smooth Gaussian (no overshoot), 1 = brick wall
+        // (sharpest, with Gibbs ringing). Moving it rebuilds the tables (20 ms crossfade).
+        defaultValue: "0",
+        key: "gibbs",
+        label: "Gibbs",
         max: "1",
         mid: "0.5",
         min: "0",

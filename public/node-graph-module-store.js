@@ -429,9 +429,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   spectralOsc: {
     category: "oscillator",
-    description: "Exact band-limited shapes built from their Fourier series: Center Edge, Pulse, Trisaw (each with Sine), Formant, Comb. Gaussian taper per octave, so no Gibbs ringing. Reset is a trigger; Cycle can play one cycle per hit.",
+    description: "Exact band-limited shapes built from their Fourier series: Center Edge, Pulse, Trisaw (each with Sine), Formant, Comb, Asym Sine (Sharp / Skew), Glass and Bell (Stretch / Sine). 3 alias-free tables per octave; Gibbs sets the band-limit from a smooth taper (0, no ringing) to a brick wall (1). Reset is a trigger; Cycle can play one cycle per hit.",
     label: "Spectral Oscillator",
-    notes: ["oscillator", "spectral", "band-limited", "fourier", "additive", "saw", "pulse", "triangle", "formant", "comb", "wavetable"],
+    notes: ["oscillator", "spectral", "band-limited", "fourier", "additive", "saw", "pulse", "triangle", "formant", "comb", "asymmetric", "sine", "glass", "bell", "gibbs", "wavetable"],
   },
   wavetable3d: {
     category: "oscillator",

@@ -544,7 +544,7 @@ extern "C" double soemdsp_sample_player_phase(int handle);
 extern "C" int soemdsp_spectral_osc_create();
 extern "C" void soemdsp_spectral_osc_destroy(int handle);
 extern "C" void soemdsp_spectral_osc_retrigger(int handle, double h);
-extern "C" void soemdsp_spectral_osc_set_target(int handle, double shape, double a, double b);
+extern "C" void soemdsp_spectral_osc_set_target(int handle, double shape, double a, double b, double gibbs);
 extern "C" int soemdsp_spectral_osc_work(int handle, double sampleRate);
 extern "C" double soemdsp_spectral_osc_sample(
   int handle, double frequencyHz, double phaseOffset, double amplitude, double engineSampleRate
@@ -4417,6 +4417,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(
     n.width,
     (typeId == kTypeConvolutionResonator) ? 0.0 : // Response trim
+    (typeId == kTypeSpectralOsc) ? 0.0 : // Gibbs (Spectral Osc: 0 = smooth taper)
     (typeId == kTypeCombPluck || typeId == kTypeModeResonator) ? 0.5 : // exciter Width x period (Comb Pluck / Mode Ping)
     (typeId == kTypePurr) ? 2.5 : // Body Ratio (Purr)
     (typeId == kTypePulseTrain) ? 0.0 : // ampCurve (Pulse Train)
@@ -15402,7 +15403,8 @@ static void process_spectral_osc(Circuit& g, Node& node, int frames) {
     node.nativeHandle,
     control_effective(node.waveform),
     control_effective(node.shape),
-    control_effective(node.resonance)
+    control_effective(node.resonance),
+    control_effective(node.width)  // Gibbs
   );
   soemdsp_spectral_osc_work(node.nativeHandle, sr);
   for (int f = 0; f < frames; f++) {
