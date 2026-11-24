@@ -25225,10 +25225,13 @@ const nodeGraphModuleDefinitions = (
   },
   sinc: {
     // Hand-written face (node-graph-module-face.js): Ideal / Band Limit, Freq | Phase, Lobes | Amp.
+    // A face only draws params its rows list: Cycle (hidden on spawn) has its own
+    // row, which drops out while hidden and appears when the param's Show is on.
     face: [
       { kind: "choices", param: "bandLimit", labels: ["Ideal", "Band Limit"], h: 26 },
       { kind: "cells", params: [["freq", "Freq"], ["phase", "Phase"]], h: 40 },
       { kind: "cells", params: [["lobes", "Lobes"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "choices", param: "cycleMode", labels: ["Free run", "Single trigger"], h: 26 },
     ],
     planRole: "processor",
     displayType: "waterfall",
