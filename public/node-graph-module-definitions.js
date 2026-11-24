@@ -25232,7 +25232,9 @@ const nodeGraphModuleDefinitions = (
     ],
     planRole: "processor",
     displayType: "waterfall",
-    inputs: ["f"],
+    // Reset is a trigger, same as PolyBLEP: height h (-1..1) moves the phase |h| of the way to the cycle start (h<0 the long way; 1 = hard reset).
+    resetTrigger: true,
+    inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     outputChannels: { Out: "green" },
@@ -25284,6 +25286,23 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1"
       },
+      {
+        // Same as PolyBLEP Cycle: Single trigger plays one cycle per Reset hit.
+        choices: ["Free run", "Single trigger"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        // Hidden on spawn; the parameter's Show toggle brings it back.
+        hidden: true,
+        key: "cycleMode",
+        label: "Cycle",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1" },
         nodeGraphOutputAmplitudeParam,
     ]
   },

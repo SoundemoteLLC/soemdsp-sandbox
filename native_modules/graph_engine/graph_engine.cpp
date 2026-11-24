@@ -1126,6 +1126,7 @@ extern "C" double soemdsp_sinc_sample(
   double bandLimit,
   double sampleRate
 );
+extern "C" void soemdsp_sinc_retrigger(int handle, double h, double freq, double sampleRate);
 
 extern "C" int soemdsp_bradley_2a_create();
 extern "C" void soemdsp_bradley_2a_destroy(int handle);
@@ -4755,7 +4756,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.timingMode,
-    (typeId == kTypePolyBlep) ? 0.0 : // Cycle Free run (PolyBLEP)
+    (typeId == kTypePolyBlep || typeId == kTypeSinc) ? 0.0 : // Cycle Free run (PolyBLEP, Sinc)
     (typeId == kTypeElectroSnare || typeId == kTypeModalSnare || typeId == kTypeElectroHat || typeId == kTypeElectroTom || typeId == kTypeElectroKick || typeId == kTypeElectroClap || typeId == kTypeRobinSinepulse) ? 0.0 : // Recalculate On Trigger Off (drums)
     (typeId == kTypeVibratoGenerator) ? 2.0 // releaseShape Exp
       : (typeId == kTypeHypersaw2) ? 0.0 // vibratoSpeedTiltSource Freq
@@ -6432,6 +6433,22 @@ static void copy_tap_to_buf(double* dst, const double* src, int frames) {
   for (int i = 0; i < frames; i++) dst[i] = src[i];
 }
 
+// Cycle = Single trigger (PolyBLEP, Sinc): a Reset hit starts one cycle; silent
+// before the first hit and after the cycle. True while the cycle is playing.
+static inline bool single_cycle_gate(Node& node, bool restart) {
+  if (restart) {
+    node.singleActive = true;
+    node.singleAcc = 0.0;
+  }
+  return node.singleActive;
+}
+
+// After each rendered sample: one full cycle (phase 0 .. just under 1) stops it.
+static inline void single_cycle_advance(Node& node, double phaseInc) {
+  node.singleAcc += phaseInc < 0.0 ? -phaseInc : phaseInc;
+  if (node.singleAcc >= 1.0 - 1e-9) node.singleActive = false;
+}
+
 static void process_polyblep(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const float sr = g.sampleRate < 1.0f ? 44100.0f : g.sampleRate;
@@ -6525,11 +6542,7 @@ static void process_polyblep(Circuit& g, Node& node, int frames) {
       node.lastReset = rv;
     }
     if (single) {
-      if (restart) {
-        node.singleActive = true;
-        node.singleAcc = 0.0;
-      }
-      if (!node.singleActive) {
+      if (!single_cycle_gate(node, restart)) {
         // Stopped: every tap silent, phase held at the cycle start.
         if (mask & kTapOut) {
           node.buf[kPortMono][f] = 0.0;
@@ -6568,11 +6581,7 @@ static void process_polyblep(Circuit& g, Node& node, int frames) {
     if (mask & kTapSine) node.buf[kPortSine][f] = soemdsp_polyblep_sine(node.nativeHandle);
     node_update_hist_from_frame(node, f);
     freePhase = wrap_phase_pi(freePhase + kTwoPi * phaseInc);
-    if (single) {
-      // One full cycle rendered (samples at phase 0 .. just under 1): stop.
-      node.singleAcc += phaseInc < 0.0 ? -phaseInc : phaseInc;
-      if (node.singleAcc >= 1.0 - 1e-9) node.singleActive = false;
-    }
+    if (single) single_cycle_advance(node, phaseInc);
   }
   node.phase = freePhase;
 }
@@ -9917,14 +9926,22 @@ static void process_hypersaw2(Circuit& g, Node& node, int frames) {
 }
 
 // Sinc: stages=lobes, mode=bandLimit, phaseParam=phase, frequency=freq.
+// Reset and Cycle (timingMode) work like PolyBLEP: a Reset hit of height h moves
+// the phase |h| of the way to the cycle start (h < 0 the long way, 1 = hard
+// reset). Cycle 0 Free run / 1 Single trigger (one cycle per Reset hit, silent
+// before the first hit and after the cycle).
 static void process_sinc(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
   const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
+  const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const bool single = control_effective(node.timingMode) >= 0.5;
   const double referenceVoltage = circuit_pitch_ref_v(g);
   const double lobes = control_effective(node.stages);
   const double bandLimit = control_effective(node.mode);
+  // Cable gone: clear latch so the next connect can rising-edge.
+  if (!liveReset) node.lastReset = 0.0;
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
@@ -9932,12 +9949,29 @@ static void process_sinc(Circuit& g, Node& node, int frames) {
     double freq = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
     );
+    bool restart = false;
+    if (liveReset) {
+      const double rv = g.mixReset[f];
+      if (gate_hit(rv, &node.lastReset)) {
+        soemdsp_sinc_retrigger(node.nativeHandle, gate_hit_height(rv), freq, sr);
+        restart = true;
+      }
+      node.lastReset = rv;
+    }
+    if (single && !single_cycle_gate(node, restart)) {
+      // Stopped: silent, phase held at the cycle start.
+      node.buf[kPortMono][f] = 0.0;
+      node.buf[kPortLeft][f] = 0.0;
+      node.buf[kPortRight][f] = 0.0;
+      continue;
+    }
     const double y = soemdsp_sinc_sample(
       node.nativeHandle, freq, phaseOff, lobes, bandLimit, sr
     );
     node.buf[kPortMono][f] = y;
     node.buf[kPortLeft][f] = y;
     node.buf[kPortRight][f] = y;
+    if (single) single_cycle_advance(node, freq > 0.0 ? freq / sr : 0.0);
   }
 }
 
