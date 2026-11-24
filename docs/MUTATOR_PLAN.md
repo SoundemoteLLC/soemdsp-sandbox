@@ -4,7 +4,7 @@
 |-------|-------|
 | **Author** | Misty (for Argi); revised with Argi's decisions |
 | **Date** | 2026-11-23 |
-| **Status** | Draft — design only, no code yet. Decisions below are adopted. |
+| **Status** | **SIGNED OFF** 2026-11-23. Design only, no code yet. |
 | **Repo** | `C:\Users\argit\Documents\_PROGRAMMING\soemdsp-sandbox` |
 | **Supersedes** | `docs/KEY_PATCHER_DESIGN.md` (rev 3), `docs/FUTURE_PLANNING.md` seeds "Keytracking / pitch-tracking modulation UI" and "Dimensional parameter prototyping" |
 | **Related** | `docs/APP_POLICY.md` (Pitch convention, MIDI boundary, Gate contract, VoiceManager), `docs/PARAM_SURFACES.md`, `docs/GATES_TRIGGERS.md`, `docs/SMOOTH_STEP_GRAPH_AND_KNOB_OVERHAUL_PLAN.md`, `docs/B-058_VOICE_PARAMETER_MODULATION_DIRTY_VOICES.md`, `public/node-graph-segment-curves.js` / `library/include/soemdsp/math/segment_curves.h` |
@@ -39,7 +39,7 @@ The workflow: **play a note → pin → play another note → pin.** Pin Keyfram
 | Parameter definitions | `public/node-graph-module-definitions.js` and per-module `*-register.js` (`parameters: [{ key, label, min, max, mid, step, nonlinearSlider, kind, unit, choices, wraparound, hardClamp, ... }]`). | Definitions are the only source of ranges and clamp behavior. Knob-lane offsets are fractions of that slider-space range. The Mutator does not store its own min/max. |
 | Param values in patches | Stored as DOMAIN on `node.params`. Unit 0–1 is a UI map only (`PARAM_SURFACES.md`). | The knob's stored `base` stays in DOMAIN as today. Knob-lane keyframes store **slider-space offsets**, not DOMAIN. The Frequency lane stores **Hz**. |
 | Modulation | `patch.modulations: [{ sourceNode, sourcePort, destinationNode, destinationParam }]`. `effective = applyMod(smooth(knob), MOD)`. Native: knob → `set_param` → `Control.target` → smoother → `control_effective`. Graph-audio MOD is per-sample `ParamModEdge`. | Knob bindings are **not cables** and must not go in `patch.modulations`. Existing MOD cables still run on top of `final`. Frequency is a normal **Freq Out** wire into a FREQUENCY input, which already overrides the Frequency knob. Any other custom wiring stays on the canvas. |
-| Knob write path | `setNodeSliderValue` / `commitNodeSliderDragValue` (`node-graph-slider-dragging.js`) → `syncNodeGraphPatchParameterFromSlider` → live sync. | This is the hook for play-to-pin (and for whatever "turn a bound knob without pinning" ends up doing — see Open questions). |
+| Knob write path | `setNodeSliderValue` / `commitNodeSliderDragValue` (`node-graph-slider-dragging.js`) → `syncNodeGraphPatchParameterFromSlider` → live sync. | This is the hook for play-to-pin, for arm-and-turn binding, and for shifting a whole lane when a bound knob is turned without pinning. |
 | MIDI | Only `keyboardController` (catalog "MIDI") and `midiCc` (MIDI CC, saved `midiLag` migrates) touch MIDI. MIDI outputs: Play Keys (blue), Gate, Trigger, `pitch` (`♯/♭`), Frequency (`ƒ`), Velocity (gold, 0–1). | Mutators **never see MIDI**. They read and write **plain signals**: Gate in/out, Freq in/out, Velocity. See §4. |
 | Polyphony | Meta Voices / Metamodule. VoiceManager assigns notes from Play Keys cables. Each voice is a compiled replica. Interior per-voice buses: **Voice ƒ, Voice Gate, Voice Trigger, Voice Idle**. | A Mutator inside a Metamodule, with Freq In from **Voice ƒ**, naturally runs per voice. See §5 and B-058. |
 | Curves | `node-graph-segment-curves.js` (JS) and `segment_curves.h` (C++) are the single source for Rational / Exponential / Log / Smoothstep / Smootherstep / Hold, skew −1..+1 (`nodeGraphSegmentCurve01(p, shape, contour)`). | Lane segments reuse this exactly. No new curve math. |
@@ -60,23 +60,24 @@ Each Mutator is a canvas module (`pitchMutator` for the first slice; more types 
 ### Frequency lane
 
 - Keyframes: `(note axis x → Hz)`.
-- Drawn and interpolated on a **log frequency** axis (open question: bake in log2(Hz) vs some other curve — see §13).
+- Drawn and interpolated **log in real Hz** (this is a wire, not a knob). The bake table stores log2(Hz) and exponentiates on read, so interpolation between notes stays in log frequency.
 - At play time the looked-up Hz is written to **Freq Out** as a real signal. Wire Freq Out to a module's FREQUENCY input to override that module's Frequency knob.
 
 ### Knob lanes
 
 - One lane per bound parameter (`target: { nodeId, paramKey }`).
-- Keyframes: `(note axis x → offset)`, where `offset` is a **fraction of the parameter's range in slider space** (for example `0.25` is a quarter of the slider's span).
+- Keyframes: `(note axis x → offset)`, where `offset` is a **fraction of the parameter's range in slider space** (the knob's 0–1 position). Interpolation between keys is **linear in that slider space**.
 - Several Mutators may bind the same knob. Their offsets **sum**:
 
-  `final = clamp(base + sum of offsets)`
+  `finalSlider = clamp(baseSlider + sum of offsets)`
 
-  then the definition maps that slider-space result to DOMAIN. `clamp` uses only the parameter definition (including `hardClamp` / `constraint` / `wraparound` as those flags already mean).
-- `base` is the knob's ordinary stored value.
+  Then the knob's **own slider curve** (`nonlinearSlider` / mid / skew in the parameter definition) maps that 0–1 position to DOMAIN. The Mutator never stores the curve. `clamp` uses only the parameter definition (including `hardClamp` / `constraint` / `wraparound` as those flags already mean).
+- `base` is the knob's ordinary stored value, read as its current slider-space position.
+- Discrete or choice parameters **hold / snap**. They do not slide between keys; the held value updates at the next key (ZOH).
 
 ### Range changes
 
-Do the simple thing. Offsets stay as fractions of the **current** definition range. If a parameter's min/max (or slider map) changes, the sounding mutated values just shift, and that is acceptable. Smart range migration is a maybe-never later step.
+Do the simple thing. Offsets stay as fractions of the **current** slider-space range. If a parameter's min/max changes, the sounding mutated values just shift, and that is acceptable. The same trade applies if the knob's slider curve changes later: the Mutator still plays the same 0–1 positions, and the new curve maps them to values. Smart range or curve migration is a maybe-never later step.
 
 ### Lane / keyframe schema (on the Mutator node)
 
@@ -110,10 +111,10 @@ Do the simple thing. Offsets stay as fractions of the **current** definition ran
 
 - `x`: position on the shared note axis (MIDI note number under the `♯/♭` convention: 69 = A4). Integer when Snap is on; fractional allowed so glide and bend still have a place on the curve.
 - `hz`: Frequency-lane value in real Hz.
-- `offset`: knob-lane value, fraction of slider-space range.
-- `shape` / `skew`: the Step Graph segment that **leaves** this key toward the next one. The last key's shape is unused.
+- `offset`: knob-lane value, fraction of slider-space range. Lanes interpolate this linearly in slider space.
+- `shape` / `skew`: the Step Graph segment that **leaves** this key toward the next one. The last key's shape is unused. Frequency-lane shapes are applied in log Hz; knob-lane shapes are applied in slider space.
 - Outside the first and last keys, the value holds the end key. A lane with one key is constant. A Frequency lane with zero keys leaves Freq Out unset (no override). A knob lane with zero keys contributes a zero offset.
-- Choice / integer-step params: see interpolation in Open questions. If hold is used, store a thresholded offset (or a held choice) rather than a continuously sliding one.
+- Discrete or choice params hold / snap: store the held slider position or the choice, and do not interpolate between keys.
 
 ---
 
@@ -162,9 +163,9 @@ When a pin happens:
 4. Rebake that lane's table (§8) and push it once. Do not rewrite `node.params[key]` (the knob `base` stays put).
 5. Bound knobs show the **sounding final** value (`base + sum of offsets`), so what you see is what you hear. The Mutator's colored ring marks the binding.
 
-Turning a bound knob **without** pinning is an open question (shift the whole lane vs do nothing). Do not invent a third "edit the unmutated base" path until that is decided.
+Turning a bound knob **without** pinning **shifts the whole lane**: the same slider-space delta is added to every key's offset (and clamped per the definition). This does not rewrite `base`. There is no third path that edits the unmutated knob value from a bound turn.
 
-**Binding** a knob to a lane is deliberate (no auto-bind of every touched knob). The gesture itself is an open question. Once bound, a chip appears in the overlay and a ring in the Mutator's color appears on the knob.
+**Binding** is deliberate (no auto-bind of every touched knob). **Arm the Mutator, then turn knobs to bind them.** Arming is a control in the overlay (a no-modifier, phone-friendly toggle). There is no right-click "Add to Mutator" flow. Once bound, a chip appears in the overlay and a ring in the Mutator's color appears on the knob. With the Mutator armed, turning an already-bound knob follows the pin / shift-whole-lane rules above, and does not re-bind it.
 
 Undo: each pin is one undo step (one step per drag gesture, not per pointer move).
 
@@ -180,6 +181,8 @@ The editor is a **horizontal docked overlay**, not a vertical Command Center pag
 - **Edit one lane at a time.** The active lane is drawn at full strength; the others are drawn faint.
 - **Pin Keyframe** and **Auto-Pin** live in the overlay, next to the keyboard. Tapping a key sets the audition note (and, if Freq In is unwired, the playhead).
 - **Binding chips** in the overlay list the bound knobs. **Colored rings** on the canvas knobs use the Mutator's color.
+- **Arm** lives in the overlay. With the Mutator armed, turning a canvas knob binds it.
+- A dedicated **Mutator inspection view**, in the same spirit as the debug menu, lets you see ownership on the circuit: each Mutator **paints a box** around everything it controls, in its color and/or with numbers. This works **alongside** the knob rings (rings stay; boxes show the grouping). It is a circuit overlay, not a replacement for the horizontal editor.
 - **No hover text, no tooltips, no `title=` attributes.** Labels, chips, and buttons name themselves.
 
 The canvas module is still a normal module: name, color, and the signal jacks. It is not the place where lanes are sculpted.
@@ -192,12 +195,12 @@ The canvas module is still a normal module: name, color, and the signal jacks. I
 
 - When a lane changes (pin, bind, load), JS evaluates it with `nodeGraphSegmentCurve01` into a table and pushes it once (stickiness contract: push on change only):
   - Every lane: **128 entries**, one per MIDI note, plus linear interpolation between entries for fractional pitch (bend / glide).
-  - The Frequency lane's table is in log2(Hz) if interpolation is log (exponentiate on read with one `exp2`), or in Hz if a later decision says otherwise. Freq Out is always real Hz.
-  - Knob-lane tables store **slider-space offsets**. At play time: `final = clamp(base + sum of tables)` across Mutators bound to that param, then map through the definition.
+  - The Frequency lane's table is **log2(Hz)**; readback exponentiates with one `exp2`. Interpolation between table entries stays in log frequency. Freq Out is always real Hz.
+  - Knob-lane tables store **slider-space offsets** and interpolate them **linearly**. At play time: `finalSlider = clamp(baseSlider + sum of tables)` across Mutators bound to that param, then the knob's own slider curve maps that 0–1 position to DOMAIN.
 - Frequency is a normal signal on Freq Out (graph audio / control, same as any `ƒ` wire). Knob offsets need one new native hook, e.g. `soemdsp_graph_set_param_mutation(...)` (name can match the offset table). In the param's `Control`, the summed offset is applied to `base` to produce `target` before the smoother. Then `effective = applyMod(smooth(final), MOD)` as today.
 - **Cost**: per mutated knob, per sample, one table index plus a lerp (about 6 flops, plus `exp2` for a log frequency lane). It runs only while the axis is moving. When the axis sample equals the last one (the common case between notes), it keeps the cached target and skips the rest. Effectively control-rate with no extra latency.
 - When Freq In comes from a graph audio node, Freq Out and any sample-accurate mutated params enter the sample path (same rule as `ParamModEdge` in `PARAM_SURFACES.md`). Update `scripts/check_graph_engine_contracts.py` so a mutated param counts as "needs sample-accurate controls".
-- Discrete / choice params stay ZOH: the hold lookup updates at most once per block (the existing `NATIVE_GRAPH_DISCRETE_PARAMS` rule), if interpolation for those is hold.
+- Discrete / choice params stay ZOH / hold-snap: the hold lookup updates at most once per block (the existing `NATIVE_GRAPH_DISCRETE_PARAMS` rule).
 - Full / live JS evaluator: the same tables and the same lookup in `readNodeGraphLiveEffectiveParam`, so live and render agree (no dual formulas).
 - The shared curve file stays the source of truth: JS bakes with the JS copy and native only reads tables, so `segment_curves.h` needs no change for the first slices.
 
@@ -207,13 +210,13 @@ The canvas module is still a normal module: name, color, and the signal jacks. I
 
 | Thing | Interaction |
 |-------|-------------|
-| Several Mutators on one knob | Offsets **sum**, then clamp per the definition. How that looks on the knob (one ring, concentric rings, …) is an open question. Concentric rings are an idea, not adopted. |
+| Several Mutators on one knob | Offsets **sum**, then clamp per the definition. Each bound knob keeps its rings. The Mutator inspection view (like the debug menu) paints a box around everything each Mutator controls, in that Mutator's color and/or with numbers. |
 | MOD cables on the same param | Unchanged: `effective = applyMod(smooth(final), MOD)`. A mutated cutoff can still have an LFO on top. That wiring is ordinary canvas cabling. |
 | FREQUENCY inputs | Freq Out is a normal `ƒ` signal. The destination's FREQUENCY input already overrides its Frequency knob. |
 | PARAM OUT jack on a mutated knob | Emits `final` (what the knob shows). |
 | Pitch-tracking params (filter `sweep` in st, Keyboard tracking knobs) | They coexist. Tracking is a fixed law. A Mutator lane can add what tracking can't. |
 | Metamodule expose | A Mutator inside a Metamodule is a normal interior module. Its face is not the editor; the overlay still is. Lanes target voice-local params. |
-| Perform mode / plugin controllers | A controller write to a bound knob pins at the sounding note when Auto-Pin is on; otherwise it follows the "turn without pinning" decision. |
+| Perform mode / plugin controllers | A controller write to a bound knob pins at the sounding note when Auto-Pin is on; otherwise it shifts the whole lane. |
 | Bypass | A bypassed Mutator releases its knob offsets and does not drive Freq Out. Params fall back to `base`. |
 
 ---
@@ -261,7 +264,7 @@ Done when: you can name the module (the tab follows), wire Freq Out into a FREQU
 |-------|-------|-----------|
 | **Native path** | Offset-table hook on `Control`, Freq Out in the native graph, sample-path rule and contract check, discrete ZOH, cache keys in `index.html` / `perform.html` (`?v=` appended). | Native and live match within float tolerance in a smoke test (`scripts/test_mutator_*.mjs`), and CPU with 8 mutated params shows no measurable change. |
 | **Polyphony** | Freq In from Voice ƒ inside a Metamodule, template-shared lane tables across replicas, note-start smoother snap, B-058 verified. | A chord of C2+C6 plays two different cutoffs and two frequencies at once, with no sweep on voice reuse. |
-| **Editing depth** | Several knob lanes, per-segment shape and skew, key drag and delete, view zoom, rings and chips polished, copy/remap, audition from the overlay keyboard via Gate / Freq outs, more than one Mutator in a patch. | Full play-and-pin loop, including on a phone with no MIDI hardware. |
+| **Editing depth** | Several knob lanes, per-segment shape and skew, key drag and delete, view zoom, rings and chips polished, the Mutator inspection view (colored/numbered boxes around controlled modules), copy/remap, audition from the overlay keyboard via Gate / Freq outs, more than one Mutator in a patch. | Full play-and-pin loop, including on a phone with no MIDI hardware. Ownership boxes are visible when several Mutators share the circuit. |
 | **More axes** | Velocity and other axes, only after the Pitch Mutator workflow is solid. | Decided then. |
 
 ---
@@ -275,20 +278,15 @@ Ingested from a Gemini "Brain / Mutators / Gradients" spec. **Not adopted** unle
 - A **sculpting lock** while a lane is being edited.
 - **Discrete parameters flipping at thresholds** rather than interpolating.
 - A **Velocity Mutator** with a PLAIN / STURM pad, and trigger / gate height equal to velocity.
-- **Concentric rings** when several Mutators bind the same knob (the sum of offsets is adopted; this display is not).
+- **Concentric rings** when several Mutators bind the same knob (the sum of offsets is adopted; rings plus the inspection-view boxes are the adopted display, not concentric rings).
 
 Related leftover from earlier drafts, also not adopted here: embedding a Sturmian Grid as the Velocity Mutator's audition player; a packed WebGL lane-row face on the module itself.
 
 ---
 
-## 14. Open questions
+## 14. Implementation checks
 
-- **Binding gesture.** Right-click "Add to \<Mutator\>" versus arm-and-turn (arm the Mutator, then turn a knob to bind it). Phone needs a no-modifier equivalent either way.
-- **Turning a bound knob without pinning.** Shift the whole lane, or do nothing?
-- **Interpolation.** Log for Hz, linear for the rest, hold for choices — versus following each knob's own slider curve (`nonlinearSlider` / mid / skew) so the lane looks like "the knob halfway." The 128-entry LUT works with either bake space.
-- **How several Mutators on one knob display.** The values already sum. The ring treatment (one combined ring, concentric rings, stacked chips, …) is still open.
-
-Smaller, still useful:
+These are not design blockers. The plan is signed off.
 
 - Does Voice Gate already carry velocity as height inside voices? (Its catalog text says 1/0.)
 - Default keyboard span in the overlay: C1–C7 (24–96) or the whole 0–127?
