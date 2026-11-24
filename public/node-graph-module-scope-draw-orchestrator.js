@@ -82,6 +82,7 @@ const nodeGraphModuleScopeCustomRenderers = {
   keypadFace: () => {},
   arpKeysFace: () => {},
   pitchQuantizerFace: () => {},
+  pitchModWheelFace: () => {},
   portalFace: () => {},
   roundShapeFace: () => {},
   basicShapeFace: () => {},

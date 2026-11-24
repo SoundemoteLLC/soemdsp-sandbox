@@ -10,6 +10,11 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
   if (!host) {
     return;
   }
+  // Pitch Mod Wheel merged panel: hand the Parameter form back to its own
+  // popover before this body is replaced.
+  if (typeof restoreNodeGraphPitchModWheelParamEmbed === "function") {
+    restoreNodeGraphPitchModWheelParamEmbed();
+  }
   const type = formType || "blank";
   // Tear down widgets bound to the previous schema body before replacing DOM.
   if (typeof destroyNodeGraphTraceDisplayColorWidgets === "function") {
@@ -165,6 +170,19 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
   if (type === "keyboardFace") {
     if (typeof bindNodeGraphKeyboardFaceDisplaySettingsBody === "function") {
       bindNodeGraphKeyboardFaceDisplaySettingsBody(host);
+    }
+  }
+  if (type === "pitchModWheelFace") {
+    if (typeof syncNodeGraphPitchModWheelDisplaySettingsControls === "function") {
+      syncNodeGraphPitchModWheelDisplaySettingsControls(
+        host,
+        typeof nodeGraphPitchModWheelDisplaySettingsForNode === "function"
+          ? nodeGraphPitchModWheelDisplaySettingsForNode(node)
+          : (node?.traceDisplaySettings || {}),
+      );
+    }
+    if (typeof bindNodeGraphPitchModWheelDisplaySettingsBody === "function") {
+      bindNodeGraphPitchModWheelDisplaySettingsBody(host, node);
     }
   }
   if (type === "pitchQuantizerFace") {
@@ -672,6 +690,11 @@ if (type === "portalFace") {
       ? normalizeNodeGraphKeyboardFaceSettings(nodeGraphKeyboardLayoutDefaults || {})
       : { blackKeyWidth: 10, blackKeyHeight: 62, hideKeyboardInfo: true, keyLabels: "name" };
   }
+  if (type === "pitchModWheelFace") {
+    return typeof normalizeNodeGraphPitchModWheelFaceSettings === "function"
+      ? normalizeNodeGraphPitchModWheelFaceSettings()
+      : { ...(typeof NODE_GRAPH_PITCH_MOD_WHEEL_DISPLAY_DEFAULTS !== "undefined" ? NODE_GRAPH_PITCH_MOD_WHEEL_DISPLAY_DEFAULTS : {}) };
+  }
   if (type === "pitchQuantizerFace") {
     return typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
       ? normalizeNodeGraphPitchQuantizerFaceSettings()
@@ -950,6 +973,11 @@ if (type === "portalFace") {
       ? normalizeNodeGraphKeyboardFaceSettings(settings)
       : (settings && typeof settings === "object" ? settings : {});
   }
+  if (type === "pitchModWheelFace") {
+    return typeof normalizeNodeGraphPitchModWheelFaceSettings === "function"
+      ? normalizeNodeGraphPitchModWheelFaceSettings(settings)
+      : (settings && typeof settings === "object" ? settings : {});
+  }
   if (type === "pitchQuantizerFace") {
     return typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
       ? normalizeNodeGraphPitchQuantizerFaceSettings(settings)
@@ -1115,6 +1143,11 @@ if (settingsSchema === "portalFace") {
         ...(typeof nodeGraphKeyboardLayoutDefaults === "object" ? nodeGraphKeyboardLayoutDefaults : {}),
         ...(node?.traceDisplaySettings || {}),
       })
+      : (node?.traceDisplaySettings || {});
+  }
+  if (settingsSchema === "pitchModWheelFace") {
+    return typeof nodeGraphPitchModWheelDisplaySettingsForNode === "function"
+      ? nodeGraphPitchModWheelDisplaySettingsForNode(node)
       : (node?.traceDisplaySettings || {});
   }
   if (settingsSchema === "pitchQuantizerFace") {
@@ -1502,6 +1535,12 @@ function readNodeGraphTraceDisplaySettingsForm() {
     }
     return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
   }
+  if (formType === "pitchModWheelFace") {
+    if (typeof readNodeGraphPitchModWheelDisplaySettingsForm === "function") {
+      return readNodeGraphPitchModWheelDisplaySettingsForm(root, current);
+    }
+    return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
+  }
   if (formType === "pitchQuantizerFace") {
     if (typeof readNodeGraphPitchQuantizerDisplaySettingsForm === "function") {
       return readNodeGraphPitchQuantizerDisplaySettingsForm(root, current);
@@ -1816,6 +1855,16 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
     if (typeof syncNodeGraphPortalDisplaySettingsControls === "function") {
       syncNodeGraphPortalDisplaySettingsControls(panel, normalized);
     }
+    return;
+  }
+  if (formType === "pitchModWheelFace") {
+    const panel = root?.querySelector?.("[data-pitch-mod-wheel-display-settings-panel]") || root;
+    if (typeof syncNodeGraphPitchModWheelDisplaySettingsControls === "function") {
+      syncNodeGraphPitchModWheelDisplaySettingsControls(panel, normalized);
+    }
+    syncNodeGraphTraceDisplayColorWidgets(
+      document.getElementById("nodeTraceDisplaySettingsPopover"),
+    );
     return;
   }
   if (formType === "arpKeysFace") {
@@ -2597,6 +2646,10 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
 function nodeGraphTraceDisplayColorWidgetLabel(field) {
   // Title lives inside the widget (swatch). Never a side "Color" heading.
   const buttonForm = nodeGraphTraceDisplaySettingsFormType();
+  if (buttonForm === "pitchModWheelFace" && typeof nodeGraphPitchModWheelColorLabel === "function") {
+    const label = nodeGraphPitchModWheelColorLabel(field);
+    if (label) return label;
+  }
   if (buttonForm === "pitchQuantizerFace") {
     if (field === "enabledColor") return "Enabled";
     if (field === "playingColor") return "Playing";

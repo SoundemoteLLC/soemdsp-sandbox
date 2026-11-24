@@ -21438,6 +21438,15 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 5,
     inputs: ["Pitch", "Mod", "Reset"],
     layout: "pitchModWheel",
+    // First display-only module: the WebGL face is the whole UI (drag the
+    // wheels, drop a wire on one to modulate it, right-click for one panel
+    // with the wheel's Parameter Settings above the Display Settings).
+    displayType: "pitchModWheelFace",
+    displayModes: [
+      { key: "face", label: "Wheels", renderer: "pitchModWheelFace", settingsSchema: "pitchModWheelFace", source: { value: "Pitch" } },
+    ],
+    defaultDisplayMode: "face",
+    customDisplayArea: true,
     outputAliases: {
       "Pitch Wheel": "Pitch",
       "Mod Wheel": "Mod" },
@@ -21455,8 +21464,7 @@ const nodeGraphModuleDefinitions = (
         showSign: true,
         hidden: true,
         parameterOutput: false,
-        modulation: false,
-        tooltip: "Pitch wheel Bias. Mouse-up sets the target to center; audio ramps with this smooth time." },
+        tooltip: "Pitch wheel. Drag it on the face; with Spring on (Display Settings) it returns to the default on release. Range and smooth time are Parameter Settings." },
       {
         ...nodeGraphControllerBiasParameter(),
         key: "mod",
@@ -21467,8 +21475,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         hidden: true,
         parameterOutput: false,
-        modulation: false,
-        tooltip: "Mod wheel Bias. Holds on mouse-up. Smooth time is Parameter Settings." },
+        tooltip: "Mod wheel. Drag it on the face; it holds on release unless Spring is on (Display Settings). Range and smooth time are Parameter Settings." },
     ]
   },
   // Cheap poly ADSR: Analog (one-pole) / Linear / Smoothstep. Velocity from Gate

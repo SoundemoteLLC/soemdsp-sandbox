@@ -575,14 +575,33 @@ function nodeGraphModuleFaceWidgetAt(spec, face, x, y, faceWidth = face.offsetWi
 }
 
 /** Wire-drop hit boxes (client px) so a cable dropped on a widget finds its param row. */
+/**
+ * Drop spots on a display that is the control (Pitch Mod Wheel): every
+ * [data-face-param-drop="key"] element inside the module is the wire target
+ * for that param's row, at the element's on-screen box.
+ */
+function nodeGraphModuleFaceParamDropBoxes(moduleEl) {
+  const boxes = [];
+  moduleEl?.querySelectorAll?.("[data-face-param-drop]").forEach((el) => {
+    const key = el.dataset.faceParamDrop;
+    const row = key && !el.hidden
+      && moduleEl.querySelector(`.node-parameter-row[data-param="${CSS.escape(key)}"]`);
+    if (!row) return;
+    const r = el.getBoundingClientRect();
+    if (!(r.width > 0) || !(r.height > 0)) return;
+    boxes.push({ row, left: r.left, right: r.right, top: r.top, bottom: r.bottom, midY: r.top + r.height * 0.5 });
+  });
+  return boxes;
+}
+
 function nodeGraphModuleFaceHitBoxes(moduleEl) {
+  const boxes = nodeGraphModuleFaceParamDropBoxes(moduleEl);
   const face = moduleEl?.querySelector(":scope > .dsp-node-body > .node-face");
   const spec = face ? nodeGraphModuleFaceSpecForElement(moduleEl) : null;
-  if (!spec) return [];
+  if (!spec) return boxes;
   const rect = face.getBoundingClientRect();
   const kx = rect.width / Math.max(1, face.offsetWidth);
   const ky = rect.height / Math.max(1, face.offsetHeight);
-  const boxes = [];
   for (const wd of nodeGraphModuleFaceWidgets(spec, face.offsetWidth, moduleEl)) {
     const keys = nodeGraphModuleFaceWidgetKeys(wd);
     keys.forEach((key, i) => {

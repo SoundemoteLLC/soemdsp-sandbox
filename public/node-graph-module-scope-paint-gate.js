@@ -566,6 +566,7 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   harmonicSeriesFace: "param",
   arpKeysFace: "param",
   pitchQuantizerFace: "param",
+  pitchModWheelFace: "param",
   phoneToneFace: "param",
   transportBpm: "param",
   // Controllers and sample pictures (UI / param, never engine-gated).

@@ -1,5 +1,5 @@
-// Native WebGL faces for the controller modules: Knob, Slider, Toggle and
-// Momentary. One shared kit, drawn on the shared WebGL2 context through
+// Native WebGL faces for the controller modules: Knob, Slider, Toggle,
+// Momentary and the Pitch Mod Wheel. One shared kit, drawn on the shared WebGL2 context through
 // gl-line-renderer.js (smoothstep capsules, glyph-atlas text) on a canvas from
 // display-canvas.js. No 2D drawing: a GL failure shows black and logs once
 // (nodeGraphDisplayGlFailed).
@@ -154,6 +154,29 @@
     };
   }
 
+  /** Pitch Mod Wheel: one vertical wheel slot per column (label above, value below). */
+  function nodeGraphControllerWheelLayout(w, h, s = {}) {
+    const count = Math.max(1, Math.min(4, Math.round(Number(s.count) || 2)));
+    const m = Math.min(w, h);
+    const pad = Math.max(0.5, m * 0.05);
+    const gap = pad;
+    const colW = Math.max(1, (w - pad * 2 - gap * (count - 1)) / count);
+    const band = Math.max(0, Math.min(h * 0.15, colW * 0.42));
+    const top = pad + band;
+    const bottom = Math.max(top + 1, h - pad - band);
+    const wheels = [];
+    for (let i = 0; i < count; i += 1) {
+      const x = pad + i * (colW + gap);
+      wheels.push({
+        slot: { x, y: top, w: colW, h: bottom - top },
+        label: band > 0 ? { x, y: pad, w: colW, h: band } : null,
+        value: band > 0 ? { x, y: bottom, w: colW, h: band } : null,
+      });
+    }
+    const radius = Math.min(colW, bottom - top) * 0.22;
+    return { kind: "wheel", w, h, pad, radius, wheels, rects: { wheels: wheels.map((wl) => wl.slot) } };
+  }
+
   // ---- draw --------------------------------------------------------------
   function drawKnob(batch, L, m, aa) {
     const fill = css(m.fill);
@@ -253,8 +276,90 @@
     }
   }
 
-  const LAYOUTS = { knob: nodeGraphControllerKnobLayout, slider: nodeGraphControllerSliderLayout, button: nodeGraphControllerButtonLayout };
-  const DRAWS = { knob: drawKnob, slider: drawSlider, button: drawButton };
+  /** Clip a convex polygon to yMin <= y <= yMax. */
+  function clipPointsY(pts, yMin, yMax) {
+    const swap = (list) => list.map((p) => [p[1], p[0]]);
+    return swap(clipPointsX(swap(pts), yMin, yMax));
+  }
+
+  function drawWheel(batch, L, m, aa) {
+    const bg = css(m.background);
+    const body = css(m.wheel);
+    const fill = css(m.fill);
+    const ink = css(m.text);
+    const well = mix(bg, [0, 0, 0, 1], 0.45);
+    const states = Array.isArray(m.wheels) ? m.wheels : [];
+    L.wheels.forEach((wl, i) => {
+      const st = states[i] || {};
+      const s = wl.slot;
+      // Recessed slot, then the wheel body inset into it.
+      fillPoints(batch, roundRectPoints(s.x, s.y, s.w, s.h, L.radius), well, aa);
+      const inset = Math.max(aa, Math.min(s.w, s.h) * 0.07);
+      const b = { x: s.x + inset, y: s.y + inset, w: Math.max(1, s.w - inset * 2), h: Math.max(1, s.h - inset * 2) };
+      const bodyShape = roundRectPoints(b.x, b.y, b.w, b.h, Math.max(0, L.radius - inset));
+      fillPoints(batch, bodyShape, st.active ? mix(body, fill, 0.12) : body, aa);
+      const unit = clamp01(st.unit);
+      const zero = clamp01(st.zero);
+      const yAt = (u) => b.y + b.h * (1 - clamp01(u));
+      // Rolling ridges: a cylinder seen side-on; ridges move with the value,
+      // brightest where they face the viewer.
+      const ridges = 13;
+      const spacing = Math.PI / ridges;
+      const roll = (((unit * Math.PI * 1.6) % spacing) + spacing) % spacing;
+      for (let k = 0; k <= ridges + 1; k += 1) {
+        const a = k * spacing + roll;
+        if (a <= 0.04 || a >= Math.PI - 0.04) continue;
+        const y = b.y + b.h * (0.5 - 0.5 * Math.cos(a));
+        const facing = Math.sin(a);
+        const half = Math.max(aa * 0.35, b.h * 0.0045 * (0.6 + facing));
+        global.nodeGraphGlLinesSegment(batch, b.x + b.w * 0.14, y, b.x + b.w * 0.86, y, half, aa,
+          mix(body, ink, 0.05 + 0.2 * facing * facing));
+      }
+      // Fill from the zero point (bottom, or center on a bipolar range) to the value.
+      const y0 = yAt(zero);
+      const y1 = yAt(unit);
+      if (Math.abs(y1 - y0) > 0.25) {
+        const band = clipPointsY(bodyShape, Math.min(y0, y1), Math.max(y0, y1));
+        const tint = fill.slice();
+        tint[3] = (tint[3] ?? 1) * 0.3;
+        fillPoints(batch, band, tint, aa);
+      }
+      // Center detent on a bipolar range.
+      if (st.bipolar) {
+        const tick = Math.max(aa, inset * 0.7);
+        const detent = mix(well, ink, 0.55);
+        global.nodeGraphGlLinesSegment(batch, s.x + aa, y0, s.x + tick, y0, Math.max(aa * 0.5, b.h * 0.006), aa, detent);
+        global.nodeGraphGlLinesSegment(batch, s.x + s.w - tick, y0, s.x + s.w - aa, y0, Math.max(aa * 0.5, b.h * 0.006), aa, detent);
+      }
+      // Modulation ghost: where the engine is sent, clamped to the range.
+      if (Number.isFinite(st.ghost)) {
+        const ghostY = yAt(st.ghost);
+        global.nodeGraphGlLinesSegment(batch, b.x + b.w * 0.3, ghostY, b.x + b.w * 0.7, ghostY,
+          Math.max(aa * 0.5, b.h * 0.012), aa, mix(fill, ink, 0.55));
+      }
+      // Grip line at the value.
+      const gripHalf = Math.max(aa * 0.7, Math.min(b.h * 0.022, b.w * 0.09));
+      const gy = Math.max(b.y + gripHalf, Math.min(b.y + b.h - gripHalf, y1));
+      global.nodeGraphGlLinesSegment(batch, b.x + b.w * 0.08 + gripHalf, gy, b.x + b.w * 0.92 - gripHalf, gy,
+        gripHalf, aa, st.active ? mix(fill, ink, 0.3) : fill);
+      if (wl.label && st.label) {
+        const r = wl.label;
+        text(batch, st.label, r.x + r.w * 0.5, r.y + r.h * 0.5, { px: r.h * 0.72, maxWidth: r.w, rgba: ink });
+      }
+      if (wl.value && st.valueText) {
+        const r = wl.value;
+        text(batch, st.valueText, r.x + r.w * 0.5, r.y + r.h * 0.5, { px: r.h * 0.66, maxWidth: r.w, rgba: mix(ink, fill, 0.35) });
+      }
+    });
+  }
+
+  const LAYOUTS = {
+    knob: nodeGraphControllerKnobLayout,
+    slider: nodeGraphControllerSliderLayout,
+    button: nodeGraphControllerButtonLayout,
+    wheel: nodeGraphControllerWheelLayout,
+  };
+  const DRAWS = { knob: drawKnob, slider: drawSlider, button: drawButton, wheel: drawWheel };
 
   // ---- face host -----------------------------------------------------------
   function nodeGraphControllerFaceCanvas(face) {
@@ -300,7 +405,7 @@
   }
 
   /**
-   * Draw one controller face. kind: knob | slider | button. model carries
+   * Draw one controller face. kind: knob | slider | button | wheel. model carries
    * settings, colors, unit/zero/ghost (0..1), texts and states. place(L) lays
    * the DOM hit elements. Returns the layout, or null (no box / GL failed).
    */
@@ -338,11 +443,12 @@
     nodeGraphControllerKnobLayout,
     nodeGraphControllerSliderLayout,
     nodeGraphControllerButtonLayout,
+    nodeGraphControllerWheelLayout,
     nodeGraphControllerFaceCanvas,
     nodeGraphControllerFacePlace,
     nodeGraphControllerFaceObserve,
     nodeGraphControllerFacePaint,
-    nodeGraphControllerFaceShapes: Object.freeze({ roundRectPoints, clipPointsX, arcPoints }),
+    nodeGraphControllerFaceShapes: Object.freeze({ roundRectPoints, clipPointsX, clipPointsY, arcPoints }),
   };
   Object.assign(global, api);
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -1027,7 +1027,6 @@ function createNodeGraphModuleElement(type, node) {
     || definition.layout === "keyboard"
     || definition.layout === "gridKeyboard"
     || definition.layout === "sequencer"
-    || definition.layout === "pitchModWheel"
   ) {
     if (definition.layout === "keyboardController") {
       article.append(createNodeGraphMidiModuleBody(node));
@@ -1036,10 +1035,8 @@ function createNodeGraphModuleElement(type, node) {
       article.append(createNodeGraphKeyboardBody(node));
     } else if (definition.layout === "gridKeyboard") {
       article.append(createNodeGraphGridKeyboardBody(node));
-    } else if (definition.layout === "sequencer") {
-      article.append(createNodeGraphSequencerBody(node));
     } else {
-      article.append(createNodeGraphPitchModWheelBody(node));
+      article.append(createNodeGraphSequencerBody(node));
     }
     appendNodeGraphModuleIoSection(
       article,

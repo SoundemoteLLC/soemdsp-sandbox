@@ -480,6 +480,15 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "pitchModWheelFace") {
+    node.traceDisplaySettings = typeof normalizeNodeGraphPitchModWheelFaceSettings === "function"
+      ? normalizeNodeGraphPitchModWheelFaceSettings(settings)
+      : (settings && typeof settings === "object" ? { ...settings } : {});
+    if (typeof applyNodeGraphPitchModWheelDisplaySettingsToFace === "function") {
+      applyNodeGraphPitchModWheelDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (displayType === "pitchQuantizerFace") {
     node.traceDisplaySettings = typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"
       ? normalizeNodeGraphPitchQuantizerFaceSettings(settings)

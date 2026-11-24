@@ -1,0 +1,60 @@
+/* Pitch Mod Wheel face: WebGL only (pitch-mod-wheel-face.js). The face box
+   sizes the canvas and holds the two transparent wheel hit boxes; the shared
+   .node-controller-gl-face rules place the canvas and hits. */
+.node-pitch-mod-wheel-face {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* GL graph mode turns DOM pointer events off inside modules; the face and
+   its wheel hit boxes take them back. */
+.node-graph-workspace.gl-graph-on .dsp-node .node-pitch-mod-wheel-face,
+.node-graph-workspace.gl-graph-on .dsp-node .node-pitch-mod-wheel-face > .node-pitch-mod-wheel-hit {
+  pointer-events: auto;
+}
+
+/* Display Settings, merged panel: the Parameter Settings form sits in this
+   box. It keeps the popover class so the form's own layout rules apply, and
+   drops the floating-window chrome that class carries. */
+.node-parameter-metadata-popover.node-pitch-mod-wheel-param-embed {
+  position: static;
+  z-index: auto;
+  display: block !important;
+  flex: none;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.node-pitch-mod-wheel-param-embed > .metadata-popover-grid {
+  flex: none;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+.node-pitch-mod-wheel-param-embed .metadata-advanced-toggle,
+.node-pitch-mod-wheel-param-embed .metadata-script-panel {
+  display: none !important;
+}
+
+.node-pitch-mod-wheel-spring-rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}

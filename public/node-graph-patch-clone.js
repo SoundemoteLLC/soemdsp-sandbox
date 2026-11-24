@@ -722,6 +722,12 @@ function cloneNodeGraphTypedDisplaySettings(node) {
       return { traceDisplaySettings: normalizeNodeGraphWaterfallSettings(bag) };
     case "torchFace":
       return { traceDisplaySettings: normalizeNodeGraphTorchFaceSettings(bag) };
+    case "pitchModWheelFace":
+      return {
+        traceDisplaySettings: typeof normalizeNodeGraphPitchModWheelFaceSettings === "function"
+          ? normalizeNodeGraphPitchModWheelFaceSettings(bag)
+          : (bag && typeof bag === "object" ? { ...bag } : {}),
+      };
     case "pitchQuantizerFace":
       return {
         traceDisplaySettings: typeof normalizeNodeGraphPitchQuantizerFaceSettings === "function"

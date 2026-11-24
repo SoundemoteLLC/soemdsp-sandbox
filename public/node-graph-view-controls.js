@@ -2678,132 +2678,6 @@ function ensureNodeGraphMidiInputMemoryLoaded() {
   }
 }
 
-function nodeGraphPerformancePitchWheelValue(value) {
-  return clampNodeSliderValue(nodeGraphFiniteNumber(value), -1, 1);
-}
-
-function nodeGraphPerformanceModWheelValue(value) {
-  return clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1);
-}
-
-function nodeGraphPerformanceWheelNodeId(element) {
-  const host = element?.closest?.("[data-node]");
-  return String(host?.dataset?.node || "").trim();
-}
-
-function nodeGraphPerformanceWheelParamKey(kind) {
-  return kind === "modWheel" ? "mod" : "pitch";
-}
-
-function nodeGraphPerformanceWheelNodes() {
-  const nodes = Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [];
-  return nodes.filter((node) => String(node?.type || "") === "pitchModWheel" && node?.id != null);
-}
-
-function readNodeGraphPerformanceWheelParam(nodeId, kind) {
-  const key = nodeGraphPerformanceWheelParamKey(kind);
-  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  const raw = Number(node?.params?.[key]);
-  const fallback = Number.isFinite(raw) ? raw : 0;
-  return kind === "modWheel"
-    ? nodeGraphPerformanceModWheelValue(fallback)
-    : nodeGraphPerformancePitchWheelValue(fallback);
-}
-
-function paintNodeGraphPerformanceWheelElement(element, value) {
-  const kind = element?.dataset?.performanceWheel;
-  const n = Number(value);
-  if (!kind || !Number.isFinite(n)) {
-    return;
-  }
-  const position = kind === "pitchWheel" ? (n + 1) * 0.5 : n;
-  element.style.setProperty("--wheel-value", String(position));
-  element.setAttribute("aria-valuenow", n.toFixed(3));
-  const valueElement = element.querySelector(`[data-performance-wheel-value="${kind}"]`);
-  if (valueElement) {
-    valueElement.textContent = n.toFixed(3);
-  }
-}
-
-function writeNodeGraphPerformanceWheelParam(nodeId, kind, value, options = {}) {
-  const key = nodeGraphPerformanceWheelParamKey(kind);
-  const slider = document.getElementById(`node-${nodeId}-${key}`);
-  if (!slider || typeof setNodeSliderValue !== "function") {
-    return false;
-  }
-  setNodeSliderValue(slider, value, options);
-  return true;
-}
-
-function renderNodeGraphPerformanceWheels() {
-  document.querySelectorAll("[data-performance-wheel]").forEach((element) => {
-    const kind = element.dataset.performanceWheel;
-    const nodeId = nodeGraphPerformanceWheelNodeId(element);
-    paintNodeGraphPerformanceWheelElement(element, readNodeGraphPerformanceWheelParam(nodeId, kind));
-  });
-}
-
-function setNodeGraphPerformanceWheel(kind, value, status = "", nodeId = "", options = null) {
-  const clamped = kind === "modWheel"
-    ? nodeGraphPerformanceModWheelValue(value)
-    : (kind === "pitchWheel" ? nodeGraphPerformancePitchWheelValue(value) : NaN);
-  if (!Number.isFinite(clamped)) {
-    return;
-  }
-  const targets = nodeId
-    ? [{ id: nodeId }]
-    : nodeGraphPerformanceWheelNodes();
-  const writeOptions = options == null ? { interaction: "drag" } : options;
-  for (let i = 0; i < targets.length; i += 1) {
-    const id = String(targets[i]?.id || "");
-    if (!id) continue;
-    writeNodeGraphPerformanceWheelParam(id, kind, clamped, writeOptions);
-  }
-  if (status) {
-    nodeGraphMvp.midiKeyboardStatus = status;
-  }
-  renderNodeGraphPerformanceWheels();
-  renderNodeGraphMidiKeyboardInputControls();
-}
-
-function setNodeGraphPerformanceWheelFromPointer(element, event) {
-  const rect = element.getBoundingClientRect();
-  const y = nodeGraphKeyboardClamp01((event.clientY - rect.top) / Math.max(1, rect.height));
-  const kind = element.dataset.performanceWheel;
-  const value = kind === "pitchWheel" ? 1 - y * 2 : 1 - y;
-  const nodeId = nodeGraphPerformanceWheelNodeId(element);
-  setNodeGraphPerformanceWheel(kind, value, kind === "pitchWheel"
-    ? `pitch wheel ${nodeGraphPerformancePitchWheelValue(value).toFixed(3)}`
-    : `mod wheel ${nodeGraphPerformanceModWheelValue(value).toFixed(3)}`, nodeId);
-}
-
-function beginNodeGraphPerformanceWheelDrag(event) {
-  const element = event.currentTarget;
-  event.preventDefault();
-  element.setPointerCapture?.(event.pointerId);
-  setNodeGraphPerformanceWheelFromPointer(element, event);
-}
-
-function dragNodeGraphPerformanceWheel(event) {
-  if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-    return;
-  }
-  event.preventDefault();
-  setNodeGraphPerformanceWheelFromPointer(event.currentTarget, event);
-}
-
-function endNodeGraphPerformanceWheelDrag(event) {
-  const element = event.currentTarget;
-  if (element.hasPointerCapture?.(event.pointerId)) {
-    element.releasePointerCapture?.(event.pointerId);
-  }
-  if (element.dataset.performanceWheel !== "pitchWheel") {
-    return;
-  }
-  const nodeId = nodeGraphPerformanceWheelNodeId(element);
-  setNodeGraphPerformanceWheel("pitchWheel", 0, "pitch wheel centered", nodeId, {});
-}
-
 // Octave numbering follows the Roland convention: MIDI 0 = C-2, so middle C
 // (MIDI 60) is C3 and the keyboard's anchor key (MIDI 24) is C0. This is the
 // single source of every note name in the app -- the keyboard key caps, the
@@ -4537,16 +4411,6 @@ function bindNodeGraphKeyboardControllerModuleEvents() {
     surface.addEventListener("lostpointercapture", updateNodeGraphKeyboardSignal);
     surface.addEventListener("pointerleave", handleNodeGraphKeyboardPointerLeave);
   });
-  document.querySelectorAll("[data-performance-wheel]").forEach((wheel) => {
-    if (wheel.dataset.performanceWheelBound === "true") {
-      return;
-    }
-    wheel.dataset.performanceWheelBound = "true";
-    wheel.addEventListener("pointerdown", beginNodeGraphPerformanceWheelDrag);
-    wheel.addEventListener("pointermove", dragNodeGraphPerformanceWheel);
-    wheel.addEventListener("pointerup", endNodeGraphPerformanceWheelDrag);
-    wheel.addEventListener("pointercancel", endNodeGraphPerformanceWheelDrag);
-  });
   document.querySelectorAll("[data-midi-keyboard-midi-input]").forEach((select) => {
     if (select.dataset.midiKeyboardInputBound === "true") {
       return;
@@ -4615,7 +4479,6 @@ function bindNodeGraphKeyboardControllerModuleEvents() {
   renderNodeGraphKeyboardKeys();
   renderNodeGraphKeyboardKeyCountControl();
   renderNodeGraphKeyboardOctaveControl();
-  renderNodeGraphPerformanceWheels();
   renderNodeGraphMidiKeyboardInputControls();
 }
 

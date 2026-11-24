@@ -3018,46 +3018,6 @@ html.soemdsp-hide-ui.body.node-patch-load-fault-open #nodePatchLoadFault {
   display: none;
 }
 
-.node-performance-wheels-panel {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(127, 199, 217, 0.1), transparent 48%),
-    #080a0c;
-}
-
-.node-performance-wheels-module {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  border-radius: 0;
-}
-
-.node-performance-wheels-heading {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.node-performance-wheels-heading span {
-  color: var(--muted);
-  font: 700 0.72rem/1 "Cascadia Mono", Consolas, monospace;
-  text-transform: uppercase;
-}
-
-.node-performance-wheels-heading strong {
-  color: var(--text);
-  font: 800 0.82rem/1 "Cascadia Mono", Consolas, monospace;
-}
-
 /* Piano Keyboard face wrapper is a hit/layout box only. The circuit-builder
    plate and keys are WebGL; this old gold-on-#080a0c CSS fill sat over them. */
 .node-keyboard-panel {
@@ -3839,102 +3799,6 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   overflow: hidden;
 }
 
-.node-keyboard-wheel-bank {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: minmax(0, 1fr);
-  gap: 6px;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-.node-keyboard-wheel {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  align-items: stretch;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid rgba(243, 241, 236, 0.16);
-  border-radius: 6px;
-  background:
-    linear-gradient(90deg, rgba(243, 241, 236, 0.04), transparent 50%, rgba(243, 241, 236, 0.035)),
-    #050607;
-  color: var(--muted);
-  font: 700 0.62rem/1 "Cascadia Mono", Consolas, monospace;
-  text-align: center;
-  touch-action: none;
-  user-select: none;
-}
-
-.node-performance-wheels-module .node-keyboard-wheel {
-  min-height: 0;
-  height: auto;
-}
-
-.node-keyboard-wheel span,
-.node-keyboard-wheel strong {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  min-width: 0;
-  min-height: 18px;
-  padding: 2px;
-  overflow: hidden;
-  text-overflow: clip;
-}
-
-.node-keyboard-wheel strong {
-  color: var(--text);
-  font-size: 0.58rem;
-}
-
-.node-keyboard-wheel i {
-  position: absolute;
-  left: 12%;
-  right: 12%;
-  /* Travel range must account for the thumb's own height (20px), or it
-     overshoots the track at both ends: the old `(value * 100%) - 10px`
-     put the thumb's bottom at -10px when value=0 (half hanging below the
-     container, clipped by overflow: hidden) and its top past 100% when
-     value=1. Interpolating across (100% - height) instead keeps the
-     whole thumb inside the track at every value. */
-  bottom: calc(var(--wheel-value, 0.5) * (100% - 20px));
-  z-index: 1;
-  height: 20px;
-  border: 1px solid rgba(241, 184, 75, 0.46);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(243, 241, 236, 0.42), rgba(127, 199, 217, 0.22)),
-    #1a2027;
-  box-shadow:
-    inset 0 0 0 1px rgba(5, 6, 7, 0.55),
-    0 0 16px rgba(241, 184, 75, 0.18);
-  pointer-events: none;
-}
-
-.node-keyboard-wheel::before {
-  content: "";
-  position: absolute;
-  inset: 24px 50% 24px auto;
-  width: 1px;
-  background: rgba(243, 241, 236, 0.13);
-}
-
-.node-keyboard-wheel.pitch::after {
-  content: "";
-  position: absolute;
-  left: 12%;
-  right: 12%;
-  top: 50%;
-  height: 1px;
-  background: rgba(241, 184, 75, 0.34);
-}
-
 /* The keyboard face draws nothing in CSS: bed, ring, keys and labels are
    WebGL (keyboard-face-gl.js). This box only sizes the surface and takes the
    pointer; the key under it comes from the same rects the draw uses. */
@@ -3968,14 +3832,6 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
 @media (max-width: 720px) {
   .node-keyboard-performance-dock {
     grid-template-columns: 1fr;
-  }
-
-  .node-keyboard-wheel-bank {
-    min-height: 0;
-  }
-
-  .node-keyboard-wheel {
-    min-height: 0;
   }
 }
 
@@ -13604,7 +13460,6 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 .node-sample-module-body,
 .node-sample-module-body *,
 .node-keyboard-surface,
-.node-keyboard-wheel,
 .node-module-lip,
 .node-slider-readout,
 .node-module-graph-display,

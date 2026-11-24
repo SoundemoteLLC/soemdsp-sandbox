@@ -588,50 +588,6 @@ function refreshNodeGraphScreenSpaceShaderBodyStatus(body) {
   status.textContent = `${script.inputs.length} in`;
 }
 
-function nodeGraphPerformanceWheelSpecs() {
-  return [
-    { className: "pitch", key: "pitchWheel", label: "Pitch", max: "1", min: "-1" },
-    { className: "mod", key: "modWheel", label: "Mod", max: "1", min: "0" },
-  ];
-}
-
-function createNodeGraphPerformanceWheel(spec) {
-  const wheel = document.createElement("div");
-  wheel.className = `node-keyboard-wheel ${spec.className}`;
-  wheel.dataset.performanceWheel = spec.key;
-  wheel.setAttribute("role", "slider");
-  wheel.setAttribute("aria-label", `${spec.label} wheel`);
-  wheel.setAttribute("aria-valuemin", spec.min);
-  wheel.setAttribute("aria-valuemax", spec.max);
-  wheel.setAttribute("aria-valuenow", "0");
-  wheel.tabIndex = 0;
-  const label = document.createElement("span");
-  label.textContent = spec.label;
-  const indicator = document.createElement("i");
-  const value = document.createElement("strong");
-  value.dataset.performanceWheelValue = spec.key;
-  value.textContent = "0.000";
-  wheel.append(label, indicator, value);
-  return wheel;
-}
-
-function createNodeGraphPitchModWheelBody(node = null) {
-  const section = document.createElement("section");
-  section.className = "node-performance-wheels-panel node-performance-wheels-module node-module-face";
-  section.dataset.moduleBand = "face";
-  if (node) {
-    section.dataset.node = node;
-  }
-  section.setAttribute("aria-label", "Pitch and modulation wheels");
-  const bank = document.createElement("div");
-  bank.className = "node-keyboard-wheel-bank";
-  for (const spec of nodeGraphPerformanceWheelSpecs()) {
-    bank.append(createNodeGraphPerformanceWheel(spec));
-  }
-  section.append(bank);
-  return section;
-}
-
 function createNodeGraphMidiModeControl() {
   const modeLabel = document.createElement("label");
   modeLabel.className = "node-keyboard-mode-control";

@@ -3219,6 +3219,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   tSeriesFace: "Crossfade",
   arpKeysFace: "Arp",
   pitchQuantizerFace: "Pitch Quantizer",
+  pitchModWheelFace: "Pitch Mod Wheel",
   knobFace: "Knob",
   pluginSliderFace: "Slider",
   graphFace: "Graph",

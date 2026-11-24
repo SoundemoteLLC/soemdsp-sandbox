@@ -948,6 +948,14 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
   };
   // Never a side "Color |" column — one contiguous widget row app-wide.
   let aria = base.aria || key;
+  if (formType === "pitchModWheelFace") {
+    const label = typeof nodeGraphPitchModWheelColorLabel === "function" ? nodeGraphPitchModWheelColorLabel(key) : "";
+    const defaults = typeof NODE_GRAPH_PITCH_MOD_WHEEL_DISPLAY_DEFAULTS !== "undefined" ? NODE_GRAPH_PITCH_MOD_WHEEL_DISPLAY_DEFAULTS : {};
+    if (label) {
+      aria = `${label} color`;
+      base = { ...base, label, defaultValue: defaults[key] || base.defaultValue };
+    }
+  }
   if (formType === "pitchQuantizerFace") {
     const labels = {
       enabledColor: "Enabled",
@@ -3308,6 +3316,9 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
   }
   if (type === "keyboardFace" && typeof buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml === "function") {
     return buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml();
+  }
+  if (type === "pitchModWheelFace" && typeof buildNodeGraphPitchModWheelDisplaySettingsBodyHtml === "function") {
+    return buildNodeGraphPitchModWheelDisplaySettingsBodyHtml();
   }
   if (type === "pitchQuantizerFace" && typeof buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml === "function") {
     return buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml();

@@ -266,6 +266,8 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "keyboardFace",
     // Pitch Quantizer: enabled / playing / natural / sharp colors.
     "pitchQuantizerFace",
+    // Pitch Mod Wheel: wheel colors and spring return.
+    "pitchModWheelFace",
     // Knob module: macro dial colors, image layers, centered span, readout.
     "knobFace",
     // Slider module: bar geometry, pins, Pill/Squircle rounding.
