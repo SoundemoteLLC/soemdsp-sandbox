@@ -3,7 +3,10 @@
 // (bindNodeSliderDragSurface / beginNodeSliderDrag). The expected numbers were
 // recorded before the binding was shared (wheel-gl-2) and must not change:
 // relative click-drag, Shift / Ctrl fine (x0.1), Shift+Ctrl finer (x0.01),
-// Alt+click jump, Ctrl+click reset.
+// Alt+click jump, Ctrl+click reset. Multi-touch (multitouch-1): a Knob and a
+// Slider dragged at once by two fingers each move exactly like a lone drag;
+// a long hold on one finger opens type-in while the other keeps dragging;
+// a double-tap resets one while the other is held; nothing leaks after.
 //   node scripts/test_controller_face_modifiers.mjs
 import { spawn } from "node:child_process";
 import net from "node:net";
@@ -73,6 +76,64 @@ try {
     }
     return out;
   }, hits);
+  // ---- multi-touch: Knob + Slider at once ----
+  const multi = await page.evaluate(async (hits) => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const fire = (el, type, id, x, y, buttons = 1) => el.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true, pointerId: id, pointerType: "touch", isPrimary: id === 41,
+      clientX: x, clientY: y, button: 0, buttons,
+    }));
+    const k = hits.k1; const s = hits.s1;
+    const ks = document.getElementById(k.target); const ss = document.getElementById(s.target);
+    const v = (el) => Number(el.dataset.domainValue ?? el.value);
+    const set = (el, val) => { setNodeSliderValue(el, val, { interaction: "drag" }); commitNodeSliderDragValue(el, "probe"); };
+    const out = {};
+    set(ks, 0.5); set(ss, 0.5);
+    const kEl = document.elementFromPoint(k.x, k.y); const sEl = document.elementFromPoint(s.x, s.y);
+    fire(kEl, "pointerdown", 41, k.x, k.y);
+    fire(sEl, "pointerdown", 42, s.x, s.y);
+    out.bothLive = nodeGraphSliderActiveDrags().length;
+    for (let i = 1; i <= 4; i += 1) {
+      fire(document, "pointermove", 41, k.x, k.y - 5 * i);
+      fire(document, "pointermove", 42, s.x, s.y - 5 * i);
+    }
+    out.knobDelta = +(v(ks) - 0.5).toFixed(5);
+    out.sliderDelta = +(v(ss) - 0.5).toFixed(5);
+    fire(document, "pointerup", 41, k.x, k.y - 20, 0);
+    out.afterFirstUp = nodeGraphSliderActiveDrags().length;
+    fire(document, "pointermove", 42, s.x, s.y - 40);
+    out.sliderAfterKnobUp = +(v(ss) - 0.5).toFixed(5);
+    fire(document, "pointerup", 42, s.x, s.y - 40, 0);
+    // Long hold on the knob opens its type-in while the slider finger drags.
+    await wait(450); // past the double-tap window from the presses above
+    set(ks, 0.5); set(ss, 0.5);
+    fire(sEl, "pointerdown", 44, s.x, s.y);
+    fire(kEl, "pointerdown", 43, k.x, k.y);
+    fire(document, "pointermove", 44, s.x, s.y - 15); // past the 10px touch slop
+    await wait(650);
+    fire(document, "pointermove", 44, s.x, s.y - 20);
+    out.holdTypeIn = document.querySelector(`.node-knob-face[data-node="k1"]`)?.dataset?.knobFaceEditing === "true";
+    out.sliderDuringHold = +(v(ss) - 0.5).toFixed(5);
+    out.liveDuringHold = nodeGraphSliderActiveDrags().map((d) => d.slider.id);
+    fire(document, "pointerup", 43, k.x, k.y, 0);
+    fire(document, "pointerup", 44, s.x, s.y - 20, 0);
+    document.activeElement?.blur?.();
+    if (typeof endNodeGraphKnobFaceValueEdit === "function") endNodeGraphKnobFaceValueEdit(document.querySelector(`.node-knob-face[data-node="k1"]`), false);
+    await wait(400);
+    // Double-tap resets the knob while another finger holds the slider.
+    set(ks, 0.8);
+    fire(sEl, "pointerdown", 45, s.x, s.y);
+    fire(kEl, "pointerdown", 46, k.x, k.y); fire(document, "pointerup", 46, k.x, k.y, 0);
+    await wait(60);
+    fire(kEl, "pointerdown", 47, k.x, k.y); fire(document, "pointerup", 47, k.x, k.y, 0);
+    out.doubleTapReset = +v(ks).toFixed(5);
+    out.sliderStillLive = nodeGraphSliderActiveDrags().some((d) => d.pointerId === 45);
+    fire(document, "pointercancel", 45, s.x, s.y, 0);
+    out.leftAfter = nodeGraphSliderActiveDrags().length;
+    out.flagAfter = Boolean(nodeGraphMvp.sliderDragging);
+    out.bodyClassAfter = document.body.classList.contains("node-slider-dragging");
+    return out;
+  }, hits);
   const expected = {"k1":{"pressNoMove":0.5,"plainUp20":0.35021,"shiftUp20":0.03502,"ctrlDragUp20":0.03502,"shiftCtrlUp20":0.0035,"altClick":0.65,"ctrlClick":0},"s1":{"pressNoMove":0.5,"plainUp20":0.09851,"shiftUp20":0.00985,"ctrlDragUp20":0.00985,"shiftCtrlUp20":0.00099,"altClick":0.65,"ctrlClick":0}};
   let bad = 0;
   for (const [id, exp] of Object.entries(expected)) {
@@ -83,6 +144,15 @@ try {
       console.log(`${ok ? "ok  " : "FAIL"} ${id === "k1" ? "Knob" : "Slider"} ${k}: ${got} (expected ${v})`);
     }
   }
+  const mcheck = (ok, msg) => { if (!ok) bad += 1; console.log(`${ok ? "ok  " : "FAIL"} ${msg}`); };
+  mcheck(multi.bothLive === 2, `two fingers drive a Knob and a Slider at once (${multi.bothLive} live drags)`);
+  mcheck(Math.abs(multi.knobDelta - expected.k1.plainUp20) < 1e-4 && Math.abs(multi.sliderDelta - expected.s1.plainUp20) < 1e-4,
+    `each finger moves its control exactly like a lone drag (knob ${multi.knobDelta}, slider ${multi.sliderDelta})`);
+  mcheck(multi.afterFirstUp === 1 && multi.sliderAfterKnobUp > multi.sliderDelta, `lifting one finger leaves the other dragging (${multi.sliderAfterKnobUp})`);
+  mcheck(multi.holdTypeIn && multi.sliderDuringHold > 0 && multi.liveDuringHold.length === 1 && multi.liveDuringHold[0] === hits.s1.target,
+    `long hold opens the Knob type-in while the Slider finger keeps dragging (${JSON.stringify(multi.liveDuringHold)}, slider ${multi.sliderDuringHold})`);
+  mcheck(Math.abs(multi.doubleTapReset) < 1e-6 && multi.sliderStillLive, `double-tap resets the Knob while another finger holds the Slider (${multi.doubleTapReset})`);
+  mcheck(multi.leftAfter === 0 && !multi.flagAfter && !multi.bodyClassAfter, "pointercancel ends its drag; no drag state or cursor class left behind");
   console.log(bad ? `\n${bad} check(s) FAILED` : "\nall checks passed");
   process.exitCode = bad ? 1 : 0;
 } finally { await browser.close(); server.kill(); }

@@ -4,7 +4,7 @@
 // entries, keyboard golden fixture untouched) plus a headless browser run:
 // shared drag surface with the Knob/Slider modifiers (relative click-drag,
 // Alt+click jump, Shift/Ctrl fine, Shift+Ctrl finer, Ctrl+click reset, touch
-// relative), Pitch springs back, Mod holds (until Spring is on), no press
+// relative, two fingers on two wheels at once), Pitch springs back, Mod holds (until Spring is on), no press
 // highlight, ridges roll with the pointer,
 // wire drops map to each wheel's MOD inlet, right-click opens one merged
 // panel (Parameter on top, Display below), hidden display collapses, the
@@ -267,6 +267,56 @@ try {
 
   const modHit = setup.hits.find((h) => h.key === "mod");
   const cx = (h) => h.x + h.w / 2;
+  // Multi-touch: two fingers drive the two wheels at once; a second finger on
+  // a wheel already held does not take it over; pointercancel ends cleanly.
+  await setVal("pitch", 0);
+  await setVal("mod", 0.25);
+  const both = await page.evaluate(() => {
+    const at = (key, v) => {
+      const hit = document.querySelector(`.dsp-node[data-node="wheelA"] [data-pitch-mod-wheel-param="${key}"]`);
+      const r = hit.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height * v };
+    };
+    const fire = (el, type, id, p, dy, buttons = 1) => el.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true, pointerId: id, pointerType: "touch", isPrimary: id === 31,
+      clientX: p.x, clientY: p.y + dy, button: 0, buttons,
+    }));
+    const read = (key) => { const el = document.getElementById(`node-wheelA-${key}`); const d = Number(el.dataset.domainValue); return Number.isFinite(d) ? d : Number(el.value); };
+    const p = at("pitch", 0.5); const m = at("mod", 0.5);
+    fire(document.elementFromPoint(p.x, p.y), "pointerdown", 31, p, 0);
+    fire(document.elementFromPoint(m.x, m.y), "pointerdown", 32, m, 0);
+    const live = nodeGraphSliderActiveDrags().length;
+    // A third finger lands on the Mod wheel that finger 32 already holds.
+    fire(document.elementFromPoint(m.x, m.y + 10), "pointerdown", 33, m, 10);
+    const liveAfterThird = nodeGraphSliderActiveDrags().length;
+    for (let i = 1; i <= 4; i += 1) {
+      fire(document, "pointermove", 31, p, -5 * i);
+      fire(document, "pointermove", 32, m, -5 * i);
+      fire(document, "pointermove", 33, m, 10 + 30 * i);
+    }
+    const heldPitch = read("pitch");
+    const heldMod = read("mod");
+    fire(document, "pointerup", 33, m, 130, 0);
+    fire(document, "pointerup", 32, m, -20, 0);
+    const modAfterUp = read("mod");
+    const pitchStillLive = nodeGraphSliderActiveDrags().some((d) => d.pointerId === 31);
+    fire(document, "pointermove", 31, p, -30);
+    const pitchMore = read("pitch");
+    fire(document, "pointercancel", 31, p, -30, 0);
+    return {
+      live, liveAfterThird, heldPitch, heldMod, modAfterUp, pitchStillLive, pitchMore,
+      pitchAfterCancel: read("pitch"),
+      left: nodeGraphSliderActiveDrags().length,
+      flag: Boolean(nodeGraphMvp.sliderDragging),
+      bodyClass: document.body.classList.contains("node-slider-dragging"),
+    };
+  });
+  check(both.live === 2 && both.heldPitch > 0.1 && both.heldMod > 0.3, `two fingers drag both wheels at once (pitch ${both.heldPitch.toFixed(4)}, mod ${both.heldMod.toFixed(4)})`);
+  check(both.liveAfterThird === 2 && near(both.heldMod - 0.25, plainDelta, 0.01), `a second finger on a held wheel does not take it over (mod moved ${(both.heldMod - 0.25).toFixed(4)} = one finger's ${plainDelta.toFixed(4)})`);
+  check(near(both.modAfterUp, both.heldMod, 1e-9) && both.pitchStillLive && both.pitchMore > both.heldPitch, `lifting the Mod finger holds Mod and Pitch keeps dragging (${both.pitchMore.toFixed(4)})`);
+  check(near(both.pitchAfterCancel, 0, 1e-9), `pointercancel ends the Pitch drag and it springs back (${both.pitchAfterCancel})`);
+  check(both.left === 0 && !both.flag && !both.bodyClass, "no drag state or cursor class left after all fingers end");
+
   // Right-click the Mod wheel: one panel, Parameter on top, Display below.
   await page.mouse.click(cx(modHit), modHit.y + modHit.h * 0.5, { button: "right" });
   await page.waitForTimeout(300);

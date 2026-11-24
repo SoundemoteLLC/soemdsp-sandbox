@@ -1094,7 +1094,9 @@ function nodeSliderHandleRangeFromTravel(slider, surface, travel) {
 }
 
 function nodeSliderTravelFromPointer(slider, surface, clientX, clientY) {
-  const drag = nodeGraphMvp?.sliderDragging;
+  const drag = typeof nodeSliderDragForSurface === "function"
+    ? nodeSliderDragForSurface(surface)
+    : nodeGraphMvp?.sliderDragging;
   const knob = typeof nodeSliderKnobDragMetrics === "function"
     ? nodeSliderKnobDragMetrics(surface)
     : null;

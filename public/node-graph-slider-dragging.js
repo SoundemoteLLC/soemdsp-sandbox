@@ -674,8 +674,8 @@ function nodeGraphDragDotEnd(surface) {
   document.body.classList.remove("node-slider-dragging");
 }
 
-// Safety net: nodeGraphMvp.sliderDragging is a single global re-entrancy
-// flag (see the early-return at the top of beginNodeSliderDrag) that is
+// Safety net: nodeGraphMvp.sliderDragging (with nodeGraphSliderDrags, one
+// drag per pointer) gates beginNodeSliderDrag and is
 // ONLY ever cleared by endNodeSliderDrag, which only runs from a
 // pointerup/pointercancel/mouseup event. If one of those events is ever
 // missed -- e.g. the OS/browser steals the mouseup while showing its
@@ -684,13 +684,53 @@ function nodeGraphDragDotEnd(surface) {
 // which silently disables dragging on EVERY slider in the app, not just
 // the one that was mid-drag. Force-clearing on blur/tab-hide turns that
 // unrecoverable, session-wide failure into, at worst, one cancelled drag.
-function forceEndNodeSliderDrag(reason) {
-  const drag = nodeGraphMvp?.sliderDragging;
-  if (!drag) {
-    return;
+// Every live value drag, keyed by pointerId (a drag begun from an event
+// without one, e.g. a bare mousedown, uses "mouse"). Each finger drives its
+// own surface; nodeGraphMvp.sliderDragging stays the newest live drag for the
+// callers that only ask "is a drag running?" or read the one just begun.
+// The mouse is one pointer, so a mouse drag is always the only drag.
+const nodeGraphSliderDrags = new Map();
+
+function nodeSliderDragKey(pointerId) {
+  return pointerId === undefined || pointerId === null ? "mouse" : pointerId;
+}
+
+/** All live drags, oldest first. */
+function nodeGraphSliderActiveDrags() {
+  return [...nodeGraphSliderDrags.values()];
+}
+
+/** The live drag on a surface, or null. */
+function nodeSliderDragForSurface(surface) {
+  if (!surface) {
+    return null;
   }
-  nodeGraphSliderDebugTrace("slider drag force-ended", { reason, sliderId: drag.slider?.id || null });
-  endNodeSliderDrag({ pointerId: drag.pointerId ?? undefined });
+  for (const drag of nodeGraphSliderDrags.values()) {
+    if (drag.surface === surface) {
+      return drag;
+    }
+  }
+  return null;
+}
+
+/**
+ * The drag an event belongs to: its pointer's drag; a pointer-less event
+ * (mousemove / mouseup, forced end) goes to the newest drag, as before.
+ */
+function nodeSliderDragForEvent(event) {
+  const pointerId = event?.pointerId;
+  if (pointerId !== undefined && pointerId !== null) {
+    return nodeGraphSliderDrags.get(pointerId) || nodeGraphSliderDrags.get("mouse") || null;
+  }
+  return nodeGraphMvp.sliderDragging || null;
+}
+
+function forceEndNodeSliderDrag(reason) {
+  // Every finger's drag ends (blur / tab hidden reach no pointerup at all).
+  for (const drag of nodeGraphSliderActiveDrags()) {
+    nodeGraphSliderDebugTrace("slider drag force-ended", { reason, sliderId: drag.slider?.id || null });
+    endNodeSliderDrag({ pointerId: drag.pointerId ?? undefined }, drag);
+  }
 }
 if (typeof window !== "undefined") {
   window.addEventListener("blur", () => forceEndNodeSliderDrag("window blur"));
@@ -1363,8 +1403,37 @@ function setNodeSliderValueAtPointer(slider, surface, event, options = {}) {
   return true;
 }
 
+/** True when every live drag is a touch/pen pointer (none from the mouse). */
+function nodeGraphActiveDragsAreTouch() {
+  for (const drag of nodeGraphSliderDrags.values()) {
+    if (drag.pointerType === "mouse" || typeof drag.pointerId !== "number") {
+      return false;
+    }
+  }
+  return nodeGraphSliderDrags.size > 0;
+}
+
 function beginNodeSliderDrag(event) {
-  if (nodeGraphMvp.sliderDragging || event.button > 0) {
+  // Multi-touch: another finger may start its own drag on another surface.
+  // A mouse press (or a bare mousedown) still waits for any drag to end, and
+  // nothing joins a running mouse drag, so the mouse stays one pointer.
+  const activeDrag = nodeGraphMvp.sliderDragging;
+  const extraTouch = Boolean(activeDrag)
+    && event.button <= 0
+    && typeof event.pointerId === "number"
+    && event.pointerType !== "mouse"
+    && !nodeGraphSliderDrags.has(event.pointerId)
+    && nodeGraphActiveDragsAreTouch();
+  if (extraTouch) {
+    const surfaceInUse = nodeSliderDragForSurface(nodeSliderDragSurfaceFromEvent(event));
+    if (surfaceInUse) {
+      // A second finger on a surface already being dragged: the first keeps it.
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+  }
+  if ((activeDrag && !extraTouch) || event.button > 0) {
     // If sliderDragging is already set, EVERY slider ignores pointerdown
     // until it clears -- if the drag that set it never reaches
     // endNodeSliderDrag (e.g. its pointerup/mouseup got swallowed
@@ -1459,9 +1528,12 @@ function beginNodeSliderDrag(event) {
     : null;
   const lane = nodeSliderVisualLane(surface, slider);
   if (typeof nodeSliderElementLayoutWidth === "function") {
+    // Other fingers' drags keep their measured lanes.
+    const kept = nodeGraphSliderDrags.size ? nodeSliderDragWidthCache : null;
     nodeSliderDragWidthCache = null;
     const width = nodeSliderElementLayoutWidth(surface);
-    nodeSliderDragWidthCache = new Map([[surface, width]]);
+    nodeSliderDragWidthCache = kept || new Map();
+    nodeSliderDragWidthCache.set(surface, width);
   }
   const resetToDefaultOnClick = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
   const jumpToPointerOnClick = event.altKey && !(event.shiftKey && (event.ctrlKey || event.metaKey));
@@ -1489,9 +1561,10 @@ function beginNodeSliderDrag(event) {
     setNodeChoiceSliderFromPointer(slider, surface, event.clientX, { interaction: "drag" });
     startTravel = nodeSliderTravelFromValue(slider, nodeSliderDomainForTravel(slider));
   }
-  nodeGraphMvp.sliderDragging = {
+  const dragState = {
     moved: false,
     pointerId: event.pointerId ?? null,
+    pointerType: event.pointerType || "",
     pointerMode,
     resetToDefaultOnClick,
     slider,
@@ -1506,13 +1579,17 @@ function beginNodeSliderDrag(event) {
     width: knobMetrics ? knobMetrics.travelWidth : lane.travelWidth,
     touchKey: touch ? touchKey : "",
   };
+  dragState.key = nodeSliderDragKey(dragState.pointerId);
+  nodeGraphSliderDrags.set(dragState.key, dragState);
+  nodeGraphMvp.sliderDragging = dragState;
   if (touch && !skipTypeIn && !noTypeIn && typeof nodeGraphTouchGestureArmHold === "function") {
     nodeGraphTouchGestureArmHold(touchKey, event, () => {
-      const drag = nodeGraphMvp.sliderDragging;
-      if (!drag || drag.surface !== surface || drag.touchMoved) {
+      // This finger's drag, still live and still: hold opens type-in.
+      const drag = dragState;
+      if (nodeGraphSliderDrags.get(drag.key) !== drag || drag.touchMoved) {
         return;
       }
-      endNodeSliderDrag({ pointerId: drag.pointerId });
+      endNodeSliderDrag({ pointerId: drag.pointerId }, drag);
       beginNodeSliderSurfaceEdit(surface);
       if (typeof nodeGraphTooltipShowTouch === "function") {
         nodeGraphTooltipShowTouch(surface, event);
@@ -1541,7 +1618,7 @@ function beginNodeSliderDrag(event) {
 }
 
 function dragNodeSlider(event) {
-  const drag = nodeGraphMvp.sliderDragging;
+  const drag = nodeSliderDragForEvent(event);
   if (
     !drag ||
     (drag.pointerId !== null && event.pointerId !== undefined && drag.pointerId !== event.pointerId)
@@ -1636,8 +1713,8 @@ function dragNodeSlider(event) {
   event.preventDefault();
 }
 
-function endNodeSliderDrag(event) {
-  const drag = nodeGraphMvp.sliderDragging;
+function endNodeSliderDrag(event, explicitDrag = null) {
+  const drag = explicitDrag || nodeSliderDragForEvent(event);
   // soemdspPerformEndHook
   if (window.soemdspPerformMode && drag?.slider && window.soemdspPerform?._handleControllerWrite) {
     const nodeId = window.soemdspPerform._nodeIdFromSlider
@@ -1657,8 +1734,13 @@ function endNodeSliderDrag(event) {
     return;
   }
 
+  // Drop this pointer's drag first so re-entrant ends (lostpointercapture from
+  // the release below) find nothing to end twice.
+  nodeGraphSliderDrags.delete(drag.key ?? nodeSliderDragKey(drag.pointerId));
   drag.surface.classList.remove("value-dragging");
-  clearNodeSliderDragCursorState();
+  if (!nodeGraphSliderDrags.size) {
+    clearNodeSliderDragCursorState();
+  }
   if (event.pointerId !== undefined && drag.surface.hasPointerCapture?.(event.pointerId)) {
     drag.surface.releasePointerCapture(event.pointerId);
   }
@@ -1677,8 +1759,15 @@ function endNodeSliderDrag(event) {
       : (springBack ? "parameter returned to default" : "parameter changed"),
   );
   nodeGraphSliderDebugTrace("slider drag ended", { sliderId: drag.slider?.id || null, moved: drag.moved });
-  nodeGraphMvp.sliderDragging = null;
-  nodeSliderDragWidthCache = null;
+  const remaining = nodeGraphSliderActiveDrags();
+  if (nodeGraphMvp.sliderDragging === drag || !remaining.length) {
+    nodeGraphMvp.sliderDragging = remaining.length ? remaining[remaining.length - 1] : null;
+  }
+  if (!remaining.length) {
+    nodeSliderDragWidthCache = null;
+  } else {
+    nodeSliderDragWidthCache?.delete?.(drag.surface);
+  }
 }
 
 // ── Deferred readout display (decouples value from display, C++ ParameterPrototype pattern) ──
@@ -1711,7 +1800,8 @@ function flushNodeSliderReadoutUpdates() {
     }
   }
   pending.clear();
-  const onlyBpmDrag = nodeGraphMvp?.sliderDragging?.slider?.dataset?.param === "bpm";
+  const liveDrags = nodeGraphSliderActiveDrags();
+  const onlyBpmDrag = liveDrags.length > 0 && liveDrags.every((drag) => drag.slider?.dataset?.param === "bpm");
   // Keep parameter-driven visuals (bug button glyph, XY pad grid/puck, filter
   // curves, etc.) tracking the slider live during a drag. Slider drags don't
   // dispatch "input" events and the deferred-UI path skips visual sync, so

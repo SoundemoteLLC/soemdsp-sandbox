@@ -8,14 +8,18 @@ const nodeGraphConvolutionProbeDefaults = Object.freeze({
 
 function nodeGraphConvolutionProbeParameters(node, sampleRate) {
   const params = { sampleRate };
-  const drag = typeof nodeGraphMvp === "undefined" ? null : nodeGraphMvp.sliderDragging;
+  // Every finger's live drag (multi-touch), else the one mouse drag.
+  const drags = typeof nodeGraphSliderActiveDrags === "function"
+    ? nodeGraphSliderActiveDrags()
+    : [typeof nodeGraphMvp === "undefined" ? null : nodeGraphMvp.sliderDragging].filter(Boolean);
   for (const [key, fallback] of Object.entries(nodeGraphConvolutionProbeDefaults)) {
     const raw = node?.params?.[key];
     const value = raw !== "" && raw != null ? Number(raw) : NaN;
     params[key] = Number.isFinite(value) ? value : fallback;
     // Only the user's active knob drag can override authoring state. Never
     // consume scope buffers, ghost sliders, wired pitch or live MOD values.
-    if (drag?.slider?.dataset?.node === String(node?.id) && drag.slider.dataset.param === key) {
+    const drag = drags.find((d) => d?.slider?.dataset?.node === String(node?.id) && d.slider.dataset.param === key);
+    if (drag) {
       const dragging = Number(drag.slider.dataset.domainValue);
       if (Number.isFinite(dragging)) params[key] = dragging;
     }
