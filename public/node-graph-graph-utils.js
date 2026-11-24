@@ -1869,6 +1869,80 @@ function nodeGraphGraphNearestHandleAtClient(display, clientX, clientY) {
   return best;
 }
 
+// A point at a corner of the plot (Y at max/min, X at 0/1) has half its hit
+// circle outside the display, and the layout-B IO columns (jack label rows)
+// sit over the display's top corners. A press there lands on the IO row or
+// the module plate, so it never reached the graph and the GL hit test moved
+// the module instead. This finds the point or contour handle whose own hit
+// circle holds the press when the target is the same module's chrome, so the
+// press grabs the point. Outside the module rect (outer half of a jack, the
+// wire layer) and away from every hit circle (title, plate) nothing changes.
+function nodeGraphGraphEdgeHandleAtClient(target, clientX, clientY) {
+  if (!(target instanceof Element) || nodeGraphGraphDisplayFromEventTarget(target)) {
+    return null;
+  }
+  const x = Number(clientX);
+  const y = Number(clientY);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+  const moduleEl = target.closest(".dsp-node");
+  const display = moduleEl?.querySelector?.(".node-module-graph-face .node-module-graph-display");
+  if (!display || target.closest("input, textarea, select, [contenteditable='true'], .node-header-title, .node-module-graph-point-strip")) {
+    return null;
+  }
+  const moduleBox = moduleEl.getBoundingClientRect();
+  if (x < moduleBox.left || x > moduleBox.right || y < moduleBox.top || y > moduleBox.bottom) {
+    return null;
+  }
+  let best = null;
+  let bestD = Infinity;
+  const consider = (el, kind) => {
+    const box = el.getBoundingClientRect();
+    const r = Math.max(box.width, box.height) * 0.5;
+    if (!(r > 0)) {
+      return;
+    }
+    const dx = x - (box.left + box.width * 0.5);
+    const dy = y - (box.top + box.height * 0.5);
+    const d = Math.hypot(dx, dy);
+    if (d <= r && d < bestD) {
+      bestD = d;
+      best = { display, el, kind };
+    }
+  };
+  display.querySelectorAll(".node-module-graph-node-hit").forEach((el) => consider(el, "node"));
+  display.querySelectorAll(".node-module-graph-contour-handle-hit").forEach((el) => consider(el, "contour"));
+  return best;
+}
+
+// Document capture runs before the workspace's GL module-drag hit test, so a
+// corner point wins over the IO row / plate under it.
+function handleNodeGraphGraphEdgePointerDown(event) {
+  if (event.button !== undefined && event.button !== 0) {
+    return;
+  }
+  const hit = nodeGraphGraphEdgeHandleAtClient(event.target, event.clientX, event.clientY);
+  if (!hit || !hit.display.closest("#nodeGraphWorkspace, .node-graph-workspace")) {
+    return;
+  }
+  nodeGraphGraphDebugTrace("graph pointerdown at plot edge, handle under module chrome", { kind: hit.kind });
+  event.stopPropagation();
+  beginNodeGraphGraphNodeDrag(new Proxy(event, {
+    get(source, key) {
+      if (key === "target") {
+        return hit.el;
+      }
+      const value = source[key];
+      return typeof value === "function" ? value.bind(source) : value;
+    },
+  }));
+}
+
+if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+  document.addEventListener("pointerdown", handleNodeGraphGraphEdgePointerDown, true);
+}
+
 function nodeGraphGraphCapturePointer(display, event) {
   if (!display || event?.pointerId === undefined) {
     return;
