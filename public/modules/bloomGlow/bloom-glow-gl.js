@@ -81,7 +81,7 @@ const NODE_GRAPH_BLOOM_GLOW_MAX = 4096;
         vec4 t = texture2D(uPic, vUv);
         c = t.a > 1e-4 ? t.rgb / t.a : vec3(0.0);
       }
-      c *= 1.0 - clamp(uDim, 0.0, 1.0);
+      c *= 1.0 - uDim;
       c += texture2D(uBloom, vUv).rgb * uBloomAmt + texture2D(uGlow, vUv).rgb * uGlowAmt;
       gl_FragColor = vec4(min(c, vec3(1.0)), 1.0);
     }
@@ -253,10 +253,10 @@ const NODE_GRAPH_BLOOM_GLOW_MAX = 4096;
     pass(gl, device, device.bright, renderer.a, [picTex], (p) => {
       gl.uniform1i(p.uPic, 0);
       gl.uniform1f(p.uHasPic, hasPic ? 1 : 0);
-      gl.uniform1f(p.uThreshold, Math.max(0, Math.min(0.99, Number(options.threshold) || 0)));
+      gl.uniform1f(p.uThreshold, Number(options.threshold) || 0);
     });
     // 2. bloom: a -> b (sideways) -> a (up and down); the step is Spread, in texels of the half-size surface
-    const bloomStep = 0.6 + (Math.max(0, Math.min(1, Number(options.spread) || 0))) * 5;
+    const bloomStep = 0.6 + (Number(options.spread) || 0) * 5;
     const blur = (src, dst, dx, dy, k) => pass(gl, device, device.blur, dst, [src.texture], (p) => {
       gl.uniform1i(p.uTex, 0);
       gl.uniform2f(p.uStep, (dx * k) / src.width, (dy * k) / src.height);
@@ -265,7 +265,7 @@ const NODE_GRAPH_BLOOM_GLOW_MAX = 4096;
     blur(renderer.b, renderer.a, 0, 1, bloomStep);
     // 3. glow: a -> c (quarter size), then blurred wide, twice
     pass(gl, device, device.copy, renderer.c, [renderer.a.texture], (p) => gl.uniform1i(p.uTex, 0));
-    const glowStep = 1.0 + (Math.max(0, Math.min(1, Number(options.glowSize) || 0))) * 7;
+    const glowStep = 1.0 + (Number(options.glowSize) || 0) * 7;
     blur(renderer.c, renderer.d, 1, 0, glowStep);
     blur(renderer.d, renderer.c, 0, 1, glowStep);
     blur(renderer.c, renderer.d, 1, 0, glowStep * 1.7);
@@ -276,9 +276,9 @@ const NODE_GRAPH_BLOOM_GLOW_MAX = 4096;
       gl.uniform1i(p.uBloom, 1);
       gl.uniform1i(p.uGlow, 2);
       gl.uniform1f(p.uHasPic, hasPic ? 1 : 0);
-      gl.uniform1f(p.uBloomAmt, Math.max(0, Number(options.bloom) || 0));
-      gl.uniform1f(p.uGlowAmt, Math.max(0, Number(options.glow) || 0));
-      gl.uniform1f(p.uDim, Math.max(0, Math.min(1, Number(options.dim) || 0)));
+      gl.uniform1f(p.uBloomAmt, Number(options.bloom) || 0);
+      gl.uniform1f(p.uGlowAmt, Number(options.glow) || 0);
+      gl.uniform1f(p.uDim, Number(options.dim) || 0);
     });
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     for (let i = 2; i >= 0; i -= 1) {

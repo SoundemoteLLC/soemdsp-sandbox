@@ -1,4 +1,9 @@
 function nodeGraphScreenBendReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -6,14 +11,6 @@ function nodeGraphScreenBendReadParam(nodeId, key, fallback) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const raw = Number(node?.params?.[key]);
   return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphScreenBendClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
 }
 
 function nodeGraphScreenBendEnsureCanvas(face) {
@@ -84,19 +81,19 @@ function drawNodeGraphScreenBendFaceItem(_renderer, item) {
   if (nodeGraphScreenBendCircuitLive() && typeof nodeGraphScreenBendGlStep === "function") {
     nodeGraphScreenBendGlStep(canvas, {
       nodeId,
-      width: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "width", 0.55), -1, 1),
-      height: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "height", 0.55), -1, 1),
-      round: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "round", 0.4), 0, 1),
-      vignette: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vignette", 0.35), 0, 1),
-      glare: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glare", 0.15), 0, 1),
-      glareX: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareX", -0.42), -1, 1),
-      glareY: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareY", 0.5), -1, 1),
-      glareSize: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "glareSize", 0.5), 0, 1),
-      vigReach: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigReach", 0.4), 0, 1),
-      vigCurve: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigCurve", 0.3), 0, 1),
-      vigShape: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "vigShape", 1), 0, 1),
-      shadowAlpha: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "shadowAlpha", 0), 0, 1),
-      shadowThick: nodeGraphScreenBendClamp(nodeGraphScreenBendReadParam(nodeId, "shadowThick", 0.3), 0, 1),
+      width: nodeGraphScreenBendReadParam(nodeId, "width", 0.55),
+      height: nodeGraphScreenBendReadParam(nodeId, "height", 0.55),
+      round: nodeGraphScreenBendReadParam(nodeId, "round", 0.4),
+      vignette: nodeGraphScreenBendReadParam(nodeId, "vignette", 0.35),
+      glare: nodeGraphScreenBendReadParam(nodeId, "glare", 0.15),
+      glareX: nodeGraphScreenBendReadParam(nodeId, "glareX", -0.42),
+      glareY: nodeGraphScreenBendReadParam(nodeId, "glareY", 0.5),
+      glareSize: nodeGraphScreenBendReadParam(nodeId, "glareSize", 0.5),
+      vigReach: nodeGraphScreenBendReadParam(nodeId, "vigReach", 0.4),
+      vigCurve: nodeGraphScreenBendReadParam(nodeId, "vigCurve", 0.3),
+      vigShape: nodeGraphScreenBendReadParam(nodeId, "vigShape", 1),
+      shadowAlpha: nodeGraphScreenBendReadParam(nodeId, "shadowAlpha", 0),
+      shadowThick: nodeGraphScreenBendReadParam(nodeId, "shadowThick", 0.3),
       picture,
     });
   }

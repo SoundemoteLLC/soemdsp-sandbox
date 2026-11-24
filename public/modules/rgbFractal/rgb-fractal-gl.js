@@ -210,7 +210,7 @@ vec3 paletteSample(float e, float soft) {
 }
 
 void main() {
-  float soft = clamp(uSoft, 0.0, 1.0);
+  float soft = uSoft;
   // Edge Blur domain 0…8 (UI); maps to gaussian sigma in pixels.
   float edgeBlur = max(0.0, uBlur);
   float glowAmt = clamp(uGlow, 0.0, 1.35);

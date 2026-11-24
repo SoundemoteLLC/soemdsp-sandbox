@@ -40,6 +40,11 @@ function nodeGraphFbmFieldSettingsForNode(node) {
 }
 
 function nodeGraphFbmFieldReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -331,11 +336,11 @@ function nodeGraphFbmFieldSyncProbeMarkers(face, nodeId, visible) {
     if (svg) svg.style.display = "none";
     return;
   }
-  const zoom = Math.max(0.05, nodeGraphFbmFieldReadParam(nodeId, "zoom", 1));
+  const zoom = nodeGraphFbmFieldReadParam(nodeId, "zoom", 1);
   const panX = nodeGraphFbmFieldReadParam(nodeId, "panX", 0);
   const panY = nodeGraphFbmFieldReadParam(nodeId, "panY", 0);
   const rotate = nodeGraphFbmFieldReadParam(nodeId, "rotate", 0);
-  const motion = Math.max(0, Math.min(1, Math.round(nodeGraphFbmFieldReadParam(nodeId, "motion", 1))));
+  const motion = nodeGraphFbmFieldReadParam(nodeId, "motion", 1);
   const isVolume = motion === 1;
   const span = 1 / zoom;
   const d = span * 0.35;
@@ -428,7 +433,7 @@ function paintNodeGraphFbmFieldFace(canvas, face, nodeId, options = {}) {
   face._fbmFieldBlack = false;
 
   // Frequency alone is domain rate (same as WASM X/Y path). No second rate knob.
-  const frequency = Math.max(0, nodeGraphFbmFieldReadParam(nodeId, "frequency", 20));
+  const frequency = nodeGraphFbmFieldReadParam(nodeId, "frequency", 20);
   const frozen = nodeGraphFbmFieldShouldFreeze(frequency);
   if (frozen && face._fbmFieldHasFrame && !options.force) {
     face._fbmFieldLastTs = 0;

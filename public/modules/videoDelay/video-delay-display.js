@@ -7,6 +7,11 @@ function nodeGraphVideoDelayPeriod(nodeId) {
 }
 
 function nodeGraphVideoDelayReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -79,10 +84,11 @@ function drawNodeGraphVideoDelayFaceItem(_renderer, item, pixelRatio) {
     return;
   }
   const nodeId = slot.nodeId;
-  const decay = Math.max(0, Math.min(1, nodeGraphVideoDelayReadParam(nodeId, "decay", 0.94)));
-  const mix = Math.max(0, Math.min(1, nodeGraphVideoDelayReadParam(nodeId, "mix", 0.7)));
-  const zoom = Math.max(0, Math.min(1, nodeGraphVideoDelayReadParam(nodeId, "zoom", 0.12)));
-  const twist = Math.max(-1, Math.min(1, nodeGraphVideoDelayReadParam(nodeId, "twist", 0)));
+  // Bounds come from the parameter definitions (the reader folds MOD cables and clips to them).
+  const decay = nodeGraphVideoDelayReadParam(nodeId, "decay", 0.94);
+  const mix = nodeGraphVideoDelayReadParam(nodeId, "mix", 0.7);
+  const zoom = nodeGraphVideoDelayReadParam(nodeId, "zoom", 0.12);
+  const twist = nodeGraphVideoDelayReadParam(nodeId, "twist", 0);
   const panX = Math.max(-1, Math.min(1,
     nodeGraphVideoDelayReadParam(nodeId, "panX", 0) + 0.55 * nodeGraphVideoGraphAudioLatest(nodeId, "X"),
   ));

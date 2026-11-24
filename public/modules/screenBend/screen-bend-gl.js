@@ -56,7 +56,7 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 4096;
         col = (t.a > 1e-4 ? t.rgb / t.a : vec3(0.0)) * inside;
       }
       // Glass edge: superellipse exponent from Roundness (0 = square corners, 1 = ellipse).
-      float n = 2.0 + 38.0 * pow(1.0 - clamp(uRound, 0.0, 1.0), 2.0);
+      float n = 2.0 + 38.0 * pow(1.0 - uRound, 2.0);
       vec2 a = pow(abs(p), vec2(n));
       float d = pow(a.x + a.y, 1.0 / n);
       float mask = 1.0 - smoothstep(0.985, 1.0, d);
@@ -64,27 +64,27 @@ const NODE_GRAPH_SCREEN_BEND_MAX = 4096;
       // fall is (soft gradient ... a hard shadow edge); at full Vignette the outside goes fully black.
       // Dark starts at vStart (Reach) and is full at vEnd (Curve: soft = out at the corners, hard = right after the start). As
       // Vignette comes up vEnd pulls in to the glass edge, so at full Vignette everything from the edge outward is pure black.
-      float vAmt = clamp(uVignette, 0.0, 1.0);
-      float vStart = mix(0.95, 0.0, clamp(uVigReach, 0.0, 1.0));
-      float vEnd = mix(1.4, vStart + 0.05, pow(clamp(uVigCurve, 0.0, 1.0), 0.7));
+      float vAmt = uVignette;
+      float vStart = mix(0.95, 0.0, uVigReach);
+      float vEnd = mix(1.4, vStart + 0.05, pow(uVigCurve, 0.7));
       vEnd = mix(vEnd, min(vEnd, 1.0), vAmt);
       // The distance the vignette is measured by: a superellipse like the glass edge. Vig Shape 0 is a circle (oval on a wide
       // screen), 1 is the glass edge's own shape (Roundness), so the dark follows the screen outline and reaches full black exactly
       // at the glass edge: at full Vignette there is no screen edge to see, only the shadow.
-      float nv = mix(2.0, n, clamp(uVigShape, 0.0, 1.0));
+      float nv = mix(2.0, n, uVigShape);
       vec2 av = pow(abs(p), vec2(nv));
       float dv = pow(av.x + av.y, 1.0 / nv);
       float vig = 1.0 - vAmt * smoothstep(vStart, max(vEnd, vStart + 0.02), dv);
       // Glare: a soft window-like reflection where Glare X / Y put it (size from Glare Size), plus a faint sheen along the rim.
       vec2 g = (p - uGlarePos) * vec2(1.1, 1.7);
-      float blob = exp(-dot(g, g) * mix(14.0, 1.2, clamp(uGlareSize, 0.0, 1.0)));
+      float blob = exp(-dot(g, g) * mix(14.0, 1.2, uGlareSize));
       float rim = smoothstep(0.84, 0.985, d);
-      col += clamp(uGlare, 0.0, 1.0) * (0.32 * blob + 0.07 * rim) * vec3(1.0);
+      col += uGlare * (0.32 * blob + 0.07 * rim) * vec3(1.0);
       // Rim shadow: a band hugging the glass edge, like the shadow the enclosure casts on the screen. Thick is how far in it reaches,
       // Alpha how dark it gets at the edge (1 is black). It follows the glass outline (Roundness), and falls off softly into the picture.
-      float shadowW = 0.02 + 0.45 * clamp(uShadowThick, 0.0, 1.0);
+      float shadowW = 0.02 + 0.45 * uShadowThick;
       float rimShadow = pow(smoothstep(1.0 - shadowW, 1.0, d), 1.6);
-      float shade = 1.0 - clamp(uShadowAlpha, 0.0, 1.0) * rimShadow;
+      float shade = 1.0 - uShadowAlpha * rimShadow;
       // The vignette and the rim shadow multiply everything, glare included, so full Vignette is pure black out there (nothing is added back).
       gl_FragColor = vec4(col * vig * shade * mask, 1.0);
     }

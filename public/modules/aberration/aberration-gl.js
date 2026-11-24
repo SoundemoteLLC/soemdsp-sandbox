@@ -78,9 +78,9 @@ const NODE_GRAPH_ABERRATION_MAX = 4096;
     void main() {
       vec3 plate = aberPlate(aberBlur(vUv + uOff, uBlur), uCh, uMode) * uGain;
       if (uOver > 0.5) {
-        gl_FragColor = vec4(plate, clamp(uBright, 0.0, 1.0));
+        gl_FragColor = vec4(plate, uBright);
       } else {
-        gl_FragColor = vec4(plate * clamp(uBright, 0.0, 1.0), 1.0);
+        gl_FragColor = vec4(plate * uBright, 1.0);
       }
     }
   `;

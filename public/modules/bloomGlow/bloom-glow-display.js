@@ -1,4 +1,9 @@
 function nodeGraphBloomGlowReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -6,14 +11,6 @@ function nodeGraphBloomGlowReadParam(nodeId, key, fallback) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const raw = Number(node?.params?.[key]);
   return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphBloomGlowClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
 }
 
 function nodeGraphBloomGlowEnsureCanvas(face) {
@@ -82,13 +79,14 @@ function drawNodeGraphBloomGlowFaceItem(_renderer, item) {
     return;
   }
   if (nodeGraphBloomGlowCircuitLive() && typeof nodeGraphBloomGlowGlStep === "function") {
-    const read = (key, fallback, lo = 0, hi = 1) => nodeGraphBloomGlowClamp(nodeGraphBloomGlowReadParam(nodeId, key, fallback), lo, hi);
+    // Bounds come from the parameter definitions (the reader folds MOD cables and clips to them).
+    const read = (key, fallback) => nodeGraphBloomGlowReadParam(nodeId, key, fallback);
     nodeGraphBloomGlowGlStep(canvas, {
       nodeId,
       threshold: read("threshold", 0.6),
-      bloom: read("bloom", 0.6, 0, 3),
+      bloom: read("bloom", 0.6),
       spread: read("spread", 0.4),
-      glow: read("glow", 0.3, 0, 3),
+      glow: read("glow", 0.3),
       glowSize: read("glowSize", 0.6),
       dim: read("dim", 0),
       picture,

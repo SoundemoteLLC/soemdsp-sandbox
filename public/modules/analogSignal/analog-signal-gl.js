@@ -72,7 +72,7 @@ const NODE_GRAPH_ANALOG_SIGNAL_MAX = 4096;
       // independent random value per line that re-rolls with the phase.
       float smoothJ = vnoise(line / 22.0, uJA) * 0.7 + vnoise(line / 5.0, uJB) * 0.3;
       float roughJ = hash11(line * 13.7 + uJTick * 7.13) * 2.0 - 1.0;
-      float shift = mix(smoothJ * 1.5, roughJ, clamp(uRough, 0.0, 1.0)) * uJitter * 0.012;
+      float shift = mix(smoothJ * 1.5, roughJ, uRough) * uJitter * 0.012;
       shift += sin(uv.y * 8.0 + uWAng.x) * uWobble * 0.015 * (0.65 + 0.35 * sin(uWAng.y));
       uv.x += shift;
 

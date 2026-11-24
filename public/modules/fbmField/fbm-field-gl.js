@@ -290,9 +290,9 @@ function nodeGraphFbmFieldGlPresentParams(canvas, params = {}) {
   gl.uniform1f(state.uniforms.uSmoothness, M.clamp01(params.smoothness, 0.55));
   // Explicit zero valid for contrast/brightness â€” never coerce with ||.
   const contrast = Number(params.contrast);
-  gl.uniform1f(state.uniforms.uContrast, Number.isFinite(contrast) ? Math.max(0, contrast) : 1);
+  gl.uniform1f(state.uniforms.uContrast, Number.isFinite(contrast) ? contrast : 1);
   const brightness = Number(params.brightness);
-  gl.uniform1f(state.uniforms.uBrightness, Number.isFinite(brightness) ? Math.max(0, brightness) : 1);
+  gl.uniform1f(state.uniforms.uBrightness, Number.isFinite(brightness) ? brightness : 1);
   const motion = Number(params.motion);
   gl.uniform1f(
     state.uniforms.uMotion,

@@ -69,12 +69,12 @@ const NODE_GRAPH_ANALOG_DISTORTION_MAX = 4096;
       vec2 uv = vUv;
       // Hum bars: distance (in picture heights) to the nearest bar's middle; the bars repeat every 1 / uBars.
       float dy = abs(fract((uv.y - uHP) * uBars + 0.5) - 0.5) / max(uBars, 0.01);
-      float w = mix(0.012, 0.16, clamp(uWidth, 0.0, 1.0)) / max(uBars, 0.5);
+      float w = mix(0.012, 0.16, uWidth) / max(uBars, 0.5);
       float bar = smoothstep(w, 0.0, dy);
       uv.x += bar * uWiggle * 0.012 * sin(uv.y * 60.0 + uWig);
       vec3 col;
       if (uMagnet > 0.002) {
-        float s = clamp(uPurity, 0.0, 1.0) * 0.4;
+        float s = uPurity * 0.4;
         col = vec3(pic(warp(uv, 1.0 + s)).r, pic(warp(uv, 1.0)).g, pic(warp(uv, 1.0 - s)).b);
       } else {
         col = pic(uv);
@@ -252,7 +252,7 @@ const NODE_GRAPH_ANALOG_DISTORTION_MAX = 4096;
     gl.uniform1i(device.uPic, 0);
     gl.uniform1f(device.uHasPic, options.picture?.texture ? 1 : 0);
     gl.uniform1f(device.uHum, Number(options.hum) || 0);
-    gl.uniform1f(device.uBars, Math.max(0.25, Number(options.humBars) || 1));
+    gl.uniform1f(device.uBars, Number(options.humBars));
     gl.uniform1f(device.uWidth, Number(options.humWidth) || 0);
     gl.uniform1f(device.uHP, Number(options.hp) || 0);
     gl.uniform1f(device.uWiggle, Number(options.wiggle) || 0);

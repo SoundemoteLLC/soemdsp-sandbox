@@ -315,17 +315,19 @@ function drawNodeGraphVideoFeedbackFaceItem(_renderer, item) {
       ? nodeGraphModuleScopeNodeForSlot(slot)
       : nodeGraphPatchNode(nodeId);
     const settings = nodeGraphVideoFeedbackSettingsForNode(node);
-    const smooth = nodeGraphReadNodeNumber(nodeId, "smooth");
+    // Knob + this frame's MOD cables, bounded by the parameter definitions (node-graph-picture-params.js).
+    const param = (key) => (typeof nodeGraphPictureParam === "function" ? nodeGraphPictureParam(nodeId, key) : nodeGraphReadNodeNumber(nodeId, key));
+    const smooth = param("smooth");
     // VG-6: block mode for the spectrum (A), control mode for spin (B).
     const levels = nodeGraphVideoFeedbackSpectrumLevels(canvas, nodeGraphVideoGraphAudioBlock(nodeId, "A"), settings, smooth);
     nodeGraphVideoFeedbackGlStep(host, {
       nodeId,
-      decay: nodeGraphReadNodeNumber(nodeId, "decay"),
-      size: nodeGraphReadNodeNumber(nodeId, "size"),
-      inner: nodeGraphReadNodeNumber(nodeId, "zoom"),
-      twist: nodeGraphReadNodeNumber(nodeId, "twist"),
+      decay: param("decay"),
+      size: param("size"),
+      inner: param("zoom"),
+      twist: param("twist"),
       spin: nodeGraphVideoGraphAudioLatest(nodeId, "B"),
-      bright: nodeGraphReadNodeNumber(nodeId, "bright"),
+      bright: param("bright"),
       smooth,
       levels: levels.values,
       count: levels.count,

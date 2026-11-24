@@ -1,4 +1,9 @@
 function nodeGraphAnalogDistortionReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -128,10 +133,11 @@ function drawNodeGraphAnalogDistortionFaceItem(_renderer, item) {
     return;
   }
   if (nodeGraphAnalogDistortionCircuitLive() && typeof nodeGraphAnalogDistortionGlStep === "function") {
-    const read = (key, fallback, lo = 0, hi = 1) => nodeGraphAnalogDistortionClamp(nodeGraphAnalogDistortionReadParam(nodeId, key, fallback), lo, hi);
+    // Bounds come from the parameter definitions (the reader folds MOD cables and clips to them).
+    const read = (key, fallback) => nodeGraphAnalogDistortionReadParam(nodeId, key, fallback);
     const clock = nodeGraphAnalogDistortionClock(face, {
-      humSpeed: read("humSpeed", 0.15, -100, 100),
-      wiggleRate: read("wiggleRate", 0.5, 0, 1000),
+      humSpeed: read("humSpeed", 0.15),
+      wiggleRate: read("wiggleRate", 0.5),
       instability: read("instability", 0.25),
       hum: read("hum", 0.35),
       wiggle: read("wiggle", 0.25),
@@ -140,14 +146,14 @@ function drawNodeGraphAnalogDistortionFaceItem(_renderer, item) {
     nodeGraphAnalogDistortionGlStep(canvas, {
       nodeId,
       hum: clock.hum,
-      humBars: read("humBars", 1, 0.25, 12),
+      humBars: read("humBars", 1),
       humWidth: read("humWidth", 0.4),
       wiggle: clock.wiggle,
       magnet: clock.magnet,
-      magX: nodeGraphAnalogDistortionClamp(read("magX", 0, -1, 1) + clock.magX, -1, 1),
-      magY: nodeGraphAnalogDistortionClamp(read("magY", 0, -1, 1) + clock.magY, -1, 1),
-      magPull: read("magPull", 0.5, -1, 1),
-      magSwirl: read("magSwirl", 0, -1, 1),
+      magX: nodeGraphAnalogDistortionClamp(read("magX", 0) + clock.magX, -1, 1),
+      magY: nodeGraphAnalogDistortionClamp(read("magY", 0) + clock.magY, -1, 1),
+      magPull: read("magPull", 0.5),
+      magSwirl: read("magSwirl", 0),
       magSize: read("magSize", 0.35),
       magPurity: read("magPurity", 0.3),
       hp: clock.hp,

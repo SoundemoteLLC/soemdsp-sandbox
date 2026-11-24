@@ -1,4 +1,9 @@
 function nodeGraphAberrationReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -6,14 +11,6 @@ function nodeGraphAberrationReadParam(nodeId, key, fallback) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const raw = Number(node?.params?.[key]);
   return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphAberrationClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
 }
 
 function nodeGraphAberrationEnsureCanvas(face) {
@@ -63,13 +60,13 @@ function nodeGraphAberrationCircuitLive() {
 function nodeGraphAberrationChannel(nodeId, key) {
   // Range scales the reach of the XY pads: 1 is the full ±12% of the face, below that it falls off with the square, so a subtle
   // fringe sits in the middle of the slider.
-  const range = nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, "range", 1), 0, 1);
+  const range = nodeGraphAberrationReadParam(nodeId, "range", 1);
   const reach = 0.12 * range * range;
   return {
-    bright: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "Bright", 1), 0, 1),
-    x: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "X", 0), -1, 1) * reach,
-    y: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "Y", 0), -1, 1) * reach,
-    blur: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, key + "Blur", 0), 0, 1),
+    bright: nodeGraphAberrationReadParam(nodeId, key + "Bright", 1),
+    x: nodeGraphAberrationReadParam(nodeId, key + "X", 0) * reach,
+    y: nodeGraphAberrationReadParam(nodeId, key + "Y", 0) * reach,
+    blur: nodeGraphAberrationReadParam(nodeId, key + "Blur", 0),
   };
 }
 
@@ -105,7 +102,8 @@ function drawNodeGraphAberrationFaceItem(_renderer, item) {
       nodeId,
       mode: nodeGraphAberrationReadParam(nodeId, "mode", 0) >= 0.5 ? 1 : 0,
       blend: nodeGraphAberrationReadParam(nodeId, "blend", 0) >= 0.5 ? 1 : 0,
-      hue: nodeGraphAberrationClamp(nodeGraphAberrationReadParam(nodeId, "hue", 0), -1, 1),
+      // Hue is in degrees; the shader turns by whole turns.
+      hue: nodeGraphAberrationReadParam(nodeId, "hue", 0) / 360,
       ch1: nodeGraphAberrationChannel(nodeId, "ch1"),
       ch2: nodeGraphAberrationChannel(nodeId, "ch2"),
       ch3: nodeGraphAberrationChannel(nodeId, "ch3"),

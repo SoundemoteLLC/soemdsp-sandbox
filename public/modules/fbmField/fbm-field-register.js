@@ -88,7 +88,8 @@ registerNodeGraphChromelessModule("fbmField", {
         tooltip:
           "Domain motion (What I See Is What I Hear — face + X/Y/Z share one mapping). "
           + "Scroll: pan a frozen 2D field. Volume: time walks the 3rd lattice axis → morph in place. "
-          + "X/Y/Z are three fixed spatial probe points on that same field.",
+          + "X/Y/Z are three fixed spatial probe points on that same field. "
+          + "Modulated, it switches at the halfway point.",
       },
       {
         defaultValue: "20",
@@ -120,7 +121,7 @@ registerNodeGraphChromelessModule("fbmField", {
         min: "1",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Layer count. More octaves = finer fractal detail (higher CPU).",
+        tooltip: "Layer count. More octaves = finer fractal detail (higher CPU). Modulated, it steps from one whole number to the next.",
       },
       {
         defaultValue: "0.5",
@@ -263,7 +264,7 @@ registerNodeGraphChromelessModule("fbmField", {
         mid: "1",
         min: "0",
         step: "1",
-        tooltip: "Lattice seed.",
+        tooltip: "Lattice seed. Modulated, it steps from one whole seed to the next.",
       },
     ],
   },

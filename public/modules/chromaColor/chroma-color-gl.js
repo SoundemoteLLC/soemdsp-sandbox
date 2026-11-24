@@ -70,8 +70,8 @@ const NODE_GRAPH_CHROMA_COLOR_MAX = 4096;
       col = (col - 0.5) * cMul + 0.5;
       col = pow(max(col, vec3(0.0)), vec3(1.0 / max(uGamma, 0.05)));
       col = uLight >= 0.0 ? mix(col, vec3(1.0), uLight) : col * (1.0 + uLight);
-      if (uTint > 0.002) col *= mix(vec3(1.0), wheel(uTintHue) * 1.6 + 0.1, clamp(uTint, 0.0, 1.0));
-      col = mix(col, 1.0 - col, clamp(uInvert, 0.0, 1.0));
+      if (uTint > 0.002) col *= mix(vec3(1.0), wheel(uTintHue) * 1.6 + 0.1, uTint);
+      col = mix(col, 1.0 - col, uInvert);
       gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
     }
   `;

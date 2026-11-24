@@ -150,6 +150,11 @@ function nodeGraphRgbFractalSettingsForNode(node) {
 }
 
 function nodeGraphRgbFractalReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) {
@@ -635,7 +640,7 @@ function paintNodeGraphRgbFractalFace(canvas, face, nodeId, options = {}) {
   );
   const orbitSize = nodeGraphRgbFractalReadParam(nodeId, "orbitSize", 1);
   const orbitSpeedRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "orbitSpeed", 1));
-  const orbitSpeed = Number.isFinite(orbitSpeedRaw) ? Math.max(0, orbitSpeedRaw) : 1;
+  const orbitSpeed = Number.isFinite(orbitSpeedRaw) ? orbitSpeedRaw : 1;
   // Pure view offset (bipolar); applied in complex plane after halfSpan is known.
   const panXRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "panX", 0));
   const panYRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "panY", 0));
@@ -644,22 +649,18 @@ function paintNodeGraphRgbFractalFace(canvas, face, nodeId, options = {}) {
 
   // Face look: Soft + Blur + Color Shift / Color Shift Rate + Color Bands.
   const softRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "soft", 0.48));
-  const soft = Number.isFinite(softRaw) ? Math.max(0, Math.min(1, softRaw)) : 0.48;
+  const soft = Number.isFinite(softRaw) ? softRaw : 0.48;
   // Edge Blur domain 0…8 (energy multi-tap). Screen Blur is full-image post.
   const blurRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "blur", 0));
-  const blur = Number.isFinite(blurRaw) ? Math.max(0, Math.min(8, blurRaw)) : 0;
+  const blur = Number.isFinite(blurRaw) ? blurRaw : 0;
   const screenBlurRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "screenBlur", 0));
-  const screenBlur = Number.isFinite(screenBlurRaw)
-    ? Math.max(0, Math.min(8, screenBlurRaw))
-    : 0;
+  const screenBlur = Number.isFinite(screenBlurRaw) ? screenBlurRaw : 0;
   const colorShift = ((nodeGraphRgbFractalReadParam(nodeId, "colorShift", 0) % 1) + 1) % 1;
   const colorShiftRateRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "colorShiftRate", 1));
-  const colorShiftRate = Number.isFinite(colorShiftRateRaw)
-    ? Math.max(0, colorShiftRateRaw)
-    : 1;
+  const colorShiftRate = Number.isFinite(colorShiftRateRaw) ? colorShiftRateRaw : 1;
   // Bands default 1 = one smooth pass through the palette (not multi-wrap hash).
   const bandsRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "bands", 1));
-  const bands = Number.isFinite(bandsRaw) ? Math.max(0.25, bandsRaw) : 1;
+  const bands = Number.isFinite(bandsRaw) ? bandsRaw : 1;
   const glow = 0;
   const breath = 1;
   face._rgbFractalBreath = 1;

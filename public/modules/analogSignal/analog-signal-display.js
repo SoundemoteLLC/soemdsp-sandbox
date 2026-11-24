@@ -1,4 +1,9 @@
 function nodeGraphAnalogSignalReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -6,14 +11,6 @@ function nodeGraphAnalogSignalReadParam(nodeId, key, fallback) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const raw = Number(node?.params?.[key]);
   return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphAnalogSignalClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
 }
 
 function nodeGraphAnalogSignalEnsureCanvas(face) {
@@ -137,13 +134,13 @@ function drawNodeGraphAnalogSignalFaceItem(_renderer, item) {
     return;
   }
   if (nodeGraphAnalogSignalCircuitLive() && typeof nodeGraphAnalogSignalGlStep === "function") {
-    const read = (key, fallback, hi = 1) => nodeGraphAnalogSignalClamp(nodeGraphAnalogSignalReadParam(nodeId, key, fallback), 0, hi);
-    const signed = (key, fallback) => nodeGraphAnalogSignalClamp(nodeGraphAnalogSignalReadParam(nodeId, key, fallback), -1, 1);
+    // Bounds come from the parameter definitions (the reader folds MOD cables and clips to them).
+    const read = (key, fallback) => nodeGraphAnalogSignalReadParam(nodeId, key, fallback);
     const clock = nodeGraphAnalogSignalClock(face, {
       jitter: read("jitter", 0.1),
       wobble: read("wobble", 0.15),
-      jitterRate: read("jitterRate", 0.5, 1000),
-      wobbleRate: read("wobbleRate", 0.5, 1000),
+      jitterRate: read("jitterRate", 0.5),
+      wobbleRate: read("wobbleRate", 0.5),
       instability: read("instability", 0.3),
     });
     nodeGraphAnalogSignalGlStep(canvas, {
@@ -153,8 +150,8 @@ function drawNodeGraphAnalogSignalFaceItem(_renderer, item) {
       wobble: clock.wobble,
       noise: read("noise", 0.08),
       ringing: read("ringing", 0.15),
-      ringX: signed("ringX", 1),
-      ringY: signed("ringY", 0),
+      ringX: read("ringX", 1),
+      ringY: read("ringY", 0),
       bleed: read("bleed", 0.2),
       jA: clock.jA,
       jB: clock.jB,

@@ -1,4 +1,9 @@
 function nodeGraphChromaColorReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -6,14 +11,6 @@ function nodeGraphChromaColorReadParam(nodeId, key, fallback) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const raw = Number(node?.params?.[key]);
   return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphChromaColorClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
 }
 
 function nodeGraphChromaColorEnsureCanvas(face) {
@@ -102,22 +99,24 @@ function drawNodeGraphChromaColorFaceItem(_renderer, item) {
     return;
   }
   if (nodeGraphChromaColorCircuitLive() && typeof nodeGraphChromaColorGlStep === "function") {
-    const read = (key, fallback, lo = 0, hi = 1) => nodeGraphChromaColorClamp(nodeGraphChromaColorReadParam(nodeId, key, fallback), lo, hi);
+    // Bounds come from the parameter definitions (the reader folds MOD cables and clips to them).
+    const read = (key, fallback) => nodeGraphChromaColorReadParam(nodeId, key, fallback);
     nodeGraphChromaColorGlStep(canvas, {
       nodeId,
-      red: read("red", 1, 0, 2),
-      green: read("green", 1, 0, 2),
-      blue: read("blue", 1, 0, 2),
-      hue: read("hue", 0, -1, 1) * 0.5,
-      saturation: read("saturation", 0, -1, 1),
-      lightness: read("lightness", 0, -1, 1),
-      contrast: read("contrast", 0, -1, 1),
-      gamma: read("gamma", 1, 0.25, 4),
-      tintHue: read("tintHue", 0.58),
+      red: read("red", 1),
+      green: read("green", 1),
+      blue: read("blue", 1),
+      // Hue and Tint Hue are in degrees; the shader works in whole turns.
+      hue: read("hue", 0) / 360,
+      saturation: read("saturation", 0),
+      lightness: read("lightness", 0),
+      contrast: read("contrast", 0),
+      gamma: read("gamma", 1),
+      tintHue: read("tintHue", 208.8) / 360,
       tint: read("tint", 0),
       invert: read("invert", 0),
-      spread: read("spread", 0, -1, 1),
-      drift: nodeGraphChromaColorDrift(face, read("drift", 0, -1, 1)),
+      spread: read("spread", 0),
+      drift: nodeGraphChromaColorDrift(face, read("drift", 0)),
       picture,
     });
   }

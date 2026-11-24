@@ -1,4 +1,9 @@
 function nodeGraphPlaceReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -6,14 +11,6 @@ function nodeGraphPlaceReadParam(nodeId, key, fallback) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const raw = Number(node?.params?.[key]);
   return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphPlaceClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
 }
 
 function nodeGraphPlaceEnsureCanvas(face) {
@@ -84,10 +81,11 @@ function drawNodeGraphPlaceFaceItem(_renderer, item) {
   if (nodeGraphPlaceCircuitLive() && typeof nodeGraphPlaceGlStep === "function") {
     nodeGraphPlaceGlStep(canvas, {
       nodeId,
-      x: nodeGraphPlaceClamp(nodeGraphPlaceReadParam(nodeId, "x", 0), -1, 1),
-      y: nodeGraphPlaceClamp(nodeGraphPlaceReadParam(nodeId, "y", 0), -1, 1),
-      rotate: nodeGraphPlaceClamp(nodeGraphPlaceReadParam(nodeId, "rotate", 0), -1, 1),
-      zoom: nodeGraphPlaceClamp(nodeGraphPlaceReadParam(nodeId, "zoom", 0), -1, 1),
+      x: nodeGraphPlaceReadParam(nodeId, "x", 0),
+      y: nodeGraphPlaceReadParam(nodeId, "y", 0),
+      // Rotate is in degrees; the shader takes half turns (x pi).
+      rotate: nodeGraphPlaceReadParam(nodeId, "rotate", 0) / 180,
+      zoom: nodeGraphPlaceReadParam(nodeId, "zoom", 0),
       picture,
     });
   }

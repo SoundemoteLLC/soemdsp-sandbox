@@ -16,8 +16,6 @@ const nodeGraphImageBurnSettingsDefaults = Object.freeze({
   fileName: "",
 });
 
-/** Soft UV/layout guard only — param metadata owns the dial range. */
-const NODE_GRAPH_IMAGE_BURN_SIZE_SAFE_MAX = 64;
 // Residual matches face pixels; only shrink uniformly on huge faces.
 const NODE_GRAPH_IMAGE_BURN_RESIDUAL_MAX_SIDE = 4096;
 const NODE_GRAPH_IMAGE_BURN_COMPRESS = 1.3;
@@ -32,15 +30,6 @@ function normalizeNodeGraphImageBurnDataUrl(value) {
   return raw.startsWith("data:image/") ? raw : "";
 }
 
-function clampNodeGraphImageBurnSize(value, fallback = 1) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
-    const fb = Number(fallback);
-    return Math.max(0, Number.isFinite(fb) ? fb : 1);
-  }
-  return Math.max(0, Math.min(NODE_GRAPH_IMAGE_BURN_SIZE_SAFE_MAX, n));
-}
-
 function clampNodeGraphImageBurnUnit(value, fallback = 0) {
   const n = Number(value);
   if (!Number.isFinite(n)) {
@@ -50,14 +39,6 @@ function clampNodeGraphImageBurnUnit(value, fallback = 0) {
 }
 
 /** Image blacks 0…2 (0 = unchanged, 2 = max black crush). */
-function clampNodeGraphImageBurnContrast(value, fallback = 0) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
-    return Math.max(0, Math.min(2, nodeGraphFiniteNumber(fallback)));
-  }
-  return Math.max(0, Math.min(2, n));
-}
-
 function normalizeNodeGraphImageBurnSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
   const defaults = nodeGraphImageBurnSettingsDefaults;
@@ -108,6 +89,11 @@ function nodeGraphImageBurnToPatch(settings) {
 
 /** Knob value + every modulation patched into `key` (face reads it live). */
 function nodeGraphImageBurnModulatedParam(nodeId, key, fallback, metaFallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   const base = nodeGraphImageBurnReadParam(nodeId, key, fallback);
   const metadata = typeof nodeGraphReadPatchParameterMetadata === "function"
     ? (nodeGraphReadPatchParameterMetadata(nodeId, key) || metaFallback)
@@ -136,16 +122,18 @@ function nodeGraphImageBurnModulatedParam(nodeId, key, fallback, metaFallback) {
   return Number(mixed);
 }
 
-/** Bright knob plus modulation, clamped to 0..1. */
+/** Bright knob plus modulation (bounded by the definition). */
 function nodeGraphImageBurnEffectiveBrightness(nodeId) {
   const n = nodeGraphImageBurnModulatedParam(nodeId, "brightness", 1, { min: 0, max: 1 });
-  if (!Number.isFinite(n)) {
-    return 0;
-  }
-  return n < 0 ? 0 : (n > 1 ? 1 : n);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function nodeGraphImageBurnReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) {
@@ -419,19 +407,14 @@ function drawNodeGraphImageBurnFaceItem(renderer, item, pixelRatio) {
   }
   const settings = nodeGraphImageBurnSettingsForNode(node);
   const nodeId = slot.nodeId;
-  const size = clampNodeGraphImageBurnSize(
-    nodeGraphImageBurnModulatedParam(nodeId, "size", 1, { min: 0, max: 2 }),
-    1,
-  );
+  // Bounds come from the parameter definitions (the reader folds MOD cables and clips to them).
+  const size = nodeGraphImageBurnModulatedParam(nodeId, "size", 1, { min: 0, max: 2 });
 
-  const blacks = clampNodeGraphImageBurnContrast(
-    nodeGraphImageBurnReadParam(nodeId, "blacks", 0),
-    0,
-  );
+  const blacks = nodeGraphImageBurnReadParam(nodeId, "blacks", 0);
   const feedback = nodeGraphImageBurnReadParam(nodeId, "feedback", 0);
-  const hang = Math.max(0, Math.min(1, nodeGraphImageBurnReadParam(nodeId, "hang", 0.55)));
-  const burn = Math.max(0, nodeGraphImageBurnReadParam(nodeId, "burn", 0.75));
-  const blur = Math.max(0, nodeGraphImageBurnReadParam(nodeId, "blur", 0.45));
+  const hang = nodeGraphImageBurnReadParam(nodeId, "hang", 0.55);
+  const burn = nodeGraphImageBurnReadParam(nodeId, "burn", 0.75);
+  const blur = nodeGraphImageBurnReadParam(nodeId, "blur", 0.45);
   const contrast = blacks;
   const w = canvas.width;
   const h = canvas.height;

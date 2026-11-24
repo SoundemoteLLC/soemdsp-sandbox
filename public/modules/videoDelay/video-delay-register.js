@@ -51,7 +51,7 @@ registerNodeGraphChromelessModule("videoDelay", {
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Recapture rate as a divider of Simulation FPS. 1 = every paint. 1/4 = every 4th paint (15 Hz at 60). Cannot go faster than Sim FPS. Between recaptures the last plate holds.",
+        tooltip: "Recapture rate as a divider of Simulation FPS. 1 = every paint. 1/4 = every 4th paint (15 Hz at 60). Cannot go faster than Sim FPS. Between recaptures the last plate holds. Modulated, it steps through the five dividers.",
       },
       {
         defaultValue: "0.94",

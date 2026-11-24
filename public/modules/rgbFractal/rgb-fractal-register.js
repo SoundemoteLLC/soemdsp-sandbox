@@ -165,6 +165,8 @@ registerNodeGraphChromelessModule("rgbFractal", {
       },
       {
         // Depth *is* maxIter (integer). Legacy patches with 0…4 floats are migrated in paint.
+        // The shader's iteration loop is compiled with 256 steps: the max is a GPU limit.
+        constraint: "gpu",
         defaultValue: "55",
         key: "depth",
         label: "Depth",
@@ -175,7 +177,7 @@ registerNodeGraphChromelessModule("rgbFractal", {
         nonlinearSlider: true,
         step: "1",
         tooltip:
-          "Julia iteration count on the face (maxIter). Integer 1…256. 1 = almost no structure (details can flow in); 256 = max filigree. Face only.",
+          "Julia iteration count on the face (maxIter). Integer 1…256 (256 is the shader's compiled loop length). 1 = almost no structure (details can flow in); 256 = max filigree. Face only. Modulated, it steps from one whole number to the next.",
       },
       {
         defaultValue: "1",

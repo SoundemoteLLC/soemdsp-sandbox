@@ -1,4 +1,9 @@
 function nodeGraphScreenShakeReadParam(nodeId, key, fallback) {
+  // Knob + this frame's MOD cables, bounded by the parameter definition (node-graph-picture-params.js).
+  if (typeof nodeGraphPictureParam === "function") {
+    const m = nodeGraphPictureParam(nodeId, key);
+    if (Number.isFinite(m)) return m;
+  }
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
     if (Number.isFinite(n)) return n;
@@ -6,14 +11,6 @@ function nodeGraphScreenShakeReadParam(nodeId, key, fallback) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const raw = Number(node?.params?.[key]);
   return Number.isFinite(raw) ? raw : fallback;
-}
-
-function nodeGraphScreenShakeClamp(value, lo, hi) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return lo;
-  if (n < lo) return lo;
-  if (n > hi) return hi;
-  return n;
 }
 
 function nodeGraphScreenShakeEnsureCanvas(face) {
@@ -41,6 +38,20 @@ function nodeGraphScreenShakeEnsureCanvas(face) {
   canvas.style.display = "block";
   canvas.style.pointerEvents = "none";
   return canvas;
+}
+
+/**
+ * The shake's noise clock in jitters: Rate (jitters per second) integrated over the time between paints, so a modulated or
+ * moving Rate changes the speed without jumping the picture. The clock is the wall clock: a shake does not stop with the engine.
+ * A gap longer than 0.25 s (hidden tab) counts as 0.25 s so the shake does not lurch on return.
+ */
+function nodeGraphScreenShakeAdvance(face, rate) {
+  const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+  const c = face._screenShakeClock || (face._screenShakeClock = { last: now, phase: now * (Number(rate) || 0) });
+  const dt = Math.max(0, Math.min(0.25, now - c.last));
+  c.last = now;
+  c.phase += (Number(rate) || 0) * dt;
+  return c.phase;
 }
 
 function nodeGraphScreenShakeCircuitLive() {
@@ -84,10 +95,8 @@ function drawNodeGraphScreenShakeFaceItem(_renderer, item) {
   if (nodeGraphScreenShakeCircuitLive() && typeof nodeGraphScreenShakeGlStep === "function") {
     nodeGraphScreenShakeGlStep(canvas, {
       nodeId,
-      amount: nodeGraphScreenShakeClamp(nodeGraphScreenShakeReadParam(nodeId, "amount", 0.25), 0, 1),
-      // Rate 0..1 -> 0.5 .. 60 jitters per second, exponential. The clock is the wall clock: a shake does not stop with the engine.
-      time: (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000
-        * Math.pow(120, nodeGraphScreenShakeClamp(nodeGraphScreenShakeReadParam(nodeId, "rate", 0.55), 0, 1)) * 0.5,
+      amount: nodeGraphScreenShakeReadParam(nodeId, "amount", 0.25),
+      time: nodeGraphScreenShakeAdvance(face, nodeGraphScreenShakeReadParam(nodeId, "rate", 6.94)),
       picture,
     });
   }
