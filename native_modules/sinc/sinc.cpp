@@ -33,6 +33,8 @@ static const int kMaxInstances = 128;
 struct SincState {
   double phase;
   bool active;
+  // Set by a Reset hit: the next sample renders at phase as-is (no advance first).
+  bool hold;
 };
 
 static SincState gPool[kMaxInstances];
@@ -66,6 +68,7 @@ extern "C" int soemdsp_sinc_create() {
     if (!gPool[i].active) {
       gPool[i].phase = 0.0;
       gPool[i].active = true;
+      gPool[i].hold = false;
       return i + 1;
     }
   }
@@ -93,7 +96,11 @@ extern "C" double soemdsp_sinc_sample(
   const double rate = sampleRate > 1.0 ? sampleRate : 44100.0;
   const double f = freq > 0.0 ? freq : 0.0;
   const double step = f / rate;
-  s.phase = wrap01(s.phase + step);
+  if (s.hold) {
+    s.hold = false;
+  } else {
+    s.phase = wrap01(s.phase + step);
+  }
   double shifted = wrap01(s.phase + phaseShift);
   const int lobeCount = (int)dsp_floor(lobes + 0.5);
   const bool bl = (int)dsp_floor(bandLimit + 0.5) != 0;
@@ -103,8 +110,22 @@ extern "C" double soemdsp_sinc_sample(
   return clamp11(value);
 }
 
+// Reset trigger (same as PolyBLEP): height h (-1..1) moves the phase the next
+// sample would render at |h| of the way to the cycle start (h < 0 the long way;
+// |h| = 1 = hard reset). That sample then renders at the new phase.
+// freq / sampleRate are the values the next soemdsp_sinc_sample call will use.
+extern "C" void soemdsp_sinc_retrigger(int handle, double h, double freq, double sampleRate) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  SincState& s = gPool[handle - 1];
+  const double rate = sampleRate > 1.0 ? sampleRate : 44100.0;
+  const double f = freq > 0.0 ? freq : 0.0;
+  const double next = s.hold ? s.phase : wrap01(s.phase + f / rate);
+  s.phase = soemdsp::math::partial_reset_phase(next, 0.0, h, 1.0);
+  s.hold = true;
+}
+
 extern "C" int soemdsp_sinc_version() {
-  return 1;
+  return 2; // 2: soemdsp_sinc_retrigger (Reset trigger input, Cycle Single trigger)
 }
 
 extern "C" const char* soemdsp_sinc_metadata_json() {

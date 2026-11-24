@@ -6512,6 +6512,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("lobes", P.NATIVE_GRAPH_PARAM_STAGES, disc("lobes", 4));
       push("bandLimit", P.NATIVE_GRAPH_PARAM_MODE, disc("bandLimit", 1));
+      // Cycle: 0 Free run / 1 Single trigger (one cycle per Reset hit), timingMode slot (as PolyBLEP).
+      push("cycleMode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("cycleMode", 0));
       continue;
     }
     if (type === "bradley2a") {
