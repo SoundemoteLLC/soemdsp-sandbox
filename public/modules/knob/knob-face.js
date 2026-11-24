@@ -692,19 +692,10 @@ function beginNodeGraphKnobFaceValueEdit(face, event = null) {
  * `.node-slider-readout` (beginNodeSliderDrag / nodeSliderFineTuneScale / etc.).
  */
 function attachNodeGraphKnobFaceDrag(face) {
-  if (!face || face.dataset.sliderDragBound === "true") {
+  // Shared drag surface (node-graph-slider-dragging.js): same modifiers as the
+  // Bias readout and the Pitch Mod Wheel.
+  if (!face || typeof bindNodeSliderDragSurface !== "function" || !bindNodeSliderDragSurface(face)) {
     return;
-  }
-  face.dataset.sliderDragBound = "true";
-  if (typeof beginNodeSliderDrag === "function") {
-    face.addEventListener("pointerdown", beginNodeSliderDrag);
-    face.addEventListener("mousedown", beginNodeSliderDrag);
-  }
-  if (typeof endNodeSliderDrag === "function") {
-    face.addEventListener("lostpointercapture", endNodeSliderDrag);
-  }
-  if (typeof stepNodeSliderFromKeyboard === "function") {
-    face.addEventListener("keydown", stepNodeSliderFromKeyboard);
   }
   face.addEventListener("dblclick", (event) => {
     event.preventDefault();

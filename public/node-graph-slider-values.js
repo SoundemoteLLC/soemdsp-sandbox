@@ -1098,6 +1098,12 @@ function nodeSliderTravelFromPointer(slider, surface, clientX, clientY) {
   const knob = typeof nodeSliderKnobDragMetrics === "function"
     ? nodeSliderKnobDragMetrics(surface)
     : null;
+  if (knob?.axis === "vertical") {
+    return normalizeNodeSliderTravel(slider, (knob.rect.bottom - clientY) / Math.max(1, knob.rect.height));
+  }
+  if (knob?.axis === "horizontal") {
+    return normalizeNodeSliderTravel(slider, (clientX - knob.rect.left) / Math.max(1, knob.rect.width));
+  }
   if (knob) {
     const travel = typeof nodeGraphPointerAbsoluteTravel === "function"
       ? nodeGraphPointerAbsoluteTravel(clientX, clientY, knob.rect, knob.travelWidth)

@@ -1094,6 +1094,15 @@ function nodeGraphCircularKnobHitElement(host) {
 
 /** Visible knob circle in screen pixels — drag min→max spans this, not the plate. */
 function nodeSliderKnobDragMetrics(surface) {
+  // Generic drag surface (Pitch Mod Wheel): the element's own box on its axis.
+  const axis = surface?.dataset?.sliderDragSurface;
+  if (axis === "vertical" || axis === "horizontal") {
+    const rect = surface.getBoundingClientRect?.();
+    if (!rect || !(rect.width > 1) || !(rect.height > 1)) {
+      return null;
+    }
+    return { rect, travelWidth: Math.max(8, axis === "vertical" ? rect.height : rect.width), visualScale: 1, axis };
+  }
   if (!surface?.classList?.contains("node-knob-face")) {
     return null;
   }
@@ -1137,8 +1146,36 @@ function nodeSliderIsDragSurface(el) {
     el?.classList?.contains("node-slider-readout")
     || el?.classList?.contains("node-knob-face")
     || el?.classList?.contains("node-plugin-slider-face")
-    || el?.classList?.contains("node-transport-bpm-face"),
+    || el?.classList?.contains("node-transport-bpm-face")
+    || el?.dataset?.sliderDragSurface,
   );
+}
+
+/**
+ * The one binding for a face that drives a parameter like the Bias readout
+ * (Knob face, Slider face, Pitch Mod Wheel): press, drag, release and keys go
+ * through beginNodeSliderDrag, so every surface gets the same modifiers:
+ *   click-drag            relative from the current value (never jumps)
+ *   alt + click           jump to the pointer, then drag relative
+ *   shift or ctrl/cmd     fine drag (x0.1), shift + ctrl/cmd finer (x0.01)
+ *   ctrl/cmd + click      reset to default
+ *   double-click          type-in (unless data-slider-type-in="off")
+ *   touch                 relative drag; double-tap resets, long hold types in
+ * Generic surfaces opt in with data-slider-target (the slider id) and
+ * data-slider-drag-surface="vertical" | "horizontal" (travel axis for the
+ * span and the Alt jump). data-slider-spring="default" returns the value to
+ * its default on release. Returns false when already bound.
+ */
+function bindNodeSliderDragSurface(surface) {
+  if (!surface || surface.dataset.sliderDragBound === "true") {
+    return false;
+  }
+  surface.dataset.sliderDragBound = "true";
+  surface.addEventListener("pointerdown", beginNodeSliderDrag);
+  surface.addEventListener("mousedown", beginNodeSliderDrag);
+  surface.addEventListener("lostpointercapture", endNodeSliderDrag);
+  surface.addEventListener("keydown", stepNodeSliderFromKeyboard);
+  return true;
 }
 
 /**
@@ -1150,7 +1187,7 @@ function nodeSliderDragSurfaceFromEvent(event) {
     return event.currentTarget;
   }
   const direct = event?.target?.closest?.(
-    ".node-slider-readout, .node-knob-face, .node-plugin-slider-face, .node-transport-bpm-face",
+    ".node-slider-readout, .node-knob-face, .node-plugin-slider-face, .node-transport-bpm-face, [data-slider-drag-surface]",
   );
   if (direct) {
     return direct;
@@ -1373,7 +1410,9 @@ function beginNodeSliderDrag(event) {
   const touchGesture = touch && typeof nodeGraphTouchGestureDown === "function"
     ? nodeGraphTouchGestureDown(touchKey, event)
     : { touch: false, doubleTap: false };
-  const isDoubleClick = !touch && !altClick && (
+  // No type-in on this surface: a second press is just another drag.
+  const noTypeIn = surface.dataset?.sliderTypeIn === "off";
+  const isDoubleClick = !touch && !altClick && !noTypeIn && (
     event.detail > 1 ||
     (lastDown &&
       lastDown.surface === surface &&
@@ -1467,7 +1506,7 @@ function beginNodeSliderDrag(event) {
     width: knobMetrics ? knobMetrics.travelWidth : lane.travelWidth,
     touchKey: touch ? touchKey : "",
   };
-  if (touch && !skipTypeIn && typeof nodeGraphTouchGestureArmHold === "function") {
+  if (touch && !skipTypeIn && !noTypeIn && typeof nodeGraphTouchGestureArmHold === "function") {
     nodeGraphTouchGestureArmHold(touchKey, event, () => {
       const drag = nodeGraphMvp.sliderDragging;
       if (!drag || drag.surface !== surface || drag.touchMoved) {
@@ -1623,7 +1662,9 @@ function endNodeSliderDrag(event) {
   if (event.pointerId !== undefined && drag.surface.hasPointerCapture?.(event.pointerId)) {
     drag.surface.releasePointerCapture(event.pointerId);
   }
-  if (drag.resetToDefaultOnClick && !drag.moved) {
+  // Spring surface (data-slider-spring="default"): back to default on release.
+  const springBack = drag.surface?.dataset?.sliderSpring === "default";
+  if ((drag.resetToDefaultOnClick && !drag.moved) || springBack) {
     const reset = nodeSliderCtrlClickDefaultValue(drag.slider);
     if (Number.isFinite(reset)) {
       setNodeSliderValue(drag.slider, reset, { interaction: "drag" });
@@ -1631,7 +1672,9 @@ function endNodeSliderDrag(event) {
   }
   commitNodeSliderDragValue(
     drag.slider,
-    drag.resetToDefaultOnClick && !drag.moved ? "parameter reset to default" : "parameter changed",
+    drag.resetToDefaultOnClick && !drag.moved
+      ? "parameter reset to default"
+      : (springBack ? "parameter returned to default" : "parameter changed"),
   );
   nodeGraphSliderDebugTrace("slider drag ended", { sliderId: drag.slider?.id || null, moved: drag.moved });
   nodeGraphMvp.sliderDragging = null;

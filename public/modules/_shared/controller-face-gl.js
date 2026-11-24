@@ -282,6 +282,24 @@
     return swap(clipPointsX(swap(pts), yMin, yMax));
   }
 
+  /**
+   * Ridge rows of a wheel body seen side-on, top to bottom: y in px and
+   * facing (0 at the rims, 1 toward the viewer). The surface moves with the
+   * pointer: raising the value rolls the ridges up, lowering it rolls them
+   * down, like a wheel pushed under the finger.
+   */
+  function nodeGraphControllerWheelRidges(b, unit, count = 13) {
+    const spacing = Math.PI / count;
+    const roll = (((-clamp01(unit) * Math.PI * 1.6) % spacing) + spacing) % spacing;
+    const out = [];
+    for (let k = 0; k <= count + 1; k += 1) {
+      const a = k * spacing + roll;
+      if (a <= 0.04 || a >= Math.PI - 0.04) continue;
+      out.push({ y: b.y + b.h * (0.5 - 0.5 * Math.cos(a)), facing: Math.sin(a) });
+    }
+    return out;
+  }
+
   function drawWheel(batch, L, m, aa) {
     const bg = css(m.background);
     const body = css(m.wheel);
@@ -297,23 +315,15 @@
       const inset = Math.max(aa, Math.min(s.w, s.h) * 0.07);
       const b = { x: s.x + inset, y: s.y + inset, w: Math.max(1, s.w - inset * 2), h: Math.max(1, s.h - inset * 2) };
       const bodyShape = roundRectPoints(b.x, b.y, b.w, b.h, Math.max(0, L.radius - inset));
-      fillPoints(batch, bodyShape, st.active ? mix(body, fill, 0.12) : body, aa);
+      fillPoints(batch, bodyShape, body, aa);
       const unit = clamp01(st.unit);
       const zero = clamp01(st.zero);
       const yAt = (u) => b.y + b.h * (1 - clamp01(u));
-      // Rolling ridges: a cylinder seen side-on; ridges move with the value,
-      // brightest where they face the viewer.
-      const ridges = 13;
-      const spacing = Math.PI / ridges;
-      const roll = (((unit * Math.PI * 1.6) % spacing) + spacing) % spacing;
-      for (let k = 0; k <= ridges + 1; k += 1) {
-        const a = k * spacing + roll;
-        if (a <= 0.04 || a >= Math.PI - 0.04) continue;
-        const y = b.y + b.h * (0.5 - 0.5 * Math.cos(a));
-        const facing = Math.sin(a);
-        const half = Math.max(aa * 0.35, b.h * 0.0045 * (0.6 + facing));
-        global.nodeGraphGlLinesSegment(batch, b.x + b.w * 0.14, y, b.x + b.w * 0.86, y, half, aa,
-          mix(body, ink, 0.05 + 0.2 * facing * facing));
+      // Rolling ridges, brightest where they face the viewer.
+      for (const r of nodeGraphControllerWheelRidges(b, unit)) {
+        const half = Math.max(aa * 0.35, b.h * 0.0045 * (0.6 + r.facing));
+        global.nodeGraphGlLinesSegment(batch, b.x + b.w * 0.14, r.y, b.x + b.w * 0.86, r.y, half, aa,
+          mix(body, ink, 0.05 + 0.2 * r.facing * r.facing));
       }
       // Fill from the zero point (bottom, or center on a bipolar range) to the value.
       const y0 = yAt(zero);
@@ -341,7 +351,7 @@
       const gripHalf = Math.max(aa * 0.7, Math.min(b.h * 0.022, b.w * 0.09));
       const gy = Math.max(b.y + gripHalf, Math.min(b.y + b.h - gripHalf, y1));
       global.nodeGraphGlLinesSegment(batch, b.x + b.w * 0.08 + gripHalf, gy, b.x + b.w * 0.92 - gripHalf, gy,
-        gripHalf, aa, st.active ? mix(fill, ink, 0.3) : fill);
+        gripHalf, aa, fill);
       if (wl.label && st.label) {
         const r = wl.label;
         text(batch, st.label, r.x + r.w * 0.5, r.y + r.h * 0.5, { px: r.h * 0.72, maxWidth: r.w, rgba: ink });
@@ -444,6 +454,7 @@
     nodeGraphControllerSliderLayout,
     nodeGraphControllerButtonLayout,
     nodeGraphControllerWheelLayout,
+    nodeGraphControllerWheelRidges,
     nodeGraphControllerFaceCanvas,
     nodeGraphControllerFacePlace,
     nodeGraphControllerFaceObserve,

@@ -7,13 +7,16 @@
 // center detent tick on a bipolar range and the modulation ghost.
 //
 // Input stays in DOM: one transparent hit element per wheel, laid over the
-// drawn slot. Dragging a wheel writes its parameter through the shared slider
-// path (setNodeSliderValue / commitNodeSliderDragValue), so the parameter's
-// own range, curve and smoothing are the only limits. Each pointer drives its
-// own wheel, so two fingers can work both wheels at once.
+// drawn slot. Each hit is a shared drag surface (bindNodeSliderDragSurface in
+// node-graph-slider-dragging.js): the same press / drag / release code as the
+// Knob and Slider faces and the Bias readout, so the wheel has the same mouse
+// modifiers (relative drag, Alt+click jumps, Shift / Ctrl fine, Shift+Ctrl
+// finer, Ctrl+click resets, touch double-tap resets). The parameter's own
+// range, curve and smoothing are the only limits.
 //
 // Spring return (Display Settings, per module): on release a spring wheel goes
-// back to its parameter default (Pitch springs by default, Mod holds).
+// back to its parameter default (Pitch springs by default, Mod holds). The
+// face marks its hits data-slider-spring="default"; the shared release does it.
 //
 // Wire drops: each hit element carries data-face-param-drop, so a cable
 // dropped on a wheel lands on that parameter's MOD inlet (node-graph-module-face.js
@@ -124,23 +127,6 @@ function nodeGraphPitchModWheelTravel(slider, value) {
   return Math.max(0, Math.min(1, (Number(value) - min) / (max - min)));
 }
 
-/** Value under a 0..1 travel (bottom = 0), through the parameter's own curve and step. */
-function nodeGraphPitchModWheelValueFromTravel(slider, travel) {
-  const t = Math.max(0, Math.min(1, Number(travel) || 0));
-  let value = typeof nodeSliderValueFromRelativeTravel === "function"
-    ? Number(nodeSliderValueFromRelativeTravel(slider, t))
-    : NaN;
-  if (!Number.isFinite(value)) {
-    const min = Number(slider?.min);
-    const max = Number(slider?.max);
-    value = Number.isFinite(min) && Number.isFinite(max) ? min + (max - min) * t : NaN;
-  }
-  if (Number.isFinite(value) && typeof quantizeNodeSliderDragValue === "function") {
-    value = Number(quantizeNodeSliderDragValue(slider, value));
-  }
-  return value;
-}
-
 function nodeGraphPitchModWheelValue(nodeId, key, slider) {
   const domain = Number(slider?.dataset?.domainValue);
   if (Number.isFinite(domain)) return domain;
@@ -179,7 +165,6 @@ function nodeGraphPitchModWheelState(nodeId, key) {
     ghost,
     bipolar,
     valueText,
-    active: false,
   };
 }
 
@@ -189,14 +174,7 @@ function paintNodeGraphPitchModWheelFace(face) {
   const nodeId = String(face.dataset.node || "");
   const patchNode = nodeGraphPitchModWheelPatchNode(nodeId);
   const s = nodeGraphPitchModWheelDisplaySettingsForNode(patchNode);
-  const drags = face._wheelDrags || new Map();
-  const wheels = NODE_GRAPH_PITCH_MOD_WHEEL_PARAMS.map((key) => {
-    const state = nodeGraphPitchModWheelState(nodeId, key);
-    for (const drag of drags.values()) {
-      if (drag.key === key) state.active = true;
-    }
-    return state;
-  });
+  const wheels = NODE_GRAPH_PITCH_MOD_WHEEL_PARAMS.map((key) => nodeGraphPitchModWheelState(nodeId, key));
   const model = {
     settings: { count: wheels.length },
     background: s.backgroundColor,
@@ -206,6 +184,7 @@ function paintNodeGraphPitchModWheelFace(face) {
     wheels,
   };
   const hits = face._wheelHits || [];
+  nodeGraphPitchModWheelSyncHits(face, s);
   face._ctrlLayout = nodeGraphControllerFacePaint(face, "wheel", model, (L) => {
     hits.forEach((hit, i) => nodeGraphControllerFacePlace(hit, L.rects.wheels[i] || null, L.w, L.h));
   }) || face._ctrlLayout;
@@ -227,78 +206,21 @@ function syncNodeGraphPitchModWheelFace(nodeId) {
 
 // ---------------------------------------------------------------- input
 
-function nodeGraphPitchModWheelSpring(nodeId, key) {
-  const field = NODE_GRAPH_PITCH_MOD_WHEEL_SPRING_FIELDS[key];
-  if (!field) return false;
-  const s = nodeGraphPitchModWheelDisplaySettingsForNode(nodeGraphPitchModWheelPatchNode(nodeId));
-  return s[field] === true;
-}
-
-function nodeGraphPitchModWheelSetFromPointer(drag, event) {
-  const rect = drag.hit.getBoundingClientRect();
-  if (!(rect.height > 0)) return;
-  const travel = 1 - (event.clientY - rect.top) / rect.height;
-  const value = nodeGraphPitchModWheelValueFromTravel(drag.slider, travel);
-  if (!Number.isFinite(value) || typeof setNodeSliderValue !== "function") return;
-  setNodeSliderValue(drag.slider, value, { interaction: "drag" });
-  drag.moved = true;
-}
-
-function nodeGraphPitchModWheelCommit(slider, status) {
-  if (typeof commitNodeSliderDragValue === "function") {
-    commitNodeSliderDragValue(slider, status);
+/**
+ * Point each hit at its wheel's slider and mark spring wheels, so the shared
+ * drag surface sets the param and returns it to default on release.
+ */
+function nodeGraphPitchModWheelSyncHits(face, settings) {
+  const nodeId = String(face?.dataset?.node || "");
+  for (const hit of face?._wheelHits || []) {
+    const key = hit.dataset.pitchModWheelParam;
+    const target = `node-${nodeId}-${key}`;
+    if (hit.dataset.sliderTarget !== target) hit.dataset.sliderTarget = target;
+    const field = NODE_GRAPH_PITCH_MOD_WHEEL_SPRING_FIELDS[key];
+    const spring = Boolean(field && settings?.[field] === true);
+    if (spring && hit.dataset.sliderSpring !== "default") hit.dataset.sliderSpring = "default";
+    if (!spring && hit.dataset.sliderSpring) delete hit.dataset.sliderSpring;
   }
-}
-
-function beginNodeGraphPitchModWheelDrag(face, event) {
-  const hit = event.target?.closest?.("[data-pitch-mod-wheel-param]");
-  if (!hit || !face.contains(hit)) return;
-  if (event.pointerType === "mouse" && event.button !== 0) return;
-  if (typeof nodeGraphPatchIsLocked === "function" && nodeGraphPatchIsLocked()) return;
-  const key = hit.dataset.pitchModWheelParam;
-  const slider = nodeGraphPitchModWheelSlider(face.dataset.node, key);
-  if (!slider) return;
-  event.preventDefault();
-  event.stopPropagation();
-  if (!face._wheelDrags) face._wheelDrags = new Map();
-  for (const other of face._wheelDrags.values()) {
-    if (other.key === key) return;
-  }
-  const drag = { key, slider, hit, pointerId: event.pointerId, moved: false };
-  face._wheelDrags.set(event.pointerId, drag);
-  try { hit.setPointerCapture(event.pointerId); } catch (_) { /* synthetic events */ }
-  nodeGraphPitchModWheelSetFromPointer(drag, event);
-  paintNodeGraphPitchModWheelFace(face);
-}
-
-function moveNodeGraphPitchModWheelDrag(face, event) {
-  const drag = face._wheelDrags?.get(event.pointerId);
-  if (!drag) return;
-  event.preventDefault();
-  event.stopPropagation();
-  nodeGraphPitchModWheelSetFromPointer(drag, event);
-  paintNodeGraphPitchModWheelFace(face);
-}
-
-function endNodeGraphPitchModWheelDrag(face, event) {
-  const drag = face._wheelDrags?.get(event.pointerId);
-  if (!drag) return;
-  face._wheelDrags.delete(event.pointerId);
-  try { drag.hit.releasePointerCapture?.(event.pointerId); } catch (_) { /* already released */ }
-  const nodeId = face.dataset.node;
-  const label = nodeGraphPitchModWheelLabel(drag.slider, drag.key).toLowerCase();
-  if (nodeGraphPitchModWheelSpring(nodeId, drag.key)) {
-    const reset = typeof nodeSliderCtrlClickDefaultValue === "function"
-      ? Number(nodeSliderCtrlClickDefaultValue(drag.slider))
-      : Number(nodeGraphPitchModWheelParamDefinition(drag.key)?.defaultValue);
-    if (Number.isFinite(reset) && typeof setNodeSliderValue === "function") {
-      setNodeSliderValue(drag.slider, reset, { interaction: "drag" });
-    }
-    nodeGraphPitchModWheelCommit(drag.slider, `${label} wheel returned`);
-  } else {
-    nodeGraphPitchModWheelCommit(drag.slider, `${label} wheel`);
-  }
-  paintNodeGraphPitchModWheelFace(face);
 }
 
 /** Right-click: remember which wheel the merged panel's Parameter section edits. */
@@ -348,18 +270,20 @@ function createNodeGraphPitchModWheelFace(nodeIdOrEl, _type) {
     hit.dataset.faceParamDrop = key;
     hit.setAttribute("role", "slider");
     hit.setAttribute("aria-label", `${key === "pitch" ? "Pitch" : "Mod"} wheel`);
+    // Shared drag surface: vertical travel, no type-in (no face editor yet).
+    hit.dataset.sliderTarget = `node-${nodeId}-${key}`;
+    hit.dataset.sliderDragSurface = "vertical";
+    hit.dataset.sliderTypeIn = "off";
+    if (typeof bindNodeSliderDragSurface === "function") {
+      bindNodeSliderDragSurface(hit);
+    }
     face.append(hit);
     return hit;
   });
-  face._wheelDrags = new Map();
+  nodeGraphPitchModWheelSyncHits(face, nodeGraphPitchModWheelDisplaySettingsForNode(nodeGraphPitchModWheelPatchNode(nodeId)));
   if (typeof nodeGraphControllerFaceCanvas === "function") {
     nodeGraphControllerFaceCanvas(face);
   }
-  face.addEventListener("pointerdown", (event) => beginNodeGraphPitchModWheelDrag(face, event));
-  face.addEventListener("pointermove", (event) => moveNodeGraphPitchModWheelDrag(face, event));
-  face.addEventListener("pointerup", (event) => endNodeGraphPitchModWheelDrag(face, event));
-  face.addEventListener("pointercancel", (event) => endNodeGraphPitchModWheelDrag(face, event));
-  face.addEventListener("lostpointercapture", (event) => endNodeGraphPitchModWheelDrag(face, event));
   face.addEventListener("contextmenu", (event) => noteNodeGraphPitchModWheelContext(face, event), true);
   if (typeof nodeGraphControllerFaceObserve === "function") {
     nodeGraphControllerFaceObserve(face, () => paintNodeGraphPitchModWheelFace(face));
@@ -590,7 +514,6 @@ if (typeof globalThis !== "undefined") {
     nodeGraphPitchModWheelDisplaySettingsForNode,
     nodeGraphPitchModWheelColorLabel,
     nodeGraphPitchModWheelState,
-    nodeGraphPitchModWheelValueFromTravel,
     paintNodeGraphPitchModWheelFace,
     syncNodeGraphPitchModWheelFace,
     createNodeGraphPitchModWheelFace,

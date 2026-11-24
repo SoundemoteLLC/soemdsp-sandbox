@@ -2,7 +2,10 @@
 // Pitch Mod Wheel is the first display-only module: the WebGL face is the
 // whole UI. Static checks (old DOM wheel gone, definition, integration
 // entries, keyboard golden fixture untouched) plus a headless browser run:
-// drag sets the param, Pitch springs back, Mod holds (until Spring is on),
+// shared drag surface with the Knob/Slider modifiers (relative click-drag,
+// Alt+click jump, Shift/Ctrl fine, Shift+Ctrl finer, Ctrl+click reset, touch
+// relative), Pitch springs back, Mod holds (until Spring is on), no press
+// highlight, ridges roll with the pointer,
 // wire drops map to each wheel's MOD inlet, right-click opens one merged
 // panel (Parameter on top, Display below), hidden display collapses, the
 // display resizes with its height, and old patches load.
@@ -38,6 +41,27 @@ check(!/modulation:\s*false/.test(def), "both wheel params accept modulation");
 check(/registerNodeGraphModuleFaceCreator\(\s*"pitchModWheelFace"/.test(face), "face registers on the display-type creator map");
 check(/nodeGraphControllerFacePaint\(\s*face,\s*"wheel"/.test(face) && /wheel:\s*drawWheel/.test(kit), "face draws through the shared controller GL kit (kind wheel)");
 check(!/\.title\s*=|setAttribute\("title"|nodeGraphApplyTooltip/.test(face), "face sets no hover text");
+const dragging = read("public/node-graph-slider-dragging.js");
+const knobFace = read("public/modules/knob/knob-face.js");
+check(/function bindNodeSliderDragSurface\(/.test(dragging) && /bindNodeSliderDragSurface\(hit\)/.test(face)
+  && /bindNodeSliderDragSurface\(face\)/.test(knobFace), "wheel, Knob and Slider faces bind through one shared drag surface helper");
+check(!/setPointerCapture|addEventListener\("pointer(down|move|up)"|altKey|shiftKey|ctrlKey/.test(face), "wheel face has no drag/modifier code of its own");
+check(!/\bactive\b/.test(kit.slice(kit.indexOf("function drawWheel"), kit.indexOf("const LAYOUTS"))) && !/active:/.test(face), "no press/drag highlight on the wheel");
+{
+  // Ridge direction: the surface moves with the pointer. Raising the value
+  // (drag up) rolls the ridges up; lowering it (drag down) rolls them down.
+  const vm = await import("node:vm");
+  const sandbox = { module: { exports: {} }, Math, Number, Object, JSON, Array, Date };
+  sandbox.globalThis = sandbox;
+  vm.runInNewContext(kit, sandbox);
+  const kitApi = sandbox.module.exports;
+  const body = { x: 0, y: 0, w: 40, h: 100 };
+  const near = (list, y) => list.reduce((best, r) => (Math.abs(r.y - y) < Math.abs(best.y - y) ? r : best));
+  const a = near(kitApi.nodeGraphControllerWheelRidges(body, 0.5), 50);
+  const up = near(kitApi.nodeGraphControllerWheelRidges(body, 0.505), a.y);
+  const down = near(kitApi.nodeGraphControllerWheelRidges(body, 0.495), a.y);
+  check(up.y < a.y && down.y > a.y, `ridges roll with the drag (value up: ${a.y.toFixed(2)} -> ${up.y.toFixed(2)}, value down: -> ${down.y.toFixed(2)})`);
+}
 check(!/clampNodeSliderValue\([^)]*-1\s*,\s*1\)|Math\.min\(1,\s*Math\.max\(-1/.test(face), "face hardcodes no wheel limits");
 for (const [rel, re] of [
   ["public/node-graph-module-scope-display-mode.js", /"pitchModWheelFace"/],
@@ -158,45 +182,91 @@ try {
   check(setup.hiddenArt && setup.hiddenVisible === false && setup.hiddenFaceH === 0, `hidden display collapses (visible=${setup.hiddenVisible}, face height ${setup.hiddenFaceH})`);
   check(setup.oldFace && Math.abs(setup.oldPitch - 0.5) < 1e-6 && setup.oldSettings?.springPitch === true, "old patch without display settings loads with defaults and keeps its values");
 
-  const val = (key) => page.evaluate((k) => Number(document.getElementById(`node-wheelA-${k}`)?.value), key);
-  const pitchHit = setup.hits.find((h) => h.key === "pitch");
+  const val = (key) => page.evaluate((k) => {
+    const el = document.getElementById(`node-wheelA-${k}`);
+    const d = Number(el?.dataset?.domainValue);
+    return Number.isFinite(d) ? d : Number(el?.value);
+  }, key);
+  const setVal = (key, v) => page.evaluate(({ k, v }) => {
+    const el = document.getElementById(`node-wheelA-${k}`);
+    setNodeSliderValue(el, v, { interaction: "drag" });
+    commitNodeSliderDragValue(el, "test");
+  }, { k: key, v });
+  // Pointer gesture on a wheel through real event dispatch (modifier flags on
+  // every event). Presses are kept apart so two in a row are not a double-click.
+  // fromV: 0 = top of the slot, 1 = bottom. dy: pixels moved (negative = up).
+  const gesture = (key, fromV, dy, mods = {}, opts = {}) => page.evaluate(({ key, fromV, dy, mods, opts }) => {
+    const hit = document.querySelector(`.dsp-node[data-node="wheelA"] [data-pitch-mod-wheel-param="${key}"]`);
+    const r = hit.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y0 = r.top + r.height * fromV;
+    const slider = document.getElementById(`node-wheelA-${key}`);
+    const read = () => { const d = Number(slider.dataset.domainValue); return Number.isFinite(d) ? d : Number(slider.value); };
+    if (!opts.keepClickTiming) nodeGraphMvp.sliderLastPointerDown = null;
+    const pointerType = opts.touch ? "touch" : "mouse";
+    const fire = (target, type, y, buttons) => target.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true, pointerId: opts.touch ? 21 : 1, pointerType, isPrimary: true,
+      clientX: x, clientY: y, button: 0, buttons, ...mods,
+    }));
+    const target = document.elementFromPoint(x, y0);
+    fire(target, "pointerdown", y0, 1);
+    const pressed = read();
+    const steps = 5;
+    for (let i = 1; i <= steps; i += 1) fire(document, "pointermove", y0 + (dy * i) / steps, 1);
+    const held = read();
+    fire(document, "pointerup", y0 + dy, 0);
+    return { onWheel: Boolean(target?.closest?.(`[data-pitch-mod-wheel-param="${key}"]`)), pressed, held, released: read(), h: r.height };
+  }, { key, fromV, dy, mods, opts });
+  const near = (a, b, tol) => Math.abs(a - b) <= tol;
+
+  // Plain click-drag is relative: the press never jumps to the pointer.
+  await setVal("mod", 0.25);
+  const plain = await gesture("mod", 0.1, -20);
+  const plainDelta = plain.held - 0.25;
+  check(plain.onWheel && near(plain.pressed, 0.25, 1e-9), `click on the wheel does not jump to the mouse (pressed at the top: ${plain.pressed})`);
+  check(plainDelta > 0.05 && plainDelta < 0.5, `click-drag moves relative to the current value (0.25 -> ${plain.held.toFixed(4)})`);
+  check(near(plain.released, plain.held, 1e-9), `Mod holds where it was released (${plain.released.toFixed(4)})`);
+  // Alt+click jumps to the pointer (vertical position in the slot).
+  await setVal("mod", 0.25);
+  const alt = await gesture("mod", 0.25, 0, { altKey: true });
+  check(near(alt.pressed, 0.75, 0.03), `Alt+click jumps to the mouse (0.25 -> ${alt.pressed.toFixed(4)} at 75% height)`);
+  // Fine drags: Shift or Ctrl x0.1, Shift+Ctrl x0.01 of a plain drag.
+  await setVal("mod", 0.25);
+  const shift = await gesture("mod", 0.5, -20, { shiftKey: true });
+  await setVal("mod", 0.25);
+  const ctrlDrag = await gesture("mod", 0.5, -20, { ctrlKey: true });
+  await setVal("mod", 0.25);
+  const finer = await gesture("mod", 0.5, -20, { shiftKey: true, ctrlKey: true });
+  const ratio = (g) => (g.held - 0.25) / plainDelta;
+  check(near(ratio(shift), 0.1, 0.01), `Shift drag is fine (x${ratio(shift).toFixed(3)})`);
+  check(near(ratio(ctrlDrag), 0.1, 0.01), `Ctrl drag is fine (x${ratio(ctrlDrag).toFixed(3)})`);
+  check(near(ratio(finer), 0.01, 0.002), `Shift+Ctrl drag is finer (x${ratio(finer).toFixed(4)})`);
+  // Ctrl+click resets to the param default.
+  await setVal("mod", 0.6);
+  const reset = await gesture("mod", 0.5, 0, { ctrlKey: true });
+  check(near(reset.released, 0, 1e-9), `Ctrl+click resets to default (0.6 -> ${reset.released})`);
+  // The param max is the only limit.
+  await setVal("mod", 0.9);
+  const past = await gesture("mod", 0.5, -400);
+  check(near(past.held, 1, 1e-9), `dragging past the end stops at the param max (${past.held})`);
+  // A quick second press is another drag (no type-in on the wheel face).
+  await setVal("mod", 0.25);
+  await gesture("mod", 0.5, 0);
+  const second = await gesture("mod", 0.5, -20, {}, { keepClickTiming: true });
+  const typeIn = await page.evaluate(() => Boolean(document.querySelector('.dsp-node[data-node="wheelA"] input:not([type="range"]):not([type="hidden"])')));
+  check(!typeIn && second.held > 0.25 + plainDelta * 0.5, `double-click does not open a type-in; the second press drags (${second.held.toFixed(4)})`);
+  // Pitch: relative drag, then springs back to its default on release.
+  await setVal("pitch", 0);
+  const pitch = await gesture("pitch", 0.9, -20);
+  check(near(pitch.pressed, 0, 1e-9) && pitch.held > 0.1, `Pitch drags relative from center (${pitch.pressed} -> ${pitch.held.toFixed(4)})`);
+  check(near(pitch.released, 0, 1e-9), `Pitch springs back to its default on release (${pitch.released})`);
+  // Touch: relative like the sliders (no jump on press), spring still applies.
+  const touch = await gesture("pitch", 0.1, 20, {}, { touch: true });
+  check(near(touch.pressed, 0, 1e-9) && touch.held < -0.1 && near(touch.released, 0, 1e-9),
+    `touch drags relative and springs back (${touch.pressed} -> ${touch.held.toFixed(4)} -> ${touch.released})`);
+
   const modHit = setup.hits.find((h) => h.key === "mod");
   const cx = (h) => h.x + h.w / 2;
-  // Pitch: drag up near the top, hold, release -> springs to default 0.
-  await page.mouse.move(cx(pitchHit), pitchHit.y + pitchHit.h * 0.5);
-  await page.mouse.down();
-  await page.mouse.move(cx(pitchHit), pitchHit.y + pitchHit.h * 0.1, { steps: 6 });
-  const pitchHeld = await val("pitch");
-  await page.mouse.up();
-  await page.waitForTimeout(80);
-  const pitchReleased = await val("pitch");
-  check(pitchHeld > 0.6, `dragging Pitch up sets the param (${pitchHeld.toFixed(3)})`);
-  check(Math.abs(pitchReleased) < 1e-6, `Pitch springs back to its default on release (${pitchReleased})`);
-  // Mod: drag to ~75%, release -> holds.
-  await page.mouse.move(cx(modHit), modHit.y + modHit.h * 0.9);
-  await page.mouse.down();
-  await page.mouse.move(cx(modHit), modHit.y + modHit.h * 0.25, { steps: 6 });
-  await page.mouse.up();
-  await page.waitForTimeout(80);
-  const modHeld = await val("mod");
-  check(Math.abs(modHeld - 0.75) < 0.05, `Mod holds where it was released (${modHeld.toFixed(3)})`);
-  // Past the end: the param's own max is the limit.
-  await page.mouse.move(cx(modHit), modHit.y + modHit.h * 0.5);
-  await page.mouse.down();
-  await page.mouse.move(cx(modHit), modHit.y - 200, { steps: 4 });
-  await page.mouse.up();
-  check(Math.abs((await val("mod")) - 1) < 1e-6, "dragging past the end stops at the param max");
-  // Touch: a tap on Pitch's lower half moves it below 0 while held.
-  const touched = await page.evaluate(({ x, y }) => {
-    const el = document.elementFromPoint(x, y);
-    const opts = { bubbles: true, cancelable: true, pointerId: 7, pointerType: "touch", isPrimary: true, clientX: x, clientY: y, button: 0, buttons: 1 };
-    el.dispatchEvent(new PointerEvent("pointerdown", opts));
-    const held = Number(document.getElementById("node-wheelA-pitch").value);
-    el.dispatchEvent(new PointerEvent("pointerup", { ...opts, buttons: 0 }));
-    return { held, after: Number(document.getElementById("node-wheelA-pitch").value) };
-  }, { x: cx(pitchHit), y: pitchHit.y + pitchHit.h * 0.8 });
-  check(touched.held < -0.3 && Math.abs(touched.after) < 1e-6, `touch drives the wheel (${touched.held.toFixed(3)} -> ${touched.after})`);
-
   // Right-click the Mod wheel: one panel, Parameter on top, Display below.
   await page.mouse.click(cx(modHit), modHit.y + modHit.h * 0.5, { button: "right" });
   await page.waitForTimeout(300);
@@ -237,12 +307,8 @@ try {
     return el?.closest?.("[data-pitch-mod-wheel-param]")?.dataset?.pitchModWheelParam || `${el?.id || ""} ${el?.className || ""}`;
   }, { x: cx(modHit), y: modHit.y + modHit.h * 0.5 });
   check(under === "mod", `closing the panel leaves the wheel reachable (${under})`);
-  await page.mouse.move(cx(modHit), modHit.y + modHit.h * 0.5);
-  await page.mouse.down();
-  await page.mouse.move(cx(modHit), modHit.y + modHit.h * 0.2, { steps: 4 });
-  await page.mouse.up();
-  await page.waitForTimeout(80);
-  check(Math.abs(await val("mod")) < 1e-6, "with Spring on, Mod returns to its default");
+  const sprung = await gesture("mod", 0.5, -30);
+  check(sprung.held > 0.1 && near(sprung.released, 0, 1e-9), `with Spring on, Mod returns to its default (${sprung.held.toFixed(4)} -> ${sprung.released})`);
   const restored = await page.evaluate(() => {
     if (typeof restoreNodeGraphPitchModWheelParamEmbed === "function") restoreNodeGraphPitchModWheelParamEmbed();
     const grid = document.querySelector("#nodeParameterMetadataPopover > .metadata-popover-grid");
