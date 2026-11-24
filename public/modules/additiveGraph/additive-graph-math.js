@@ -226,7 +226,7 @@ function additiveGraphSkewMap(t, curve, mode) {
 /**
  * Basic harmonic waveforms for Additive Generator (Yellow Graph).
  * Indices: 0 Trisaw, 1 Saw, 2 Square, 3 PulseCenter, 4 PulseLeft, 5 PulseRight,
- *          6 Tri, 7 RectSine, 8 Even, 9 Odd.
+ *          6 Tri, 7 RectSine, 8 Even, 9 Odd, 10 CenterSaw.
  * Morph (0…1): Pulse* duty, Trisaw peak (0.5 = triangle, 0/1 → saw).
  * Saw / Square / Tri / RectSine / Even / Odd ignore Morph.
  * Phase Rotation is on Additive Generator (baked into Graph phases).
@@ -286,6 +286,18 @@ function additiveGraphWaveformPartial(waveform, harmonic, morph = 0.5) {
       amplitude = odd ? 1 : 0;
       phase = 0;
       break;
+    case 10: { // Center Saw — same series as additive_yellow_graph.h (edge at p = Morph)
+      const p = pulseDuty;
+      const w = 2 * Math.PI * h;
+      const x = w * p;
+      const k = (1 - 2 * p) / (p * (1 - p));
+      const sh = Math.sin(0.5 * x);
+      const an = 4 * Math.sin(x) / w - 4 * k * sh * sh / (w * w);
+      const bn = 2 * k * Math.sin(x) / (w * w) - 4 * Math.cos(x) / w;
+      amplitude = 0.1 * Math.PI * Math.PI * Math.hypot(an, bn);
+      phase = Math.atan2(an, bn) / (2 * Math.PI);
+      break;
+    }
     default:
       amplitude = 1 / h;
       phase = odd ? 0.5 : 0;

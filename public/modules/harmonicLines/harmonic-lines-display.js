@@ -30,7 +30,7 @@ function buildNodeGraphHarmonicLinesDisplaySettingsBodyHtml() {
   return `
     <div class="node-led-display-settings-panel" data-harmonic-lines-display-settings-panel>
       <label class="node-led-settings-row">
-        <span>Line width</span>
+        <span>Line thickness</span>
         <input type="range" min="0.5" max="8" step="0.25" data-harmonic-lines-field="lineWidth" aria-label="Harmonic line width in pixels">
         <span>px</span>
       </label>
@@ -336,7 +336,10 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
 
   // Dim mid line — Left above, Right below.
   // Capsule half-width for a CSS stroke width: core = w/2 - 0.35, Expo skirt.
-  const smoothing = Math.max(0, Number(hlLook.lineSmoothing) || 1);
+  // Line blur = the shared display Expo skirt (as Plot / Waterfall), 0..8 CSS px; 0 = hard core.
+  const smoothing = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(hlLook, nodeGraphHarmonicLinesSettingsDefaults.lineSmoothing)
+    : Math.max(0, Math.min(8, Number.isFinite(Number(hlLook.lineSmoothing)) ? Number(hlLook.lineSmoothing) : 1));
   const half = (lw) => Math.max(0, lw * 0.5 - 0.35);
   nodeGraphGlLinesSegment(batch, pad, midY, pad + span, midY, half(faceInkPx(1, faceMin)), smoothing, [1, 1, 1, 0.18]);
 
@@ -363,9 +366,10 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
       ? additiveGraphPhaseColor(phase01)
       : { r: 224, g: 64, b: 251 };
     const rgba = [col.r / 255, col.g / 255, col.b / 255, 1];
-    // Butt ends like the 2D stroke: square-ended rect, not a capsule.
-    if (leftH > 0.5) nodeGraphGlLinesRect(batch, x - lineW * 0.5, midY - leftH, lineW, leftH, rgba);
-    if (rightH > 0.5) nodeGraphGlLinesRect(batch, x - lineW * 0.5, midY, lineW, rightH, rgba);
+    // Antialiased stems: shared Expo-edge segment with butt ends (not a capsule),
+    // same core as the mid line and the Line blur skirt.
+    if (leftH > 0.5) nodeGraphGlLinesSegment(batch, x, midY - leftH, x, midY, half(lineW), smoothing, rgba, "square");
+    if (rightH > 0.5) nodeGraphGlLinesSegment(batch, x, midY, x, midY + rightH, half(lineW), smoothing, rgba, "square");
   }
 
   if (trackFilter) {

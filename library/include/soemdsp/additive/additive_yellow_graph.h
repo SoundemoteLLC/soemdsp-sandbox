@@ -259,7 +259,7 @@ static inline float bubble_effective_phase_skew(float phaseSkew, float unskew, f
   return skew + (unskew - skew) * cut;
 }
 
-// Waveforms 0–9: Trisaw / Saw / Square / PulseCenter / PulseLeft / PulseRight / Tri / RectSine / Even / Odd.
+// Waveforms 0–10: Trisaw / Saw / Square / PulseCenter / PulseLeft / PulseRight / Tri / RectSine / Even / Odd / Center Saw.
 static inline void waveform_partial(
   int waveform, int harmonic, float pwm, float* ampOut, float* phaseOut, float* ratioOut
 ) {
@@ -323,6 +323,26 @@ static inline void waveform_partial(
       amplitude = odd ? 1.0f : 0.0f;
       phase = 0.0f;
       break;
+    case 10: { // Center Saw — ramp 0→1 on [0,p), edge 1→−1 at p, ramp −1→0 on [p,1)
+      // Morph = edge position p (like Pulse* duty, 0.001…0.999). Exact Fourier
+      // series a_n cos(2πnt) + b_n sin(2πnt), with w = 2πn, x = w p, k = (1−2p)/(p(1−p)):
+      //   a_n = 4 sin(x)/w − 4 k sin²(x/2)/w²,   b_n = 2 k sin(x)/w² − 4 cos(x)/w.
+      // No DC term (the naive shape's mean p − 0.5 is dropped, like Pulse*).
+      // × 0.1π² so p = 0.5 is Trisaw's Morph-1 limit (Trisaw's 0.2 ≈ 2/π² level).
+      const double p = (double)pulseDuty;
+      const double w = soemdsp_maths::kTwoPi * (double)h;
+      const double x = w * p;
+      const double k = (1.0 - 2.0 * p) / (p * (1.0 - p));
+      const double sx = soemdsp_maths::dsp_sin(x);
+      const double sh = soemdsp_maths::dsp_sin(0.5 * x);
+      const double an = 4.0 * sx / w - 4.0 * k * sh * sh / (w * w);
+      const double bn = 2.0 * k * sx / (w * w) - 4.0 * soemdsp_maths::dsp_cos(x) / w;
+      amplitude = (float)(0.1 * soemdsp_maths::kPi * soemdsp_maths::kPi
+        * soemdsp::math::sqrt_newton(an * an + bn * bn));
+      // a cos + b sin = A sin(θ + φ), φ = atan2(a, b).
+      phase = (float)(soemdsp::math::atan2_approx(an, bn) / soemdsp_maths::kTwoPi);
+      break;
+    }
     default:
       amplitude = 1.0f / (float)h;
       phase = odd ? 0.5f : 0.0f;

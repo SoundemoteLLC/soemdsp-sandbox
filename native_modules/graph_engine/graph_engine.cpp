@@ -22,6 +22,7 @@
 using soemdsp::math::gate_hit;
 using soemdsp::math::gate_hit_height;
 using soemdsp::math::partial_reset_phase;
+using soemdsp::math::partial_reset_delta;
 using soemdsp::math::planck_divisor;
 using soemdsp::math::clamp_planck_range;
 using soemdsp::math::seed_mix;
@@ -4756,7 +4757,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.timingMode,
-    (typeId == kTypePolyBlep || typeId == kTypeSinc) ? 0.0 : // Cycle Free run (PolyBLEP, Sinc)
+    (typeId == kTypePolyBlep || typeId == kTypeSinc || typeId == kTypeAdditiveOut) ? 0.0 : // Cycle Free run (PolyBLEP, Sinc, Additive Out)
     (typeId == kTypeElectroSnare || typeId == kTypeModalSnare || typeId == kTypeElectroHat || typeId == kTypeElectroTom || typeId == kTypeElectroKick || typeId == kTypeElectroClap || typeId == kTypeRobinSinepulse) ? 0.0 : // Recalculate On Trigger Off (drums)
     (typeId == kTypeVibratoGenerator) ? 2.0 // releaseShape Exp
       : (typeId == kTypeHypersaw2) ? 0.0 // vibratoSpeedTiltSource Freq
@@ -6433,7 +6434,7 @@ static void copy_tap_to_buf(double* dst, const double* src, int frames) {
   for (int i = 0; i < frames; i++) dst[i] = src[i];
 }
 
-// Cycle = Single trigger (PolyBLEP, Sinc): a Reset hit starts one cycle; silent
+// Cycle = Single trigger (PolyBLEP, Sinc, Additive Out): a Reset hit starts one cycle; silent
 // before the first hit and after the cycle. True while the cycle is playing.
 static inline bool single_cycle_gate(Node& node, bool restart) {
   if (restart) {
@@ -8639,7 +8640,7 @@ static void process_additive_generator(Circuit& g, Node& node, int frames) {
   }
   int waveform = (int)(control_effective(node.waveform) + (control_effective(node.waveform) >= 0.0 ? 0.5 : -0.5));
   if (waveform < 0) waveform = 0;
-  if (waveform > 9) waveform = 9;
+  if (waveform > 10) waveform = 10; // 10 = Center Saw
   const float pwm = (float)control_effective(node.shape);
   const float harmonics = (float)control_effective(node.stages);
   const float phaseRotation = (float)control_effective(node.phaseParam);
@@ -9312,6 +9313,9 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
   const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
   const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  // Cycle (timingMode): 0 Free run / 1 Single trigger (one fundamental cycle per
+  // Reset hit, silent before the first hit and after the cycle, phases held).
+  const bool single = control_effective(node.timingMode) >= 0.5;
   const double referenceVoltage = circuit_pitch_ref_v(g);
   if (!liveReset) node.lastReset = 0.0;
 
@@ -9320,16 +9324,40 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
     const soemdsp_yellow_graph::SlopeMask liveSlope = liveSlopeMod
       ? additive_out_live_slope(node)
       : soemdsp_yellow_graph::SlopeMask{};
+    bool restart = false;
     if (liveReset) {
       const double rv = g.mixReset[f];
       if (gate_hit(rv, &node.lastReset)) {
-        for (int i = 0; i < H; i += 1) node.yellowPhaseAcc[i] = 0.0;
+        // Reset trigger (as PolyBLEP): height h moves the master phase |h| of the
+        // way to the cycle start (h < 0 the long way). A full-height hit zeroes
+        // every partial; a partial hit shifts each partial by the master's move
+        // times its ratio, so the bank stays coherent.
+        const double h = gate_hit_height(rv);
+        if (h >= 1.0 || h <= -1.0) {
+          for (int i = 0; i < H; i += 1) node.yellowPhaseAcc[i] = 0.0;
+        } else if (H > 0) {
+          const double r0 = (double)local.ratio[0];
+          const double move = partial_reset_delta(node.yellowPhaseAcc[0], 0.0, h, 1.0);
+          for (int i = 0; i < H; i += 1) {
+            const double ri = (double)local.ratio[i];
+            const double scale = (r0 > 1e-12 && ri == ri) ? ri / r0 : 1.0;
+            node.yellowPhaseAcc[i] = soemdsp_maths::wrap01(node.yellowPhaseAcc[i] + move * scale);
+          }
+        }
+        restart = true;
       }
       node.lastReset = rv;
     }
     double freq = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, srD
     );
+    if (single && !single_cycle_gate(node, restart)) {
+      // Stopped: silent, every partial phase held.
+      node.buf[kPortMono][f] = 0.0;
+      node.buf[kPortLeft][f] = 0.0;
+      node.buf[kPortRight][f] = 0.0;
+      continue;
+    }
     double inc = 0.0;
     float mono = 0.0f;
     float left = 0.0f;
@@ -9353,6 +9381,7 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
     node.buf[kPortMono][f] = (double)mono;
     node.buf[kPortLeft][f] = (double)left;
     node.buf[kPortRight][f] = (double)right;
+    if (single) single_cycle_advance(node, freq / srD);
   }
   if (liveSlopeMod) additive_generator_apply_mask(node, nullptr, 0);
   if (

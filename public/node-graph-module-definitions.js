@@ -1789,6 +1789,7 @@ const nodeGraphModuleDefinitions = (
           "RectSine",
           "Even",
           "Odd",
+          "CenterSaw",
         ],
         defaultValue: "0",
         displayChoices: true,
@@ -1797,7 +1798,7 @@ const nodeGraphModuleDefinitions = (
         label: "Waveform",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "9",
+        max: "10",
         mid: "0",
         min: "0",
         step: "1",
@@ -3159,6 +3160,8 @@ const nodeGraphModuleDefinitions = (
       { key: "harmonicLines", renderer: "harmonicLines" },
     ],
     // Signal CV; Graph data inlet stacks above these (see nodeGraphPatchNodeInputPorts).
+    // Reset is a trigger, same as PolyBLEP: height h (-1..1) moves the master phase |h| of the way to the cycle start (h<0 the long way; 1 = hard reset); partials move with it.
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
@@ -3241,6 +3244,23 @@ const nodeGraphModuleDefinitions = (
         tooltip: "0…1. Linear amplitude drop from Slope Start to Slope End on the finished spectrum. Partials past Slope End sit at 1 − Slope Height.",
       },
       { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Random phase seed for newly added partials (Phase Entry = Random)." },
+      {
+        // Same as PolyBLEP Cycle: Single trigger plays one fundamental cycle per Reset hit.
+        choices: ["Free run", "Single trigger"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        // Hidden on spawn; the parameter's Show toggle brings it back.
+        hidden: true,
+        key: "cycleMode",
+        label: "Cycle",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1" },
     ] },
   // RoundShape — sine→square modulator (getSineToSquare). Separate from full Ellipsoid osc.
   // Face: cheap static orbit outline (filter-curve family), not phosphor trace.

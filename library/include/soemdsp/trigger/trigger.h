@@ -120,6 +120,24 @@ static inline double partial_reset_phase(double phase, double target, double h, 
   return wrap(phase + h * d * period);
 }
 
+// The signed move partial_reset_phase makes, unwrapped (same units as period):
+// for |h| < 1, partial_reset_phase(phase, target, h, period) is
+// wrap(phase + partial_reset_delta(phase, target, h, period)). Lets a bank of
+// phases (additive partials) shift together, each by delta * its ratio.
+static inline double partial_reset_delta(double phase, double target, double h, double period = 1.0) {
+  if (!(h == h) || !(period > 0.0)) return 0.0;
+  if (h > 1.0) h = 1.0;
+  if (h < -1.0) h = -1.0;
+  if (h == 0.0) return 0.0;
+  double d = (target - phase) / period;
+  d -= __builtin_floor(d + 0.5);  // shortest signed distance, [-0.5, 0.5)
+  if (h < 0.0) {
+    d = (d >= 0.0) ? d - 1.0 : d + 1.0;  // long way around
+    h = -h;
+  }
+  return h * d * period;
+}
+
 }  // namespace soemdsp::math
 
 namespace soemdsp_maths {
