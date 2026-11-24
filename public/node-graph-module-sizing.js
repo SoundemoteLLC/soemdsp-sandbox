@@ -1621,7 +1621,7 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
     ];
   }
-  if (type === "samplePlayer" || type === "sampleLooper" || type === "audioPlayer" || type === "wavetable2d") {
+  if (type === "samplePlayer" || type === "sampleLooper" || type === "audioPlayer") {
     // header → io → face → sample controls → params. I/O above the waveform.
     return [
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },

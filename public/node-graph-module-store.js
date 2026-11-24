@@ -183,7 +183,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   "chaoticPhaseLockingFilter",
   "cookbookFilter",
   "samplePlayer",
-  "wavetable2d",
+  "spectralOsc",
   "phaser",
   "flanger",
   "chorus",
@@ -212,7 +212,6 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
   animatedTextBox: "Wireable animated text plate. Parked until the text animation pass.",
   evolveField: "Field evolve visual. Parked until RGB/shader pass.",
   phosphillator: "Draw a path, play it as X/Y. Parked until the draw engine is ready.",
-  wavetable2d: "Morph (4 frames, wrap) × Warp (13 baked knots). Additive Nyquist.",
   sineWarp: "Live rational phasewarp + rectSin PolyBLAMP (or clean sine). Reset→PolyBLEP.",
   wavetable3d: "Dual-axis table morph. Parked until wavetable playback exists.",
   besselThomson: "Maximally flat group-delay filter. Parked until that filter lands.",
@@ -428,11 +427,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "SinCos",
     notes: ["implemented", "sincos", "native", "wavetable-switch", "modulator"],
   },
-  wavetable2d: {
+  spectralOsc: {
     category: "oscillator",
-    description: "Morph (RectSine → Sine → inv-RectSine 180° → Sine, wrap) × Warp (13 baked knots, both signs). Additive with Hmax at Nyquist.",
-    label: "Wavetable 2D",
-    notes: ["wavetable", "oscillator", "rectified sine", "warp", "phase"],
+    description: "Exact band-limited shapes built from their Fourier series: Center Edge, Pulse, Trisaw (each with Sine), Formant, Comb. Gaussian taper per octave, so no Gibbs ringing. Reset is a trigger; Cycle can play one cycle per hit.",
+    label: "Spectral Oscillator",
+    notes: ["oscillator", "spectral", "band-limited", "fourier", "additive", "saw", "pulse", "triangle", "formant", "comb", "wavetable"],
   },
   wavetable3d: {
     category: "oscillator",
@@ -1581,12 +1580,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Read pitch bend and mod wheel next to the keyboard for expression.",
     label: "Pitch Mod Wheel",
     notes: ["pitch wheel", "mod wheel", "performance control", "pitch", "mod"],
-  },
-  wavetable2d: {
-    category: "oscillator",
-    description: "Morph (RectSine → Sine → inv-RectSine 180° → Sine, wrap) × Warp (13 baked knots). Additive Nyquist.",
-    label: "Wavetable 2D",
-    notes: ["wavetable", "oscillator", "rectified sine", "warp", "phase"],
   },
   fftReconstruction: {
     browserEmoji: "🌊",

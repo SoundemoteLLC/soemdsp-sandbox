@@ -260,7 +260,7 @@ const nodeGraphNodeLabels = Object.freeze({
   formantFilter: "Formant Voice",
   binaryClock: "Binary Clock",
   osc: "Open Sound Control",
-  wavetable2d: "Wavetable2D",
+  spectralOsc: "Spectral Oscillator",
   wavetable3d: "Wavetable3D",
   pixelGrid: "PixelGrid",
   flexGrid: "Flex Grid",
@@ -302,7 +302,6 @@ const nodeGraphNodeLabels = Object.freeze({
   gridKeyboard: "Grid Keyboard",
   samplePlayer: "Sample Player",
   fftReconstruction: "FFT Reconstruction",
-  wavetable2d: "Wavetable 2D",
   sampleLooper: "Sample Looper",
   audioPlayer: "Music Player",
 
@@ -21088,43 +21087,84 @@ const nodeGraphModuleDefinitions = (
       "Y",
     ],
     parameters: [] },
-  wavetable2d: {
-    planRole: "source",
-    chrome: NodeGraphModuleChromeLayout.LayoutB,
-    layoutBPortLabels: true,
-    layout: "sampleWaveform",
-    defaultWidthGu: 13,
-    defaultHeightGu: 18,
-    displayType: "sampleWaveform",
-    displayModes: [
+  spectralOsc: {
+    // Spectral Oscillator (native_modules/spectral_osc): every cycle is built from the
+    // shape's Fourier series and band-limited per octave by a Gaussian taper, so no
+    // Gibbs ringing. Hand-written face: Shape, Freq | Phase, A | B | Amp, Cycle. A and B
+    // mean something different per Shape, so their face labels follow it (labelsBy).
+    // Cycle (hidden on spawn) has its own row, which drops out while hidden and
+    // appears when the param's Show is on.
+    face: [
+      { kind: "cells", params: [["shape", "Shape"]], horizontal: true },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
       {
-        key: "waveform",
-        label: "Waveform",
-        renderer: "sampleWaveform",
-        settingsSchema: "sampleWaveform" },
+        kind: "cells",
+        params: [["shapeA", "Edge"], ["shapeB", "Sine"], ["amplitude", "Amp"]],
+        h: 40,
+        labelsBy: {
+          param: "shape",
+          labels: [["Edge", "Sine"], ["Width", "Sine"], ["Peak", "Sine"], ["Formant", "Width"], ["Spacing", "Depth"]],
+        },
+      },
+      { kind: "choices", param: "cycleMode", labels: ["Free run", "Single trigger"], h: 26 },
     ],
-    defaultDisplayMode: "waveform",
+    planRole: "source",
+    chrome: "LayoutA",
+    customDisplayArea: true,
+    // One exact cycle of the current Shape / A / B (spectralOscBakeCycle).
+    displayType: "additiveWaveform",
+    displayHeightGu: 3,
+    defaultDisplaySettings: {
+      lineThickness: 0.4,
+      lineSmoothing: 0.7,
+      strokeColor: "#ffd228",
+      backgroundColor: "#050508",
+    },
+    // Wide enough for "Single trigger" on the Cycle row.
+    defaultWidthGu: 8,
+    displayModes: [
+      { key: "additiveWaveform", renderer: "additiveWaveform", settingsSchema: "additiveWaveform" },
+    ],
+    // Reset is a trigger, same as PolyBLEP / Sinc: height h (-1..1) moves the phase |h| of the way to the cycle start (h<0 the long way; 1 = hard reset).
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
-    inputTooltips: {
-      Reset: "Rising edge zeros the phasor.",
-      f: "Absolute Hz. Replaces Frequency when wired." },
-    outputLabels: { Out: "←" },
     outputs: ["Out"],
     parameters: [
       {
+        choices: ["Center Edge", "Pulse", "Trisaw", "Formant", "Comb"],
         defaultValue: "0",
-        key: "morph",
-        kind: "phase",
-        label: "Morph",
+        displayChoices: true,
+        key: "shape",
+        label: "Shape",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "4",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1" },
+      {
+        // Center Edge: Edge, Pulse: Width, Trisaw: Peak, Formant: Formant, Comb: Spacing.
+        defaultValue: "0.5",
+        key: "shapeA",
+        label: "Shape A",
         max: "1",
         mid: "0.5",
         min: "0",
-        step: "0.001",
-        wraparound: true,
-        smoothingType: "papoulis",
-        tooltip: "Wraparound morph: Rectified sine → Sine → inverted Rectified sine (180°) → Sine → …" },
+        nonlinearSlider: false,
+        step: "any" },
+      {
+        // Center Edge / Pulse / Trisaw: Sine, Formant: Width, Comb: Depth.
+        defaultValue: "0",
+        key: "shapeB",
+        label: "Shape B",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any" },
       {
         defaultValue: "100",
         key: "frequency",
@@ -21147,16 +21187,6 @@ const nodeGraphModuleDefinitions = (
         unit: "\u03C6",
         wraparound: true },
       {
-        defaultValue: "0",
-        key: "warp",
-        label: "Warp",
-        max: "1",
-        mid: "0",
-        min: "-1",
-        showSign: true,
-        step: "any",
-        tooltip: "Baked warp (−1…+1). 0 = linear. Negatives bunch the other side of the cycle. Maps across 13 Fourier frames (no live phase distortion)." },
-      {
         defaultValue: "1",
         key: "amplitude",
         label: "Amplitude",
@@ -21165,6 +21195,23 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any" },
+      {
+        // Same as PolyBLEP / Sinc Cycle: Single trigger plays one cycle per Reset hit.
+        choices: ["Free run", "Single trigger"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        // Hidden on spawn; the parameter's Show toggle brings it back.
+        hidden: true,
+        key: "cycleMode",
+        label: "Cycle",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1" },
     ] },
   fftReconstruction: {
     defaultWidthGu: 7,

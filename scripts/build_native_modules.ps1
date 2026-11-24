@@ -636,16 +636,17 @@ $modules = @(
     "soemdsp_sample_player_version", "soemdsp_sample_player_metadata_json",
     "soemdsp_sample_player_metadata_json_size"
   ) }
-  @{ Name = "wavetable_2d"; Simd = $false; Exports = @(
-    "soemdsp_wavetable_2d_create", "soemdsp_wavetable_2d_destroy",
-    "soemdsp_wavetable_2d_clear_pcm", "soemdsp_wavetable_2d_set_pcm",
-    "soemdsp_wavetable_2d_l_ptr", "soemdsp_wavetable_2d_r_ptr",
-    "soemdsp_wavetable_2d_max_frames",
-    "soemdsp_wavetable_2d_reset",
-    "soemdsp_wavetable_2d_sample",
-    "soemdsp_wavetable_2d_phase", "soemdsp_wavetable_2d_out",
-    "soemdsp_wavetable_2d_version", "soemdsp_wavetable_2d_metadata_json",
-    "soemdsp_wavetable_2d_metadata_json_size"
+  @{ Name = "spectral_osc"; Simd = $false; Exports = @(
+    "soemdsp_spectral_osc_create", "soemdsp_spectral_osc_destroy",
+    "soemdsp_spectral_osc_reset", "soemdsp_spectral_osc_retrigger",
+    "soemdsp_spectral_osc_set_target", "soemdsp_spectral_osc_work",
+    "soemdsp_spectral_osc_sample",
+    "soemdsp_spectral_osc_phase", "soemdsp_spectral_osc_out",
+    "soemdsp_spectral_osc_table_ptr", "soemdsp_spectral_osc_table_len",
+    "soemdsp_spectral_osc_table_harmonics", "soemdsp_spectral_osc_gain",
+    "soemdsp_spectral_osc_busy",
+    "soemdsp_spectral_osc_version", "soemdsp_spectral_osc_metadata_json",
+    "soemdsp_spectral_osc_metadata_json_size"
   ) }
 )
 

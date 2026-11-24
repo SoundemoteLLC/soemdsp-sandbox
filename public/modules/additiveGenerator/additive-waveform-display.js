@@ -139,8 +139,22 @@ function drawNodeGraphAdditiveWaveformDisplay(section) {
   }
 
   const nodeId = section.dataset.node;
-  const graph = nodeGraphAdditiveWaveformReadGraph(nodeId);
-  if (!graph || !graph.ratio || !graph.ratio.length) {
+  // Spectral Oscillator: the exact cycle of its own Shape / A / B (no Graph input).
+  const spectral = section.dataset.nodeType === "spectralOsc" && typeof spectralOscBakeCycle === "function";
+  const graph = spectral ? null : nodeGraphAdditiveWaveformReadGraph(nodeId);
+  if (spectral) {
+    const N = Math.max(64, Math.min(256, Math.round(w)));
+    const p = node?.params || {};
+    const key = `spectral|${N}|${p.shape}|${p.shapeA}|${p.shapeB}`;
+    if (!section._wave || section._wave.length !== N || section._bakeKey !== key) {
+      // N - 1 points over one cycle, then the first again: the plot closes the loop.
+      const cycle = spectralOscBakeCycle(p, N - 1);
+      section._wave = new Float32Array(N);
+      section._wave.set(cycle);
+      section._wave[N - 1] = cycle[0];
+      section._bakeKey = key;
+    }
+  } else if (!graph || !graph.ratio || !graph.ratio.length) {
     nodeGraphGlLinesText(batch, "—", w * 0.5, h * 0.5, { px: 11, weight: 400, family: "ui-monospace, monospace", rgba: [0.4, 0.4, 0.4, 1] });
     nodeGraphGlLinesEnd(batch);
     section._forceDraw = false;
@@ -148,8 +162,8 @@ function drawNodeGraphAdditiveWaveformDisplay(section) {
   }
 
   const N = Math.max(64, Math.min(256, Math.round(w)));
-  const key = `${N}|${nodeGraphAdditiveWaveformFingerprint(graph)}`;
-  if (!section._wave || section._wave.length !== N || section._bakeKey !== key) {
+  const key = spectral ? section._bakeKey : `${N}|${nodeGraphAdditiveWaveformFingerprint(graph)}`;
+  if (!spectral && (!section._wave || section._wave.length !== N || section._bakeKey !== key)) {
     if (!section._wave || section._wave.length !== N) {
       section._wave = new Float32Array(N);
     }

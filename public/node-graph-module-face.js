@@ -157,13 +157,27 @@ function nodeGraphModuleFaceRowHasUnitColumn(row, defs) {
   });
 }
 
+/**
+ * labelsBy: { param, labels: [[...], ...] } on a cells row -> the row's cell labels
+ * are labels[value of param] (e.g. Spectral Oscillator: A / B named per Shape).
+ */
+function nodeGraphModuleFaceApplyLabelsBy(row, node, defs) {
+  const by = row?.labelsBy;
+  if (!by || row.kind !== "cells" || !Array.isArray(by.labels) || !by.labels.length) return row;
+  const def = defs.find((p) => p.key === by.param);
+  const raw = Number(node?.params?.[by.param] ?? def?.defaultValue ?? 0);
+  const index = Math.max(0, Math.min(by.labels.length - 1, Math.round(Number.isFinite(raw) ? raw : 0)));
+  const names = by.labels[index] || [];
+  return { ...row, params: row.params.map((cell, i) => (names[i] ? [cell[0], names[i], ...cell.slice(2)] : cell)) };
+}
+
 /** Face rows for a type. With a patch node, hidden params drop out and their rows close up. */
 function nodeGraphModuleFaceSpec(type, node = null) {
   const face = nodeGraphModuleDefinitions?.[type]?.face;
   if (!Array.isArray(face) || !face.length) return null;
   const defsAll = nodeGraphModuleDefinitions[type]?.parameters || [];
   const mapped = face.map((row) => {
-    let up = nodeGraphModuleFaceUpgradeSliderRow(row, type);
+    let up = nodeGraphModuleFaceUpgradeSliderRow(node ? nodeGraphModuleFaceApplyLabelsBy(row, node, defsAll) : row, type);
     if (up.kind === "cells" && Array.isArray(up.params) && nodeGraphModuleFaceRowHasUnitColumn(up, defsAll)) {
       up = { ...up, h: Math.max(Number(up.h) || 0, NODE_GRAPH_FACE_UNIT_ROW_H) };
     }

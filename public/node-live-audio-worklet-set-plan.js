@@ -118,7 +118,7 @@ NodeLiveAudioProcessor.prototype._setPlanImpl = function _setPlanImpl(plan, mess
     this.audioPlayerNodeIds = nodes
       .filter((node) => {
         const t = node?.type;
-        return t === "audioPlayer" || t === "samplePlayer" || t === "wavetable2d";
+        return t === "audioPlayer" || t === "samplePlayer";
       })
       .map((node) => String(node.id || ""))
       .filter(Boolean);

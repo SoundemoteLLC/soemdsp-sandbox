@@ -1601,7 +1601,7 @@ function createNodeGraphModuleElement(type, node) {
       scopeSection = createNodeGraphModuleScopeSection(node, type);
       article.append(scopeSection);
     }
-    if ((type === "samplePlayer" || type === "sampleLooper" || type === "audioPlayer" || type === "wavetable2d") && typeof createNodeGraphSampleModuleBody === "function") {
+    if ((type === "samplePlayer" || type === "sampleLooper" || type === "audioPlayer") && typeof createNodeGraphSampleModuleBody === "function") {
       const sampleBody = createNodeGraphSampleModuleBody(node);
       if (sampleBody) {
         article.append(sampleBody);

@@ -579,7 +579,6 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   sampleWaveform: "param",
   // Node types whose faces are UI or param pictures.
   audioPlayer: "param",
-  wavetable2d: "param",
   sequencer: "param",
   ellipsoid: "param",
   basicShape: "param",

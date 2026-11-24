@@ -169,7 +169,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   wowAndFlutter: "silence",
   softpopOscillator: "silence",
   softpop2: "silence",
-  wavetable2d: "silence",
+  spectralOsc: "silence",
   wavetable3d: "silence",
   flexGrid: "silence",
   chaosfly: "silence", // free-run source — bypass mutes outs
@@ -187,7 +187,6 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   fractalBrownianNoise: "silence",
   fbmField: "silence",
   samplePlayer: "silence",
-  wavetable2d: "silence",
   sampleLooper: "silence",
   audioPlayer: "silence",
   audioInput: "silence",

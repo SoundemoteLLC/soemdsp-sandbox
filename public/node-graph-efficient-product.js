@@ -102,7 +102,6 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   // Music Player / Sample Player — native PCM upload on the efficient path.
   "audioPlayer",
   "samplePlayer",
-  "wavetable2d",
   "sequencer",
   "acidSequencer",
   "transport",
@@ -145,6 +144,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "vibratoGenerator",
   "wowAndFlutter",
   "sinc",
+  "spectralOsc",
   "bradley2a",
   "ellipsoid",
   "ellipsoidOsc",

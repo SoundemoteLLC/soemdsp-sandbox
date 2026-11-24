@@ -541,16 +541,15 @@ extern "C" double soemdsp_sample_player_left(int handle);
 extern "C" double soemdsp_sample_player_right(int handle);
 extern "C" double soemdsp_sample_player_phase(int handle);
 
-extern "C" int soemdsp_wavetable_2d_create();
-extern "C" void soemdsp_wavetable_2d_destroy(int handle);
-extern "C" void soemdsp_wavetable_2d_reset(int handle);
-extern "C" double soemdsp_wavetable_2d_sample(
-  int handle,
-  double reset, double frequencyHz, double phaseOffset,
-  double amplitude, double morph, double warp,
-  double increment, double engineSampleRate
+extern "C" int soemdsp_spectral_osc_create();
+extern "C" void soemdsp_spectral_osc_destroy(int handle);
+extern "C" void soemdsp_spectral_osc_retrigger(int handle, double h);
+extern "C" void soemdsp_spectral_osc_set_target(int handle, double shape, double a, double b);
+extern "C" int soemdsp_spectral_osc_work(int handle, double sampleRate);
+extern "C" double soemdsp_spectral_osc_sample(
+  int handle, double frequencyHz, double phaseOffset, double amplitude, double engineSampleRate
 );
-extern "C" double soemdsp_wavetable_2d_phase(int handle);
+extern "C" double soemdsp_spectral_osc_phase(int handle);
 
 extern "C" int soemdsp_transport_create();
 extern "C" void soemdsp_transport_destroy(int handle);
@@ -2531,7 +2530,7 @@ static const int kTypeCheapWalk = 108;
 static const int kTypePumpLimiter = 109; // musical Pump Limiter (type `limiter`)
 static const int kTypeAudioPlayer = 110; // Music Player (PCM upload)
 static const int kTypeSamplePlayer = 174; // Gate-driven sample player (PCM upload)
-static const int kTypeWavetable2d = 180; // PCM wavetable oscillator
+static const int kTypeSpectralOsc = 180; // Spectral Oscillator (exact spectral shapes, mip tables; was Wavetable 2D)
 static const int kTypeNamedPortalIn = 182; // wireless Portal →
 static const int kTypeNamedPortalOut = 184; // wireless Portal â†
 // Yellow Graph (Additive) — A1+A2 (see additive_yellow_graph.h)
@@ -2637,7 +2636,7 @@ static const int kTypeWavetableAdsr = 168; // cheap poly ADSR (Analog/Linear/Smo
 static const int kTypeFm = 169; // Freq Manager: ƒ(+inc) mix × pitch scale + Add; outs ƒ + inc
 static const int kTypePitchHz = 170; // Pitch â†” Hz (MIDI-ish pitch law, A4 = tuning)
 static const int kTypePitchManager = 185; // Pitch Manager (zero-based pitch -> Hz -> Pitch/f/inc)
-static const int kTypeAmpDb = 264; // own id: it was 180, shared with kTypeWavetable2d, so Amp<->dB nodes ran the wavetable code // Amp â†” dB (20Â·log10 voltage gain, 0 dB = 1)
+static const int kTypeAmpDb = 264; // own id: it was 180, shared with kTypeSpectralOsc, so Amp<->dB nodes ran the wavetable code // Amp â†” dB (20Â·log10 voltage gain, 0 dB = 1)
 static const int kTypeGraphicEq = 171; // ISO 1/3-octave graphic EQ (30 peaking bands)
 static const int kTypeSuperloveRev2 = 172; // Softwave-Tri LP + classic HP/BP
 static const int kTypeCookbookFilter = 173; // RS-MET rosic::CookbookFilter (RBJ cascade)
@@ -3315,8 +3314,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_audio_player_destroy(handle);
   } else if (kind == kTypeSamplePlayer) {
     soemdsp_sample_player_destroy(handle);
-  } else if (kind == kTypeWavetable2d) {
-    soemdsp_wavetable_2d_destroy(handle);
+  } else if (kind == kTypeSpectralOsc) {
+    soemdsp_spectral_osc_destroy(handle);
   } else if (kind == kTypeTransport) {
     soemdsp_transport_destroy(handle);
   } else if (kind == kTypeAliasSine) {
@@ -3982,7 +3981,7 @@ static void init_node_defaults(Node& n, int typeId) {
           || typeId == kTypeSoftwaveOsc || typeId == kTypeSineWarp || typeId == kTypeFilterMorphOscillator
           || typeId == kTypeDsfOscillator || typeId == kTypeDsfMorphingOsc
           || typeId == kTypeHypersaw2 || typeId == kTypeSinc
-          || typeId == kTypeAdditiveOut || typeId == kTypeWavetable2d) ? 100.0
+          || typeId == kTypeAdditiveOut || typeId == kTypeSpectralOsc) ? 100.0
       : (typeId == kTypeAdditiveSync) ? 1.0 // sync ratio (1 = bypass)
       : (typeId == kTypeAdditiveBubble) ? 1.0 // cutoff 0..1 (settled default)
       : (typeId == kTypeAdditiveLinearFilter || typeId == kTypeAdditiveAnalogFilter
@@ -4091,6 +4090,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeNoiseConvReverb) ? 0.0 : // Amp Shape
     (typeId == kTypeStepRegister) ? 1.0 : // Antialias On
     (typeId == kTypeResonantCompressor) ? 0.0 : // Impulse (Resonant Compressor)
+    (typeId == kTypeSpectralOsc) ? 0.5 : // A (Edge / Width / Peak / Formant / Spacing)
     (typeId == kTypeXyPad) ? 0.35 // Smoothing (Papoulis amount)
       : (typeId == kTypeSoftpopOscillator) ? 0.5 // Morph
       : (typeId == kTypeSoftpop2) ? 0.0 // Amp over Crossfade
@@ -4195,7 +4195,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeResonantEnvelope || typeId == kTypeResonantFollower) ? 0.0 // resonance
       : (typeId == kTypeAdditiveSync) ? 0.0 // pinch
       : (typeId == kTypeAdditiveOut) ? 1.0 // slope skew
-      : (typeId == kTypeWavetable2d) ? 0.0 // warp
+      : (typeId == kTypeSpectralOsc) ? 0.0 // B (Sine / Width / Depth)
       : (typeId == kTypeVactrol) ? 2.0 // fltCurve
       : 0.2,
     false
@@ -4644,8 +4644,8 @@ static void init_node_defaults(Node& n, int typeId) {
           || typeId == kTypeAdditiveNoisyFreq || typeId == kTypeAdditiveNoisyPhase
           || typeId == kTypeAdditiveNoisyPan || typeId == kTypeAdditiveNoisyAmp) ? 1.0
       : 0.0,
-    // Music Player playlistScrub / Wavetable warp are continuous on this Control.
-    (typeId == kTypeAudioPlayer || typeId == kTypeWavetable2d) ? false : true
+    // Music Player playlistScrub / Spectral Osc B are continuous on this Control.
+    (typeId == kTypeAudioPlayer || typeId == kTypeSpectralOsc) ? false : true
   );
   init_control(
     n.feedback,
@@ -4708,7 +4708,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeDelayEffect) ? 0.18 // time s
       : (typeId == kTypeFlanger) ? 0.005 // delay s
       : (typeId == kTypeChorus || typeId == kTypeEnsemble) ? 18.0 // delay ms
-      : (typeId == kTypeAudioPlayer || typeId == kTypeSamplePlayer || typeId == kTypeWavetable2d) ? 0.0 // start phase
+      : (typeId == kTypeAudioPlayer || typeId == kTypeSamplePlayer) ? 0.0 // start phase
       : (typeId == kTypeSpeakerProtector2) ? 0.008 // dropSeconds
       : (typeId == kTypeRobinSupersaw) ? 0.0 // portaTimeMin s
       : (typeId == kTypeAcidSequencer) ? 0.06 // slide time s
@@ -4749,7 +4749,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeVactrol) ? 0.1 // release
       : (typeId == kTypeLinearAttackRelease) ? 0.25 // release
       : (typeId == kTypeVibratoGenerator) ? 0.1 // release (depth env)
-      : (typeId == kTypeAudioPlayer || typeId == kTypeSamplePlayer || typeId == kTypeWavetable2d) ? 1.0 // end phase
+      : (typeId == kTypeAudioPlayer || typeId == kTypeSamplePlayer) ? 1.0 // end phase
       : (typeId == kTypeSpeakerProtector2) ? 0.333 // holdSeconds
       : (typeId == kTypeRobinSupersaw) ? 0.0 // portaTimeMax s (0 = off)
       : 4.0,
@@ -4757,7 +4757,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.timingMode,
-    (typeId == kTypePolyBlep || typeId == kTypeSinc || typeId == kTypeAdditiveOut) ? 0.0 : // Cycle Free run (PolyBLEP, Sinc, Additive Out)
+    (typeId == kTypePolyBlep || typeId == kTypeSinc || typeId == kTypeAdditiveOut || typeId == kTypeSpectralOsc) ? 0.0 : // Cycle Free run (PolyBLEP, Sinc, Additive Out, Spectral Osc)
     (typeId == kTypeElectroSnare || typeId == kTypeModalSnare || typeId == kTypeElectroHat || typeId == kTypeElectroTom || typeId == kTypeElectroKick || typeId == kTypeElectroClap || typeId == kTypeRobinSinepulse) ? 0.0 : // Recalculate On Trigger Off (drums)
     (typeId == kTypeVibratoGenerator) ? 2.0 // releaseShape Exp
       : (typeId == kTypeHypersaw2) ? 0.0 // vibratoSpeedTiltSource Freq
@@ -5934,7 +5934,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeSidechain) return soemdsp_sidechain_create();
   if (typeId == kTypeAudioPlayer) return soemdsp_audio_player_create();
   if (typeId == kTypeSamplePlayer) return soemdsp_sample_player_create();
-  if (typeId == kTypeWavetable2d) return soemdsp_wavetable_2d_create();
+  if (typeId == kTypeSpectralOsc) return soemdsp_spectral_osc_create();
   if (typeId == kTypeTransport) return soemdsp_transport_create();
   if (typeId == kTypeAliasSine) return soemdsp_alias_sine_create();
   if (typeId == kTypePhoneTone) return soemdsp_phone_tone_create();
@@ -15382,54 +15382,62 @@ static void process_sidechain(Circuit& g, Node& node, int frames) {
   }
 }
 
-// Wavetable 2D. Params: morph(shape), frequency, phaseParam, amplitude, warp(resonance).
-// Warp is a baked Morph×Warp axis (13 knots). Playback is mipmapped table lookup
-// (Hmax picks the mip). Reset → kPortReset. ƒ → kPortF (Hz, replaces Frequency).
-static void process_wavetable_2d(Circuit& g, Node& node, int frames) {
+// Spectral Oscillator. Params: waveform = Shape (0 Center Edge, 1 Pulse, 2 Trisaw,
+// 3 Formant, 4 Comb), shape = A, resonance = B, frequency, phaseParam, amplitude.
+// Shape / A / B rebuild the mip tables off the per-sample path (work() once per
+// block, then a 20 ms crossfade). Reset and Cycle (timingMode) work like
+// PolyBLEP / Sinc: a Reset hit of height h moves the phase |h| of the way to the
+// cycle start (h < 0 the long way, 1 = hard reset); Cycle 0 Free run /
+// 1 Single trigger (one cycle per hit, silent before the first and after it).
+static void process_spectral_osc(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
-  const bool takeSamplePath = liveF || node.frequency.active || node.phaseParam.active
-    || node.amplitude.active || node.shape.active || node.resonance.active;
+  const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
+  const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const bool single = control_effective(node.timingMode) >= 0.5;
+  const double referenceVoltage = circuit_pitch_ref_v(g);
   if (!liveReset) node.lastReset = 0.0;
+  soemdsp_spectral_osc_set_target(
+    node.nativeHandle,
+    control_effective(node.waveform),
+    control_effective(node.shape),
+    control_effective(node.resonance)
+  );
+  soemdsp_spectral_osc_work(node.nativeHandle, sr);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
-    if (takeSamplePath) {
-      Control* chase[] = {
-        &node.frequency, &node.phaseParam, &node.amplitude, &node.shape,
-        &node.resonance
-      };
-      for (unsigned ci = 0; ci < sizeof(chase) / sizeof(chase[0]); ci += 1) {
-        Control* c = chase[ci];
-        if (c && c->active && !c->snap) { control_ensure_stepped(g, *c, f); }
-      }
-    }
-    double reset = 0.0;
+    double freq = resolve_osc_hz(
+      g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
+    );
+    bool restart = false;
     if (liveReset) {
-      reset = g.mixReset[f];
-      if (gate_hit(reset, &node.lastReset)) {
-        soemdsp_wavetable_2d_reset(node.nativeHandle);
+      const double rv = g.mixReset[f];
+      if (gate_hit(rv, &node.lastReset)) {
+        soemdsp_spectral_osc_retrigger(node.nativeHandle, gate_hit_height(rv));
+        restart = true;
       }
-      node.lastReset = reset;
+      node.lastReset = rv;
     }
-    const double inc = 0.0;
-    const double hz = resolve_osc_hz(g, f, liveF, false, node.frequency, 0.0, sr);
-    const double y = soemdsp_wavetable_2d_sample(
+    if (single && !single_cycle_gate(node, restart)) {
+      // Stopped: silent, phase held.
+      node.buf[kPortMono][f] = 0.0;
+      node.buf[kPortLeft][f] = 0.0;
+      node.buf[kPortRight][f] = 0.0;
+      continue;
+    }
+    const double y = soemdsp_spectral_osc_sample(
       node.nativeHandle,
-      reset,
-      hz,
+      freq,
       control_audio(g, node.phaseParam, f),
       control_audio(g, node.amplitude, f),
-      control_audio(g, node.shape, f),
-      control_audio(g, node.resonance, f),
-      inc,
       sr
     );
     node.buf[kPortMono][f] = y;
     node.buf[kPortLeft][f] = y;
     node.buf[kPortRight][f] = y;
-    node.buf[kPortSaw][f] = soemdsp_wavetable_2d_phase(node.nativeHandle);
+    node.buf[kPortSaw][f] = soemdsp_spectral_osc_phase(node.nativeHandle);
+    if (single) single_cycle_advance(node, freq / sr);
   }
 }
 
@@ -17916,7 +17924,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeSidechain
     || typeId == kTypeAudioPlayer
     || typeId == kTypeSamplePlayer
-    || typeId == kTypeWavetable2d
+    || typeId == kTypeSpectralOsc
     || typeId == kTypeTransport
     || typeId == kTypeAliasSine
     || typeId == kTypePhoneTone
@@ -19663,8 +19671,8 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_sample_player(g, node, frames);
       return;
     }
-    if (node.typeId == kTypeWavetable2d) {
-      process_wavetable_2d(g, node, frames);
+    if (node.typeId == kTypeSpectralOsc) {
+      process_spectral_osc(g, node, frames);
       return;
     }
     if (node.typeId == kTypeHostBpm) {

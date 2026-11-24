@@ -804,7 +804,7 @@ function validateNodeGraphPatch(patch) {
       normalizedNode.scopeShader = normalizeNodeGraphScopeShader(node.scopeShader);
     }
     if (
-      (type === "samplePlayer" || type === "sampleLooper" || type === "audioPlayer" || type === "wavetable2d") &&
+      (type === "samplePlayer" || type === "sampleLooper" || type === "audioPlayer") &&
       node.sample
     ) {
       const pointer = typeof normalizeNodeGraphNodeSamplePointer === "function"
@@ -815,7 +815,7 @@ function validateNodeGraphPatch(patch) {
       }
     }
     if (
-      (type === "audioPlayer" || type === "samplePlayer" || type === "wavetable2d")
+      (type === "audioPlayer" || type === "samplePlayer")
       && Object.hasOwn(node, "sampleWaveformSettings")
     ) {
       normalizedNode.sampleWaveformSettings = typeof normalizeNodeGraphSampleWaveformSettings === "function"

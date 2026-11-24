@@ -910,7 +910,7 @@ function cloneNodeGraphPatch(patch) {
         ...(Object.hasOwn(node, "scopeShader")
           ? { scopeShader: normalizeNodeGraphScopeShader(node.scopeShader) }
           : {}),
-        ...((node.type === "samplePlayer" || node.type === "sampleLooper" || node.type === "audioPlayer" || node.type === "wavetable2d") && node.sample
+        ...((node.type === "samplePlayer" || node.type === "sampleLooper" || node.type === "audioPlayer") && node.sample
           ? (() => {
             const pointer = typeof normalizeNodeGraphNodeSamplePointer === "function"
               ? normalizeNodeGraphNodeSamplePointer(node.sample)
@@ -918,7 +918,7 @@ function cloneNodeGraphPatch(patch) {
             return pointer ? { sample: pointer } : {};
           })()
           : {}),
-        ...((node.type === "audioPlayer" || node.type === "samplePlayer" || node.type === "wavetable2d")
+        ...((node.type === "audioPlayer" || node.type === "samplePlayer")
           && Object.hasOwn(node, "sampleWaveformSettings")
           ? {
             sampleWaveformSettings: typeof normalizeNodeGraphSampleWaveformSettings === "function"

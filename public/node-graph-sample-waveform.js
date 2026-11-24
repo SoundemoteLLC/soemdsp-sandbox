@@ -1713,321 +1713,8 @@ function nodeGraphSampleWaveformEntrySamples(entry) {
   return nodeGraphSampleWaveformSamplesUsable(channel) ? channel : null;
 }
 
-const nodeGraphWavetable2dWarpKnots = Object.freeze([
-  -0.97, -0.87, -0.73, -0.66, -0.49, -0.19, 0,
-  0.19, 0.49, 0.66, 0.73, 0.87, 0.97,
-]);
-
-function nodeGraphWavetable2dWrap01(t) {
-  let x = Number(t);
-  if (!Number.isFinite(x)) x = 0;
-  x -= Math.floor(x);
-  if (x < 0) x += 1;
-  return x;
-}
-
-function nodeGraphWavetable2dWarpPhase(t, warp) {
-  t = nodeGraphWavetable2dWrap01(t);
-  let skew = Number(warp);
-  if (!Number.isFinite(skew)) skew = 0;
-  if (skew === 0) return t;
-  const cv = skew * t;
-  const den = 2 * cv - skew + 1;
-  if (Math.abs(den) < 1e-12) return t;
-  return nodeGraphWavetable2dWrap01((cv + t) / den);
-}
-
-function nodeGraphWavetable2dWarpPosition(warp) {
-  let w = Number(warp);
-  if (!Number.isFinite(w)) w = 0;
-  if (w < -1) w = -1;
-  if (w > 1) w = 1;
-  const last = nodeGraphWavetable2dWarpKnots.length - 1;
-  return (w + 1) * 0.5 * last;
-}
-
-function nodeGraphSampleWaveformPaintBuffer(canvas, samples, settings) {
-  if (!canvas || !samples?.length) return;
-  const cssW = Math.max(8, canvas.clientWidth || 40);
-  const cssH = Math.max(8, canvas.clientHeight || 28);
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const width = Math.round(cssW * dpr);
-  const height = Math.round(cssH * dpr);
-  if (canvas.width !== width) canvas.width = width;
-  if (canvas.height !== height) canvas.height = height;
-  // Native WebGL2 (shared picture device): plate clear + one rect per column.
-  const batch = typeof nodeGraphGlLinesBegin === "function"
-    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(nodeGraphSampleWaveformBackgroundColor(settings)))
-    : null;
-  if (!batch) {
-    nodeGraphDisplayGlFailed(canvas, "wavetable strip: no shared GL device");
-    return;
-  }
-  const midY = height * 0.5;
-  const amp = midY * 0.92;
-  const env = nodeGraphSampleWaveformEnsureEnvelope({}, width);
-  nodeGraphSampleWaveformEnvelopeColumns(env, samples, 0, samples.length / Math.max(1, width), 0, width);
-  nodeGraphSampleWaveformGlEnvelope(batch, env, midY, amp, nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 85, 0.95)));
-  if (!nodeGraphGlLinesEnd(batch)) {
-    nodeGraphDisplayGlFailed(canvas, "wavetable strip: GL present failed");
-  }
-}
-
-function nodeGraphWavetable2dPeakNormalize(buf) {
-  let peak = 0;
-  for (let i = 0; i < buf.length; i += 1) {
-    const a = buf[i] < 0 ? -buf[i] : buf[i];
-    if (a > peak) peak = a;
-  }
-  if (peak > 1e-12) {
-    const s = 1 / peak;
-    for (let i = 0; i < buf.length; i += 1) buf[i] *= s;
-  }
-}
-
-function nodeGraphWavetable2dEnsureFrames() {
-  if (nodeGraphWavetable2dEnsureFrames._frames) {
-    return nodeGraphWavetable2dEnsureFrames._frames;
-  }
-  const N = 4096;
-  const H = 2047;
-  const twoPi = Math.PI * 2;
-  const rect = new Float32Array(N);
-  let sum = 0;
-  for (let i = 0; i < N; i += 1) {
-    const t = i / N;
-    let y = 0;
-    for (let n = 1; n <= H; n += 1) {
-      y += (1 / (n * n)) * Math.sin(twoPi * (n * t + (n & 1 ? 0.25 : 0.75)));
-    }
-    rect[i] = y;
-    sum += y;
-  }
-  const mean = sum / N;
-  for (let i = 0; i < N; i += 1) rect[i] -= mean;
-  nodeGraphWavetable2dPeakNormalize(rect);
-  const sine = new Float32Array(N);
-  for (let i = 0; i < N; i += 1) {
-    sine[i] = Math.sin(twoPi * (i / N + 0.25));
-  }
-  nodeGraphWavetable2dPeakNormalize(sine);
-  const flip = new Float32Array(N);
-  const rot = N / 2;
-  for (let i = 0; i < N; i += 1) {
-    flip[i] = -rect[(i + rot) % N];
-  }
-  const sine2 = new Float32Array(N);
-  sine2.set(sine);
-  const frames = [rect, sine, flip, sine2];
-  nodeGraphWavetable2dEnsureFrames._frames = frames;
-  nodeGraphWavetable2dEnsureFrames._labels = [
-    "Rectified sine",
-    "Sine",
-    "Inverted rectified sine (180°)",
-    "Sine",
-  ];
-  nodeGraphWavetable2dEnsureFrames._warped = [];
-  return frames;
-}
-
-function nodeGraphWavetable2dWarpedFrame(frameIndex, knotIndex) {
-  const frames = nodeGraphWavetable2dEnsureFrames();
-  const f = ((frameIndex % frames.length) + frames.length) % frames.length;
-  const knots = nodeGraphWavetable2dWarpKnots;
-  let w = knotIndex | 0;
-  if (w < 0) w = 0;
-  if (w > knots.length - 1) w = knots.length - 1;
-  let row = nodeGraphWavetable2dEnsureFrames._warped[f];
-  if (!row) {
-    row = [];
-    nodeGraphWavetable2dEnsureFrames._warped[f] = row;
-  }
-  if (row[w]) return row[w];
-  const src = frames[f];
-  const N = src.length;
-  const out = new Float32Array(N);
-  const knot = knots[w];
-  let sum = 0;
-  for (let i = 0; i < N; i += 1) {
-    const tp = nodeGraphWavetable2dWarpPhase(i / N, knot) * N;
-    const i0 = ((Math.floor(tp) % N) + N) % N;
-    const i1 = (i0 + 1) % N;
-    const frac = tp - Math.floor(tp);
-    const y = src[i0] + (src[i1] - src[i0]) * frac;
-    out[i] = y;
-    sum += y;
-  }
-  const mean = sum / N;
-  for (let i = 0; i < N; i += 1) out[i] -= mean;
-  nodeGraphWavetable2dPeakNormalize(out);
-  row[w] = out;
-  return out;
-}
-
-function nodeGraphWavetable2dLerpFrames(a, b, frac, dest) {
-  const N = a.length;
-  const t = frac < 0 ? 0 : (frac > 1 ? 1 : frac);
-  if (t <= 1e-9) {
-    dest.set(a);
-    return dest;
-  }
-  if (t >= 1 - 1e-9) {
-    dest.set(b);
-    return dest;
-  }
-  for (let i = 0; i < N; i += 1) {
-    dest[i] = a[i] + (b[i] - a[i]) * t;
-  }
-  return dest;
-}
-
-function nodeGraphWavetable2dBlendBuffer(morph, warp, dest) {
-  const frames = nodeGraphWavetable2dEnsureFrames();
-  const N = frames[0].length;
-  const count = frames.length;
-  const m = nodeGraphWavetable2dWrap01(morph);
-  let mpos = m * count;
-  if (mpos >= count) mpos = 0;
-  const mi0 = Math.floor(mpos) % count;
-  const mi1 = (mi0 + 1) % count;
-  const mf = mpos - Math.floor(mpos);
-  const knots = nodeGraphWavetable2dWarpKnots;
-  let wpos = nodeGraphWavetable2dWarpPosition(warp);
-  if (wpos < 0) wpos = 0;
-  if (wpos > knots.length - 1) wpos = knots.length - 1;
-  const wi0 = Math.min(knots.length - 1, Math.max(0, Math.floor(wpos)));
-  const wi1 = Math.min(knots.length - 1, wi0 + 1);
-  const wf = wi0 === wi1 ? 0 : (wpos - wi0);
-  let buf = dest;
-  if (!buf || buf.length !== N) buf = new Float32Array(N);
-  const a = nodeGraphWavetable2dWarpedFrame(mi0, wi0);
-  const b = nodeGraphWavetable2dWarpedFrame(mi1, wi0);
-  const c = nodeGraphWavetable2dWarpedFrame(mi0, wi1);
-  const d = nodeGraphWavetable2dWarpedFrame(mi1, wi1);
-  const omf = 1 - mf;
-  const owf = 1 - wf;
-  for (let i = 0; i < N; i += 1) {
-    const u0 = a[i] * omf + b[i] * mf;
-    const u1 = c[i] * omf + d[i] * mf;
-    buf[i] = u0 * owf + u1 * wf;
-  }
-  return buf;
-}
-
-function nodeGraphWavetable2dBlendDisplay(morph, warp) {
-  const frames = nodeGraphWavetable2dEnsureFrames();
-  const N = frames[0].length;
-  let blend = nodeGraphWavetable2dBlendDisplay._buf;
-  if (!blend || blend.length !== N) {
-    blend = new Float32Array(N);
-    nodeGraphWavetable2dBlendDisplay._buf = blend;
-  }
-  nodeGraphWavetable2dBlendBuffer(morph, warp, blend);
-  let entry = nodeGraphWavetable2dBlendDisplay._entry;
-  if (!entry) {
-    entry = {
-      frames: N,
-      sampleRate: 44100,
-      channels: 1,
-      samples: blend,
-      channelData: [blend],
-    };
-    nodeGraphWavetable2dBlendDisplay._entry = entry;
-  } else {
-    entry.samples = blend;
-    entry.channelData = [blend];
-  }
-  return entry;
-}
-
-function nodeGraphWavetable2dWriteParam(nodeId, key, value) {
-  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  if (!node || (key !== "morph" && key !== "warp")) return;
-  const next = Number(value);
-  if (!Number.isFinite(next)) return;
-  node.params = { ...(node.params || {}), [key]: next };
-  const safeId = CSS.escape(String(nodeId || ""));
-  const moduleEl = document.querySelector(`.dsp-node[data-node="${safeId}"]`);
-  const slider = moduleEl?.querySelector?.(`input[data-param="${key}"]`);
-  if (slider) {
-    if (typeof setNodeSliderValue === "function") {
-      setNodeSliderValue(slider, next, { interaction: "program", bypassSmoothing: true });
-    } else {
-      slider.value = String(next);
-      if (typeof syncNodeSliderReadout === "function") {
-        syncNodeSliderReadout(slider);
-      }
-    }
-  }
-  if (typeof scheduleNodeGraphLiveParameterSync === "function") {
-    scheduleNodeGraphLiveParameterSync();
-  }
-  if (typeof markNodeGraphRenderPending === "function") {
-    markNodeGraphRenderPending();
-  }
-}
-
-function nodeGraphWavetable2dSyncStrips(section) {
-  if (!section || section.dataset.nodeType !== "wavetable2d") return;
-  const nodeId = section.dataset.node;
-  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  const frames = nodeGraphWavetable2dEnsureFrames();
-  const count = Math.max(1, frames.length);
-  const knots = nodeGraphWavetable2dWarpKnots;
-  let morph = Number(node?.params?.morph);
-  if (!Number.isFinite(morph)) morph = 0;
-  morph = nodeGraphWavetable2dWrap01(morph);
-  let warp = Number(node?.params?.warp);
-  if (!Number.isFinite(warp)) warp = 0;
-  const warpPos = nodeGraphWavetable2dWarpPosition(warp);
-  const warpSel = Math.min(knots.length - 1, Math.max(0, Math.floor(warpPos + 1e-9)));
-  const morphCanvas = section.querySelector(".node-wavetable-morph-preview-canvas");
-  const warpStrip = section.querySelector(".node-wavetable-warp-strip");
-  const previewW = morphCanvas?.clientWidth || 0;
-  const settings = typeof nodeGraphSampleWaveformSettingsForNode === "function"
-    ? nodeGraphSampleWaveformSettingsForNode(nodeId)
-    : null;
-  const sig = `${morph.toFixed(4)}|${warp.toFixed(4)}|${previewW}|${section.clientWidth || 0}`;
-  if (section.dataset.wtStripSig === sig) {
-    warpStrip?.querySelectorAll?.(".node-wavetable-warp-slot").forEach((el) => {
-      el.classList.toggle("is-selected", Number(el.dataset.slot) === warpSel);
-    });
-    return;
-  }
-  section.dataset.wtStripSig = sig;
-  let morphBuf = nodeGraphWavetable2dSyncStrips._morphBuf;
-  if (!morphBuf || morphBuf.length !== frames[0].length) {
-    morphBuf = new Float32Array(frames[0].length);
-    nodeGraphWavetable2dSyncStrips._morphBuf = morphBuf;
-  }
-  // Morph row is the unwarped morph blend (warp 0) as one cycle.
-  nodeGraphWavetable2dBlendBuffer(morph, 0, morphBuf);
-  nodeGraphSampleWaveformPaintBuffer(morphCanvas, morphBuf, settings);
-  let warpBuf = nodeGraphWavetable2dSyncStrips._warpBuf;
-  if (!warpBuf || warpBuf.length !== frames[0].length) {
-    warpBuf = new Float32Array(frames[0].length);
-    nodeGraphWavetable2dSyncStrips._warpBuf = warpBuf;
-  }
-  const mpos = morph * count;
-  const mi0 = Math.floor(mpos) % count;
-  const mi1 = (mi0 + 1) % count;
-  const mf = mpos - Math.floor(mpos);
-  warpStrip?.querySelectorAll?.(".node-wavetable-warp-slot").forEach((el) => {
-    const s = Number(el.dataset.slot);
-    el.classList.toggle("is-selected", s === warpSel);
-    const canvas = el.querySelector(".node-wavetable-warp-slot-canvas");
-    const a = nodeGraphWavetable2dWarpedFrame(mi0, s);
-    const b = nodeGraphWavetable2dWarpedFrame(mi1, s);
-    nodeGraphWavetable2dLerpFrames(a, b, mf, warpBuf);
-    nodeGraphSampleWaveformPaintBuffer(canvas, warpBuf, settings);
-  });
-}
-
 function nodeGraphSampleWaveformSampleEntry(nodeId) {
   const node = nodeGraphPatchNode(nodeId);
-  if (node?.type === "wavetable2d") {
-    return nodeGraphWavetable2dBlendDisplay(node?.params?.morph, node?.params?.warp);
-  }
   const sampleId = node?.sample?.id;
   let entry = sampleId ? nodeGraphMvp?.sampleBuffers?.get?.(sampleId) : null;
   let samples = nodeGraphSampleWaveformEntrySamples(entry);
@@ -2591,11 +2278,6 @@ function nodeGraphSampleWaveformShouldKeepLoop(section) {
   if (face === "pl" || face === "playinfo") {
     return false;
   }
-  // Wavetable is a free-running osc, not a playlist clip. The Music Player
-  // audible gate would kill this loop, so Morph/Warp previews never animated.
-  if (section.dataset.nodeType === "wavetable2d") {
-    return true;
-  }
   // Music Player pages are UI. Wave / waveplay / stereo paint whether the
   // engine is playing, stopped, or the playlist is empty.
   if (section.dataset.nodeType === "audioPlayer") {
@@ -2639,9 +2321,6 @@ function scheduleNodeGraphSampleWaveformFrame(section) {
     drawNodeGraphSampleWaveformDisplay(section);
     if (noSample && typeof nodeGraphGlGraphPresentSoon === "function") {
       nodeGraphGlGraphPresentSoon();
-    }
-    if (section.dataset.nodeType === "wavetable2d") {
-      nodeGraphWavetable2dSyncStrips(section);
     }
   }
   if (!keep) {
@@ -2691,9 +2370,7 @@ function createNodeGraphSampleWaveformDisplay(nodeId, type) {
   section.dataset.lightStrength = "1";
   const faceLabel = type === "samplePlayer"
     ? "Sample Player"
-    : (type === "wavetable2d"
-      ? "Wavetable 2D"
-      : (nodeGraphNodeDisplayName?.(nodeId) || "Music Player"));
+    : (nodeGraphNodeDisplayName?.(nodeId) || "Music Player");
   section.setAttribute("aria-label", `${faceLabel} waveform display`);
 
   const canvas = nodeGraphDisplayCanvasCreate("node-sample-waveform-canvas");
@@ -2708,74 +2385,7 @@ function createNodeGraphSampleWaveformDisplay(nodeId, type) {
       window.__nodeGraphAudioPlayerPlaylistWrapRuntime();
     }
   }
-  // Wavetable 2D: result (main canvas) / Morph preview (one cycle) / Warp boxes.
-  if (type === "wavetable2d") {
-    section.classList.add("has-wavetable-morph-strip");
-    const morphPreview = document.createElement("div");
-    morphPreview.className = "node-wavetable-morph-preview";
-    morphPreview.setAttribute("aria-label", "Wavetable morph preview");
-    morphPreview.dataset.node = nodeId;
-    morphPreview.title = "Morph (warp 0). Drag to scrub Morph.";
-    const morphCanvas = document.createElement("canvas");
-    morphCanvas.className = "node-wavetable-morph-preview-canvas";
-    morphPreview.append(morphCanvas);
-    const scrubMorph = (event) => {
-      const rect = morphCanvas.getBoundingClientRect();
-      if (!(rect.width > 0)) return;
-      const x = (event.clientX - rect.left) / rect.width;
-      const morph = x < 0 ? 0 : (x > 1 ? 1 : x);
-      nodeGraphWavetable2dWriteParam(nodeId, "morph", morph >= 1 ? 0 : morph);
-      section.dataset.wtStripSig = "";
-      nodeGraphWavetable2dSyncStrips(section);
-    };
-    morphCanvas.style.touchAction = "none";
-    morphCanvas.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 && event.button !== undefined) return;
-      event.stopPropagation();
-      morphCanvas.setPointerCapture?.(event.pointerId);
-      scrubMorph(event);
-    });
-    morphCanvas.addEventListener("pointermove", (event) => {
-      if (!morphCanvas.hasPointerCapture?.(event.pointerId)) return;
-      event.stopPropagation();
-      scrubMorph(event);
-    });
-    section.append(morphPreview);
-    const knots = nodeGraphWavetable2dWarpKnots;
-    const warpStrip = document.createElement("div");
-    warpStrip.className = "node-wavetable-warp-strip";
-    warpStrip.setAttribute("aria-label", "Wavetable warp knots");
-    warpStrip.dataset.node = nodeId;
-    const last = Math.max(1, knots.length - 1);
-    for (let s = 0; s < knots.length; s += 1) {
-      const box = document.createElement("button");
-      box.type = "button";
-      box.className = "node-wavetable-warp-slot" + (s === 6 ? " is-selected" : "");
-      box.dataset.slot = String(s);
-      const knot = knots[s];
-      const title = knot === 0 ? "Warp 0 (linear)" : `Warp ${knot > 0 ? "+" : ""}${knot}`;
-      box.title = title;
-      box.setAttribute("aria-label", title);
-      const mini = document.createElement("canvas");
-      mini.className = "node-wavetable-warp-slot-canvas";
-      box.append(mini);
-      box.addEventListener("click", (event) => {
-        event.stopPropagation();
-        nodeGraphWavetable2dWriteParam(nodeId, "warp", -1 + (2 * s) / last);
-        warpStrip.querySelectorAll(".node-wavetable-warp-slot").forEach((el) => {
-          el.classList.toggle("is-selected", el === box);
-        });
-        section.dataset.wtStripSig = "";
-        nodeGraphWavetable2dSyncStrips(section);
-      });
-      warpStrip.append(box);
-    }
-    section.append(warpStrip);
-    requestAnimationFrame(() => nodeGraphWavetable2dSyncStrips(section));
-  }
-  if (type !== "wavetable2d") {
-    nodeGraphSampleWaveformEnsureZoomControl(section);
-  }
+  nodeGraphSampleWaveformEnsureZoomControl(section);
   nodeGraphSampleWaveformEnsureLayoutObserver(section);
   nodeGraphSampleWaveformEnsureLoop(section);
   return section;
@@ -3770,15 +3380,10 @@ function drawNodeGraphSampleWaveformDisplay(section) {
     }
   }
 
-  if (node?.type !== "wavetable2d") {
-    const zoomRatio = (viewEnd - viewStart) / Math.max(1, state.totalFrames);
-    nodeGraphSampleWaveformPaintFaceHud(batch, section, nodeId, node, width, height, pixelRatio, settings, zoomRatio);
-    present();
-    nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId);
-  } else {
-    present();
-    nodeGraphWavetable2dSyncStrips(section);
-  }
+  const zoomRatio = (viewEnd - viewStart) / Math.max(1, state.totalFrames);
+  nodeGraphSampleWaveformPaintFaceHud(batch, section, nodeId, node, width, height, pixelRatio, settings, zoomRatio);
+  present();
+  nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId);
 }
 
 function nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId) {

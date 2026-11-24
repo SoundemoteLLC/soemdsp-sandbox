@@ -115,7 +115,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   sidechain: 216, // Sidechain (Pump Limiter detector + Hold, moves a Dry/Wet crossfade)
   audioPlayer: 110, // Music Player (PCM upload)
   samplePlayer: 174, // Gate-driven sample player (PCM upload)
-  wavetable2d: 180, // PCM wavetable oscillator
+  spectralOsc: 180, // Spectral Oscillator (exact band-limited shapes)
   additiveGenerator: 111, // Yellow Graph
   additiveBubble: 112,
   additiveOut: 113,
@@ -8358,12 +8358,15 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("end", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("end", 1));
       continue;
     }
-    if (type === "wavetable2d") {
-      push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 0));
+    if (type === "spectralOsc") {
+      // Matches process_spectral_osc: waveform = Shape, shape = A, resonance = B, timingMode = Cycle.
+      push("shape", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("shape", 0));
+      push("shapeA", P.NATIVE_GRAPH_PARAM_SHAPE, cont("shapeA", 0.5));
+      push("shapeB", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("shapeB", 0));
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
-      push("warp", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("warp", 0));
+      push("cycleMode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("cycleMode", 0));
       continue;
     }
     if (type === "additiveGenerator") {
@@ -9685,7 +9688,7 @@ NodeLiveAudioProcessor.prototype.updateNativeAudioPlayerMeters = function update
     ? this.audioPlayerNodeIds
     : [...(this.nodes?.keys?.() || [])].filter((id) => {
       const t = this.nodes.get(id)?.type;
-      return t === "audioPlayer" || t === "samplePlayer" || t === "wavetable2d";
+      return t === "audioPlayer" || t === "samplePlayer";
     });
   if (!ids.length) return;
 
@@ -9709,7 +9712,7 @@ NodeLiveAudioProcessor.prototype.updateNativeAudioPlayerMeters = function update
     if (!id) continue;
     const node = this.nodes?.get?.(id);
     const nodeType = String(node?.type || "");
-    if (!node || (nodeType !== "audioPlayer" && nodeType !== "samplePlayer" && nodeType !== "wavetable2d")) {
+    if (!node || (nodeType !== "audioPlayer" && nodeType !== "samplePlayer")) {
       continue;
     }
 
@@ -9755,11 +9758,6 @@ NodeLiveAudioProcessor.prototype.updateNativeAudioPlayerMeters = function update
     } else if (nodeType === "samplePlayer") {
       const mode = Math.round(readNum(node, "mode", 0));
       reason = mode === 2 ? "engine looping" : (mode === 1 ? "engine hold" : "engine one-shot");
-    } else if (nodeType === "wavetable2d") {
-      reason = hasPcm ? "engine playing" : reason;
-      // HUD speed label: show frequency Hz as a pseudo-speed for the face.
-      speed = readNum(node, "frequency", 100);
-      this.audioPlayerMeterSpeeds[id] = speed;
     } else {
       const transport = Math.round(readNum(node, "transport", 4));
       if (transport <= 0) {
@@ -9789,7 +9787,7 @@ NodeLiveAudioProcessor.prototype.updateNativeAudioPlayerMeters = function update
 };
 
 /**
- * Copy Music Player / Sample Player / Wavetable 2D planar PCM from this.samples
+ * Copy Music Player / Sample Player planar PCM from this.samples
  * into native buffers (set_pcm + l_ptr/r_ptr). Re-binds after memory.grow.
  */
 NodeLiveAudioProcessor.prototype.syncNativeAudioPlayerPcm = function syncNativeAudioPlayerPcm() {
@@ -9806,7 +9804,7 @@ NodeLiveAudioProcessor.prototype.syncNativeAudioPlayerPcm = function syncNativeA
     ? this.audioPlayerNodeIds
     : [...this.nodes.keys()].filter((id) => {
       const t = this.nodes.get(id)?.type;
-      return t === "audioPlayer" || t === "samplePlayer" || t === "wavetable2d";
+      return t === "audioPlayer" || t === "samplePlayer";
     });
 
   for (let i = 0; i < ids.length; i += 1) {
@@ -9814,24 +9812,15 @@ NodeLiveAudioProcessor.prototype.syncNativeAudioPlayerPcm = function syncNativeA
     if (!nodeId) continue;
     const node = this.nodes.get(nodeId);
     const nodeType = String(node?.type || "");
-    if (!node || (nodeType !== "audioPlayer" && nodeType !== "samplePlayer" && nodeType !== "wavetable2d")) {
+    if (!node || (nodeType !== "audioPlayer" && nodeType !== "samplePlayer")) {
       continue;
     }
 
     const isSample = nodeType === "samplePlayer";
-    const isWt = nodeType === "wavetable2d";
-    const setPcm = isWt
-      ? native.soemdsp_wavetable_2d_set_pcm
-      : (isSample ? native.soemdsp_sample_player_set_pcm : native.soemdsp_audio_player_set_pcm);
-    const lPtrFn = isWt
-      ? native.soemdsp_wavetable_2d_l_ptr
-      : (isSample ? native.soemdsp_sample_player_l_ptr : native.soemdsp_audio_player_l_ptr);
-    const rPtrFn = isWt
-      ? native.soemdsp_wavetable_2d_r_ptr
-      : (isSample ? native.soemdsp_sample_player_r_ptr : native.soemdsp_audio_player_r_ptr);
-    const clearPcm = isWt
-      ? native.soemdsp_wavetable_2d_clear_pcm
-      : (isSample ? native.soemdsp_sample_player_clear_pcm : native.soemdsp_audio_player_clear_pcm);
+    const setPcm = isSample ? native.soemdsp_sample_player_set_pcm : native.soemdsp_audio_player_set_pcm;
+    const lPtrFn = isSample ? native.soemdsp_sample_player_l_ptr : native.soemdsp_audio_player_l_ptr;
+    const rPtrFn = isSample ? native.soemdsp_sample_player_r_ptr : native.soemdsp_audio_player_r_ptr;
+    const clearPcm = isSample ? native.soemdsp_sample_player_clear_pcm : native.soemdsp_audio_player_clear_pcm;
     if (!setPcm || !lPtrFn) continue;
 
     const hash = this.fnv1aHash32(nodeId);
@@ -9872,8 +9861,7 @@ NodeLiveAudioProcessor.prototype.syncNativeAudioPlayerPcm = function syncNativeA
       1,
       Number(sample.channels) || (Array.isArray(sample.channelData) ? sample.channelData.length : 1) || 1,
     ) | 0;
-    // Wavetable 2D is mono cycle tables for now.
-    const channels = isWt ? 1 : (channelCount >= 2 ? 2 : 1);
+    const channels = channelCount >= 2 ? 2 : 1;
     const rate = Math.max(
       1,
       nodeGraphFiniteNumber(
@@ -11034,7 +11022,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     // Face jack is Ext Out (Out/Mono are aliases). MOD/scope must publish that name.
     if (type === "sampleHold") return ["Ext Out", "Out", "Mono"];
     if (/^([2-9]|1[01])t$/.test(type)) return ["Out", "Mono"];
-    if (type === "wavetable2d" || type === "sineWarp") return ["Out", "Mono"];
+    if (type === "spectralOsc" || type === "sineWarp") return ["Out", "Mono"];
     if (type === "filterMorphOscillator") return [];
     if (type === "softpopOscillator" || type === "softpopFilter" || type === "softpop2") return ["Mono"];
     if (type === "minMax") return ["Max"];
@@ -11281,7 +11269,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     // Sidechain Envelope out (duck amount) rides the Saw tap.
     if (type === "sidechain") return ["Envelope", "Env"];
     if (type === "transport") return ["f"];
-    if (type === "audioPlayer" || type === "samplePlayer" || type === "wavetable2d") {
+    if (type === "audioPlayer" || type === "samplePlayer") {
       return ["Phase"];
     }
     if (type === "chaosfly") return [];
