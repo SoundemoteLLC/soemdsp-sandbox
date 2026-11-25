@@ -19,6 +19,17 @@ Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M
 
 ---
 
+## Checkpoint 2026-11-25 1:41 PM MST
+
+The AI ran out of energy (Argi t502u). Resume in about 5 hours.
+
+- **HP-20** is done locally. The face edit landed inside Cloud commit `46445674`; the test and tokens are in `e943008d`. Open question: "two-high" was read as two params side by side per row, so Argi should confirm.
+- **HP-21** is done locally (`e943008d`). Trail and Ghost are 0/0 across the shared defaults and the listed faces, Rounding Error's Trail (s) is exposed and only its current step lights, and Trail 0 still leaves about 30 ms of fast erase.
+- **Spectral Blur Swarm:** Cloud mode `5dce88cb` plus `46445674` (Voices visible, Fuzz | Voices + Seed). Untested by the AI; Argi's listening acceptance is open.
+- Everything since `a5a28c3d` is unpushed (to be squashed and pushed later, on Argi's call).
+- Argi mentioned other AI agents (about 3 total) with unfinished jobs, status unknown. On resume, check `git status` and `git log` for their partial work first.
+- The next plan in the queue is **HP-04**.
+
 ## Plans
 
 | ID | Title | Owner | Phase | Depends | Argi gate | Status | Handed to | Commits | Last event |
@@ -27,9 +38,9 @@ Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M
 | HP-01 | Stage 1 removal (broom circuit presets, Trigger Patch, Pages menu, orphan presets) | Moth | A | — | D-P1 (decided: keep bank/program in data and filename) | ready, serving | — | — | 2026-11-25: D-P1 decided (keep bank/program; bank = category in the filename; one flat folder) |
 | HP-02 | Stage A1, one param-offset provider list (+ plugin-host reads effective params) | Moth | A | — | — | done for now (browser retest passed; REAPER retest dropped by Argi) | big AI | 5bd52c53 | 2026-11-25: browser retest passed (t412u); REAPER retest dropped (D-R1); done for now |
 | HP-03 | Stage A2, gradient data and engine effect (no UI) | Moth | B | HP-02 | D-G2 (decided 2026-11-25: hold) | done locally (`c9f808f5`, not pushed) | — | c9f808f5 | 2026-11-25: done locally at `c9f808f5` (not pushed). Earlier: handed off to the AI. D-G2 decided (t449u) "hold" for v1; revisit remains HP-17. |
-| HP-20 | Hypersaw parameter layout | big AI | A | after HP-03 | — | planned (after HP-03; then HP-21) | — | plan `docs/handoffs/HP-20.md` | 2026-11-25: added (t494u) — group jitter params together; stack some pairs two-high. Definitions stay the source of truth for limits. |
-| HP-21 | Display trail/ghost defaults | big AI | A | after HP-03 (after HP-20) | — | planned (after HP-20) | — | plan `docs/handoffs/HP-21.md` | 2026-11-25: added (t494u) — default Trail and Ghost to 0; expose Trail wherever there is Ghost; Ghost 0 + Trail 0 = no burn. Included other phosphor faces found with nonzero or hidden trail (see plan). |
-| HP-04 | Stage A3, the Gradients page | Misty | C | HP-01, HP-03 | D-G1, D-G5 (decided 2026-11-25) | planned | — | — | 2026-11-25: D-G1 and D-G5 decided (t449u) "yes" — recommended defaults |
+| HP-20 | Hypersaw parameter layout | big AI | A | after HP-03 | — | done locally (face in `46445674`; test and tokens in `e943008d`, not pushed) | — | e943008d | 2026-11-25: done locally. Face landed inside Cloud commit `46445674`; test and tokens in `e943008d`. Open question (t502u): "two-high" was read as two params side by side per row — Argi should confirm. Earlier: added (t494u). |
+| HP-21 | Display trail/ghost defaults | big AI | A | after HP-03 (after HP-20) | — | done locally (`e943008d`, not pushed) | — | e943008d | 2026-11-25: done locally at `e943008d`. Trail and Ghost are 0/0 across the shared defaults and the listed faces; Rounding Error's Trail (s) is exposed and only its current step lights; Trail 0 still leaves about 30 ms of fast erase. Earlier: added (t494u). |
+| HP-04 | Stage A3, the Gradients page | Misty | C | HP-01, HP-03 | D-G1, D-G5 (decided 2026-11-25) | planned (next) | — | — | 2026-11-25: next in the queue after the 1:41 PM MST checkpoint (t502u). Earlier: D-G1 and D-G5 decided (t449u) "yes" — recommended defaults. |
 | HP-05 | Stage A4, slider ghost uses the effective value, 1 to 2 px outline, "Holds still" line | Misty | C | HP-03, HP-04 | — | planned | — | — | 2026-11-25: index created |
 | HP-06 | Stage B1, the variations store (server, catalog script, client wrapper) | Moth | A | — (D-P1 decided 2026-11-25) | D-P1, D-P4 (decided 2026-11-25) | ready, serving | — | — | 2026-11-25: D-P4 decided (t449u): remind Argi to restart when it is needed; report must say "server restart needed". D-P2 (with HP-07): expose factory vs user source for a seamless list. |
 | HP-06b | Plugin mirror of the variations / rename / remove API | Moth (plugin repo) | B | HP-06 | — | planned | — | — | 2026-11-25: index created |
