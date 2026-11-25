@@ -713,7 +713,7 @@ function nodeGraphCodeScreenWorkspaceAudioApi() {
     }
     const key = `${match[1].toLowerCase()}${match[2].toLowerCase()}`;
     const octave = Number(match[3]);
-    return ((octave + 1) * 12) + (noteOffsets[key] ?? 0);
+    return ((octave + 2) * 12) + (noteOffsets[key] ?? 0); // the app-wide numbering: C-2 = MIDI 0, C3 = MIDI 60
   };
   return {
     clamp(value, min = -1, max = 1) {

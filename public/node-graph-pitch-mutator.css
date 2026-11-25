@@ -26,6 +26,34 @@
   --pm-key-count: 128;
 }
 
+/* Cursor policy: the little + while hovering, the little dot while the mouse is down. Never the hand, never the arrow.
+   Text fields keep the text cursor. */
+#pitchMutatorOverlay,
+#pitchMutatorOverlay * {
+  cursor: var(--node-dot-cursor);
+}
+
+#pitchMutatorOverlay input[type="text"],
+#pitchMutatorOverlay input[type="number"] {
+  cursor: text;
+}
+
+#pitchMutatorOverlay :active {
+  cursor: var(--node-adjust-cursor);
+}
+
+/* No scrollbars anywhere in the Mutator: drag scrolls, the wheel scrolls, touch scrolls. */
+#pitchMutatorOverlay,
+#pitchMutatorOverlay * {
+  scrollbar-width: none;
+}
+
+#pitchMutatorOverlay *::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 #pitchMutatorOverlay[hidden] {
   display: none !important;
 }
@@ -59,7 +87,6 @@
   color: inherit;
   padding: 1px 6px;
   border-radius: 3px;
-  cursor: pointer;
   font: inherit;
 }
 
@@ -157,7 +184,6 @@
   padding: 3px 5px;
   border-radius: 3px;
   text-align: left;
-  cursor: pointer;
   font: inherit;
 }
 
@@ -236,10 +262,15 @@
 .pm-key {
   flex: 1 1 0;
   min-width: 0;
+  /* The global button rule gives min-height 38px and a 6px radius: that cut the key off at the bottom of its 22px strip and
+     rounded narrow keys into arches. Fill the strip exactly: flat bottom, only the two top corners are round, by a hair. */
+  min-height: 0;
+  height: 100%;
+  border-radius: 2px 2px 0 0;
+  corner-shape: round;
   border: 0;
   border-right: 1px solid #333;
   padding: 0;
-  cursor: pointer;
   background: #f3f0ea;
   color: #111;
   font: 8px/1 ui-sans-serif, system-ui, sans-serif;
@@ -253,6 +284,11 @@
   flex: 1 1 0;
 }
 
+/* Outline: what arrives on Pitch In. The solid key (.audition) is the Pitch knob. */
+.pm-key.wire {
+  box-shadow: inset 0 0 0 2px var(--pitch-mutator-color, #c45a7a);
+}
+
 .pm-key.audition {
   background: var(--pitch-mutator-color, #c45a7a);
   color: #111;
@@ -264,11 +300,29 @@
   gap: 1px;
 }
 
+.pm-side input[data-unit-stepper-drag][readonly] {
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
+}
+
+.pm-side input[data-unit-stepper-drag].editing {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  caret-color: currentColor;
+}
+
 .pm-side input[type="number"],
 .pm-side input[type="range"] {
   width: 100%;
   font: inherit;
   box-sizing: border-box;
+}
+
+/* The Pitch knob is off 0: tint the button so a forgotten knob is visible with the overlay closed. */
+.node-unified-window-nav-button[data-unified-action="mutators"].pm-nav-pitched {
+  background: rgba(196, 90, 122, 0.45);
 }
 
 .node-unified-window-nav-button[data-unified-action="mutators"].active {

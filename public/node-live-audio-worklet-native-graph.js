@@ -984,6 +984,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (t === "pitchMutator") {
     if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "pitch") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW; // MIDI-note units: Pitch In + the Pitch knob
+    if (p === "unit" || p === "0-1" || p === "0\u20131" || p === "0\u20261") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01; // the bound knob's lane value, 0..1
     if (p === "velocity") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
   if (t === "stftGate" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
@@ -1676,7 +1678,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   const tDst = String(type || "").trim();
   if (tDst === "pitchMutator") {
     if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
-    if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_F;
+    if (p === "pitch") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_F; // Pitch In: MIDI-note units, added to the Playhead knob
     if (p === "velocity") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
   }
   if (tDst === "spectralFreeze") {
@@ -8229,7 +8231,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
 
     if (type === "pitchMutator") {
-      push("playheadHz", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("playheadHz", 440));
+      push("playhead", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("playhead", 0));
       continue;
     }
     if (type === "pitchHz") {
@@ -8680,6 +8682,76 @@ NodeLiveAudioProcessor.prototype.syncNativeMutatorFreqLuts = function syncNative
       new Float32Array(native.memory.buffer, ptr, 128).set(Float32Array.from(src));
     } catch (_e) { /* keep previous table */ }
   }
+};
+
+// Pitch Mutator knob lane: hand each Mutator's lane table and target to the native graph. The engine evaluates it every block from the
+// Mutator's smoothed playhead and adds it to the target Control AFTER the target's own smoother (graph_engine.cpp Control.laneUnit), so the
+// target moves with the playhead's final value and never chases the offset. Host only: no lane math here.
+NodeLiveAudioProcessor.prototype.syncNativeMutatorLanes = function syncNativeMutatorLanes() {
+  const native = this.nativeGraph;
+  if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) return;
+  if (!native?.soemdsp_graph_set_mutator_lane || !native?.soemdsp_graph_mutator_lane_lut_ptr
+    || !native?.soemdsp_graph_mutator_lane_add_target || !native.memory?.buffer) {
+    return;
+  }
+  const nodes = this.nodes;
+  if (!nodes || typeof nodes.values !== "function") return;
+  const handle = this.nativeGraphHandle;
+  const voiceLanes = Array.isArray(this._nativeMetaVoiceLanes) ? this._nativeMetaVoiceLanes : [];
+  for (const node of nodes.values()) {
+    if (!node || node.type !== "pitchMutator") continue;
+    const mutHash = this.fnv1aHash32(node.id);
+    const lane = node._mutatorLane;
+    const target = lane && lane.valid && lane.table && lane.table.length >= 128 ? lane.target : null;
+    const targetNode = target ? this.nodes.get(String(target.nodeId)) : null;
+    const paramId = targetNode ? this.lookupNativeParamId(String(targetNode.type || ""), String(target.paramKey || "")) : null;
+    if (target && !Number.isFinite(paramId)) {
+      // A bound knob the native graph has no Control for is a bug to show, not to hide.
+      if (this._mutatorLaneErrorFor !== `${node.id}:${target.nodeId}:${target.paramKey}`) {
+        this._mutatorLaneErrorFor = `${node.id}:${target.nodeId}:${target.paramKey}`;
+        try { console.error(`Pitch Mutator lane: ${target.nodeId} / ${target.paramKey} has no native Control`); } catch (_e) { /* worklet console */ }
+        try { this.port?.postMessage?.({ type: "error", message: `Pitch Mutator lane: ${target.nodeId} / ${target.paramKey} has no native Control` }); } catch (_e) { /* no port */ }
+      }
+    }
+    const valid = !!(target && Number.isFinite(paramId));
+    let ok = 0;
+    try {
+      ok = native.soemdsp_graph_set_mutator_lane(handle, mutHash, valid ? paramId : 0, valid ? 1 : 0,
+        valid ? this.fnv1aHash32(String(target.nodeId)) : 0) | 0;
+    } catch (_e) { ok = 0; }
+    if (!ok || !valid) continue;
+    // Voice clones of the target follow the same lane.
+    for (const vl of voiceLanes) {
+      if (String(vl?.baseId || "") !== String(target.nodeId)) continue;
+      const ids = vl.voiceIds || [];
+      for (let v = 1; v < ids.length; v += 1) {
+        try { native.soemdsp_graph_mutator_lane_add_target(handle, mutHash, this.fnv1aHash32(String(ids[v]))); } catch (_e) { /* pool full */ }
+      }
+    }
+    let ptr = 0;
+    try { ptr = native.soemdsp_graph_mutator_lane_lut_ptr(handle, mutHash) | 0; } catch (_e) { ptr = 0; }
+    if (!(ptr > 0)) continue;
+    try {
+      new Float32Array(native.memory.buffer, ptr, 128).set(lane.table.length === 128 ? lane.table : lane.table.subarray(0, 128));
+    } catch (_e) { /* keep the previous table */ }
+  }
+};
+
+// Pitch Mutator: the smoothed playhead Hz the native engine evaluated the lane from, relayed on the data bus as PlayheadHz (the page's knob and
+// chip paint use it). Read only; no audio math here.
+NodeLiveAudioProcessor.prototype.syncNativeMutatorPlayheadPublish = function syncNativeMutatorPlayheadPublish() {
+  const read = this.nativeGraph?.soemdsp_graph_mutator_playhead_hz;
+  if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle || typeof read !== "function") return;
+  if (!this.mutatorPlayheadPublish) this.mutatorPlayheadPublish = new Map();
+  const live = new Set();
+  for (const [id, node] of this.nodes || []) {
+    if (!node || node.type !== "pitchMutator") continue;
+    live.add(id);
+    let hz = -1;
+    try { hz = Number(read(this.nativeGraphHandle, this.fnv1aHash32(id))); } catch (_e) { hz = -1; }
+    this.mutatorPlayheadPublish.set(id, Number.isFinite(hz) ? hz : -1);
+  }
+  for (const id of [...this.mutatorPlayheadPublish.keys()]) if (!live.has(id)) this.mutatorPlayheadPublish.delete(id);
 };
 
 NodeLiveAudioProcessor.prototype.createVibratoGeneratorState = function createVibratoGeneratorState() {

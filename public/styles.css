@@ -3822,6 +3822,11 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   border: 0;
   background: transparent;
   user-select: none;
+  cursor: var(--node-dot-cursor); /* the little + on hover, the little dot while pressed; never the hand */
+}
+
+.node-keyboard-surface:active {
+  cursor: var(--node-adjust-cursor);
 }
 
 /* Face-only tiles (no GL plate pass there): the same draw, presented into this canvas. */
@@ -26133,4 +26138,33 @@ body[data-io-strip="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .
    which starts below the padding; letting the row be automatic puts the first jack in the strip row. */
 body[data-io-strip="1"] .dsp-node:is(.chrome-layout-b, .solid-module-layout) > .node-solid-module-shell > .node-io-column {
   grid-row: auto !important;
+}
+
+/* IO View A: the compact label beside each side's pill (written by node-graph-io-view.js, drawn by the GL chrome). Out of the jack grid. */
+:is(.node-solid-module-shell, .node-module-chrome-layout-b-shell) > .node-io-column > .node-io-label.node-io-compact-label {
+  position: absolute;
+  top: 0;
+  height: var(--node-signal-port-height);
+  line-height: var(--node-signal-port-height);
+  min-width: 0 !important;
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+:is(.node-solid-module-shell, .node-module-chrome-layout-b-shell) > .node-io-column.input > .node-io-label.node-io-compact-label {
+  left: var(--node-signal-port-width);
+  padding-left: 3px;
+  text-align: left;
+}
+
+:is(.node-solid-module-shell, .node-module-chrome-layout-b-shell) > .node-io-column.output > .node-io-label.node-io-compact-label {
+  right: var(--node-signal-port-width);
+  padding-right: 3px;
+  text-align: right;
+}
+
+body[data-io-view="B"] .node-io-compact-label {
+  display: none !important;
 }

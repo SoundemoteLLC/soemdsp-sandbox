@@ -224,9 +224,10 @@ function browserContext(extra = {}) {
       // HP-09c: the Mutator's live playheadHz follows the incoming Hz when Freq In is wired, otherwise the audition key (C4 here, nothing wired),
       // instead of the stale stored value the baseline sent. Assert that value; then the rest of the params must be identical.
       if (oldNode.type === "pitchMutator") {
-        const expected = newCtx.PitchMutatorEngine.hzFromNote(60);
-        assert(Math.abs(newParams.playheadHz - expected) < 1e-9, `${label}: ${newNode.id} playheadHz is the audition-key Hz (${expected}), got ${newParams.playheadHz}`);
-        oldParams.playheadHz = newParams.playheadHz;
+        // The Playhead is now a plain knob (keys); the host no longer writes a playhead Hz into the live params.
+        assert(newParams.playheadHz === JSON.parse(base).playheadHz, `${label}: ${newNode.id} the host does not rewrite playheadHz`);
+        delete oldParams.playheadHz;
+        delete newParams.playheadHz;
       }
       if (JSON.stringify(oldParams) !== JSON.stringify(newParams)) {
         differing += 1;
@@ -255,10 +256,38 @@ function browserContext(extra = {}) {
 
   const fixture = JSON.parse(read(patchFiles[0]));
   const movedPlain = compare("acoustic-bass fixture", fixture);
-  const { copy } = withLanes(fixture);
-  const movedLanes = compare("fixture with mutator lanes", copy);
-  assert(movedLanes > movedPlain, "the lane fixture really moves params (the comparison is not trivially empty)");
-  console.log(`ok  Pitch Mutator identical (fixture: ${movedPlain} nodes moved; with lanes: ${movedLanes} moved)`);
+  // HP-09e: a bound knob lane is NOT folded into the target's params any more. The target keeps its base (its smoother chases the base
+  // only) and the Mutator hands the native engine the lane table, which adds the offset after the target's smoother.
+  const { copy, targetId, keys } = withLanes(fixture);
+  const ctx = browserContext();
+  ctx.nodeGraphMvp = { patch: JSON.parse(JSON.stringify(copy)) };
+  engineFiles(ctx);
+  run(ctx, read("public/node-graph-param-offsets.js"), "node-graph-param-offsets.js");
+  run(ctx, read("public/node-graph-pitch-mutator-overlay.js"), "overlay@now");
+  let touched = 0;
+  for (const node of ctx.nodeGraphMvp.patch.nodes) {
+    const params = paramsOf(node);
+    const before = JSON.stringify(params);
+    ctx.applyNodeGraphParamOffsets(node, params, { notify: false });
+    if (node.type === "pitchMutator") {
+      assert(node._mutatorLane && node._mutatorLane.valid, "the Mutator carries a baked lane for the native engine");
+      assert(node._mutatorLane.table.length === 128, "one entry per MIDI note");
+      assert(node._mutatorLane.target.nodeId === targetId && node._mutatorLane.target.paramKey === keys[0], "the lane names its target");
+      assert(Math.abs(node._mutatorLane.table[60] - -0.1) < 1e-6, "the table holds the pinned offset at C4");
+      continue;
+    }
+    assert(JSON.stringify(params) === before, `${node.id}: the Mutator no longer changes a target's params (base only)`);
+    for (const key of Object.keys(params)) {
+      const meta = node.paramMeta?.[key] || {};
+      // the single-value path (main-thread evaluators) adds the lane once, after a smoother that chases the base
+      const single = ctx.applyNodeGraphParamOffsetsToBase(node, key, params[key], meta);
+      if (node.id === targetId && keys.includes(key)) assert(single !== params[key], `${node.id}.${key}: the single-value path applies the lane once`);
+      else assert(Object.is(single, params[key]), `${node.id}.${key}: untouched params are untouched`);
+    }
+    touched += 1;
+  }
+  assert(touched > 0, "targets were checked");
+  console.log(`ok  Pitch Mutator: plain fixture identical (${movedPlain} moved); a lane leaves targets on their base and ships a lane table`);
 }
 
 console.log("all HP-02 checks passed");

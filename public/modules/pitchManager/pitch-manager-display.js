@@ -7,15 +7,10 @@
 // own pitch / ƒ outputs. Before audio runs, the lines show what the knobs give
 // on their own (no inputs). GPU only, shared line / text drawer (gl-line-renderer).
 
-const NODE_GRAPH_PITCH_MANAGER_NOTE_NAMES = Object.freeze(["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]);
-
-/** "60.00 C4" style: MIDI number with the nearest note name (MIDI 60 = C4). */
+/** "60.00 C3" style: MIDI number with the nearest note name (the app-wide helper: MIDI 60 = C3). */
 function nodeGraphPitchManagerPitchText(pitch) {
   if (!Number.isFinite(pitch)) return "—";
-  const nearest = Math.round(pitch);
-  const name = NODE_GRAPH_PITCH_MANAGER_NOTE_NAMES[((nearest % 12) + 12) % 12];
-  const octave = Math.floor(nearest / 12) - 1;
-  return `${pitch.toFixed(2)} ${name}${octave}`;
+  return `${pitch.toFixed(2)} ${nodeGraphKeyboardPitchLabel(Math.round(pitch))}`;
 }
 
 function nodeGraphPitchManagerHzText(hz) {

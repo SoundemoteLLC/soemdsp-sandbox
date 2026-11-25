@@ -2818,6 +2818,7 @@ struct Control {
   double modDomain; // absolute DOMAIN MOD accumulator (|mod|>1 sources)
   double liveModUnit; // per-sample audio MOD (ParamModEdge), cleared+stamped each frame
   double liveModDomain;
+  double laneUnit; // Pitch Mutator knob lane: signed unit-band (slider) offset, applied after the smoother like modUnit; never smoothed
   unsigned char liveModActive; // 1 if a ParamModEdge targets this Control this block
   unsigned char liveModDomainReplace; // 1 if domain-valued live MOD stamped (ADD unless bit4)
   double domainMin; // paramMeta min for unit-band map
@@ -3050,6 +3051,15 @@ struct Node {
   unsigned char mutatorFreqLutValid;
   double mutatorLutLastX;
   double mutatorLutLastY;
+  // Knob lane (HP-09e): one signed slider-unit offset per MIDI note. process_pitch_mutator reads the playhead (the smoothed playhead
+  // Control, or the live Freq In sample), looks the offset up and stamps it on each target Control's laneUnit, so the target moves with
+  // the playhead's final value and the target's own smoother never sees it.
+  float mutatorLaneLut[128];
+  unsigned char mutatorLaneValid;
+  int mutatorLaneParam; // paramId of the target Control on every target node
+  int mutatorLaneTargetCount;
+  unsigned int mutatorLaneTargets[33]; // target node hashes: the module and up to 32 voice clones
+  double mutatorPlayheadHz; // the playhead's final (smoothed) Hz at the last frame of the last block; -1 until it has run
 };
 
 enum SinkKind : unsigned char { kSinkPort = 0, kSinkControl = 1 };
@@ -3688,6 +3698,7 @@ static void init_control(Control& c, double value, bool snap) {
   c.modDomain = 0.0;
   c.liveModUnit = 0.0;
   c.liveModDomain = 0.0;
+  c.laneUnit = 0.0;
   c.liveModActive = 0;
   c.liveModDomainReplace = 0;
   c.domainMin = 0.0;
@@ -3759,7 +3770,7 @@ static inline bool node_take_seed(Node& node, unsigned int* seedOut);
 // Never multiply. Never replace.
 static inline double control_effective(const Control& c) {
   const double base = c.out;
-  const double unitAdd = c.modUnit + c.liveModUnit;
+  const double unitAdd = c.modUnit + c.liveModUnit + c.laneUnit;
   const double domainAdd = c.modDomain + c.liveModDomain;
   const bool anyMod = (unitAdd != 0.0) || (domainAdd != 0.0) || (c.liveModActive != 0)
     || (c.modUnit != 0.0) || (c.modDomain != 0.0)
@@ -3855,6 +3866,11 @@ static void init_node_defaults(Node& n, int typeId) {
   n.mutatorLutLastX = -1.0e9;
   n.mutatorLutLastY = 0.0;
   for (int mutI = 0; mutI < 128; mutI++) n.mutatorFreqLut[mutI] = 0.0f;
+  n.mutatorLaneValid = 0;
+  n.mutatorPlayheadHz = -1.0;
+  n.mutatorLaneParam = 0;
+  n.mutatorLaneTargetCount = 0;
+  for (int mutI = 0; mutI < 128; mutI++) n.mutatorLaneLut[mutI] = 0.0f;
   n.bypassed = false;
   n.vactrolAmp = 1.0;
   n.vactrolAmpInit = false;
@@ -4028,7 +4044,8 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeCrossover5) ? 150.0
       : (typeId == kTypeCrossover6) ? 100.0
       : (typeId == kTypeAudioPlayer || typeId == kTypeSamplePlayer) ? 1.0 // speed ×
-: (typeId == kTypePitchHz || typeId == kTypePitchManager || typeId == kTypePitchMutator) ? 440.0 // A4 / playhead Hz
+: (typeId == kTypePitchMutator) ? 0.0 // playhead knob (keys)
+      : (typeId == kTypePitchHz || typeId == kTypePitchManager) ? 440.0 // A4
       : (typeId == kTypeVelvetNoise) ? 2500.0 // density Hz
       : (typeId == kTypeVelvetReverb) ? 64.0 // Taps (tap count)
             : 220.0,
@@ -7315,20 +7332,65 @@ static void process_b2u(Circuit& g, Node& node, int frames) {
 // pitchToFreq: tuning * 2^((pitch - 69) / 12)
 // freqToPitch: 69 + 12 * log2(hz / tuning); non-finite/â‰¤0 → 0
 
+// The knob lane's signed slider-unit offset at keyboard position note (0..127), linear between keys.
+static inline double mutator_lane_offset(const Node& node, double note) {
+  double x = note;
+  if (x < 0.0) x = 0.0;
+  if (x > 127.0) x = 127.0;
+  const int i = (int)x;
+  const int i1 = (i < 127) ? (i + 1) : 127;
+  const double frac = x - (double)i;
+  return (double)node.mutatorLaneLut[i] + ((double)node.mutatorLaneLut[i1] - (double)node.mutatorLaneLut[i]) * frac;
+}
+
 static void process_pitch_mutator(Circuit& g, Node& node, int frames) {
   // Ports: Gate=Trigger thru, Freq=kPortF (in via mix, out to buf), Velocity=kPortMorph thru.
   // frequency slot: playhead Hz when Freq In is unwired.
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
   const bool liveGate = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
   const bool liveVel = mix_live_port(g, node, kPortMorph, frames, g.mixMorph);
+  double laneHz = 0.0; // the playhead's final value at the last frame of this block
+  // Outputs: Mono = f (Hz), Saw = pitch (MIDI-note units, the mixed playhead), Phase01 = the knob lane's value normalized: where the bound
+  // knob ends up on its own range (its base position + the lane offset, clamped to 0..1). 0 when no lane is bound.
+  const bool laneOn = node.mutatorLaneValid && node.mutatorLaneTargetCount > 0;
+  Control* laneCtl = nullptr;
+  double laneBaseUnit = 0.0;
+  if (laneOn) {
+    const int ti0 = find_node(g, node.mutatorLaneTargets[0]);
+    if (ti0 >= 0) {
+      Control* c0 = control_for_param(g.nodes[ti0], node.mutatorLaneParam);
+      if (c0 && (c0->domainMax - c0->domainMin) > 0.0) {
+        laneCtl = c0;
+        laneBaseUnit = (c0->out - c0->domainMin) / (c0->domainMax - c0->domainMin);
+      }
+    }
+  }
+  double lastOff = 0.0;
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
     const double gate = liveGate ? g.mixTrigger[f] : 0.0;
     const double vel = liveVel ? g.mixMorph[f] : 0.0;
-    double inHz = liveF ? g.mixF[f] : control_audio(g, node.frequency, f);
+    // Playhead in keyboard units: Pitch In (MIDI notes, summed cables) + the Playhead knob. The knob is smoothed on its own; cables and
+    // modulation land after that smoother (control_audio), so a signal is never smoothed by the parameter. Clamped to the keyboard.
+    double note = (liveF ? g.mixF[f] : 0.0) + control_audio(g, node.frequency, f);
+    if (!(note == note)) note = 0.0;
+    if (note < 0.0) note = 0.0;
+    if (note > 127.0) note = 127.0;
+    const double inHz = 440.0 * dsp_exp(((note - 69.0) / 12.0) * 0.6931471805599453);
+    laneHz = inHz;
+    node.buf[kPortSaw][f] = note;
+    double unitOut = 0.0;
+    if (laneOn) {
+      lastOff = mutator_lane_offset(node, note);
+      if (laneCtl) {
+        unitOut = laneBaseUnit + lastOff;
+        if (unitOut < 0.0) unitOut = 0.0;
+        if (unitOut > 1.0) unitOut = 1.0;
+      }
+    }
+    node.buf[kPortPhase01][f] = unitOut;
     double outHz = 0.0;
-    if (node.mutatorFreqLutValid && inHz > 0.0 && inHz == inHz) {
-      const double note = 69.0 + 12.0 * (dsp_ln(inHz / 440.0) * k1zLN2);
+    if (node.mutatorFreqLutValid) {
       if (note == node.mutatorLutLastX) {
         outHz = node.mutatorLutLastY;
       } else {
@@ -7344,13 +7406,32 @@ static void process_pitch_mutator(Circuit& g, Node& node, int frames) {
         node.mutatorLutLastX = note;
         node.mutatorLutLastY = outHz;
       }
-    } else if (inHz > 0.0 && inHz == inHz) {
+    } else {
       // No keys: passthrough so an empty lane does not invent a pitch.
       outHz = inHz;
     }
     node.buf[kPortMono][f] = outHz;
     node.buf[kPortLeft][f] = gate;
     node.buf[kPortRight][f] = vel;
+  }
+  if (laneHz > 0.0 && laneHz == laneHz) node.mutatorPlayheadHz = laneHz;
+  if (laneOn && laneHz > 0.0 && laneHz == laneHz) {
+    for (int t = 0; t < node.mutatorLaneTargetCount; t++) {
+      const int ti = find_node(g, node.mutatorLaneTargets[t]);
+      if (ti < 0) continue;
+      Control* c = control_for_param(g.nodes[ti], node.mutatorLaneParam);
+      if (c) c->laneUnit = lastOff;
+    }
+  }
+}
+
+// Clear the lane offset on every target of a Pitch Mutator (lane turned off, retargeted, or the Mutator removed).
+static void mutator_lane_release(Circuit& g, Node& node) {
+  for (int t = 0; t < node.mutatorLaneTargetCount; t++) {
+    const int ti = find_node(g, node.mutatorLaneTargets[t]);
+    if (ti < 0) continue;
+    Control* c = control_for_param(g.nodes[ti], node.mutatorLaneParam);
+    if (c) c->laneUnit = 0.0;
   }
 }
 
@@ -17502,6 +17583,7 @@ extern "C" int soemdsp_graph_remove_node(int handle, unsigned int nodeIdHash) {
   const int idx = find_node(*g, nodeIdHash);
   if (idx < 0) return -3;
   Node& n = g->nodes[idx];
+  if (n.typeId == kTypePitchMutator) mutator_lane_release(*g, n);
   release_node_papoulis_controls(n);
   destroy_node_native(n);
   n.used = false;
@@ -20728,6 +20810,63 @@ extern "C" int soemdsp_graph_set_mutator_freq_lut(int handle, unsigned int nodeH
   node.mutatorFreqLutValid = valid ? 1 : 0;
   node.mutatorLutLastX = -1.0e9;
   return 1;
+}
+
+// Knob lane of a Pitch Mutator. paramId is the target Control's param on every target node; targetHash is the first target (the module).
+// Idempotent: the host calls this on every param sync, and an unchanged lane keeps its targets and its running offset (no glitch).
+// valid=0 clears the lane and every target's offset. More targets (voice clones) follow with soemdsp_graph_mutator_lane_add_target.
+extern "C" int soemdsp_graph_set_mutator_lane(int handle, unsigned int nodeHash, int paramId, int valid, unsigned int targetHash) {
+  Circuit* g = get(handle);
+  if (!g) return 0;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0) return 0;
+  Node& node = g->nodes[idx];
+  if (node.typeId != kTypePitchMutator) return 0;
+  const unsigned char v = valid ? 1 : 0;
+  if (node.mutatorLaneValid == v && node.mutatorLaneParam == paramId
+      && (v == 0 || (node.mutatorLaneTargetCount > 0 && node.mutatorLaneTargets[0] == targetHash))) {
+    return 1;
+  }
+  mutator_lane_release(*g, node);
+  node.mutatorLaneTargetCount = 0;
+  node.mutatorLaneParam = paramId;
+  node.mutatorLaneValid = v;
+  if (v) node.mutatorLaneTargets[node.mutatorLaneTargetCount++] = targetHash;
+  return 1;
+}
+
+extern "C" int soemdsp_graph_mutator_lane_add_target(int handle, unsigned int nodeHash, unsigned int targetHash) {
+  Circuit* g = get(handle);
+  if (!g) return 0;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0) return 0;
+  Node& node = g->nodes[idx];
+  if (node.typeId != kTypePitchMutator || node.mutatorLaneTargetCount >= 33) return 0;
+  for (int i = 0; i < node.mutatorLaneTargetCount; i++) {
+    if (node.mutatorLaneTargets[i] == targetHash) return 1;
+  }
+  node.mutatorLaneTargets[node.mutatorLaneTargetCount++] = targetHash;
+  return 1;
+}
+
+// The Mutator's smoothed playhead Hz (what the lane was evaluated from), for the page's knob / chip paint. -1 until the Mutator has run.
+extern "C" double soemdsp_graph_mutator_playhead_hz(int handle, unsigned int nodeHash) {
+  Circuit* g = get(handle);
+  if (!g) return -1.0;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0) return -1.0;
+  const Node& node = g->nodes[idx];
+  return node.typeId == kTypePitchMutator ? node.mutatorPlayheadHz : -1.0;
+}
+
+extern "C" float* soemdsp_graph_mutator_lane_lut_ptr(int handle, unsigned int nodeHash) {
+  Circuit* g = get(handle);
+  if (!g) return nullptr;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0) return nullptr;
+  Node& node = g->nodes[idx];
+  if (node.typeId != kTypePitchMutator) return nullptr;
+  return node.mutatorLaneLut;
 }
 
 extern "C" float* soemdsp_graph_mutator_freq_lut_ptr(int handle, unsigned int nodeHash) {

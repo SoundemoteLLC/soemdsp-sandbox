@@ -9,12 +9,12 @@
 
   const ONE_LANE_NOTICE = "One knob lane for now";
   const FREQ_DROPPED_NOTICE = "Dropped a Frequency pin. The Pitch Mutator's frequency is not pinnable";
-  const FREQ_NOT_PINNABLE = "The Pitch Mutator's frequency cannot be pinned. Bind a knob on another module (Arm, then turn it).";
+  const NO_LANE_NOTICE = "Bind a knob first: press Arm, then turn the knob you want to control";
+  const SELF_NOTICE = "A Mutator can't mutate itself";
 
   const ui = {
     open: false,
     selectedId: "",
-    auditionNote: 60,
     navHooked: false,
     raf: 0,
     notice: "",
@@ -22,9 +22,13 @@
     pending: null,
     // A pin being dragged: { pointerId, laneId, x, startX, startY, moved, timer }.
     pinDrag: null,
+    keyDrag: null,
     pinMsg: "",
-    // Last frequency each possible Freq In source (keyboard / MIDI module) was heard at, from the signals it sends. Not a poll: set by the send hooks.
+    // Last frequency each possible Pitch In source (keyboard / MIDI module) was heard at, from the signals it sends. Not a poll: set by the send hooks.
     sourceHz: new Map(),
+    // The Mutator playhead's smoothed Hz as the audio engine reports it (data bus PlayheadHz), per Mutator id.
+    heardHz: new Map(),
+    redrawFull: false,
     pan: null,
     pointers: new Map(),
     suppressKeyClick: false,
@@ -105,17 +109,17 @@
     return (node && node.alias) || (engine() && engine().DEFAULT_NAME) || "Pitch Mutator";
   }
 
-  // The module wired into this Mutator's Freq In ("" when nothing is).
+  // The module wired into this Mutator's Pitch In ("" when nothing is).
   function freqInSourceId(node) {
     const p = patch();
     const cables = p && Array.isArray(p.connections) ? p.connections : [];
     for (const c of cables) {
-      if (c && String(c.destinationNode) === String(node && node.id) && String(c.destinationPort) === "f") return String(c.sourceNode);
+      if (c && String(c.destinationNode) === String(node && node.id) && String(c.destinationPort) === "pitch") return String(c.sourceNode);
     }
     return "";
   }
 
-  // Hz arriving on a wired Freq In, as far as the page can know it (the source's last signal); null when unwired or not heard yet.
+  // Hz arriving on a wired Pitch In, as far as the page can know it (the source's last signal); null when unwired or not heard yet.
   function incomingHz(node) {
     if (!node) return null;
     const id = freqInSourceId(node);
@@ -129,20 +133,44 @@
     return hz > 0 ? hz : null;
   }
 
-  // D-M2: a wired Freq In drives the playhead; unwired (or not heard yet) falls back to the audition key.
+  // The playhead is a knob in keyboard units (0..127 keys, the "playhead" param); anything on the Pitch In adds to it, so the Mutator's own
+  // keyboard, its knob and every cable mix like any other param. Modulation lands after the smoother (the knob's smoothing never touches a signal).
+  function biasNote(node) {
+    if (!node) return 0;
+    const v = typeof root.nodeGraphReadPatchParameterValue === "function"
+      ? root.nodeGraphReadPatchParameterValue(node, "playhead")
+      : Number(node.params && node.params.playhead);
+    return Number.isFinite(v) ? v : 0;
+  }
+
+  // Pitch In as a note: the page only hears the source's Hz, so it converts; the native engine reads the real cable.
+  function incomingNote(node) {
+    const E = engine();
+    const hz = E ? incomingHz(node) : null;
+    return hz ? E.noteFromHz(hz) : 0;
+  }
+
+  // The Mutator keyboard shows both contributions: the solid key is the Pitch knob (-1 when it is 0 = off), the outlined key is what arrives on Pitch In.
+  function knobKeyOf(node) {
+    const v = biasNote(node);
+    return v > 0 ? Math.min(127, Math.round(v)) : -1;
+  }
+
+  function wireKeyOf(node) {
+    return freqInSourceId(node) && incomingHz(node) ? Math.min(127, Math.max(0, Math.round(incomingNote(node)))) : -1;
+  }
+
+  // True when any Mutator's Pitch knob is off 0: the nav button is tinted so a forgotten knob is not a mystery with the overlay closed.
+  function anyPitchSet() {
+    return mutatorNodes().some((n) => biasNote(n) > 0);
+  }
+
+  // The playhead: Pitch In + the Playhead knob, clamped to the keyboard (only the lookup range is clamped; the knob itself is not).
   function soundingNote(node) {
     const E = engine();
     const snap = !!(node && node.mutator && node.mutator.snap);
-    const hz = E ? incomingHz(node) : null;
-    const raw = hz ? E.noteFromHz(hz) : ui.auditionNote;
+    const raw = Math.min(127, Math.max(0, incomingNote(node) + biasNote(node)));
     return E ? E.snapNote(raw, snap) : raw;
-  }
-
-  // Hz on Freq Out at note x (D-M3: an empty Frequency lane passes the incoming frequency through, like the native engine).
-  function freqOutHz(node, x) {
-    const E = engine();
-    if (!E || !node) return NaN;
-    return E.freqOutHz(E.bakeFreqLane(node.mutator && node.mutator.freqLane), x, incomingHz(node));
   }
 
   function mutatorsFedBy(sourceId) {
@@ -191,6 +219,37 @@
     return offsetAt(node, lane, x);
   }
 
+  // The playhead the engine actually evaluates the lane from: its smoothed Hz, relayed on the data bus while the audio engine runs. Pin placement
+  // keeps using the target note (soundingNote); knob / chip paint and the main-thread offset use this one.
+  function shownNote(node) {
+    const E = engine();
+    const live = root.nodeGraphMvp && root.nodeGraphMvp.live;
+    const hz = E && live && live.node ? ui.heardHz.get(node.id) : 0;
+    return hz > 0 ? E.noteFromHz(hz) : soundingNote(node);
+  }
+
+  // The lane's offset for painting: a pending (unpinned) value is held flat, otherwise the pinned curve at the smoothed playhead.
+  function paintOffset(node, lane) {
+    const pending = ui.pending;
+    if (pending && pending.mut === node.id && pending.lane === lane.id) return pending.offset;
+    return offsetAt(node, lane, shownNote(node));
+  }
+
+  // Data-bus event (arrives with the engine's scope message): the Mutator's smoothed playhead moved.
+  function playheadHeard(nodeId, hz) {
+    const id = String(nodeId);
+    const next = Number(hz) > 0 ? Number(hz) : 0;
+    const prev = ui.heardHz.get(id) || 0;
+    if (Math.abs(Math.log2((next || 1) / (prev || 1))) < 1e-5 && (next > 0) === (prev > 0)) return;
+    if (next > 0) ui.heardHz.set(id, next);
+    else ui.heardHz.delete(id);
+    if (!mutatorNodes().some((n) => n.id === id)) return;
+    dropPendingIfMoved();
+    document.querySelectorAll('[data-unified-action="mutators"]').forEach((btn) => btn.classList.toggle("pm-nav-pitched", anyPitchSet()));
+    paintBoundKnobs();
+    queueRedraw(true);
+  }
+
   // Moving the playhead to another note drops a pending value; the knob goes back to what the lane says there.
   function dropPendingIfMoved() {
     if (!ui.pending) return;
@@ -202,15 +261,19 @@
   }
 
   // Redraw work is queued, never looped: one rAF while the overlay is open and something changed, nothing while closed or idle.
-  function queueRedraw() {
-    if (!ui.open || ui.raf) return;
+  function queueRedraw(light) {
+    if (!ui.open) return;
+    if (!light) ui.redrawFull = true;
+    if (ui.raf) return;
     ui.raf = root.requestAnimationFrame(() => {
       ui.raf = 0;
+      const full = ui.redrawFull;
+      ui.redrawFull = false;
       if (!ui.open) return;
       const el = document.getElementById("pitchMutatorOverlay");
       const typing = el && document.activeElement && el.contains(document.activeElement)
         && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
-      if (typing) refreshPlayhead();
+      if (typing || !full) refreshPlayhead();
       else renderOverlay();
     });
   }
@@ -221,35 +284,36 @@
     const node = selectedNode();
     if (!el || el.hidden || !node) return;
     const x = soundingNote(node);
-    const lit = Math.round(x);
-    el.querySelectorAll(".pm-key.audition").forEach((k) => k.classList.remove("audition"));
-    const key = el.querySelector('.pm-key[data-note="' + lit + '"]');
+    el.querySelectorAll(".pm-key.audition, .pm-key.wire").forEach((k) => k.classList.remove("audition", "wire"));
+    const knobKey = knobKeyOf(node);
+    const wireKey = wireKeyOf(node);
+    const key = knobKey >= 0 ? el.querySelector('.pm-key[data-note="' + knobKey + '"]') : null;
     if (key) key.classList.add("audition");
+    const wireEl = wireKey >= 0 ? el.querySelector('.pm-key[data-note="' + wireKey + '"]') : null;
+    if (wireEl) wireEl.classList.add("wire");
     const readout = el.querySelector("[data-pm=playhead]");
     if (readout) readout.textContent = playheadText(node, x);
     const plot = el.querySelector("[data-pm=plot]");
     if (plot) drawPlot(plot, node);
     const state = ensureState(node);
-    const field = el.querySelector('[data-pm="hz"]');
-    if (field && document.activeElement !== field) field.value = hzText(node, x);
     const statusEl = el.querySelector("[data-pm=status]");
     if (statusEl) statusEl.textContent = statusText(node);
     el.querySelectorAll("[data-pm=chip-value]").forEach((chip) => {
       const l = (state.lanes || []).find((q) => q.id === chip.getAttribute("data-lane"));
-      if (l) chip.textContent = laneValueText(node, l, x);
+      if (l) chip.textContent = laneValueText(node, l);
     });
     const off = el.querySelector('[data-pm="offset"]');
     const lane = state && (state.lanes || []).find((l) => l.id === state.activeLane);
-    if (off && lane && document.activeElement !== off) off.value = offsetAt(node, lane, x).toFixed(3);
+    if (off && lane && document.activeElement !== off && !off.classList.contains("value-dragging")) off.value = offsetAt(node, lane, x).toFixed(3);
   }
 
   // The effective value the bound knob has right now, as a short number (the face readout is GL; this is the chip's own copy).
-  function laneValueText(node, lane, x) {
+  function laneValueText(node, lane) {
     const E = engine();
     if (!E || !lane) return "";
     const meta = paramMeta(lane.target);
     const base = E.sliderFromDomain(meta, baseDomain(lane.target));
-    const value = E.domainFromSlider(meta, E.finalSlider(base, laneOffsetAt(node, lane, x), meta));
+    const value = E.domainFromSlider(meta, E.finalSlider(base, paintOffset(node, lane), meta));
     return Number.isFinite(value) ? String(Number(value.toPrecision(3))) : "";
   }
 
@@ -266,7 +330,7 @@
     if (ui.notice) return ui.notice + ".";
     if (node._mutatorArmed) return "Armed: turn the knob you want to bind.";
     const lane = state && state.lanes && state.lanes[0];
-    if (!lane) return "Not armed. Press Arm, then turn the knob you want to control. The Pitch Mutator's frequency cannot be pinned.";
+    if (!lane) return "Not armed. Press Arm, then turn the knob you want to control.";
     const parts = ["Bound: " + laneLabel(lane) + "."];
     parts.push(state.autoPin
       ? "Auto-Pin on: each knob turn pins at the playing note."
@@ -284,6 +348,7 @@
     const armed = !!(node && node._mutatorArmed);
     button.setAttribute("aria-label", armed ? "Mutators, armed" : "Mutators");
     button.textContent = "\u{1F9EC}";
+    button.classList.toggle("pm-nav-pitched", anyPitchSet());
     if (armed) {
       const word = document.createElement("span");
       word.className = "pm-nav-armed";
@@ -299,13 +364,12 @@
     if (!E) return;
     for (const node of mutatorNodes()) {
       const state = ensureState(node);
-      const x = soundingNote(node);
       for (const lane of (state && state.lanes) || []) {
         const knob = knobFor(lane.target.nodeId, lane.target.paramKey);
         if (!knob || !knob.dataset) continue;
         const meta = paramMeta(lane.target);
         const base = E.sliderFromDomain(meta, baseDomain(lane.target));
-        const final = E.domainFromSlider(meta, E.finalSlider(base, laneOffsetAt(node, lane, x), meta));
+        const final = E.domainFromSlider(meta, E.finalSlider(base, paintOffset(node, lane), meta));
         if (!Number.isFinite(final) || Number(knob.dataset.domainValue) === final) continue;
         knob.dataset.domainValue = String(final);
         knob.value = String(final);
@@ -314,31 +378,33 @@
     }
   }
 
-  // Frequency is not pinnable, so its Hz field only shows Freq Out. With a cable on Freq In it is "driven by Freq In" and disabled.
-  function frequencyReadoutHtml(node, hzValue) {
-    const driven = !!freqInSourceId(node);
-    const cls = driven ? ' class="node-under-construction-control"' : "";
-    const dis = driven ? ' disabled aria-disabled="true"' : " readonly";
-    return "<label>Frequency Hz" + (driven ? " (driven by Freq In)" : " (not pinnable)") +
-      '<input type="number" data-pm="hz"' + cls + dis + ' value="' + escapeAttr(hzValue) + '"></label>';
-  }
-
-  function hzText(node, x) {
-    const hz = freqOutHz(node, x);
-    return hz > 0 ? hz.toFixed(2) : "";
-  }
-
   function playheadText(node, x) {
     const E = engine();
     const wired = freqInSourceId(node) && incomingHz(node);
-    return "Playhead " + midiName(x) + " (" + (Number.isFinite(x) ? x.toFixed(2) : "") + ")" + (wired ? " from Freq In" : "");
+    const knob = biasNote(node);
+    const parts = wired ? " = Pitch knob " + (knob > 0 ? midiName(Math.round(knob)) : "off") + " + \u266f/\u266d " + midiName(Math.round(incomingNote(node))) : "";
+    return "Playhead " + midiName(x) + " (" + (Number.isFinite(x) ? x.toFixed(2) : "") + ")" + parts;
+  }
+
+  function setBias(node, note) {
+    const value = Math.min(127, Math.max(0, note));
+    const slider = knobFor(node.id, "playhead");
+    if (slider && typeof root.setNodeSliderValue === "function") {
+      root.setNodeSliderValue(slider, value, { interaction: "drag" });
+    } else {
+      node.params = { ...(node.params || {}), playhead: value };
+    }
   }
 
   function setAuditionNote(note) {
     const E = engine();
     if (!E || !Number.isFinite(Number(note))) return;
-    ui.auditionNote = Number(note);
+    // The Mutator keyboard is the Playhead knob's mirror: a key sets the knob (a wired Pitch In still adds to it).
+    // Selecting only: clearing is a separate gesture (mouse up on the key that was already selected, see onAxisPointerUp).
+    const node = selectedNode();
+    if (node) setBias(node, Number(note));
     dropPendingIfMoved();
+    refreshNav();
     if (typeof root.scheduleNodeGraphLiveParameterSync === "function") root.scheduleNodeGraphLiveParameterSync();
     paintBoundKnobs();
     refreshPlayhead();
@@ -363,7 +429,7 @@
     const state = ensureState(node);
     const lane = state.lanes[0];
     if (!lane) {
-      ui.notice = FREQ_NOT_PINNABLE;
+      ui.notice = NO_LANE_NOTICE;
       renderOverlay();
       return;
     }
@@ -386,8 +452,12 @@
     const E = engine();
     const node = selectedNode();
     if (!E || !node || !node.mutator || !nodeId || !paramKey) return null;
-    // Never the Mutator's own controls: its only parameter is the hidden playhead, which is the note, not something to pin.
-    if (node.id === nodeId || paramKey === "playheadHz" || mutatorNodes().some((m) => m.id === nodeId)) return null;
+    // A Mutator never lists its own parameters: refused with an inline note, nothing added, Arm stays on for the real knob.
+    if (node.id === nodeId) {
+      ui.notice = SELF_NOTICE;
+      renderOverlay();
+      return null;
+    }
     const state = ensureState(node);
     const existing = state.lanes.find((l) => l.target.nodeId === nodeId && l.target.paramKey === paramKey);
     if (existing) {
@@ -482,39 +552,19 @@
     return true;
   }
 
+  // The Mutator's own live params and tables. Its knob lane is NOT folded into the target's params: the target's smoother keeps chasing the
+  // target's base value, and the native engine adds the lane offset after that smoother, from the Mutator's smoothed playhead
+  // (graph_engine.cpp, Control.laneUnit). Here the host only hands the engine the lane table.
   function applyLiveParams(sourceNode, params) {
     const E = engine();
-    if (!E || !params) return;
-    if (sourceNode && sourceNode.type === "pitchMutator") {
-      const state = ensureState(sourceNode);
-      const baked = E.bakeFreqLane(state.freqLane);
-      // The playhead the native graph reads: the Hz arriving on a wired Freq In, otherwise the audition key.
-      params.playheadHz = incomingHz(sourceNode) || E.hzFromNote(soundingNote(sourceNode));
-      sourceNode._mutatorFreqLut = baked;
-      return;
-    }
-    const offsets = [];
-    for (const node of mutatorNodes()) {
-      const state = ensureState(node);
-      if (!state) continue;
-      for (const lane of state.lanes || []) {
-        if (lane.target.nodeId !== sourceNode.id) continue;
-        if (!(lane.target.paramKey in params)) continue;
-        offsets.push({ key: lane.target.paramKey, meta: paramMeta(lane.target), offset: laneOffsetAt(node, lane, soundingNote(node)), discrete: lane.discrete });
-      }
-    }
-    const byKey = {};
-    for (const item of offsets) {
-      (byKey[item.key] || (byKey[item.key] = [])).push(item);
-    }
-    for (const key of Object.keys(byKey)) {
-      const meta = byKey[key][0].meta;
-      const baseSlider = E.sliderFromDomain(meta, params[key]);
-      const sum = byKey[key].map((item) => item.offset);
-      params[key] = E.domainFromSlider(meta, E.finalSlider(baseSlider, sum, meta));
-    }
+    if (!E || !params || !sourceNode || sourceNode.type !== "pitchMutator") return;
+    const state = ensureState(sourceNode);
+    sourceNode._mutatorFreqLut = E.bakeFreqLane(state.freqLane);
+    sourceNode._mutatorLane = bakeKnobLane(sourceNode);
   }
 
+  // The single-value path for the main-thread live evaluators (they read a smoother output that now chases the BASE, so the lane is added once,
+  // here, after the smoother). Audio never comes through here: the native engine adds the same offset after its own smoother.
   function applyToBase(node, key, base, metadata) {
     const E = engine();
     if (!E || !node || !key) return base;
@@ -524,14 +574,28 @@
       if (!state) continue;
       for (const lane of state.lanes || []) {
         if (lane.target.nodeId === node.id && lane.target.paramKey === key) {
-          offsets.push(laneOffsetAt(mut, lane, soundingNote(mut)));
+          offsets.push(paintOffset(mut, lane));
         }
       }
     }
     if (!offsets.length) return base;
     const meta = metadata || paramMeta({ nodeId: node.id, paramKey: key });
-    const finalSlider = E.finalSlider(E.sliderFromDomain(meta, base), offsets, meta);
-    return E.domainFromSlider(meta, finalSlider);
+    return E.domainFromSlider(meta, E.finalSlider(E.sliderFromDomain(meta, base), offsets, meta));
+  }
+
+  // One entry per MIDI note: the signed slider-unit offset of the bound knob, plus the target. A pending (unpinned) value is held flat so it
+  // is heard at the playhead until it is pinned or the note moves (which drops it and re-bakes).
+  function bakeKnobLane(node) {
+    const E = engine();
+    const state = ensureState(node);
+    const lane = state && state.lanes[0];
+    if (!E || !lane) return { valid: false, table: null, target: null };
+    const pending = ui.pending;
+    if (pending && pending.mut === node.id && pending.lane === lane.id) {
+      return { valid: true, table: new Float32Array(128).fill(pending.offset), target: lane.target };
+    }
+    const baked = E.bakeOffsetLane(lane);
+    return { valid: !!baked.valid, table: baked.valid ? Float32Array.from(baked.table) : null, target: lane.target };
   }
 
   function toggleOverlay(force) {
@@ -539,6 +603,12 @@
     if (ui.open && !ui.selectedId) {
       const first = mutatorNodes()[0];
       if (first) ui.selectedId = first.id;
+    }
+    if (ui.open) {
+      // Reopening lands on the knob lane, not on the Frequency view the last session left behind.
+      const node = selectedNode();
+      const state = node && ensureState(node);
+      if (state && state.lanes.length) state.activeLane = state.lanes[0].id;
     }
     renderOverlay();
     refreshNav();
@@ -549,7 +619,7 @@
     const link = document.createElement("link");
     link.id = "pitchMutatorOverlayCss";
     link.rel = "stylesheet";
-    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-4-hp09d";
+    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-4-hp09e2";
     document.head.append(link);
   }
 
@@ -571,16 +641,29 @@
     el.addEventListener("pointerup", onAxisPointerUp);
     el.addEventListener("pointercancel", onAxisPointerUp);
     el.addEventListener("contextmenu", onOverlayContextMenu);
+    el.addEventListener("dblclick", onOverlayDoubleClick);
+    el.addEventListener("focusout", (event) => {
+      const input = event.target;
+      if (input instanceof HTMLInputElement && input.hasAttribute("data-unit-stepper-drag")) {
+        input.readOnly = true;
+        input.classList.remove("editing");
+      }
+    });
+    el.addEventListener("keydown", (event) => {
+      const input = event.target;
+      if (input instanceof HTMLInputElement && input.hasAttribute("data-unit-stepper-drag") && (event.key === "Enter" || event.key === "Escape")) {
+        event.preventDefault();
+        input.blur();
+      }
+    });
     return el;
   }
 
+  // The app-wide note name (MIDI 0 = C-2, MIDI 60 = C3): one shared helper (nodeGraphKeyboardPitchLabel, node-graph-view-controls.js).
   function midiName(note) {
-    const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     const n = Math.round(Number(note));
     if (!Number.isFinite(n)) return "";
-    const pc = ((n % 12) + 12) % 12;
-    const oct = Math.floor(n / 12) - 1;
-    return names[pc] + oct;
+    return root.nodeGraphKeyboardPitchLabel(n);
   }
 
   function isBlack(note) {
@@ -787,7 +870,63 @@
     refreshPlayhead();
   }
 
+  // The shared scrub-number move / up handlers are document level and normally bound when a settings window first opens; the Mutator may be
+  // used before that, so bind the same functions here once (a second binding of them is harmless: they are idempotent).
+  let scrubBound = false;
+  function bindScrubListeners() {
+    if (scrubBound || typeof root.dragNodeGraphUnitStepper !== "function" || typeof root.endNodeGraphUnitStepperDrag !== "function") return;
+    scrubBound = true;
+    document.addEventListener("pointermove", root.dragNodeGraphUnitStepper, true);
+    document.addEventListener("pointerup", root.endNodeGraphUnitStepperDrag, true);
+    document.addEventListener("pointercancel", root.endNodeGraphUnitStepperDrag, true);
+  }
+
+  // Double click on the graph adds a point (like the step and smooth graphs) on the knob lane, where the pointer is.
+  function onOverlayDoubleClick(event) {
+    const scrub = event.target.closest && event.target.closest("input[data-unit-stepper-drag]");
+    if (scrub) {
+      // Same as the other scrub numbers: double click to type, Enter / Escape / leaving the field ends it.
+      scrub.readOnly = false;
+      scrub.classList.add("editing");
+      scrub.focus();
+      scrub.select();
+      event.preventDefault();
+      return;
+    }
+    if (!event.target.closest || !event.target.closest(".pm-plot-wrap") || event.target.closest("[data-pm=pin-dot]")) return;
+    const E = engine();
+    const node = selectedNode();
+    if (!E || !node) return;
+    const state = ensureState(node);
+    const lane = state.lanes[0];
+    if (!lane) {
+      ui.notice = NO_LANE_NOTICE;
+      renderOverlay();
+      return;
+    }
+    const to = plotPointToPin(event, lane, state);
+    if (!to) return;
+    event.preventDefault();
+    lane.keys = E.pinKey(lane.keys, to.x, "offset", to.offset, state.snap);
+    lane.discrete = isDiscreteMeta(paramMeta(lane.target));
+    state.activeLane = lane.id;
+    ui.pending = null;
+    ui.pinMsg = "Added a point at " + midiName(Math.round(to.x)) + ".";
+    ui.notice = "";
+    recordChange("Pin added");
+    paintBoundKnobs();
+    renderOverlay();
+    refreshRings();
+  }
+
   function onAxisPointerDown(event) {
+    const scrub = event.target.closest && event.target.closest("input[data-unit-stepper-drag]");
+    if (scrub) {
+      // The app-wide scrub number (data-unit-stepper-drag): its move / up listeners are bound with the settings windows.
+      bindScrubListeners();
+      if (typeof root.beginNodeGraphUnitStepperDrag === "function" && scrub.readOnly) root.beginNodeGraphUnitStepperDrag(event);
+      return;
+    }
     const pinDot = event.target.closest && event.target.closest("[data-pm=pin-dot]");
     if (pinDot) {
       // A pin press is never a pan or a key tap. Only the primary button drags; right-click is the delete (contextmenu).
@@ -815,10 +954,25 @@
       return;
     }
     const keyEl = event.target.closest("[data-pm=key]");
+    const mouse = event.pointerType === "mouse";
+    if (mouse && keyEl) {
+      // A mouse press on the keyboard plays like a keyboard: the key under the pointer sounds, dragging across keys plays each one.
+      // It never scrolls the view (the wheel and the view buttons do that; touch drags the view).
+      if (event.button !== 0 && event.button !== undefined) return;
+      const pressed = Number(keyEl.getAttribute("data-note"));
+      const was = knobKeyOf(selectedNode());
+      ui.keyDrag = { pointerId: event.pointerId, startNote: pressed, startSelected: was === pressed, moved: false, lastNote: pressed };
+      try { axis.setPointerCapture(event.pointerId); } catch (err) {}
+      if (was !== pressed) setAuditionNote(pressed);
+      return;
+    }
+    if (mouse) return; // a mouse press on the graph never pans; a double click adds a point
     if (keyEl) {
-      ui.pan = { kind: "maybe-key", pointerId: event.pointerId, x: event.clientX, scroll0: axis.scrollLeft, axis: axis };
+      const pressed = Number(keyEl.getAttribute("data-note"));
+      const was = knobKeyOf(selectedNode());
+      ui.pan = { kind: "maybe-key", pointerId: event.pointerId, x: event.clientX, scroll0: axis.scrollLeft, axis: axis, startNote: pressed, startSelected: was === pressed };
       // The note changes now, on pointerdown; a drag past the threshold below still turns into a pan.
-      setAuditionNote(Number(keyEl.getAttribute("data-note")));
+      if (was !== pressed) setAuditionNote(pressed);
       return;
     }
     if (!event.target.closest(".pm-plot-wrap") && !event.target.closest(".pm-kbd")) return;
@@ -830,6 +984,19 @@
   function onAxisPointerMove(event) {
     if (ui.pinDrag) {
       movePinDrag(event);
+      return;
+    }
+    if (ui.keyDrag && ui.keyDrag.pointerId === event.pointerId) {
+      const under = document.elementFromPoint(event.clientX, event.clientY);
+      const key = under && under.closest && under.closest("[data-pm=key]");
+      if (key) {
+        const note = Number(key.getAttribute("data-note"));
+        if (note !== ui.keyDrag.lastNote) {
+          ui.keyDrag.lastNote = note;
+          ui.keyDrag.moved = true; // the last key dragged to wins; no toggling during a drag
+          setAuditionNote(note);
+        }
+      }
       return;
     }
     if (ui.pointers.has(event.pointerId)) {
@@ -867,6 +1034,14 @@
       }
       return;
     }
+    if (ui.keyDrag && ui.keyDrag.pointerId === event.pointerId) {
+      const drag = ui.keyDrag;
+      ui.keyDrag = null;
+      const under = document.elementFromPoint(event.clientX, event.clientY);
+      const upKey = under && under.closest && under.closest("[data-pm=key]");
+      // A key toggles off only on mouse up, and only if the press began on the key that was already selected and the pointer stayed on it.
+      if (drag.startSelected && !drag.moved && upKey && Number(upKey.getAttribute("data-note")) === drag.startNote) setAuditionNote(0);
+    }
     ui.pointers.delete(event.pointerId);
     if (ui.pan && ui.pan.kind === "pinch") {
       if (ui.pointers.size < 2) {
@@ -876,6 +1051,7 @@
       return;
     }
     if (ui.pan && ui.pan.pointerId === event.pointerId) {
+      if (ui.pan.kind === "maybe-key" && ui.pan.startSelected) setAuditionNote(0); // a tap on the selected key, released: toggle off
       if (ui.pan.kind === "pan") persistViewSoon();
       ui.pan = null;
     }
@@ -979,33 +1155,27 @@
       '<button type="button" class="pm-swatch' + (c === color ? " active" : "") + '" data-pm="color" data-color="' + c + '" style="background:' + c + '" aria-label="Color ' + c + '"></button>'
     )).join("");
     const lanes = [];
-    lanes.push(
-      '<button type="button" class="pm-lane-btn' + (node && freqInSourceId(node) ? " node-under-construction-control" : "") + (state && state.activeLane === "freq" ? " active" : "") + '" data-pm="lane" data-lane="freq">Frequency' + (node && freqInSourceId(node) ? " (driven by Freq In)" : "") + "</button>"
-    );
     if (state) {
       for (const lane of state.lanes) {
         const label = laneLabel(lane);
         lanes.push(
           '<button type="button" class="pm-chip' + (state.activeLane === lane.id ? " active" : "") + '" data-pm="lane" data-lane="' + lane.id + '">' +
           '<span class="pm-chip-dot"></span>' + escapeHtml(label) + ' <span data-pm="chip-value" data-lane="' + lane.id + '">' +
-          escapeHtml(laneValueText(node, lane, soundingNote(node))) + "</span></button>"
+          escapeHtml(laneValueText(node, lane)) + "</span></button>"
         );
       }
     }
     const range = E ? (E.MIDI_RANGE || E.KEYBOARD_SPAN) : { min: 0, max: 127 };
     const view = state ? viewOf(state) : viewOf(null);
     let kbd = "";
-    const lit = Math.round(node ? soundingNote(node) : ui.auditionNote);
+    const knobKey = node ? knobKeyOf(node) : -1;
+    const wireKey = node ? wireKeyOf(node) : -1;
     for (let n = range.min; n <= range.max; n++) {
-      const on = lit === n;
-      kbd += '<button type="button" class="pm-key' + (isBlack(n) ? " black" : "") + (on ? " audition" : "") + '" data-pm="key" data-note="' + n + '">' +
+      kbd += '<button type="button" class="pm-key' + (isBlack(n) ? " black" : "") + (knobKey === n ? " audition" : "") + (wireKey === n ? " wire" : "") + '" data-pm="key" data-note="' + n + '">' +
         (n % 12 === 0 ? midiName(n) : "") + "</button>";
     }
-    const x = node ? soundingNote(node) : ui.auditionNote;
-    const activeLane = state && state.activeLane !== "freq"
-      ? (state.lanes || []).find((l) => l.id === state.activeLane)
-      : null;
-    const hzValue = node ? hzText(node, x) : "";
+    const x = node ? soundingNote(node) : 0;
+    const activeLane = state ? (state.lanes || []).find((l) => l.id === state.activeLane) : null;
     const offValue = activeLane ? String(offsetAt(node, activeLane, x).toFixed(3)) : "";
     el.innerHTML = [
       '<div class="pm-overlay-chrome">',
@@ -1020,6 +1190,7 @@
         '<button type="button" class="pm-btn' + (state && state.lanes.length ? "" : " node-under-construction-control") + '" data-pm="pin"' + (state && state.lanes.length ? "" : ' disabled aria-disabled="true"') + ">Pin Keyframe</button>",
         '<button type="button" class="pm-btn" data-pm="autopin" aria-pressed="' + (state && state.autoPin ? "true" : "false") + '">Auto-Pin: ' + (state && state.autoPin ? "On" : "Off") + "</button>",
         '<button type="button" class="pm-btn" data-pm="snap" aria-pressed="' + (state && state.snap ? "true" : "false") + '">Snap</button>',
+        node ? '<button type="button" class="pm-btn" data-pm="glide">Glide</button>' : "",
         '<div class="pm-view">',
           "<label>Keys <input type=\"range\" data-pm=\"visible\" min=\"12\" max=\"128\" step=\"1\" value=\"" + view.visible + "\"><span data-pm=\"visible-count\">" + view.visible + "</span></label>",
           '<span class="pm-view-readout" data-pm="view-readout">' + escapeHtml(viewReadout(view)) + "</span>",
@@ -1041,10 +1212,9 @@
         "</div>",
         '<div class="pm-side">',
           '<div data-pm="playhead">' + escapeHtml(node ? playheadText(node, x) : "") + "</div>",
-          state && state.activeLane === "freq"
-            ? frequencyReadoutHtml(node, hzValue)
-            : (activeLane ? '<label>Offset<input type="number" data-pm="offset" step="0.001" value="' + escapeAttr(offValue) + '"></label>' : "<div>Select a lane.</div>"),
-          "<div>Wire Freq Out into a FREQUENCY input. Arm, turn one knob to bind it, then Pin Keyframe at each note (or turn Auto-Pin on and turn the knob).</div>",
+          activeLane
+            ? '<label>Offset<input type="number" readonly data-pm="offset" data-unit-stepper-drag="true" data-unit-min="-1" data-unit-max="1" step="0.001" autocomplete="off" value="' + escapeAttr(offValue) + '"></label>'
+            : "",
           "<div>Dot = pin: at this note the knob is set to this value.</div>",
         "</div>",
       "</div>",
@@ -1102,13 +1272,24 @@
       return renderOverlay();
     }
     if (act === "key") {
+      if (event.detail > 0) return; // a pointer press already acted on pointerdown; this serves Enter / Space (detail 0)
       if (ui.suppressKeyClick) {
         ui.suppressKeyClick = false;
         return;
       }
       // Pointer taps already set the note on pointerdown; this serves keyboard activation (Enter / Space).
       const note = Number(btn.getAttribute("data-note"));
-      if (note !== ui.auditionNote) setAuditionNote(note);
+      const node0 = selectedNode();
+      setAuditionNote(node0 && knobKeyOf(node0) === note ? 0 : note);
+    }
+    if (act === "glide" && node) {
+      const slider = knobFor(node.id, "playhead");
+      const readout = slider && slider.id
+        ? document.querySelector('.node-slider-readout[data-slider-target="' + slider.id + '"]')
+        : null;
+      if (readout && typeof root.openNodeMetadataPopover === "function") root.openNodeMetadataPopover(event, readout);
+      else { ui.notice = "Add the Mutator's Pitch knob to the canvas to open its menu"; renderOverlay(); }
+      return;
     }
     if (act === "view-c0c8" && node) setAxisView(node, { start: 12, visible: 97 }, true);
     if (act === "view-c1c7" && node) setAxisView(node, { start: 24, visible: 73 }, true);
@@ -1147,6 +1328,7 @@
       if (!lane) return;
       const x = soundingNote(node);
       const cur = offsetAt(node, lane, x);
+      if (Math.abs(next - cur) < 1e-9) return; // a press and release without a change (the scrub number always sends change) rebuilds nothing
       const meta = paramMeta(lane.target);
       if (state.autoPin || event.type === "change") {
         if (lane.keys.length && !state.autoPin) lane.keys = E.shiftOffsets(lane.keys, next - cur, meta);
@@ -1219,11 +1401,9 @@
     if (typeof orig !== "function" || orig._pitchMutatorHooked) return;
     function wrapped(signal) {
       const note = Number(signal && (signal.note ?? signal.pitch ?? signal.midiNote));
-      if (Number.isFinite(note)) ui.auditionNote = note;
       const hz = Number(signal && (signal.hz ?? signal.frequency));
       const E = engine();
-      if (E && hz > 0) ui.auditionNote = E.noteFromHz(hz);
-      // A MIDI module wired to a Freq In sends its note as that module's frequency.
+      // A MIDI module wired to a Pitch In sends its note as that module's frequency.
       const heardHz = hz > 0 ? hz : (Number.isFinite(note) && E ? E.hzFromNote(note) : 0);
       if (heardHz > 0) {
         for (const n of (patch() && patch().nodes) || []) {
@@ -1266,13 +1446,17 @@
 
   // The patch changed (cables, knobs re-rendered, mutators added or removed): rings, the wired source and the overlay catch up.
   function onPatchCommit() {
+    refreshNav();
     paintBoundKnobs();
     refreshRings();
     queueRedraw();
   }
 
   root.togglePitchMutatorOverlay = toggleOverlay;
-  // After the gradients (order 0): the Mutator's offsets are added on top of theirs.
+  root.pitchMutatorPlayheadHeard = playheadHeard;
+  root.pitchMutatorPlayheadNote = soundingNote;
+  // Order 20, after the gradients (order 0). applyParams only fills in the Mutator's own node (target offsets are added after the target's
+  // smoother, natively); applyToBase serves the main-thread evaluators.
   root.registerNodeGraphParamOffsetProvider({
     id: "pitchMutator",
     order: 20,

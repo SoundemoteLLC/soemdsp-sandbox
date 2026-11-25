@@ -11156,23 +11156,27 @@ const nodeGraphModuleDefinitions = (
     defaultUi: {
       buttonsHidden: true,
       oscilloscopeHidden: true },
-    inputLabels: { f: "ƒ" },
-    outputLabels: { f: "ƒ" },
-    inputs: ["Gate", "f", "Velocity"],
-    outputs: ["Gate", "f", "Velocity"],
+    inputLabels: { pitch: "♯/♭" },
+    outputLabels: { pitch: "♯/♭", f: "ƒ", unit: "0–1" },
+    inputs: ["Gate", "pitch", "Velocity"],
+    // pitch = MIDI-note units (Pitch In + the Pitch knob), f = Hz, 0-1 = the bound knob's lane value normalized.
+    outputs: ["Gate", "pitch", "f", "unit", "Velocity"],
     digitalInputs: ["Gate"],
     digitalOutputs: ["Gate"],
+    // Pitch = Pitch In + this knob, in keyboard units (0..127 keys). The Mutator keyboard sets it.
     parameters: [
       {
-        defaultValue: "440",
-        key: "playheadHz",
-        label: "Playhead",
-        max: "20000",
-        mid: "440",
-        min: "0.001",
+        defaultValue: "0",
+        key: "playhead",
+        label: "Pitch",
+        smoothingMode: "off",
+        smoothingSeconds: 0,
+        smoothingType: "linear",
+        max: "127",
+        mid: "63.5",
+        min: "0",
         step: "any",
-        unit: "Hz",
-        visible: false }
+        unit: "key" }
     ] },
   pitchManager: {
     planRole: "processor",

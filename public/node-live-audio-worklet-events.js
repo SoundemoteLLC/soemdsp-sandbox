@@ -356,6 +356,7 @@ NodeLiveAudioProcessor.prototype.setParams = function setParams(nodes, message =
       }
       if (Object.hasOwn(node, "_mutatorFreqLut") || node.type === "pitchMutator") {
         current._mutatorFreqLut = node._mutatorFreqLut || current._mutatorFreqLut || null;
+        current._mutatorLane = Object.hasOwn(node, "_mutatorLane") ? node._mutatorLane : (current._mutatorLane || null);
         current.mutator = node.mutator || current.mutator || null;
       }
       if (Object.hasOwn(node, "chordMemory")) {
@@ -399,6 +400,9 @@ NodeLiveAudioProcessor.prototype.setParams = function setParams(nodes, message =
     }
     if (this.efficientProduct && typeof this.syncNativeMutatorFreqLuts === "function") {
       this.syncNativeMutatorFreqLuts();
+    }
+    if (this.efficientProduct && typeof this.syncNativeMutatorLanes === "function") {
+      this.syncNativeMutatorLanes();
     }
     if (this.efficientProduct && typeof this.publishEfficientControllerBiasTargets === "function") {
       try {

@@ -292,6 +292,8 @@ function nodeGraphBuildLiveParameterNodes(activeNodeIds = null, bypassedNodes = 
         else if (typeof pitchMutatorFreqLutForNode === "function") {
           runtimeNode._mutatorFreqLut = pitchMutatorFreqLutForNode(node);
         }
+        // Knob lane table + target for the native engine (offset added after the target's smoother, from the smoothed playhead).
+        runtimeNode._mutatorLane = node._mutatorLane || null;
       }
       return runtimeNode;
     });
@@ -431,6 +433,8 @@ function nodeGraphBuildLiveParameterNodesForPatch(patch, activeNodeIds = null, b
         else if (typeof pitchMutatorFreqLutForNode === "function") {
           runtimeNode._mutatorFreqLut = pitchMutatorFreqLutForNode(node);
         }
+        // Knob lane table + target for the native engine (offset added after the target's smoother, from the smoothed playhead).
+        runtimeNode._mutatorLane = node._mutatorLane || null;
       }
       return runtimeNode;
     });

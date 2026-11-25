@@ -238,6 +238,11 @@ function createNodeGraphIoColumn(node, type, ports, io) {
     }
     column.append(row);
   }
+  // IO View A: the compact label of this side (node-graph-io-view.js writes it; the GL chrome draws it beside the side's pill).
+  const compact = document.createElement("span");
+  compact.className = "node-io-label node-io-compact-label";
+  compact.setAttribute("aria-hidden", "true");
+  column.append(compact);
   // CSS: .node-io-label min-width uses 1ch × this (monospace IO font).
   // LayoutA section tracks also read --node-io-{input|output}-label-ch.
   column.style.setProperty("--node-io-label-min-ch", String(maxLabelChars));

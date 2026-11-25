@@ -4,13 +4,10 @@
 // A note that was never set uses the nearest lower set note, or the default.
 
 const NODE_GRAPH_CIRCUIT_PATCH_COUNT = 128;
-const NODE_GRAPH_CIRCUIT_PATCH_NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const NODE_GRAPH_CIRCUIT_PATCH_DEFAULT = -1;
 
 function nodeGraphCircuitPatchMidiName(index) {
-  const name = NODE_GRAPH_CIRCUIT_PATCH_NOTE_NAMES[index % 12];
-  const octave = Math.floor(index / 12) - 1;
-  return `${name}${octave}`;
+  return nodeGraphKeyboardPitchLabel(index);
 }
 
 let nodeGraphCircuitPatchClipboard = null;

@@ -144,7 +144,13 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
     if (typeof this.syncNativeEffectiveHzPublish === "function") {
       try { this.syncNativeEffectiveHzPublish(); } catch (_e) { /* keep prior publish */ }
     }
+    if (typeof this.syncNativeMutatorPlayheadPublish === "function") {
+      try { this.syncNativeMutatorPlayheadPublish(); } catch (_e) { /* keep prior publish */ }
+    }
     const dataPorts = [];
+    if (this.mutatorPlayheadPublish) {
+      for (const [nodeId, hz] of this.mutatorPlayheadPublish) dataPorts.push([nodeId, "PlayheadHz", hz]);
+    }
     // Filter faces: native effective Hz while ƒ is wired (-1 = follow knob).
     if (this.effectiveHzPublish) {
       for (const [nodeId, hz] of this.effectiveHzPublish) {

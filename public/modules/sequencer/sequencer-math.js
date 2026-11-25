@@ -111,9 +111,7 @@ function sequencerSnapCeil(tick, snap) {
 }
 
 function sequencerPitchLabel(midi) {
-  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const m = sequencerClampMidi(midi);
-  return `${names[m % 12]}${Math.floor(m / 12) - 2}`;
+  return nodeGraphKeyboardPitchLabel(sequencerClampMidi(midi));
 }
 
 function sequencerNoteSoundsAt(note, tick, loopTicks) {

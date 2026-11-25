@@ -61,12 +61,24 @@ try {
 
   const mut = () => page.evaluate((id) => JSON.parse(JSON.stringify(nodeGraphPatchNode(id).mutator)), ids.pm);
   const base = () => page.evaluate((id) => Number(nodeGraphPatchNode(id).params.frequency), ids.flt);
-  const effective = () => page.evaluate((id) => {
-    const n = nodeGraphPatchNode(id);
-    const p = { frequency: Number(n.params.frequency) };
-    applyNodeGraphParamOffsets(n, p, { notify: false });
-    return { live: p.frequency, base1: applyNodeGraphParamOffsetsToBase(n, "frequency", Number(n.params.frequency), n.paramMeta.frequency) };
-  }, ids.flt);
+  // HP-09e: the Mutator no longer offsets the target's params. The native engine gets the playhead Hz and a 128-entry lane table and adds
+  // table[note] after the target's smoother. This is that sum, from what the page ships (applyNodeGraphParamOffsets on the Mutator).
+  const effective = () => page.evaluate(({ pm, flt }) => {
+    const m = nodeGraphPatchNode(pm), n = nodeGraphPatchNode(flt);
+    applyNodeGraphParamOffsets(m, {}, { notify: false });
+    const live = { frequency: Number(n.params.frequency) };
+    applyNodeGraphParamOffsets(n, live, { notify: false });
+    const lane = m._mutatorLane;
+    const meta = n.paramMeta.frequency, E = PitchMutatorEngine;
+    let value = live.frequency;
+    if (lane && lane.valid && lane.target.nodeId === flt) {
+      const note = pitchMutatorPlayheadNote(m);
+      const i = Math.floor(note), f = note - i;
+      const off = lane.table[i] + (lane.table[Math.min(127, i + 1)] - lane.table[i]) * f;
+      value = E.domainFromSlider(meta, E.finalSlider(E.sliderFromDomain(meta, value), off, meta));
+    }
+    return { live: value, base1: value, targetParamIsBase: live.frequency === Number(n.params.frequency) };
+  }, { pm: ids.pm, flt: ids.flt });
   const status = () => page.locator("#pitchMutatorOverlay [data-pm=status]").innerText();
   const shot = async (name) => { if (shots) await page.screenshot({ path: path.join(shots, name + ".png") }); };
   // Open and close the overlay the way a person does: Command Center, then the DNA emoji in its nav; Close is the overlay's own button.
@@ -135,15 +147,17 @@ try {
   await clickNote(60);
   step = "the Mutator's own control is never bound";
   {
-    // The Mutator has no face widget (its only parameter, playheadHz, is hidden), so drive its real slider through the app's own write path.
+    // The Mutator has no face widget (its only parameter is the Playhead knob), so drive its real slider through the app's own write path.
     await page.evaluate((id) => {
-      const slider = nodeGraphSliderForParameter(id, "playheadHz");
-      setNodeSliderValue(slider, 880, { interaction: "drag" });
+      const slider = nodeGraphSliderForParameter(id, "playhead");
+      setNodeSliderValue(slider, 69, { interaction: "drag" });
     }, ids.pm);
     const own2 = await mut();
     assert.equal(own2.lanes.length, 0, "Arm + a drag of the Mutator's own playhead binds nothing");
     assert.deepEqual(own2.freqLane.keys, [], "and pins no Frequency keys");
-    assert.match(await status(), /Armed: turn the knob/, "still armed");
+    assert.match(await status(), /A Mutator can't mutate itself/, "the inline note says why");
+    assert.equal(await page.evaluate((id) => !!nodeGraphPatchNode(id)._mutatorArmed, ids.pm), true, "still armed for the real knob");
+    await page.evaluate((id) => setNodeSliderValue(nodeGraphSliderForParameter(id, "playhead"), 60, { interaction: "drag" }), ids.pm); // back to C4 for what follows
   }
   step = "real drag binds";
   await drag(-60);
@@ -170,9 +184,9 @@ try {
   const expectAt = async (note, lo, hi) => {
     await clickNote(note);
     const e = await effective();
-    assert.equal(e.live, e.base1, `live params and base path agree at note ${note}`);
+    assert.equal(e.targetParamIsBase, true, `the target's own live param is its base at note ${note} (the engine adds the offset after its smoother)`);
     const shown = await page.evaluate((id) => Number(nodeGraphSliderForParameter(id, "frequency").dataset.domainValue), ids.flt);
-    assert.ok(Math.abs(shown - e.live) < 1e-9, `the knob shows the effective value at note ${note} (${shown} vs ${e.live})`);
+    assert.ok(Math.abs(shown - e.live) < 1e-6, `the knob shows the effective value at note ${note} (${shown} vs ${e.live})`);
     return e.live;
   };
   const at60 = await expectAt(60), at84 = await expectAt(84), at72 = await expectAt(72);
@@ -226,35 +240,33 @@ try {
   await page.evaluate(({ id, v }) => { nodeGraphPatchNode(id).params.frequency = v; }, { id: ids.flt, v: base0 });
   await openOverlay();
 
-  // 5. Freq In and the native playhead ---------------------------------------------------------------------------------------------
+  // 5. Pitch In and the native playhead ---------------------------------------------------------------------------------------------
   step = "freq in";
+  // the list never has a Frequency entry and there is no Hz field
+  assert.equal(await page.locator('#pitchMutatorOverlay [data-lane="freq"]').count(), 0, "no Frequency entry");
+  assert.equal(await page.locator('#pitchMutatorOverlay [data-pm="hz"]').count(), 0, "no Hz field");
+  await clickNote(66);
+  await page.evaluate((id) => setNodeSliderValue(nodeGraphSliderForParameter(id, "playhead"), 0, { interaction: "drag" }), ids.pm); // the knob adds to Pitch In: park it at 0 so the cable alone is the playhead
   await page.evaluate((i) => {
-    nodeGraphMvp.patch.connections.push({ sourceNode: i.kb, sourcePort: "f", destinationNode: i.pm, destinationPort: "f" });
-    commitNodeGraphPatch(nodeGraphMvp.patch, { status: "Wire Freq In" });
+    nodeGraphMvp.patch.connections.push({ sourceNode: i.kb, sourcePort: "f", destinationNode: i.pm, destinationPort: "pitch" });
+    commitNodeGraphPatch(nodeGraphMvp.patch, { status: "Wire Pitch In" });
   }, ids);
-  const wiredBefore = await page.locator('#pitchMutatorOverlay [data-pm="lane"][data-lane="freq"]').innerText();
-  assert.ok(!/driven by Freq In/.test(wiredBefore), "the audition key alone does not disable Frequency");
-  const wired = await page.evaluate((i) => nodeGraphMvp.patch.connections.some((c) => c.sourceNode === i.kb && c.destinationNode === i.pm && c.destinationPort === "f"), ids);
-  assert.ok(wired, "keyboard f is wired into the Mutator's Freq In");
-  await page.waitForFunction(() => /driven by Freq In/.test(document.querySelector('#pitchMutatorOverlay [data-pm="lane"][data-lane="freq"]').innerText));
-  await page.locator('#pitchMutatorOverlay [data-pm="lane"][data-lane="freq"]').click();
-  const hzField = page.locator('#pitchMutatorOverlay [data-pm="hz"]');
-  assert.equal(await hzField.isDisabled(), true, "the Hz field is disabled while a cable drives Freq In");
-  assert.match(await page.locator("#pitchMutatorOverlay .pm-side").innerText(), /driven by Freq In/);
-  assert.ok(await hzField.evaluate((e) => e.classList.contains("node-under-construction-control")), "uses the under-construction styling");
+  const wired = await page.evaluate((i) => nodeGraphMvp.patch.connections.some((c) => c.sourceNode === i.kb && c.destinationNode === i.pm && c.destinationPort === "pitch"), ids);
+  assert.ok(wired, "keyboard f is wired into the Mutator's Pitch In");
   await shot("freq-in-driven");
   const cuts = [];
   for (const hz of [130.8128, 880]) {
     await page.evaluate(({ kb, hz }) => sendNodeGraphLiveKeyboardModuleSignal(kb, { frequency: hz, gate: 1, midi: 0 }), { kb: ids.kb, hz });
     cuts.push((await effective()).live);
   }
-  assert.notEqual(cuts[0], cuts[1], "the cutoff follows the note arriving on Freq In");
-  assert.equal(await base(), base0, "base untouched by Freq In");
+  assert.notEqual(cuts[0], cuts[1], "the cutoff follows the note arriving on Pitch In");
+  assert.equal(await base(), base0, "base untouched by Pitch In");
   {
     for (const hz of [880, 130.8128]) {
       await page.evaluate(({ kb, hz }) => sendNodeGraphLiveKeyboardModuleSignal(kb, { frequency: hz, gate: 1, midi: 0 }), { kb: ids.kb, hz });
-      const live = await page.evaluate((id) => { const n = nodeGraphPatchNode(id); const p = { playheadHz: 0 }; applyNodeGraphParamOffsets(n, p, { notify: false }); return p.playheadHz; }, ids.pm);
-      assert.ok(Math.abs(live - hz) < 1e-6, `live playheadHz follows Freq In (${hz}), got ${live}`);
+      const live = await page.evaluate((id) => pitchMutatorPlayheadNote(nodeGraphPatchNode(id)), ids.pm);
+      const want = await page.evaluate((hz) => PitchMutatorEngine.noteFromHz(hz), hz);
+      assert.ok(Math.abs(live - want) < 1e-4, `the playhead follows Pitch In (${hz} Hz = key ${want}), got ${live}`);
     }
   }
 
@@ -262,9 +274,8 @@ try {
   step = "pins";
   await page.evaluate(({ kb, pm }) => {
     nodeGraphMvp.patch.connections = nodeGraphMvp.patch.connections.filter((c) => !(c.sourceNode === kb && c.destinationNode === pm));
-    commitNodeGraphPatch(nodeGraphMvp.patch, { status: "Unwire Freq In" });
+    commitNodeGraphPatch(nodeGraphMvp.patch, { status: "Unwire Pitch In" });
   }, ids);
-  await page.waitForFunction(() => !/driven by Freq In/.test(document.querySelector('#pitchMutatorOverlay [data-pm="lane"][data-lane="freq"]').innerText));
   await page.evaluate(() => {
     const n = nodeGraphMvp.patch.nodes.find((q) => q.type === "pitchMutator");
     n.mutator.lanes[0].keys = [{ x: 48, offset: 0.1 }, { x: 60, offset: 0.2 }, { x: 72, offset: 0.3 }, { x: 84, offset: -0.1 }];
@@ -326,6 +337,14 @@ try {
   assert.deepEqual((await laneKeys()).map((k) => k.x), [66, 72], "long-press on touch deleted the C3 pin");
   await clickNote(60);
   assert.equal(await page.evaluate(() => document.querySelector("#pitchMutatorOverlay .pm-key.audition")?.dataset.note), "60", "a key tap still sets the note");
+
+  // Toggle by the nav button: clicking the DNA emoji again closes; reopening lands on the knob lane even after the Frequency chip was shown
+  await page.locator('#nodeSceneContextMenu [data-unified-action="mutators"]').click();
+  await page.waitForFunction(() => document.getElementById("pitchMutatorOverlay").hidden);
+  await page.locator('#nodeSceneContextMenu [data-unified-action="mutators"]').click();
+  await page.waitForFunction(() => !document.getElementById("pitchMutatorOverlay").hidden);
+  assert.equal(await page.evaluate((id) => nodeGraphPatchNode(id).mutator.activeLane, ids.pm), "L1", "after a close and reopen the knob lane is the active lane");
+  assert.equal(await page.evaluate(() => /\.\./.test(document.querySelector("#pitchMutatorOverlay [data-pm=status]").innerText)), false, "no double period in the status line");
 
   // 6. Save and reload -------------------------------------------------------------------------------------------------------------
   step = "save and reload";

@@ -121,6 +121,7 @@
     applyBodyState();
     resyncModuleSizes();
     refreshGeometry();
+    syncCompactLabels();
     redraw();
     refreshHelp();
     return state.view;
@@ -148,8 +149,59 @@
     return state.wiresHidden;
   };
 
+  // A compact label (the strip label beside a pill) carries this invisible mark in its text so the GL label pass lets it through in View A,
+  // where per-jack names are off. Nothing else carries it.
+  const COMPACT_MARK = "\u2063";
+
   /** Jack label text for the current view ("" = none). */
-  window.nodeGraphIoViewLabelText = (text) => (VIEWS[state.view].labels === "off" ? "" : String(text || ""));
+  window.nodeGraphIoViewLabelText = (text) => {
+    const s = String(text || "");
+    if (s.startsWith(COMPACT_MARK)) return state.view === "A" ? s.slice(1) : "";
+    return VIEWS[state.view].labels === "off" ? "" : s;
+  };
+
+  let compactSignature = "";
+
+  /**
+   * View A: write each side's compact label (node-graph-io-compact-label.js) into its strip element. A jack is connected when a cable of
+   * the patch touches it. Runs on events only (a patch commit, a view change); text and a present are touched only when something changed.
+   */
+  function syncCompactLabels() {
+    const patch = typeof nodeGraphMvp === "object" ? nodeGraphMvp?.patch : null;
+    if (!patch || !Array.isArray(patch.nodes) || typeof nodeGraphIoCompactLabel !== "function") return;
+    const connections = Array.isArray(patch.connections) ? patch.connections : [];
+    const signature = `${state.view}|${patch.nodes.length}|` + connections.map((c) => `${c.sourceNode}.${c.sourcePort}>${c.destinationNode}.${c.destinationPort}`).join(",");
+    if (signature === compactSignature) return;
+    compactSignature = signature;
+    const wired = new Set();
+    for (const c of connections) {
+      wired.add(`o|${c.sourceNode}|${c.sourcePort}`);
+      wired.add(`i|${c.destinationNode}|${c.destinationPort}`);
+    }
+    let changed = false;
+    for (const node of patch.nodes) {
+      const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(node.id) : null;
+      if (!el) continue;
+      for (const io of ["input", "output"]) {
+        const column = el.querySelector(`:scope > .node-solid-module-shell > .node-io-column.${io}`);
+        const target = column?.querySelector(":scope > .node-io-compact-label");
+        if (!target) continue;
+        const rows = [...column.querySelectorAll(":scope > .node-io-row")];
+        const ports = rows.map((row) => ({
+          label: row.querySelector(":scope > .node-io-label")?.textContent || "",
+          connected: wired.has(`${io === "output" ? "o" : "i"}|${node.id}|${row.dataset.port}`),
+        }));
+        const text = state.view === "A" ? nodeGraphIoCompactLabel(ports) : "";
+        const next = text ? COMPACT_MARK + text : "";
+        if (target.textContent !== next) {
+          target.textContent = next;
+          changed = true;
+        }
+      }
+    }
+    if (changed) redraw();
+  }
+  window.nodeGraphIoViewSyncCompactLabels = syncCompactLabels;
 
   function pointOf(event) {
     return typeof nodeGraphClientToZoomSurfacePoint === "function"
@@ -215,4 +267,8 @@
 
   if (document.body) applyBodyState();
   else document.addEventListener("DOMContentLoaded", applyBodyState, { once: true });
+
+  // Cables come and go with patch commits (and modules with them): the compact labels follow, on that event only.
+  if (typeof addNodeGraphPatchCommitListener === "function") addNodeGraphPatchCommitListener(syncCompactLabels);
+  else (globalThis.__nodeGraphPatchCommitPending || (globalThis.__nodeGraphPatchCommitPending = [])).push(syncCompactLabels);
 })();

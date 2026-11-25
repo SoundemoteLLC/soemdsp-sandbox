@@ -23,7 +23,7 @@ const curve01 = context.nodeGraphSegmentCurve01;
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
-function almost(a, b, eps = 1e-9) {
+function almost(a, b, eps = 1e-6) { // lane tables are Float32 (as in the native engine)
   return Math.abs(a - b) <= eps;
 }
 
@@ -166,7 +166,7 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   assert(!empty.valid, "an empty Frequency lane bakes invalid");
   assert(almost(E.freqOutHz(empty, 69, 523.25), 523.25), "empty lane passes the incoming Hz through");
   assert(almost(E.freqOutHz(empty, 69, null), 440), "empty lane, nothing wired: the playhead note's Hz");
-  assert(almost(E.freqOutHz(empty, 69.5, 0), E.hzFromNote(69.5)), "empty lane, no Freq In Hz: playhead Hz");
+  assert(almost(E.freqOutHz(empty, 69.5, 0), E.hzFromNote(69.5)), "empty lane, no Pitch In Hz: playhead Hz");
   const keyed = E.bakeFreqLane({ keys: [{ x: 36, hz: E.hzFromNote(36) }, { x: 84, hz: E.hzFromNote(84) * 2 }] });
   assert(E.freqOutHz(keyed, 60, 123) > E.hzFromNote(60) * 1.0, "a keyed lane ignores the incoming Hz");
 }
@@ -209,12 +209,14 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   ctx2.addNodeGraphPatchCommitListener = (fn) => { commitListeners.push(fn); return () => {}; };
   ctx2.scheduleNodeGraphLiveParameterSync = () => { ctx2.__syncs = (ctx2.__syncs || 0) + 1; };
   ctx2.sendNodeGraphLiveMidiKeyboardSignal = () => {};
+  // The app-wide note name (node-graph-view-controls.js): MIDI 0 = C-2, MIDI 60 = C3.
+  ctx2.nodeGraphKeyboardPitchLabel = (m) => ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][((m % 12) + 12) % 12] + (Math.floor(m / 12) - 2);
   ctx2.sendNodeGraphLiveKeyboardModuleSignal = () => {};
   const num = (a, b) => ({ min: a, max: b });
   ctx2.nodeGraphMvp = {
     patch: {
       nodes: [
-        { id: "pm", type: "pitchMutator", params: { playheadHz: 440 } },
+        { id: "pm", type: "pitchMutator", params: { playhead: 0 } },
         { id: "kb", type: "keyboard", params: {} },
         { id: "k1", type: "filter", params: { cutoff: 0.5 }, paramMeta: { cutoff: num(0, 1) } },
         { id: "k2", type: "filter", params: { cutoff: 0.2 }, paramMeta: { cutoff: num(0, 1) } },
@@ -231,13 +233,15 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
     vm.runInContext(fs.readFileSync(path.join(root, rel), "utf8"), ctx2, { filename: path.basename(rel) });
   }
   const pm = ctx2.nodeGraphMvp.patch.nodes[0];
+  // The Playhead is a knob in keys (0..127); the Mutator keyboard sets it, and anything on Pitch In adds to it.
+  const setPlayhead = (n) => { pm.params.playhead = n; ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: n }); }; // the signal only wakes the overlay (noteMoved); the playhead is the knob
   const overlay = registry.pitchMutatorOverlay;
   assert(overlay && overlay.handlers.click && overlay.handlers.pointerdown, "overlay boots and listens");
 
   // idle: nothing scheduled while closed
   assert(rafCalls === 0, "boot schedules no requestAnimationFrame (got " + rafCalls + ")");
   for (const fn of commitListeners) fn();
-  ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 64 });
+  setPlayhead(64);
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: 440 });
   assert(commitListeners.length === 1, "one patch commit listener");
   assert(rafCalls === 0, "closed overlay: commits and notes schedule no requestAnimationFrame (got " + rafCalls + ")");
@@ -270,44 +274,62 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   ctx2.togglePitchMutatorOverlay(false);
   assert(overlay.hidden === true, "overlay closes");
 
-  // D-M2: wired Freq In drives the playhead; unwired falls back to the audition key
+  // D-M2: wired Pitch In drives the playhead; unwired falls back to the audition key
   pm.mutator.lanes[0].keys = [{ x: 60, offset: 0 }, { x: 81, offset: 0.3 }];
   pm.mutator.autoPin = false;
-  pm.mutator.snap = false; // Snap rounds the playhead to a key; off, Freq In is continuous
+  pm.mutator.snap = false; // Snap rounds the playhead to a key; off, Pitch In is continuous
   const meta = ctx2.nodeGraphMvp.patch.nodes[2].paramMeta.cutoff;
-  const effective = () => ctx2.applyNodeGraphParamOffsetsToBase(ctx2.nodeGraphMvp.patch.nodes[2], "cutoff", 0.5, meta);
-  ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
-  assert(almost(effective(), 0.5, 1e-9), "unwired: the audition key (C4) sets the playhead");
-  ctx2.nodeGraphMvp.patch.connections.push({ sourceNode: "kb", sourcePort: "f", destinationNode: "pm", destinationPort: "f" });
+  // HP-09e: the Mutator does not touch the target's params. It ships the native engine (1) the playhead Hz and (2) a 128-entry lane table; the
+  // engine adds table[note] to the target AFTER the target's smoother. This helper does what the engine does with those two, for the asserts.
+  const nativeEffective = (node, key, base, metaIn) => {
+    ctx2.applyNodeGraphParamOffsets(pm, {}, { notify: false });
+    const lane = pm._mutatorLane;
+    if (!lane || !lane.valid || lane.target.nodeId !== node.id || lane.target.paramKey !== key) return base;
+    const note = ctx2.pitchMutatorPlayheadNote(pm);
+    const i = Math.floor(note), f = note - i, t1 = lane.table[Math.min(127, i + 1)];
+    const off = lane.table[i] + (t1 - lane.table[i]) * f;
+    return Math.min(metaIn.max, Math.max(metaIn.min, base + off));
+  };
+  const effective = () => nativeEffective(ctx2.nodeGraphMvp.patch.nodes[2], "cutoff", 0.5, meta);
+  setPlayhead(60);
+  assert(almost(effective(), 0.5, 1e-6), "unwired: the Playhead knob (C4) is the playhead");
+  ctx2.nodeGraphMvp.patch.connections.push({ sourceNode: "kb", sourcePort: "f", destinationNode: "pm", destinationPort: "pitch" });
+  setPlayhead(0);
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: E.hzFromNote(81), gate: 1 });
-  assert(almost(effective(), 0.8, 1e-9), "wired Freq In (A5) moves the playhead and the knob offset, got " + effective());
+  assert(almost(effective(), 0.8, 1e-6), "wired Pitch In (A5) with the knob at 0 moves the playhead and the knob offset, got " + effective());
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: E.hzFromNote(70.5), gate: 1 });
   const bakedLane = E.bakeOffsetLane(pm.mutator.lanes[0]);
   const wiredMid = 0.5 + E.lookupOffset(bakedLane.table, 70.5, true);
   assert(Math.abs(wiredMid - (0.5 + bakedLane.table[70])) > 1e-6 && Math.abs(wiredMid - (0.5 + bakedLane.table[71])) > 1e-6, "70.5 is between two keys");
-  assert(almost(effective(), wiredMid, 1e-6), "Freq In is read as a continuous signal, not a rounded key, got " + effective());
+  assert(almost(effective(), wiredMid, 1e-6), "Pitch In is read as a continuous signal, not a rounded key, got " + effective());
+  // mixing: the knob adds to Pitch In (C4 on the wire + 12 keys on the knob = C5), nobody wins
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: E.hzFromNote(60), gate: 1 });
+  setPlayhead(12);
+  assert(almost(effective(), 0.5 + E.lookupOffset(bakedLane.table, 72, true), 1e-6), "Pitch In C4 + Playhead knob 12 keys = C5, got " + effective());
+  setPlayhead(0);
   const syncsBefore = ctx2.__syncs || 0;
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: E.hzFromNote(60), gate: 1 });
   assert((ctx2.__syncs || 0) > syncsBefore, "a note on the wired source asks for a live param sync");
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("other", { frequency: 1000, gate: 1 });
   ctx2.nodeGraphMvp.patch.connections.length = 0;
-  ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 81 });
-  assert(almost(effective(), 0.8, 1e-9), "unwired again: back to the audition key");
+  setPlayhead(81);
+  assert(almost(effective(), 0.8, 1e-6), "unwired again: the knob alone is the playhead");
 
-  // HP-09d: Frequency is never pinned. With no knob bound, Pin does nothing but say why; the Hz field and the lane stay empty.
+  // HP-09f: a fresh list is blank (no Frequency entry). With no knob bound, Pin is disabled; the Hz field is gone.
   pm.mutator.activeLane = "freq";
   pm.mutator.freqLane.keys = [];
   pm.mutator.lanes.length = 0;
-  ctx2.nodeGraphMvp.patch.connections.push({ sourceNode: "kb", sourcePort: "f", destinationNode: "pm", destinationPort: "f" });
+  ctx2.nodeGraphMvp.patch.connections.push({ sourceNode: "kb", sourcePort: "f", destinationNode: "pm", destinationPort: "pitch" });
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: 523.25, gate: 1 });
   ctx2.togglePitchMutatorOverlay(true);
   const pinBtn = { getAttribute: (n) => (n === "data-pm" ? "pin" : null) };
   overlay.handlers.click({ target: { closest: () => pinBtn } });
   assert(pm.mutator.freqLane.keys.length === 0, "Pin with no knob bound leaves the Frequency lane empty");
-  assert(overlay.innerHTML.includes("cannot be pinned"), "the status line says why");
-  assert(overlay.innerHTML.includes("disabled aria-disabled") && overlay.innerHTML.includes("driven by Freq In"), "Pin is disabled and Frequency is driven by Freq In in words");
-  overlay.handlers.input({ target: { closest: () => ({ getAttribute: (n) => (n === "data-pm" ? "hz" : null), value: "300" }) }, type: "change" });
-  assert(pm.mutator.freqLane.keys.length === 0, "the Hz field never writes Frequency keys");
+  assert(!overlay.innerHTML.includes("Frequency"), "the list has no Frequency entry");
+  assert(!overlay.innerHTML.includes('data-pm="hz"'), "the Hz field is gone");
+  assert(!overlay.innerHTML.includes("Wire Freq Out"), "the explanation text is gone");
+  assert(overlay.innerHTML.includes("disabled aria-disabled"), "Pin is disabled while nothing is bound");
+  assert(!overlay.innerHTML.includes('data-pm="lane"'), "no lane entries until something is armed");
   // a saved patch with Frequency pins AND a knob lane: the Frequency pins drop once, the knob lane keeps its keys
   {
     const legacy = { type: "pitchMutator", id: "pm-old", params: {}, mutator: {
@@ -315,7 +337,7 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
       lanes: [{ id: "L1", target: { nodeId: "k1", paramKey: "cutoff" }, keys: [{ x: 60, offset: 0.1 }] }],
       activeLane: "freq" } };
     ctx2.nodeGraphMvp.patch.nodes.push(legacy);
-    ctx2.applyNodeGraphParamOffsets(ctx2.nodeGraphMvp.patch.nodes[2], { cutoff: 0.5 }, { notify: false }); // the live params walk every Mutator
+    ctx2.applyNodeGraphParamOffsets(legacy, {}, { notify: false }); // building the Mutator's live params normalizes its state
     assert(legacy.mutator.freqLane.keys.length === 0, "Frequency pins are dropped on load");
     assert(legacy.mutator.lanes[0].keys.length === 1, "the knob lane is not touched");
     assert(legacy.mutator.activeLane === "L1", "the knob lane is the active lane when one exists");
@@ -333,15 +355,15 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   pm.mutator.freqLane.keys = [];
   pm.mutator.lanes[0].keys = [{ x: 60, offset: 0 }, { x: 72, offset: 0.12 }];
   overlay.handlers.pointerdown({ target: target(keyEl(72)), pointerId: 1, clientX: 100, clientY: 0 });
-  assert(almost(effective(), 0.62, 1e-9), "key pointerdown set the playhead before any click, got " + effective());
+  assert(almost(effective(), 0.62, 1e-6), "key pointerdown set the playhead before any click, got " + effective());
   overlay.handlers.pointermove({ target: target(null), pointerId: 1, clientX: 140, clientY: 0 });
   overlay.handlers.pointerup({ target: target(null), pointerId: 1, clientX: 140, clientY: 0 });
   overlay.handlers.click({ target: { closest: () => keyEl(60) } });
-  assert(almost(effective(), 0.62, 1e-9), "the click after a drag-pan is suppressed");
+  assert(almost(effective(), 0.62, 1e-6), "the click after a drag-pan is suppressed");
   // No 0ms timer: leftover suppress is cleared on the next pointerdown (and consumed by the click above).
   overlay.handlers.pointerdown({ target: target(keyEl(60)), pointerId: 2, clientX: 10, clientY: 0 });
   overlay.handlers.pointerup({ target: target(keyEl(60)), pointerId: 2, clientX: 10, clientY: 0 });
-  assert(almost(effective(), 0.5, 1e-9), "a plain tap on another key moves the playhead");
+  assert(almost(effective(), 0.5, 1e-6), "a plain tap on another key moves the playhead");
 
   // HP-09c: Auto-Pin OFF flow on a fresh lane (pending value, Pin Keyframe, drop on another note), base untouched
   {
@@ -354,63 +376,94 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
     const k1 = ctx2.nodeGraphMvp.patch.nodes[2];
     const knob = slider("k1", "cutoff");
     const turn = (v) => { knob.value = String(v); return ctx2.pitchMutatorMaybeInterceptSlider(knob, v); };
-    const eff = () => ctx2.applyNodeGraphParamOffsetsToBase(k1, "cutoff", k1.params.cutoff, k1.paramMeta.cutoff);
+    const eff = () => nativeEffective(k1, "cutoff", k1.params.cutoff, k1.paramMeta.cutoff);
     const live = () => { const p = { cutoff: k1.params.cutoff }; ctx2.applyNodeGraphParamOffsets(k1, p, { notify: false }); return p.cutoff; };
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
+    // the target's own params are never offset by the Mutator
+    const liveIsBase = () => almost(live(), k1.params.cutoff);
+    setPlayhead(60);
     assert(turn(0.9) === false, "not armed, no lane: a normal base write");
     pm._mutatorArmed = true; // armed with the overlay CLOSED (D-M8)
     assert(turn(0.9) === true, "armed with the overlay closed: the turn binds");
     assert(pm.mutator.lanes.length === 1 && pm._mutatorArmed === false, "bound and disarmed");
     assert(almost(k1.params.cutoff, 0.5), "base slider never written by a bound turn");
     assert(pm.mutator.lanes[0].keys.length === 0, "Auto-Pin off: the turn is pending, nothing pinned");
-    assert(almost(eff(), 0.9) && almost(live(), 0.9), "the pending value shows at the playhead");
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 72 });
-    assert(almost(eff(), 0.5) && almost(live(), 0.5), "moving to another note drops the pending value");
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
+    assert(almost(eff(), 0.9) && liveIsBase(), "the pending value shows at the playhead");
+    setPlayhead(72);
+    assert(almost(eff(), 0.5) && liveIsBase(), "moving to another note drops the pending value");
+    setPlayhead(60);
     assert(almost(eff(), 0.5), "and it does not come back");
     assert(turn(0.9) === true, "a bound knob turn is always taken");
     ctx2.togglePitchMutatorOverlay(true);
     const pinBtn2 = { getAttribute: (n) => (n === "data-pm" ? "pin" : null) };
     overlay.handlers.click({ target: { closest: () => pinBtn2 } });
     assert(pm.mutator.lanes[0].keys.length === 1 && pm.mutator.lanes[0].keys[0].x === 60, "Pin Keyframe pins the pending value at C4");
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 84 });
+    setPlayhead(84);
     assert(turn(0.1) === true, "turn at C6");
     overlay.handlers.click({ target: { closest: () => pinBtn2 } });
     const keys2 = pm.mutator.lanes[0].keys;
     assert(keys2.length === 2 && keys2[0].x === 60 && keys2[1].x === 84, "second pin at C6");
     assert(almost(keys2[0].offset, 0.4) && almost(keys2[1].offset, -0.4), "two different, signed offsets: " + JSON.stringify(keys2));
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
-    assert(almost(eff(), 0.9) && almost(live(), 0.9), "C4 gives the first pin");
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 84 });
-    assert(almost(eff(), 0.1) && almost(live(), 0.1), "C6 gives the second pin");
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 72 });
-    assert(almost(eff(), 0.5, 1e-9), "C5 is interpolated between the pins, got " + eff());
+    setPlayhead(60);
+    assert(almost(eff(), 0.9) && liveIsBase(), "C4 gives the first pin");
+    setPlayhead(84);
+    assert(almost(eff(), 0.1) && liveIsBase(), "C6 gives the second pin");
+    setPlayhead(72);
+    assert(almost(eff(), 0.5, 1e-6), "C5 is interpolated between the pins, got " + eff());
     assert(almost(k1.params.cutoff, 0.5), "base slider still untouched");
     // Auto-Pin on: each turn pins at the playing note
     pm.mutator.autoPin = true;
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 48 });
+    setPlayhead(48);
     assert(turn(0.7) === true && pm.mutator.lanes[0].keys.some((k) => k.x === 48 && almost(k.offset, 0.2)), "Auto-Pin on pins at the playing note");
     // lane identity: a bind and pin in the very same turn lands in node.mutator.lanes (the bug stored it in a stale copy)
     pm.mutator.lanes.length = 0;
     pm.mutator.autoPin = true;
     pm._mutatorArmed = true;
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
+    setPlayhead(60);
     assert(turn(0.8) === true, "bind + Auto-Pin in one turn");
     assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].keys.length === 1 && almost(pm.mutator.lanes[0].keys[0].offset, 0.3),
       "the pin is in node.mutator.lanes[0], got " + JSON.stringify(pm.mutator.lanes));
     // HP-09d: never the Mutator's own controls; a bound-knob turn re-selects its lane; Pin ignores the Frequency chip
     pm._mutatorArmed = true;
-    assert(ctx2.pitchMutatorMaybeInterceptSlider(slider("pm", "playheadHz"), 0.5) === false, "the Mutator's own playhead is never bound");
+    assert(ctx2.pitchMutatorMaybeInterceptSlider(slider("pm", "playhead"), 0.5) === false, "the Mutator's own playhead is never bound");
     assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].target.nodeId === "k1", "no lane for the Mutator's own control");
+    assert(overlay.innerHTML.includes("A Mutator can't mutate itself."), "arming its own knob shows the inline note");
+    assert(pm._mutatorArmed === true, "and Arm stays on for the real knob");
     pm._mutatorArmed = false;
     pm.mutator.activeLane = "freq";
     assert(turn(0.6) === true && pm.mutator.activeLane === "L1", "turning the bound knob re-selects its lane");
     pm.mutator.activeLane = "freq";
     ctx2.togglePitchMutatorOverlay(true);
     const keysBeforePin = pm.mutator.lanes[0].keys.length;
-    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 66 });
+    setPlayhead(66);
     overlay.handlers.click({ target: { closest: () => ({ getAttribute: (n) => (n === "data-pm" ? "pin" : null) }) } });
     assert(pm.mutator.lanes[0].keys.length === keysBeforePin + 1 && pm.mutator.freqLane.keys.length === 0, "Pin with the Frequency chip showing still pins the knob lane");
+  }
+
+  // HP-09e: paint and the main-thread offset follow the engine's SMOOTHED playhead (data bus PlayheadHz); pins stay on the target note
+  {
+    const k1 = ctx2.nodeGraphMvp.patch.nodes[2];
+    const metaK = k1.paramMeta.cutoff;
+    pm.mutator.lanes.length = 0;
+    pm.mutator.lanes.push({ id: "L1", target: { nodeId: "k1", paramKey: "cutoff" }, keys: [{ x: 60, offset: 0 }, { x: 84, offset: 0.24 }], discrete: false });
+    pm.mutator.snap = false; pm.mutator.autoPin = false; pm.mutator.activeLane = "L1";
+    setPlayhead(60);
+    const at = () => ctx2.applyNodeGraphParamOffsetsToBase(k1, "cutoff", 0.5, metaK);
+    assert(almost(at(), 0.5), "target note C4, nothing heard: the lane at C4");
+    ctx2.pitchMutatorPlayheadHeard("pm", 440 * 2 ** ((72 - 69) / 12)); // engine says the smoothed playhead is at C5 (gliding up)
+    assert(almost(at(), 0.5), "no live engine: the heard value is not used");
+    ctx2.nodeGraphMvp.live = { node: {} };
+    assert(almost(at(), 0.62), "live engine: the offset is evaluated at the smoothed playhead (C5), not the target note, got " + at());
+    ctx2.pitchMutatorPlayheadHeard("pm", 440 * 2 ** ((84 - 69) / 12));
+    assert(almost(at(), 0.74), "and follows the glide to C6");
+    ctx2.pitchMutatorPlayheadHeard("pm", -1);
+    assert(almost(at(), 0.5), "an engine that reports nothing falls back to the target note");
+    // pin placement: the target note, even while the smoothed playhead is elsewhere
+    ctx2.pitchMutatorPlayheadHeard("pm", 440 * 2 ** ((84 - 69) / 12));
+    ctx2.togglePitchMutatorOverlay(true);
+    overlay.handlers.click({ target: { closest: () => ({ getAttribute: (n) => (n === "data-pm" ? "pin" : null) }) } });
+    assert(pm.mutator.lanes[0].keys.some((k) => k.x === 60), "Pin lands on the target note (C4) while the smoothed playhead is at C6");
+    ctx2.pitchMutatorPlayheadHeard("pm", 0);
+    ctx2.nodeGraphMvp.live = undefined;
   }
 
   // idle again after closing: no requestAnimationFrame left queued by the Mutator
@@ -418,7 +471,7 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   const rafAtClose = rafCalls;
   for (const fn of commitListeners) fn();
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: 330, gate: 1 });
-  ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 50 });
+  setPlayhead(50);
   assert(rafCalls === rafAtClose, "closed and idle again: no requestAnimationFrame scheduled");
 }
 

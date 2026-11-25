@@ -6,10 +6,7 @@ const ARP_GL_FONT = '"Cascadia Mono", "Cascadia Code", Consolas, sans-serif';
 const ARP_GL_BLACK = Object.freeze([0, 0, 0, 1]);
 
 function nodeGraphArpPitchLabel(midi) {
-  if (typeof sequencerPitchLabel === "function") return sequencerPitchLabel(midi);
-  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const m = Math.max(0, Math.min(127, Math.round(Number(midi) || 0)));
-  return `${names[m % 12]}${Math.floor(m / 12) - 2}`;
+  return nodeGraphKeyboardPitchLabel(Math.max(0, Math.min(127, Math.round(Number(midi) || 0))));
 }
 
 function nodeGraphArpKeysLookForNodeId(nodeId) {

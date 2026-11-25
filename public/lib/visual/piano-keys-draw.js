@@ -252,7 +252,8 @@ function nodeGraphPianoKeysDraw(batch, geom, opts) {
     if (!r) continue;
     const paint = paintKey(key);
     rr(r.x, r.y, r.w, r.h, {
-      radius: 4 * Math.min(sx, sy),
+      // Only the corners are round: the radius never passes a fifth of the key, so a narrow key (all 128 shown) is not a pill.
+      radius: Math.min(4 * Math.min(sx, sy), 0.2 * r.w * sx, 0.2 * r.h * sy),
       radiusTop: 0,
       fill: paint.top,
       fillBottom: paint.bottom,
