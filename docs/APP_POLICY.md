@@ -10,6 +10,7 @@ When in doubt: prefer **honesty, one path, and delete over compatibility**.
 
 - **Pitch cable** port key `pitch`, jack stamp **`♯/♭`** (U+266F / U+002F / U+266D). Value is **MIDI note number** (e.g. `69` = A4). Not midi/120 and not midi/127. Do not clamp to 0–1. Jack chrome is **white digital** (same family as `ƒ` / Gate), not gold analog.
 - **Why ASCII key `pitch`:** C++/native wiring and many string maps are safer with ASCII port ids; the jack **shows** `♯/♭` via `inputLabels` / `outputLabels`. Legacy names (`0.1V/Oct`, `Note#`, `Note#/127`, …) remap through aliases + `normalizeNodeGraphPitchPortName` on load.
+- **Note names:** MIDI 0 is **C-2** and MIDI 60 is **C3** (Roland numbering). Every note-name display and every note-name parser calls the one helper `nodeGraphKeyboardPitchLabel` (`node-graph-view-controls.js`); no other octave convention may exist anywhere (Argi, 2026-11-25).
 - **Hz law:** `hz = tuning × 2^((midi − 69)/12)` (or `refHz × 2^((midi − refMidi)/12)` with patch Freq Ref). Same law as `pitchHz` / Keyboard `ƒ`.
 - **Freq Ref** (`pitchReferenceHz`) + **Pitch Reference Note** (`pitchReferenceMidiNote`): Hz sounded at that MIDI note when a leftover `pitch` consumer converts MIDI → Hz. **Default A4 / MIDI 69 @ 440 Hz.** Saved patches that store 100 Hz @ 48 keep those values.
 - **Keyboard `ƒ`** is concert A440 (`440 × 2^((midi−69)/12)`). Independent of Freq Ref. Wire Keyboard `ƒ` → osc `ƒ` for Hz; wire `♯/♭` into pitch utilities (quantizer, glide, transpose, Phone Tone, Pitch Manager).
@@ -768,7 +769,22 @@ The only limits a user should ever meet are the node count (128) and total memor
 **Arrow cursors are not allowed anywhere in the app.** That means no left-right (`ew-resize` / `col-resize` / `e-resize` / `w-resize`), no up-down (`ns-resize` / `row-resize` / `n-resize` / `s-resize`), no diagonal (`nwse-resize` / `nesw-resize`), and no all-direction (`move` / `all-scroll`) cursor. This applies everywhere: resize handles, sliders, knobs, drag and adjust surfaces, Display Settings, and every panel or window.
 
 - Adjusting and dragging always show the app's own custom mouse-dot cursor, set through the shared cursor code. Never set a `cursor` value per module or in a one-off CSS rule.
+- **Hover is the little +, a press is the little dot** (`--node-dot-cursor` on hover, `--node-adjust-cursor` while pressed, via `:active`). Never the hand (`pointer` / `grab`) and avoid the standard arrow. Text fields keep `text`. This covers every surface, keyboards included (the Mutator keyboard and the Keyboard module).
 - A smoke test fails if an arrow cursor comes back. Delete any you find (§10b).
+
+## 25. Parameters: real units, and the definition owns the range (Argi, 2026-11-25)
+
+**This is a professional modular tool, not a casual-user app.** A control shows what it really is. Do not soften, scale or hide a quantity to make it friendlier.
+
+1. **Every parameter is in its real unit:** Hz, dB, ms, s, degrees, keys (MIDI note), cycles, a ratio (`×`). Never `%` for something that is not a fraction of a whole, and never an abstract 0-1 "amount" with a hidden scale ("Drift 1 = 3 Hz" is wrong: the control is Hz). `%` is only correct for a true fraction (Mix is the share of wet).
+2. **One control, one quantity.** If a control would drive two things (a phase wobble and a level wobble), it is two parameters, one per real unit. No hidden coupling constants (no `kDepth` that turns an "amount" into a physical size).
+3. **The parameter definition owns the range.** `min`, `max`, `mid`, `step` and the default live in the definition (and the matching C++ metadata JSON and `init_control`) and nowhere else. The numbers there are wide, honest defaults; the user changes them in Parameter Settings. Plans and handoffs only suggest ranges; they do not make the DSP enforce them.
+4. **DSP code never clamps, floors or rescales a user parameter.** No `unit(x)` / `clamp(x, 0, 1)` on a parameter, no `x > 0 ? x : magic`, no fixed maximum (§18). A value outside the definition's range keeps following the math.
+5. **The only allowed guards are for numbers that would break the math:** a non-finite value (use a safe value), a sign or size that makes the maths blow up (a negative time constant gives a one-pole coefficient above 1; Nyquist; the speed limit; array bounds). Each guard carries a comment that says what it prevents, and it is never a musical range. State-internal bounds (a noise state, a feedback ceiling) are not parameter limits and are described as such.
+6. **Units are checked in four places:** the definition, the C++ metadata JSON, the face readout and the docs must agree. A new parameter's unit is chosen before its range.
+7. **Believe the plan.** If a plan or handoff says "limits come only from the parameter definitions", that applies to every line you write, including the setter you added for convenience.
+
+(Failure that created this section: Spectral Blur Swarm shipped Swarm and Drift as `%` amounts and hard-coded Rate 0.1-40 and 0..1 clamps in the native setter, against the plan that said limits come from the definitions.)
 
 ## Public links (Argi, 2026-10-17)
 
@@ -780,6 +796,9 @@ The only limits a user should ever meet are the node count (128) and total memor
 - **2026-11-10 — MIDI boundary:** Only MIDI modules handle MIDI protocol. After conversion, the circuit is signals only (no MIDI cables, no non-MIDI module sending or ingesting MIDI). VoiceManager follows wired Play Keys / Voices only (no WebMIDI or keyboard pointer side-channel). Pitch/Mod wheels are not written from raw MIDI (use MIDI CC). Percussion has no GM channel knob. See **MIDI boundary** under Pitch convention.
 - **2026-11-10 — MIDI Lag renamed MIDI CC:** Catalog name **MIDI CC**, JS type `midiCc`, Controllers category. Native type id stays 242. Saved `midiLag` nodes and `midiLagRaw` / `midiLagSmooth` / `midiLagState` keys migrate on load.
 
+
+- **2026-11-25 — Parameters are real units, the definition owns the range (§25):** Spectral Blur Swarm was first shipped with `%` amounts and hard-coded clamps. Swarm is now degrees, Level dB, Rate Hz, Drift Hz; the DSP no longer clamps Rate, Swarm, Level, Drift, Seed, Diffusion, Stereo Spread or Mix; Diffusion and Stereo Spread are labelled `×` (a ratio), Mix stays `%` (a true fraction).
+- **2026-11-25 — Cursors and note names:** hover is the little +, press is the little dot, never the hand (§24). MIDI 0 = C-2, MIDI 60 = C3 from one shared helper (Pitch convention).
 
 Add new rules here when the same class of mistake happens twice. Keep this file short and enforceable.
 

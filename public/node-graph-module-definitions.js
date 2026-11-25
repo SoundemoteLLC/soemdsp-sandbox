@@ -8730,7 +8730,7 @@ const nodeGraphModuleDefinitions = (
         "min": "0",
         "mid": "0.5",
         "max": "1",
-        "unit": "%",
+        "unit": "×",
         "step": "any",
         "tooltip": "Phase excursion amount, from coherent phase to full diffusion. Rotates each bin without complex-spectrum crossfade cancellations. Stereo Spread controls channel decorrelation; no makeup gain."
       },
@@ -8741,7 +8741,7 @@ const nodeGraphModuleDefinitions = (
         "min": "0",
         "mid": "0.5",
         "max": "1",
-        "unit": "%",
+        "unit": "×",
         "step": "any",
         "tooltip": "Opposite-channel phase diffusion spread. Zero links the phase motion; higher values give mono input a stereo wash. Does not crossfeed audio. Requires Diffusion above zero; mono summing can change tone through phase cancellation."
       },

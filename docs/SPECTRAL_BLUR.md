@@ -17,11 +17,15 @@ Module Browser: Space. Native type 272, `spectral_blur` version 5 (adds Swarm, R
   Fractional bin widths interpolate between adjacent box kernels. Zero leaves
   bins separate; broad settings make harmonic material more noise-like.
 - Diffusion: phase excursion amount from coherent to phase-diffused synthesis,
-  default 100%. A fixed 2 Hz Brownian phase walk has physical hop/rate scaling;
+  default 1×. A fixed 2 Hz Brownian phase walk has physical hop/rate scaling;
   the control scales its unwrapped phase, not an undocumented cutoff frequency.
   Rotation preserves each bin's magnitude. V1 crossfaded complex spectra, which
   introduced moving cancellations at partial settings; that crossfade is removed.
-- Stereo Spread: default 100%, opposite-channel diffusion offsets make a mono
+- Units (APP_POLICY §25): Diffusion and Stereo Spread are ratios (`×`, 1 = the nominal phase walk), Mix is a true
+  fraction (`%`). No range is enforced in the DSP for any parameter: Diffusion, Stereo Spread and Mix beyond
+  their definition range keep following the math. Only a negative Time Smear or Frequency Blur is refused
+  (a negative time constant would blow the one-pole up), and non-finite input resets the module locally.
+- Stereo Spread: default 1×, opposite-channel diffusion offsets make a mono
   source into a stereo wash. Zero restores linked phase motion. Diffusion must
   be above zero for spread to act; mono summing can change the result's tone.
 - Phase Smooth: default 10 ms, lowpass time constant on the unwrapped diffusion
