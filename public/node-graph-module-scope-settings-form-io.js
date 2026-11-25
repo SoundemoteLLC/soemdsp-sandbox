@@ -1435,23 +1435,6 @@ function readNodeGraphTraceDisplaySettingsForm() {
     }
     return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
   }
-  if (formType === "pitchQuantizerFace") {
-    const panel = root?.querySelector?.("[data-pitch-quantizer-display-settings-panel]") || root;
-    if (typeof syncNodeGraphPitchQuantizerDisplaySettingsControls === "function") {
-      syncNodeGraphPitchQuantizerDisplaySettingsControls(panel, normalized);
-    }
-    syncNodeGraphTraceDisplayColorWidgets(
-      document.getElementById("nodeTraceDisplaySettingsPopover"),
-    );
-    return;
-  }
-  if (formType === "sturmianGridFace") {
-    const panel = root?.querySelector?.("[data-sturmian-grid-display-settings-panel]") || root;
-    if (typeof syncNodeGraphSturmianGridDisplaySettingsControls === "function") {
-      syncNodeGraphSturmianGridDisplaySettingsControls(panel, normalized);
-    }
-    return;
-  }
   if (formType === "keypadFace") {
     const panel = root?.querySelector?.("[data-keypad-display-settings-panel]") || root;
     const next = { ...current };
@@ -1869,6 +1852,23 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
     syncNodeGraphTraceDisplayColorWidgets(
       document.getElementById("nodeTraceDisplaySettingsPopover"),
     );
+    return;
+  }
+  if (formType === "pitchQuantizerFace") {
+    const panel = root?.querySelector?.("[data-pitch-quantizer-display-settings-panel]") || root;
+    if (typeof syncNodeGraphPitchQuantizerDisplaySettingsControls === "function") {
+      syncNodeGraphPitchQuantizerDisplaySettingsControls(panel, normalized);
+    }
+    syncNodeGraphTraceDisplayColorWidgets(
+      document.getElementById("nodeTraceDisplaySettingsPopover"),
+    );
+    return;
+  }
+  if (formType === "sturmianGridFace") {
+    const panel = root?.querySelector?.("[data-sturmian-grid-display-settings-panel]") || root;
+    if (typeof syncNodeGraphSturmianGridDisplaySettingsControls === "function") {
+      syncNodeGraphSturmianGridDisplaySettingsControls(panel, normalized);
+    }
     return;
   }
   if (formType === "arpKeysFace") {
