@@ -34,6 +34,7 @@ Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M
 | HP-07 | Stage B2, the Preset Explorer UI | Misty | B | HP-01, HP-06 | D-P1 (decided 2026-11-25) | planned | — | — | 2026-11-25: D-P1 decided (keep bank/program filename stem; one flat folder) |
 | HP-08 | Stage B3, first-iteration audition (▶) and lazy thumbnails | Misty | C | HP-07 | D-P3 | planned | — | — | 2026-11-25: index created |
 | HP-09 | Mutator first slice, model-independent fixes (the MAS-1 open decisions) | Misty | A | — (D-M1, D-M2, D-M3 decided 2026-11-25) | D-M1, D-M2, D-M3 (decided 2026-11-25) | in progress (2026-11-25 2:54 AM) | big AI | — | 2026-11-25 2:54 AM: handed to big AI, in progress |
+| HP-09b | Mutator keyboard strip: not cut off, stacked note names | big AI | A | HP-09 | — | planned | — | — | 2026-11-25: added, next after HP-09 (t418u cut-off + stacked names; t420u keep middle-mouse pan, remove scrollbar, add one-finger touch-drag) |
 | HP-10 | Stage A5, rebase the Pitch Mutator onto gradients | Misty | D | HP-03, HP-04, HP-09 | D-M5, D-M6, D-M7 | planned | — | — | 2026-11-25: index created |
 | HP-11 | Mutator native offset path and polyphony | Moth | D | HP-10, S-4 | — | planned | — | — | 2026-11-25: index created |
 | HP-12 | Mutator editing depth | Misty | D (parallel with HP-11) | HP-10 | — | planned | — | — | 2026-11-25: index created |
