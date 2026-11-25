@@ -234,6 +234,23 @@ x.soemdsp_spectral_blur_destroy(h);
     assert.equal(energy(recovery[0]) + energy(recovery[1]), 0, 'non-finite settings and input recover to silence');
     x.soemdsp_spectral_blur_destroy(h);
   }
+  // the parameter definitions own the ranges: nothing in the DSP clamps Rate, Swarm, Drift or Seed (values past the old suggested ranges run and stay finite)
+  {
+    const reference = fresh(); swarmSet(reference, 1, 40, 1, 7); const atOld = render(reference, n, sr, [0, 0, 0, 1], tone);
+    const wide = fresh(); swarmSet(wide, 1, 400, 1, 7); const atWide = render(wide, n, sr, [0, 0, 0, 1], tone);
+    assert.ok(diffEnergy(atOld, atWide) > 0, 'Rate 400 Hz is used as given, not clamped to the old 40 Hz');
+    const rateSlow = fresh(); swarmSet(rateSlow, 1, 0.01, 1, 7);
+    assert.ok(diffEnergy(atOld, render(rateSlow, n, sr, [0, 0, 0, 1], tone)) > 0, 'Rate 0.01 Hz is used as given, not floored to the old 0.1 Hz');
+    const big = fresh(); swarmSet(big, 3, 5000, 4, 4000000000);
+    const out = render(big, n, sr, [0, 0, 0, 1], tone);
+    assert.ok(out[0].every(Number.isFinite), 'Swarm 3, Drift 4, Rate 5000 and a 32-bit Seed stay finite');
+    const more = fresh(); swarmSet(more, 1, 5, 0, 1); const one = render(more, n, sr, [0, 0, 0, 1], tone);
+    const twice = fresh(); swarmSet(twice, 2, 5, 0, 1); const two = render(twice, n, sr, [0, 0, 0, 1], tone);
+    assert.ok(diffEnergy(one, two) > 0, 'Swarm 2 is used as given, not clamped to 1');
+    const seedA = fresh(); swarmSet(seedA, 1, 5, 0, 16777215); const seedB = fresh(); swarmSet(seedB, 1, 5, 0, 16777216);
+    assert.ok(diffEnergy(render(seedA, n, sr, [0, 0, 0, 1], tone), render(seedB, n, sr, [0, 0, 0, 1], tone)) > 0, 'Seeds past 16777215 are different seeds');
+    for (const h of [reference, wide, rateSlow, big, more, twice, seedA, seedB]) x.soemdsp_spectral_blur_destroy(h);
+  }
   // CPU: Swarm adds a few per-bin poles and randoms per hop and no FFT; compare against the same module with Swarm off at 16384
   {
     const time = (swarm) => { const h = fresh(1); x.soemdsp_spectral_blur_set_fft_size(h, 16384); swarmSet(h, swarm, 5, swarm, 1); render(h, 20000, sr, [1, 300, 1, 1], tone); const t0 = performance.now(); render(h, sr, sr, [1, 300, 1, 1], tone); const dt = performance.now() - t0; x.soemdsp_spectral_blur_destroy(h); return dt; };

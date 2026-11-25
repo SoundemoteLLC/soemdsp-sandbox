@@ -139,8 +139,7 @@ struct Core {
         swarmDriftPhase[k] = dp;
         const double angle = swarm * p * kPhaseDepth + dp;
         soemdsp_maths::dsp_sin_cos(angle, &swarmSin[k], &swarmCos[k]);
-        const double gain = 1 + swarm * a * kAmpDepth;
-        swarmGain[k] = gain < 0 ? 0 : gain > 2 ? 2 : gain;
+        swarmGain[k] = 1 + swarm * a * kAmpDepth; // no range is imposed here: the parameter definitions set the limits
       }
     }
     for (int c = 0; c < 2; ++c) {
@@ -283,7 +282,7 @@ const char metadata[] = R"json({"module":"spectral_blur","targetType":"spectralB
 {"key":"phaseSmoothMs","label":"Phase Smooth","kind":"time","defaultValue":"10","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Time constant for smoothing the unwrapped phase-diffusion trajectory. Zero keeps raw phase motion. Does not smooth spectral magnitudes or reduce their contrast. Updates at the STFT hop rate."},
 {"key":"amplitudeSmoothMs","label":"Amplitude Smooth","kind":"time","defaultValue":"0","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Additional symmetric per-bin magnitude smoothing after frequency spreading. Zero preserves the sharp amplitude texture. Increase gently to soften chatter; this is not compression, saturation or limiting. Updates at the STFT hop rate."},
 {"key":"swarm","label":"Swarm","defaultValue":"0","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Fuzzy, buzzing wobble of each partial's phase and level that stays in place in time. Zero is off and leaves the sound unchanged. It is not a smear: with Time Smear, Frequency Blur and Diffusion at zero, transients keep their time (plus the FFT Size delay). Wobble updates at the STFT hop rate."},
-{"key":"swarmRate","label":"Rate","kind":"frequency","defaultValue":"5","min":"0.1","mid":"5","max":"40","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm and Drift are zero."},
+{"key":"swarmRate","label":"Rate","kind":"frequency","defaultValue":"5","min":"0","mid":"5","max":"1000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm and Drift are zero."},
 {"key":"swarmDrift","label":"Drift","defaultValue":"0","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"A tiny mean-reverting pitch wander of each partial around its own frequency, a few Hz at most. It is not Frequency Blur: no power moves to neighboring bins. Uses the Swarm Rate."},
 {"key":"swarmSeed","label":"Seed","kind":"seed","defaultValue":"1","min":"0","mid":"1","max":"16777215","step":"1","linearSmoothing":false,"smoothingType":"none","tooltip":"Seed for the Swarm and Drift noise. Same Seed, same input and same settings give the same sound. No effect while Swarm and Drift are zero."},
 {"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion, Amplitude Smooth, Swarm and Drift for neutral reconstruction."}]})json";
@@ -312,10 +311,13 @@ extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, doubl
 // Swarm amount (0..1), Rate in Hz, Drift (0..1), Seed (integer). Cheap to call every sample; a changed Seed reseeds both cores.
 extern "C" void soemdsp_spectral_blur_set_swarm(int h, double amount, double rateHz, double drift, double seed) {
   if (auto* s = get(h)) {
-    const unsigned int sd = __builtin_isfinite(seed) && seed > 0 ? (unsigned int)(seed > 16777215.0 ? 16777215.0 : seed) : 0u;
+    // Only guards the type and non-finite input: any finite non-negative Seed up to the 32-bit integer range is used as given.
+    const unsigned int sd = __builtin_isfinite(seed) && seed > 0 ? (seed >= 4294967295.0 ? 4294967295u : (unsigned int)seed) : 0u;
     for (auto& core : s->cores) {
-      core.swarm = __builtin_isfinite(amount) ? unit(amount) : 0;
-      core.swarmDrift = __builtin_isfinite(drift) ? unit(drift) : 0;
+      // The parameter definitions own the ranges; nothing is clamped here. Only what would break the math is guarded: a non-finite value
+      // is 0, and a negative Rate is 0 (a negative rate would make the one-pole coefficient exceed 1 and the filter blow up).
+      core.swarm = __builtin_isfinite(amount) ? amount : 0;
+      core.swarmDrift = __builtin_isfinite(drift) ? drift : 0;
       core.swarmRate = __builtin_isfinite(rateHz) && rateHz > 0 ? rateHz : 0;
       if (sd != core.swarmSeed) { core.swarmSeed = sd; core.seedSwarm(); }
     }

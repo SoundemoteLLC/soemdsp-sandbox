@@ -33,7 +33,8 @@ Module Browser: Space. Native type 272, `spectral_blur` version 5 (adds Swarm, R
   stays in place in time. Separate from Diffusion (whose Brownian walk is untouched) and not a
   smear: with Time Smear, Frequency Blur, Diffusion and Amplitude Smooth at zero, transients keep
   their time plus the FFT window delay. At 0 the output is bit-identical to version 4.
-- Rate: default 5 Hz (0.1..40). How fast the Swarm wobble moves. It updates at the STFT hop rate
+- Rate: default 5 Hz (the definition spans 0..1000; nothing in the DSP enforces a range, the parameter
+  definition / Parameter Settings do). How fast the Swarm wobble moves. It updates at the STFT hop rate
   (about 47 Hz at 4096 / 48 kHz), so it is not audio-rate modulation. No effect while Swarm and Drift are 0.
 - Drift: default 0. A tiny mean-reverting pitch wander of each partial around its own frequency
   (a few Hz at most), not Frequency Blur: no power moves to neighboring bins. Uses Rate.
@@ -50,7 +51,7 @@ Per bin and hop (bins 1..N/2-1), one-pole mean-reverting noise for a phase wobbl
 and a drift: `state = pole * state + sqrt(1 - pole^2) * noise`, with `pole = exp(-2 pi Rate hop / sr)`
 and the state clamped to +-1 (the sqrt keeps the depth the same at every Rate; the state returns to 0, it
 never integrates). The wobble rotates the analysis phase by `Swarm * state * pi` radians and scales the
-sounding magnitude by `1 + Swarm * state * 0.5` (clamped 0..2) AFTER the Amplitude Smooth lag, so that lag
+sounding magnitude by `1 + Swarm * state * 0.5` (no clamp: Swarm, Drift and Rate are used as given, only non-finite input and a negative Rate are guarded) AFTER the Amplitude Smooth lag, so that lag
 cannot erase it. Drift adds `Drift * state * 2 pi 3 Hz * hop / sr` radians per hop to a wrapped accumulator,
 a pitch wander of up to 3 Hz. The modulators are linked across Left and Right (a mono input stays mono);
 Stereo Spread still affects Diffusion only. No FFT is added.
