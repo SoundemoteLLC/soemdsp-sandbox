@@ -6118,7 +6118,25 @@ const nodeGraphModuleDefinitions = (
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     outputs: ["Left", "Right"],
-        parameters: [
+    face: [
+      { kind: "cells", params: [["voices", "Oscillators"], ["centerSide", "Center/Side"]], h: 40 },
+      { kind: "cells", params: [["waveform", "Waveform"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["morph", "Morph"], ["frequency", "Frequency"]], h: 40 },
+      { kind: "cells", params: [["phase", "Phase"], ["randomizePhase", "Random Phase"]], h: 40 },
+      { kind: "choices", param: "phaseCollapse", labels: ["Merge", "Distribute"], h: 26 },
+      // Jitter, all together
+      { kind: "cells", params: [["jitterDistance", "Jitter Distance"], ["jitterSpeed", "Jitter Speed"]], h: 40 },
+      { kind: "cells", params: [["jitterFilter", "Jitter Filter", "horizontal"]], h: 26 },
+      { kind: "choices", param: "jitterSteps", labels: ["Fixed", "Random"], h: 26 },
+      { kind: "choices", param: "jitterDistanceTiltSource", labels: ["Wavelength", "Division"], h: 26 },
+      // Vibrato, all together
+      { kind: "cells", params: [["vibratoDistance", "Vibrato Distance"], ["vibratoSpeed", "Vibrato Speed"]], h: 40 },
+      { kind: "cells", params: [["vibratoPhaseVary", "Vibrato Phase Vary", "horizontal"]], h: 26 },
+      { kind: "choices", param: "vibratoDistanceTiltSource", labels: ["Wavelength", "Division"], h: 26 },
+      { kind: "seed", param: "seed", h: 28 },
+      { kind: "cells", params: [["amplitude", "Amplitude", "horizontal"]], h: 26 },
+    ],
+    parameters: [
       {
         constraint: "cpu",
         key: "voices",
@@ -6243,21 +6261,6 @@ const nodeGraphModuleDefinitions = (
           "Walk room around phase centers. 0 = collapse onto centers (Merge or Distribute). "
           + "Uses normal parameter smoothing (param menu)." },
       {
-        key: "vibratoDistance",
-        label: "Vibrato Distance",
-        defaultValue: "0",
-        min: "0",
-        mid: "10",
-        max: "100",
-        step: "any",
-        curveAmount: "-0.9",
-        nonlinearSlider: true,
-        sliderCurve: "custom",
-        tooltip:
-          "Scales each saw's phase spread by the shared vibrato LFO "
-          + "(phaseOffset = spread × (LFO×Distance + 1) + walk). Not pitch FM. "
-          + "Center saw is unmodulated. 0 = rest." },
-      {
         key: "jitterSpeed",
         label: "Jitter Speed",
         kind: "frequency",
@@ -6270,19 +6273,6 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         sliderCurve: "skew",
         tooltip: "Walk step rate in Hz when Distance > 0. Same at every pitch." },
-      {
-        key: "vibratoSpeed",
-        label: "Vibrato Speed",
-        kind: "frequency",
-        defaultValue: "0",
-        min: "0",
-        mid: "5",
-        max: "20",
-        step: "any",
-        unit: "Hz",
-        nonlinearSlider: true,
-        sliderCurve: "skew",
-        tooltip: "Shared vibrato LFO rate in Hz. Same at every pitch." },
       {
         key: "jitterSteps",
         label: "Jitter Steps",
@@ -6329,6 +6319,47 @@ const nodeGraphModuleDefinitions = (
           "Wavelength: higher pitches move more so phase travel matches. "
           + "Division: allotted 1/N slot space (legacy)." },
       {
+        key: "vibratoDistance",
+        label: "Vibrato Distance",
+        defaultValue: "0",
+        min: "0",
+        mid: "10",
+        max: "100",
+        step: "any",
+        curveAmount: "-0.9",
+        nonlinearSlider: true,
+        sliderCurve: "custom",
+        tooltip:
+          "Scales each saw's phase spread by the shared vibrato LFO "
+          + "(phaseOffset = spread × (LFO×Distance + 1) + walk). Not pitch FM. "
+          + "Center saw is unmodulated. 0 = rest." },
+      {
+        key: "vibratoSpeed",
+        label: "Vibrato Speed",
+        kind: "frequency",
+        defaultValue: "0",
+        min: "0",
+        mid: "5",
+        max: "20",
+        step: "any",
+        unit: "Hz",
+        nonlinearSlider: true,
+        sliderCurve: "skew",
+        tooltip: "Shared vibrato LFO rate in Hz. Same at every pitch." },
+      {
+        key: "vibratoPhaseVary",
+        label: "Vibrato Phase Vary",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        step: "any",
+        nonlinearSlider: false,
+        sliderCurve: "linear",
+        tooltip:
+          "Per-voice sine start phase (Master Seed). "
+          + "0 = all in phase; 1 = full random 0…1 offset." },
+      {
         key: "vibratoDistanceTiltSource",
         label: "Vibrato Distance Source",
         defaultValue: "1",
@@ -6344,19 +6375,6 @@ const nodeGraphModuleDefinitions = (
         tooltip:
           "Wavelength: higher pitches move more so phase travel matches. "
           + "Division: allotted 1/N slot space." },
-      {
-        key: "vibratoPhaseVary",
-        label: "Vibrato Phase Vary",
-        defaultValue: "0",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        step: "any",
-        nonlinearSlider: false,
-        sliderCurve: "linear",
-        tooltip:
-          "Per-voice sine start phase (Master Seed). "
-          + "0 = all in phase; 1 = full random 0…1 offset." },
       {
         key: "seed",
         label: "Seed",
@@ -8655,7 +8673,8 @@ const nodeGraphModuleDefinitions = (
       { kind: "choices", param: "swarmCharacter", labels: ["Warble", "Cloud"], h: 26 },
       { kind: "cells", params: [["swarm", "Swarm"], ["swarmLevel", "Level"]], h: 40 },
       { kind: "cells", params: [["swarmRate", "Rate"], ["swarmDrift", "Drift"]], h: 40 },
-      { kind: "cells", params: [["swarmFuzz", "Fuzz"], ["swarmSeed", "Seed"]], h: 40 },
+      { kind: "cells", params: [["swarmFuzz", "Fuzz"], ["swarmVoices", "Voices"]], h: 40 },
+      { kind: "cells", params: [["swarmSeed", "Seed", "horizontal"]], h: 26 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
     ],
     parameters: [
@@ -8869,7 +8888,6 @@ const nodeGraphModuleDefinitions = (
         "max": "4",
         "step": "1",
         "linearSmoothing": false,
-        "hidden": true,
         "tooltip": "Cloud voices: independent sprays of the same single analysis, summed power-for-power. More voices is a denser fur. Only used by Cloud."
       },
       {

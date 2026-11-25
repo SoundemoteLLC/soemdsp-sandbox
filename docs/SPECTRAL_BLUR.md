@@ -52,7 +52,7 @@ Module Browser: Space. Native type 272, `spectral_blur` version 6 (adds Swarm, R
   Changing it warms a second core and crossfades 50 ms, like an FFT Size change (Cloud runs at an 8x overlap).
 - Fuzz: default 0, in cents (the definition spans 0..200, mid 50). Cloud only. Each partial is sprayed to within
   plus or minus Fuzz cents of itself, a new amount every hop. 0 is dry.
-- Voices: hidden, default 3 (2..4), set on spawn. Cloud only: independent sprays of one analysis, averaged.
+- Voices: default 3 (2..4), shown on the face next to Fuzz. Cloud only: independent sprays of one analysis, averaged.
 - Mix: dry/wet aligned to the selected FFT size, default fully wet. No limiter or saturation.
 
 ## Swarm DSP

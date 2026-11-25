@@ -1529,7 +1529,7 @@
           "constraint": "",
           "unit": "",
           "wraparound": false,
-          "visible": false,
+          "visible": true,
           "linearSmoothing": false,
           "outputDomain": false,
           "domainOffset": 0
