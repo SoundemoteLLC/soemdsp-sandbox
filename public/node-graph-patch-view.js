@@ -52,9 +52,18 @@ function nodeGraphDefaultPatchViewBox() {
   }
   w = Math.max(min.w, snapNodeGraphPatchViewValue(w, "x"));
   h = Math.max(min.h, snapNodeGraphPatchViewValue(h, "y"));
+  // Even cell counts keep the origin at the exact centre after a grid snap.
+  const stepX = nodeGraphPatchViewGridStep("x");
+  const stepY = nodeGraphPatchViewGridStep("y");
+  if ((Math.round(w / stepX) % 2) !== 0) {
+    w += stepX;
+  }
+  if ((Math.round(h / stepY) % 2) !== 0) {
+    h += stepY;
+  }
   return {
-    x: snapNodeGraphPatchViewValue(-w / 2, "x"),
-    y: snapNodeGraphPatchViewValue(-h / 2, "y"),
+    x: -w / 2,
+    y: -h / 2,
     w,
     h,
   };
@@ -62,6 +71,19 @@ function nodeGraphDefaultPatchViewBox() {
 
 function nodeGraphPatchViewBox() {
   return normalizeNodeGraphPatchViewBox(nodeGraphMvp?.patch?.patchView);
+}
+
+/** Put a default box on the patch in place. No commit, no history, no dirty. */
+function ensureNodeGraphPatchViewBox(patch = nodeGraphMvp?.patch) {
+  if (!patch) {
+    return null;
+  }
+  let rect = normalizeNodeGraphPatchViewBox(patch.patchView);
+  if (!rect) {
+    rect = nodeGraphDefaultPatchViewBox();
+    patch.patchView = rect;
+  }
+  return rect;
 }
 
 function nodeGraphPatchViewIsVisible() {
@@ -98,8 +120,6 @@ function applyNodeGraphHtmlCameraToWorldEl(el, extraTransform) {
 
 function syncNodeGraphPatchViewButtons() {
   const toggle = document.getElementById("nodePatchViewToggleButton");
-  const remove = document.getElementById("nodePatchViewRemoveButton");
-  const box = nodeGraphPatchViewBox() || nodeGraphMvp?.patchViewDragging?.next;
   const visible = nodeGraphPatchViewIsVisible();
   if (typeof setNodeGraphVisibilityToggleLabel === "function") {
     setNodeGraphVisibilityToggleLabel(toggle, visible, "Patch View");
@@ -107,9 +127,6 @@ function syncNodeGraphPatchViewButtons() {
     toggle.textContent = visible ? "⬜ Patch View" : "⬛ Patch View";
     toggle.setAttribute("aria-pressed", visible ? "true" : "false");
     toggle.setAttribute("aria-label", `Patch View, ${visible ? "visible" : "hidden"}`);
-  }
-  if (remove) {
-    remove.disabled = !box;
   }
 }
 
@@ -132,17 +149,16 @@ function syncNodeGraphPatchViewChrome() {
 }
 
 function setNodeGraphPatchViewBox(rect, status) {
-  const next = normalizeNodeGraphPatchViewBox(rect);
+  const next = normalizeNodeGraphPatchViewBox(rect) || ensureNodeGraphPatchViewBox();
+  if (!next || !nodeGraphMvp?.patch) {
+    return;
+  }
   const patch = typeof cloneNodeGraphPatch === "function"
     ? cloneNodeGraphPatch(nodeGraphMvp.patch)
     : { ...(nodeGraphMvp.patch || {}) };
-  if (next) {
-    patch.patchView = next;
-  } else {
-    delete patch.patchView;
-  }
+  patch.patchView = next;
   commitNodeGraphPatch(patch, {
-    status: status || (next ? "patch view updated" : "patch view removed"),
+    status: status || "patch view updated",
   });
 }
 
@@ -150,11 +166,8 @@ function showNodeGraphPatchView() {
   if (!nodeGraphMvp) {
     return;
   }
+  ensureNodeGraphPatchViewBox();
   nodeGraphMvp.patchViewVisible = true;
-  if (!nodeGraphPatchViewBox()) {
-    setNodeGraphPatchViewBox(nodeGraphDefaultPatchViewBox(), "patch view created");
-    return;
-  }
   syncNodeGraphPatchViewChrome();
 }
 
@@ -172,14 +185,6 @@ function toggleNodeGraphPatchView() {
   } else {
     showNodeGraphPatchView();
   }
-}
-
-function removeNodeGraphPatchView() {
-  if (!nodeGraphMvp || !nodeGraphPatchViewBox()) {
-    return;
-  }
-  nodeGraphMvp.patchViewVisible = false;
-  setNodeGraphPatchViewBox(null, "patch view removed");
 }
 
 function nodeGraphPatchViewRectFromDrag(point) {
@@ -282,15 +287,14 @@ function endNodeGraphPatchViewDrag(event) {
   setNodeGraphPatchViewBox(next, "patch view adjusted");
 }
 
-/** After a patch load: show a saved box and frame the camera on it. Never invents a box. */
+/** After a patch load: the patch always has a box; frame the camera on it. Visibility is session-only. */
 function frameNodeGraphPatchViewAfterLoad() {
   if (!nodeGraphMvp) {
     return;
   }
-  const rect = nodeGraphPatchViewBox();
-  nodeGraphMvp.patchViewVisible = Boolean(rect);
+  const rect = ensureNodeGraphPatchViewBox();
   syncNodeGraphPatchViewChrome();
-  // A saved box frames the camera on load (viewFrame(rect): fit + centre).
+  // viewFrame(rect): fit + centre. Visibility is not changed here.
   if (rect && typeof viewFrame === "function") {
     viewFrame(rect);
   }
@@ -298,15 +302,10 @@ function frameNodeGraphPatchViewAfterLoad() {
 
 function bindNodeGraphPatchViewControls() {
   const toggle = document.getElementById("nodePatchViewToggleButton");
-  const remove = document.getElementById("nodePatchViewRemoveButton");
   const boxEl = document.getElementById("nodeGraphPatchViewBox");
   if (toggle && toggle.dataset.boundPatchView !== "true") {
     toggle.addEventListener("click", toggleNodeGraphPatchView);
     toggle.dataset.boundPatchView = "true";
-  }
-  if (remove && remove.dataset.boundPatchView !== "true") {
-    remove.addEventListener("click", removeNodeGraphPatchView);
-    remove.dataset.boundPatchView = "true";
   }
   if (boxEl && boxEl.dataset.boundPatchView !== "true") {
     boxEl.querySelectorAll("[data-patch-view-handle]").forEach((el) => {

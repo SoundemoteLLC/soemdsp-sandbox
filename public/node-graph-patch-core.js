@@ -2181,6 +2181,11 @@ function commitNodeGraphPatchBody(patch, options = {}) {
     }
     nodeGraphMvp.patch = validated;
   }
+  // Every patch has a box. Fill in a default now, before history, with no
+  // extra undo step and no dirty mark (ensure does not commit).
+  if (typeof ensureNodeGraphPatchViewBox === "function") {
+    ensureNodeGraphPatchViewBox(nodeGraphMvp.patch);
+  }
   // Hide unused snapshot: newly wired jacks join it; unwired ones stay.
   if (typeof nodeGraphHideUnusedGrowPatch === "function") {
     nodeGraphHideUnusedGrowPatch(nodeGraphMvp.patch);
