@@ -14,8 +14,8 @@
 
 (function initPhosphorDrawer(global) {
   const DEFAULT_BLUR = 0.35;
-  const DEFAULT_TRAIL = global.PhosphorResidual?.DEFAULT_TRAIL ?? 0.3;
-  const DEFAULT_GHOST = global.PhosphorResidual?.DEFAULT_GHOST ?? 0.25;
+  const DEFAULT_TRAIL = global.PhosphorResidual?.DEFAULT_TRAIL ?? 0;
+  const DEFAULT_GHOST = global.PhosphorResidual?.DEFAULT_GHOST ?? 0;
   const DEFAULT_EXPOSURE = 2.9;
   // Deposit = Bright (0..1): energy deposits MAX-blend, so this IS the
   // stored peak; no size or overlap gain.

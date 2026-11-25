@@ -3,11 +3,11 @@
 // step k starts at Rotate + k * Spacing internal samples, a band-limited gate
 // of Gate samples; its peak on the grid is the accent.
 //   Length > 0 (loop): the loop's bars stay in place; each step lights up
-//     when it fires and fades to a ghost floor (Fade time / Ghost settings).
+//     when it fires and fades to a ghost floor (Trail / Ghost settings; Trail is the fade time in seconds).
 //   Length 0 (free): a waterfall: the last 16 steps, the newest entering on
 //     the right, the row shifting left as each step fires.
 // Display Settings `roundingErrorFace` (node.traceDisplaySettings):
-// Background / Bars colours, Fade time (s), Ghost (dim floor 0..1).
+// Background / Bars colours, Trail (s, stored as fadeTime), Ghost (dim floor 0..1). Trail 0 and Ghost 0: only the current step shows, no burn.
 // GPU only, shared line / text drawer (gl-line-renderer).
 
 const NODE_GRAPH_ROUNDING_ERROR_LATENCY = 2;
@@ -17,8 +17,8 @@ const nodeGraphRoundingErrorFaceDisplaySettingsDefaults = Object.freeze({
   backgroundColor: "#06080c",
   barColor: "#e2b44a",
   textColor: "#7fc7d9",
-  fadeTime: 0.35,
-  ghost: 0.3,
+  fadeTime: 0,
+  ghost: 0,
   waterfallSteps: false,
 });
 
@@ -192,7 +192,7 @@ function drawNodeGraphRoundingErrorFace(section) {
   const ghost = look.ghost;
   const lit = (t) => {
     if (!Number.isFinite(t)) return ghost;
-    if (fade <= 0) return 1;
+    if (fade <= 0) return ghost; // Trail 0: nothing hangs on after its step (the newest step is drawn at full level below)
     return ghost + (1 - ghost) * Math.exp(-(now - t) / fade);
   };
   if (!waterfall) {

@@ -26,7 +26,7 @@ function nodeGraphOneDimensionalBurnFadeTrail(context, canvas, settings) {
     ? Residual.migrateTrail(settings, Residual.DEFAULT_TRAIL ?? 0.5)
     : clampNodeSliderValue(nodeGraphFiniteNumber(settings?.trail), 0, 1);
   const ghost = Residual && typeof Residual.migrateGhost === "function"
-    ? Residual.migrateGhost(settings, Residual.DEFAULT_GHOST ?? 0.45)
+    ? Residual.migrateGhost(settings, Residual.DEFAULT_GHOST ?? 0)
     : clampNodeSliderValue(nodeGraphFiniteNumber(settings?.ghost), 0, 1);
   let erase = 0;
   if (Residual && typeof Residual.trailFadeAmount === "function") {

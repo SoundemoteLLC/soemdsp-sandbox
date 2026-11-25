@@ -456,7 +456,7 @@ function drawNodeGraphPhosphorDotGlItem(renderer, item, pixelRatio) {
     ? Residual.migrateTrail(settings, 0.78)
     : clampNodeSliderValue(Number(settings.trail ?? 0.78), 0, 1);
   const ghost = Residual?.migrateGhost
-    ? Residual.migrateGhost(settings, 0.4)
+    ? Residual.migrateGhost(settings, 0)
     : clampNodeSliderValue(nodeGraphFiniteNumber(settings.ghost), 0, 1);
   const lampBright = clampNodeSliderValue(nodeGraphFiniteNumber(settings.dot1Brightness), 0, 1);
   const energy = nodeGraphVectorDotFrameEnergy01(buffer, canvas);

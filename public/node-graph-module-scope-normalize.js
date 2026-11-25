@@ -320,6 +320,7 @@ function nodeGraphDisplaySettingsFormTypeUsesGradient(type) {
   // Until the selector script loads — keep a minimal local mirror.
   return Boolean(type && [
     "spectrogramBurn",
+    "spectralStyle",
     "videoFeedbackFace",
     "scope2d",
     "phosphorLight",
@@ -2361,8 +2362,8 @@ const nodeGraphHypersawBurnSettingsDefaults = Object.freeze({
   autoZoomLines: false,
   // Plate fade: the shared phosphor look (what the face used before these
   // were per module), so older patches look the same.
-  trail: typeof nodeGraphScopePhosphorLookDefaults !== "undefined" ? nodeGraphScopePhosphorLookDefaults.trail : 0.3,
-  ghost: typeof nodeGraphScopePhosphorLookDefaults !== "undefined" ? nodeGraphScopePhosphorLookDefaults.ghost : 0.25,
+  trail: typeof nodeGraphScopePhosphorLookDefaults !== "undefined" ? nodeGraphScopePhosphorLookDefaults.trail : 0,
+  ghost: typeof nodeGraphScopePhosphorLookDefaults !== "undefined" ? nodeGraphScopePhosphorLookDefaults.ghost : 0,
 });
 
 // Per-module overrides of the defaults above. Ping Pong's few delay lines

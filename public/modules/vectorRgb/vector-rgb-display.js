@@ -13,11 +13,11 @@ const nodeGraphVectorRgbSettingsDefaults = Object.freeze({
   drawMode: "budget",
   rotate90: false,
   skipDiscontinuities: false,
-  // Mid Ghost ≈ DestFade erase 0.008 (sweet hang); see PhosphorResidual.destFadeAmount.
-  ghost: 0.35,
+  // Ghost and Trail start at 0 (see PhosphorResidual).
+  ghost: 0,
   pixelDensity: 1,
   scale: 1,
-  trail: 0.86,
+  trail: 0,
 });
 
 function normalizeNodeGraphVectorRgbSettings(settings = {}) {

@@ -85,9 +85,9 @@ const nodeGraphScopePhosphorLookDefaults = Object.freeze({
   ]),
   // Bright 0…1 (1 = full deposit / tip).
   brightness: 1,
-  // Shared phosphor drawer hang (all 1D/2D phosphor faces).
-  ghost: 0.25,
-  trail: 0.3,
+  // Shared phosphor drawer hang (all 1D/2D phosphor faces). Both start at 0: no trail, no ghost, no burn.
+  ghost: 0,
+  trail: 0,
   burnAmount: PhosphorResidual.DEFAULT_BURN_AMOUNT,
   residualSchema: 4,
   // Size: dot diameter as a share of the face min side, 0…1 (1 = one dot as

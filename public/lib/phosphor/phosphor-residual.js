@@ -16,8 +16,9 @@
 // Used by energy-GL, drawer, matrix, asciiscope.
 
 (function initPhosphorResidual(global) {
-  const DEFAULT_TRAIL = 0.3;
-  const DEFAULT_GHOST = 0.25;
+  // Trail and Ghost both start at 0 (no hang, no tail) on every phosphor face; a stored value always wins.
+  const DEFAULT_TRAIL = 0;
+  const DEFAULT_GHOST = 0;
   // App-wide Burn × default (every phosphor face reads this).
   const DEFAULT_BURN_AMOUNT = 0.3;
   const BURN_AMOUNT_MAX = 4;

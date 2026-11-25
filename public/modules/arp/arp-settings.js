@@ -28,8 +28,8 @@ const NODE_GRAPH_ARP_KEYS_DISPLAY_DEFAULTS = Object.freeze({
   previousColor: nodeGraphArpKeysHueHex(165),
   previousBrightness: 0.28,
   previousFadeSeconds: 0.5,
-  trail: 0.35,
-  ghost: 0.4,
+  trail: 0,
+  ghost: 0,
   // Music Player: "square" button is labeled Pill (CSS corner-shape: round).
   cornerShape: "squircle",
   cornerRadius: 0,

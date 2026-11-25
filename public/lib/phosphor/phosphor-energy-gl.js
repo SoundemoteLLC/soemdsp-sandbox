@@ -1677,7 +1677,7 @@
     }
     const trail = Number.isFinite(Number(options.trail))
       ? Number(options.trail)
-      : (global.PhosphorResidual?.DEFAULT_TRAIL ?? 0.3);
+      : (global.PhosphorResidual?.DEFAULT_TRAIL ?? 0);
     const ghostAmt = Number.isFinite(Number(options.ghost))
       ? Math.max(0, Math.min(1, Number(options.ghost)))
       : 0;

@@ -490,10 +490,10 @@ function nodeGraphXyPadStepPhosphor(pad, canvas, ctx, width, height, options = {
 
   const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
   const trail = Residual && typeof Residual.migrateTrail === "function"
-    ? Residual.migrateTrail(options, 0.88)
+    ? Residual.migrateTrail(options, 0)
     : Math.max(0, Math.min(1, Number.isFinite(Number(options.trail)) ? Number(options.trail) : 0.88));
   const ghost = Residual && typeof Residual.migrateGhost === "function"
-    ? Residual.migrateGhost(options, 0.45)
+    ? Residual.migrateGhost(options, 0)
     : Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.ghost)));
   const residualSchema = Residual?.RESIDUAL_SCHEMA || 2;
   const brightness01 = Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.brightness, 0.78)));
@@ -648,7 +648,7 @@ function drawNodeGraphXyPad(pad, options = {}) {
     ? ResidualUx.migrateTrail(display, 0.65)
     : Math.max(0, Math.min(1, Number.isFinite(Number(display.trail)) ? Number(display.trail) : 0.65));
   const ghostUx = ResidualUx && typeof ResidualUx.migrateGhost === "function"
-    ? ResidualUx.migrateGhost(display, 0.45)
+    ? ResidualUx.migrateGhost(display, 0)
     : Math.max(0, Math.min(1, nodeGraphFiniteNumber(display.ghost)));
   const residualSchemaUx = ResidualUx?.RESIDUAL_SCHEMA || 2;
   // Beam diameter: Size is a share of the face min side (0…1) -> authored px

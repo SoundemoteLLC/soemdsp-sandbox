@@ -191,6 +191,11 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Stack fade (s)";
     title = "";
   }
+  if (formType === "roundingErrorFace" && key === "fadeTime") {
+    // The Trail of this face: how long a step stays lit after it fires, in seconds. No hover pop-up.
+    label = "Trail (s)";
+    title = "";
+  }
   if (formType === "pulseTrainFace" && key === "fadeTime") {
     label = "Fade time (s)";
     title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
@@ -698,7 +703,15 @@ function nodeGraphDisplaySettingsBuildChoiceRowHtml(key) {
     return "";
   }
   const idAttr = meta.id ? ` id="${nodeGraphDisplaySettingsEscapeHtml(meta.id)}"` : "";
+  // Spectral style faces: only the styles this module has data for.
+  const spectralTarget = key === "spectralStyle" && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
+    ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())
+    : null;
+  const allowed = spectralTarget && typeof nodeGraphSpectralStyleOptionsForNode === "function"
+    ? new Set(nodeGraphSpectralStyleOptionsForNode(spectralTarget).map((s) => s.value))
+    : null;
   const options = (meta.options || [])
+    .filter((option) => !allowed || allowed.has(option.value))
     .map((option) => (
       `<option value="${nodeGraphDisplaySettingsEscapeHtml(option.value)}">${nodeGraphDisplaySettingsEscapeHtml(option.label)}</option>`
     ))
@@ -3701,7 +3714,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     // Other faces may pack 2+ short choices into a two-column grid.
     if (plotLayout) {
       // Built above.
-    } else if (type === "spectrogramBurn" || type === "spectrumLine" || choiceKeys.length < 2) {
+    } else if (type === "spectrogramBurn" || type === "spectrumLine" || type === "spectralStyle" || choiceKeys.length < 2) {
       for (const key of choiceKeys) {
         rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml(key));
       }
