@@ -2557,6 +2557,12 @@ void main() {
     let wantBake = cam
       ? Math.min(TEXT_CAM_BAKE_MAX, Math.max(TEXT_CAM_BAKE_MIN, Math.round(px * devScale * 64) / 64))
       : 0;
+    // wantBake is clamped to TEXT_CAM_BAKE_MIN..MAX. Past the clamp the run is
+    // magnified, not 1:1: it must not take the fitted re-bake below (that
+    // divided by the clamped size, so a squeezed label stopped growing with
+    // zoom and held one screen width: Chroma's Lightness / Saturation), and
+    // it must not snap to device pixels.
+    const capped = cam && Math.abs(px * devScale - wantBake) > 0.02;
     let atlas = nodeGraphGlLinesTextAtlas(family, weight, str, wantBake);
     if (!atlas) return;
     let g = px / atlas.bakePx;
@@ -2582,7 +2588,7 @@ void main() {
     // size below the fit and bake that size, so the run is still sampled 1:1
     // (a resampled squeeze is what made fitted titles soft). Sizes are
     // quantised, so many titles share a few atlases.
-    if (cam && !hasEmoji && maxW > 0 && width > maxW && Math.abs(atlas.bakePx - wantBake) < 0.02) {
+    if (cam && !capped && !hasEmoji && maxW > 0 && width > maxW && Math.abs(atlas.bakePx - wantBake) < 0.02) {
       const fitBake = Math.floor(wantBake * (maxW / width) * 2) / 2;
       if (fitBake >= TEXT_CAM_BAKE_MIN) {
         const fitAtlas = nodeGraphGlLinesTextAtlas(family, weight, str, fitBake);
@@ -2616,7 +2622,7 @@ void main() {
     const cr = c[0]; const cg = c[1]; const cb = c[2]; const ca = c.length > 3 ? c[3] : 1;
     // 1:1 runs (atlas baked at the on-screen size, no squeeze) have their
     // origins snapped to whole device pixels by the vertex shader.
-    const snapScale = cam && squeeze === 1 && Math.abs(atlas.bakePx - wantBake) < 0.02 ? devScale : 0;
+    const snapScale = cam && !capped && squeeze === 1 && Math.abs(atlas.bakePx - wantBake) < 0.02 ? devScale : 0;
     if (!hasEmoji) {
       pen = pushGlyphs(batch, atlas, str, pen, baseline, gy, sx, cr, cg, cb, ca, snapScale);
       return;
