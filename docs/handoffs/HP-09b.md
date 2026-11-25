@@ -1,5 +1,5 @@
 ## HP-09b: Mutator keyboard strip: not cut off, stacked note names
-**Owner:** big AI · **Size:** S · **Depends on:** HP-09c (HP-09 failed Argi's retest; HP-09c fixes it in the same file `public/node-graph-pitch-mutator-overlay.js`; start after HP-09c lands; line numbers below are against local `22ee8943` and will shift) · **Phase:** A
+**Owner:** big AI · **Size:** S · **Depends on:** HP-09d (HP-09c is a partial pass; start after HP-09d lands, same file `public/node-graph-pitch-mutator-overlay.js`; line numbers below are against local `22ee8943` / `6afa3e9b` and will shift) · **Phase:** A
 
 **Why.** Argi (t418u, 2026-11-25): "it seems like the keyboard is getting cut off at the bottom of the mutator , and the note names are clipping into the black key like C3 and the 3 is not visible. For the next handoff let's get that fixed by the AI, we could do a stacked note name: 4 / C". Argi (t420u): "middle mouse drag already works actually".
 
