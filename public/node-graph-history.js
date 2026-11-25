@@ -107,6 +107,7 @@ function nodeGraphHistoryRestKey(patch) {
     view: patch?.view,
     visual: patch?.visual,
     windows: patch?.windows,
+    patchView: patch?.patchView,
   });
 }
 

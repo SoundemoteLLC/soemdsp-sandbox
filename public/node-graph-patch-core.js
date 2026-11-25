@@ -1214,6 +1214,10 @@ function validateNodeGraphPatch(patch) {
     view,
     visual: normalizeNodeGraphPatchVisual(patch.visual),
     windows: normalizeNodeGraphPatchWindows(patch.windows),
+    ...(typeof normalizeNodeGraphPatchViewBox === "function"
+      && normalizeNodeGraphPatchViewBox(patch.patchView)
+      ? { patchView: normalizeNodeGraphPatchViewBox(patch.patchView) }
+      : {}),
   };
   normalized.circuitPatches = patch.circuitPatches;
   normalized.activeCircuitPatch = patch.activeCircuitPatch;
@@ -2315,6 +2319,9 @@ function commitNodeGraphPatchBody(patch, options = {}) {
     });
   } else {
     runDeferredUiPanels();
+  }
+  if (options.resetEditorView && typeof frameNodeGraphPatchViewAfterLoad === "function") {
+    frameNodeGraphPatchViewAfterLoad();
   }
 }
 

@@ -1012,5 +1012,9 @@ function cloneNodeGraphPatch(patch) {
     view: normalizeNodeGraphPatchView(patch.view),
     visual: normalizeNodeGraphPatchVisual(patch.visual),
     windows: normalizeNodeGraphPatchWindows(patch.windows),
+    ...(typeof normalizeNodeGraphPatchViewBox === "function"
+      && normalizeNodeGraphPatchViewBox(patch.patchView)
+      ? { patchView: normalizeNodeGraphPatchViewBox(patch.patchView) }
+      : {}),
   };
 }

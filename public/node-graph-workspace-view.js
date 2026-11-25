@@ -105,6 +105,9 @@ function syncNodeGraphOriginMarker() {
   } else {
     marker.title = "World origin: X 0, Y 0";
   }
+  if (typeof syncNodeGraphPatchViewChrome === "function") {
+    syncNodeGraphPatchViewChrome();
+  }
 }
 
 function nodeGraphWorldPositionLabel(value) {

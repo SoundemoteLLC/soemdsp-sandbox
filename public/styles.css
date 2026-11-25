@@ -12648,6 +12648,105 @@ body.node-graph-magnifying-active .node-graph-workspace * {
 .node-camera-frame-handle[data-camera-handle="sw"] { left: -7px; bottom: -7px; }
 .node-camera-frame-handle[data-camera-handle="w"] { left: -7px; top: calc(50% - 6px); }
 
+.node-patch-view-controls {
+  display: grid;
+  flex: 1.8 1 0;
+  grid-template-rows: minmax(10px, 0.34fr) minmax(0, 1.66fr);
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--node-toolbar-surface);
+}
+
+.node-patch-view-buttons {
+  display: grid;
+  grid-template-columns: minmax(52px, 1fr) minmax(64px, 1fr);
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.node-patch-view-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0 4px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent;
+  box-shadow: none;
+  font-size: clamp(0.72rem, 0.95vw, 0.95rem);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.node-patch-view-box {
+  position: absolute;
+  z-index: 9;
+  box-sizing: border-box;
+  border: 2px solid #ff3333;
+  background: color-mix(in srgb, #ff3333 8%, transparent);
+  box-shadow: 0 0 24px color-mix(in srgb, #ff3333 36%, transparent);
+  pointer-events: none;
+}
+
+.node-patch-view-box[hidden] {
+  display: none;
+}
+
+.node-patch-view-label {
+  position: absolute;
+  left: 16px;
+  top: 8px;
+  padding: 2px 8px;
+  color: #ff3333;
+  font-size: 12px;
+  line-height: 18px;
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.node-patch-view-handle {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.node-patch-view-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: #ff3333;
+  box-shadow: 0 0 10px color-mix(in srgb, #ff3333 54%, transparent);
+  transform: translate(-50%, -50%);
+}
+
+.node-patch-view-handle[data-patch-view-handle="nw"] { left: -22px; top: -22px; cursor: nwse-resize; }
+.node-patch-view-handle[data-patch-view-handle="n"] { left: calc(50% - 22px); top: -22px; cursor: ns-resize; }
+.node-patch-view-handle[data-patch-view-handle="ne"] { right: -22px; top: -22px; cursor: nesw-resize; }
+.node-patch-view-handle[data-patch-view-handle="e"] { right: -22px; top: calc(50% - 22px); cursor: ew-resize; }
+.node-patch-view-handle[data-patch-view-handle="se"] { right: -22px; bottom: -22px; cursor: nwse-resize; }
+.node-patch-view-handle[data-patch-view-handle="s"] { left: calc(50% - 22px); bottom: -22px; cursor: ns-resize; }
+.node-patch-view-handle[data-patch-view-handle="sw"] { left: -22px; bottom: -22px; cursor: nesw-resize; }
+.node-patch-view-handle[data-patch-view-handle="w"] { left: -22px; top: calc(50% - 22px); cursor: ew-resize; }
+
 .node-graph-workspace.grid-visible {
   background-color: color-mix(
     in srgb,

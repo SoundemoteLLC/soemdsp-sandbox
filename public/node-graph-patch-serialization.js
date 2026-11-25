@@ -109,6 +109,10 @@ function serializeNodeGraphPatch(patch = nodeGraphMvp.patch, options = {}) {
     windows: typeof normalizeNodeGraphPatchWindows === "function"
       ? normalizeNodeGraphPatchWindows(patch.windows)
       : patch.windows,
+    ...(typeof normalizeNodeGraphPatchViewBox === "function"
+      && normalizeNodeGraphPatchViewBox(patch.patchView)
+      ? { patchView: normalizeNodeGraphPatchViewBox(patch.patchView) }
+      : {}),
     circuitPatches: patch.circuitPatches,
     activeCircuitPatch: patch.activeCircuitPatch,
     defaultCircuitPatch: patch.defaultCircuitPatch,
