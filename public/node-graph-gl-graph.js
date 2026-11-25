@@ -1503,8 +1503,27 @@ function nodeGraphGlGraphSettleTextBake() {
   let px = chrome.bakePx || NODE_GRAPH_GL_TEXT_BAKE_FLOOR;
   // Tiles only raise the shared bake, so several tiles never rebake against each other.
   if (nodeGraphGlGraphState.view) px = Math.max(px, nodeGraphGlGraphState.emojiPx || 0);
+  // After zoom stops: raise the atlas to the on-screen size so zoomed-in
+  // titles and labels are sharp. Zooming out keeps the floor (scaled down).
+  const zoom = typeof nodeGraphGlGraphZoom === "function" ? nodeGraphGlGraphZoom() : (nodeGraphMvp?.zoom || 1);
+  if (zoom > 1) px = Math.max(px, Math.round(px * zoom));
+  px = Math.max(16, Math.min(384, Math.round(px)));
   nodeGraphGlGraphState.emojiPx = px;
-  if (typeof nodeGraphGlLinesSetGlyphBakePx === "function") nodeGraphGlLinesSetGlyphBakePx(px);
+  const changed = typeof nodeGraphGlLinesSetGlyphBakePx === "function"
+    ? nodeGraphGlLinesSetGlyphBakePx(px) === true
+    : false;
+  if (changed) nodeGraphGlGraphState.textBakeDirty = true;
+  const prev = nodeGraphGlGraphState.lastTextBake;
+  // A no-op at the same size must not erase a just-successful change
+  // (Present also calls this on a settled zoom during the remesh).
+  if (!changed && prev && prev.px === px) return false;
+  nodeGraphGlGraphState.lastTextBake = {
+    px,
+    changed,
+    zoom,
+    t: (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+  };
+  return changed;
 }
 
 function nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH, pad = 48) {
@@ -4383,7 +4402,8 @@ function nodeGraphGlGraphPresent(options = {}) {
   const cameraOnly = options.cameraOnly === true;
   const meshSel = nodeGraphGlGraphState.mesh?.selKey;
   const liveUnchanged = Boolean(nodeGraphGlGraphState.mesh && meshSel === liveKey);
-  if (!view && frameCamera && liveUnchanged) {
+  const resharpenText = options.resharpenText === true || Boolean(nodeGraphGlGraphState.textBakeDirty);
+  if (!view && frameCamera && liveUnchanged && !resharpenText) {
     nodeGraphGlGraphEnsureRecordedPlatesInMesh();
     const dirty = typeof nodeGraphGlGraphTakeValueChromeDirty === "function"
       ? nodeGraphGlGraphTakeValueChromeDirty()
@@ -4418,6 +4438,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     }
   }
   if (nodeGraphGlGraphState.valueChromeDirty) nodeGraphGlGraphState.valueChromeDirty.clear();
+  nodeGraphGlGraphState.textBakeDirty = false;
   const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true };
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);

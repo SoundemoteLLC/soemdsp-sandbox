@@ -246,9 +246,8 @@ function scheduleNodeGraphViewTextQuality() {
     if (typeof scheduleNodeGraphViewportCullRefresh === "function") {
       scheduleNodeGraphViewportCullRefresh({ minIntervalMs: 0 });
     }
-    if (typeof nodeGraphGlGraphSettleTextBake === "function") {
-      nodeGraphGlGraphSettleTextBake();
-    }
+    const bakeChanged = typeof nodeGraphGlGraphSettleTextBake === "function"
+      && nodeGraphGlGraphSettleTextBake() === true;
     // Snap leftover HTML to the settled zoom (deferred mid-gesture).
     if (typeof applyNodeGraphViewportCssLight === "function") {
       applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: true, skipSync: true, skipCull: true, skipHeatmap: true });
@@ -256,7 +255,9 @@ function scheduleNodeGraphViewTextQuality() {
       nodeGraphPositionGridHtml();
     }
     if (typeof nodeGraphGlGraphPresent === "function") {
-      nodeGraphGlGraphPresent();
+      // Replay would restamp glyphs from the old atlas. A quality pass that
+      // raised the bake must remesh text; otherwise a camera replay is enough.
+      nodeGraphGlGraphPresent(bakeChanged ? { resharpenText: true } : { cameraOnly: true });
     }
   }, NODE_GRAPH_VIEW_TEXT_QUALITY_MS);
 }
