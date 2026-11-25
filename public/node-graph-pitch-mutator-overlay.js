@@ -8,17 +8,20 @@
   ]);
 
   const ONE_LANE_NOTICE = "One knob lane for now";
+  const FREQ_DROPPED_NOTICE = "Dropped a Frequency pin. The Pitch Mutator's frequency is not pinnable";
+  const FREQ_NOT_PINNABLE = "The Pitch Mutator's frequency cannot be pinned. Bind a knob on another module (Arm, then turn it).";
 
   const ui = {
     open: false,
     selectedId: "",
     auditionNote: 60,
-    ccInjected: false,
     navHooked: false,
     raf: 0,
     notice: "",
     // Auto-Pin off: the value a knob turn set at the playhead, not yet pinned. { mut, lane, x, offset } or null.
     pending: null,
+    // A pin being dragged: { pointerId, laneId, x, startX, startY, moved, timer }.
+    pinDrag: null,
     pinMsg: "",
     // Last frequency each possible Freq In source (keyboard / MIDI module) was heard at, from the signals it sends. Not a poll: set by the send hooks.
     sourceHz: new Map(),
@@ -56,6 +59,13 @@
     if (!node.mutator || normalizedStates.get(node) !== node.mutator) {
       node.mutator = E.normalizeMutatorState(node.mutator);
       normalizedStates.set(node, node.mutator);
+      // The Pitch Mutator's own frequency is not pinnable. A patch saved before that rule may hold Frequency pins: drop them once, here,
+      // where the state is first normalized for this load or patch. The bound knob lane is not touched.
+      if (node.mutator.freqLane.keys.length) {
+        node.mutator.freqLane.keys = [];
+        ui.notice = FREQ_DROPPED_NOTICE;
+      }
+      if (node.mutator.lanes.length && node.mutator.activeLane === "freq") node.mutator.activeLane = node.mutator.lanes[0].id;
     }
     node.color = E.normalizeColor(node.color);
     return node.mutator;
@@ -191,13 +201,6 @@
     }
   }
 
-  function freqAt(node, x) {
-    const E = engine();
-    if (!E || !node) return null;
-    const baked = E.bakeFreqLane(node.mutator && node.mutator.freqLane);
-    return E.lookupFreqHz(baked.table, x, baked.valid);
-  }
-
   // Redraw work is queued, never looped: one rAF while the overlay is open and something changed, nothing while closed or idle.
   function queueRedraw() {
     if (!ui.open || ui.raf) return;
@@ -263,7 +266,7 @@
     if (ui.notice) return ui.notice + ".";
     if (node._mutatorArmed) return "Armed: turn the knob you want to bind.";
     const lane = state && state.lanes && state.lanes[0];
-    if (!lane) return "Not armed. Press Arm, then turn the knob you want to control.";
+    if (!lane) return "Not armed. Press Arm, then turn the knob you want to control. The Pitch Mutator's frequency cannot be pinned.";
     const parts = ["Bound: " + laneLabel(lane) + "."];
     parts.push(state.autoPin
       ? "Auto-Pin on: each knob turn pins at the playing note."
@@ -275,9 +278,18 @@
     return parts.join(" ");
   }
 
-  function navLabel() {
+  // The Mutators nav button, like the other pages: the DNA emoji. While armed it says so in words beside the emoji; no title / hover text.
+  function paintNavButton(button) {
     const node = selectedNode();
-    return node && node._mutatorArmed ? "Mutators (armed)" : "Mutators";
+    const armed = !!(node && node._mutatorArmed);
+    button.setAttribute("aria-label", armed ? "Mutators, armed" : "Mutators");
+    button.textContent = "\u{1F9EC}";
+    if (armed) {
+      const word = document.createElement("span");
+      word.className = "pm-nav-armed";
+      word.textContent = "armed";
+      button.append(word);
+    }
   }
 
   // The bound knob shows what the lane says at the playhead, so it moves with the note. Display only: the stored base value is never written.
@@ -300,6 +312,15 @@
         if (typeof root.syncNodeSliderReadout === "function") root.syncNodeSliderReadout(knob);
       }
     }
+  }
+
+  // Frequency is not pinnable, so its Hz field only shows Freq Out. With a cable on Freq In it is "driven by Freq In" and disabled.
+  function frequencyReadoutHtml(node, hzValue) {
+    const driven = !!freqInSourceId(node);
+    const cls = driven ? ' class="node-under-construction-control"' : "";
+    const dis = driven ? ' disabled aria-disabled="true"' : " readonly";
+    return "<label>Frequency Hz" + (driven ? " (driven by Freq In)" : " (not pinnable)") +
+      '<input type="number" data-pm="hz"' + cls + dis + ' value="' + escapeAttr(hzValue) + '"></label>';
   }
 
   function hzText(node, x) {
@@ -334,26 +355,26 @@
     }
   }
 
+  // Pin Keyframe always commits the knob lane. Frequency is never a pin target: with no knob bound there is nothing to pin.
   function pinActiveLane() {
     const E = engine();
     const node = selectedNode();
     if (!E || !node) return;
     const state = ensureState(node);
+    const lane = state.lanes[0];
+    if (!lane) {
+      ui.notice = FREQ_NOT_PINNABLE;
+      renderOverlay();
+      return;
+    }
     const x = soundingNote(node);
     if (!Number.isFinite(x)) return;
-    const active = state.activeLane || "freq";
-    if (active === "freq") {
-      const hz = freqOutHz(node, x);
-      state.freqLane.keys = E.pinKey(state.freqLane.keys, x, "hz", hz, state.snap);
-    } else {
-      const lane = state.lanes.find((l) => l.id === active);
-      if (!lane) return;
-      const meta = paramMeta(lane.target);
-      // What the knob shows at this note: the pending value if one was set here, else what the lane already says.
-      lane.keys = E.pinKey(lane.keys, x, "offset", laneOffsetAt(node, lane, x), state.snap);
-      lane.discrete = isDiscreteMeta(meta);
-      ui.pending = null;
-    }
+    const meta = paramMeta(lane.target);
+    // What the knob shows at this note: the pending value if one was set here, else what the lane already says.
+    lane.keys = E.pinKey(lane.keys, x, "offset", laneOffsetAt(node, lane, x), state.snap);
+    lane.discrete = isDiscreteMeta(meta);
+    state.activeLane = lane.id;
+    ui.pending = null;
     ui.pinMsg = "Pinned " + midiName(x) + ".";
     ui.notice = "";
     recordChange("Pin Keyframe");
@@ -365,10 +386,14 @@
     const E = engine();
     const node = selectedNode();
     if (!E || !node || !node.mutator || !nodeId || !paramKey) return null;
-    if (node.id === nodeId) return null;
+    // Never the Mutator's own controls: its only parameter is the hidden playhead, which is the note, not something to pin.
+    if (node.id === nodeId || paramKey === "playheadHz" || mutatorNodes().some((m) => m.id === nodeId)) return null;
     const state = ensureState(node);
     const existing = state.lanes.find((l) => l.target.nodeId === nodeId && l.target.paramKey === paramKey);
-    if (existing) return existing;
+    if (existing) {
+      state.activeLane = existing.id;
+      return existing;
+    }
     if (state.lanes.length) {
       // D-M1: one knob lane for now. The second knob stays free; the overlay's status line says so.
       node._mutatorArmed = false;
@@ -429,6 +454,7 @@
     const { node } = bound;
     const state = ensureState(node);
     const lane = state.lanes.find((l) => l.id === bound.lane.id) || bound.lane;
+    state.activeLane = lane.id;
     const meta = paramMeta(lane.target);
     const baseSlider = E.sliderFromDomain(meta, baseDomain(lane.target));
     const nextSlider = E.sliderFromDomain(meta, domainValue);
@@ -523,7 +549,7 @@
     const link = document.createElement("link");
     link.id = "pitchMutatorOverlayCss";
     link.rel = "stylesheet";
-    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-4-hp09c";
+    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-4-hp09d";
     document.head.append(link);
   }
 
@@ -544,6 +570,7 @@
     el.addEventListener("pointermove", onAxisPointerMove);
     el.addEventListener("pointerup", onAxisPointerUp);
     el.addEventListener("pointercancel", onAxisPointerUp);
+    el.addEventListener("contextmenu", onOverlayContextMenu);
     return el;
   }
 
@@ -662,7 +689,111 @@
     }
   }
 
+  // ---- pins: drag to edit, right-click (long-press on touch) to delete. Keys store signed slider offsets.
+  function pinLaneAndKey(dot) {
+    const node = selectedNode();
+    const state = node && ensureState(node);
+    const lane = state && state.lanes.find((l) => l.id === dot.getAttribute("data-lane"));
+    const x = Number(dot.getAttribute("data-x"));
+    return { node, state, lane, x };
+  }
+
+  function deletePin(laneId, x) {
+    const node = selectedNode();
+    const state = node && ensureState(node);
+    const lane = state && state.lanes.find((l) => l.id === laneId);
+    if (!lane) return false;
+    const keys = lane.keys.filter((k) => k.x !== x);
+    if (keys.length === lane.keys.length) return false;
+    lane.keys = keys;
+    ui.pending = null;
+    ui.pinMsg = "Deleted the pin at " + midiName(x) + ".";
+    recordChange("Pin deleted");
+    paintBoundKnobs();
+    renderOverlay();
+    return true;
+  }
+
+  function onOverlayContextMenu(event) {
+    const dot = event.target.closest && event.target.closest("[data-pm=pin-dot]");
+    if (!dot) return;
+    // Like the graph modules: right-click removes the point, no context menu, no change of module or workspace selection.
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    deletePin(dot.getAttribute("data-lane"), Number(dot.getAttribute("data-x")));
+  }
+
+  function plotPointToPin(event, lane, state) {
+    const E = engine();
+    const svg = document.querySelector("#pitchMutatorOverlay [data-pm=plot]");
+    if (!E || !svg) return null;
+    const rect = svg.getBoundingClientRect();
+    const range = midiRange();
+    const count = range.max - range.min + 1;
+    const note = range.min + ((event.clientX - rect.left) / Math.max(1, rect.width)) * count - 0.5;
+    const x = Math.min(range.max, Math.max(range.min, state.snap ? Math.round(note) : note));
+    // Height is the knob's position on its own definition range (3 px inset like the drawing); only the definition clamps it.
+    const h = Math.max(1, rect.height);
+    const slider = Math.min(1, Math.max(0, 1 - ((event.clientY - rect.top) - 3) / Math.max(1, h - 6)));
+    const meta = paramMeta(lane.target);
+    const base = E.sliderFromDomain(meta, baseDomain(lane.target));
+    return { x, offset: slider - base };
+  }
+
+  function startPinDrag(event, dot) {
+    const { node, lane, x } = pinLaneAndKey(dot);
+    if (!node || !lane) return;
+    ui.pan = null;
+    const axis = event.target.closest("[data-pm=axis]");
+    try { axis.setPointerCapture(event.pointerId); } catch (err) {}
+    const drag = { pointerId: event.pointerId, laneId: lane.id, x, startX: event.clientX, startY: event.clientY, moved: false, timer: 0 };
+    ui.pinDrag = drag;
+    ui.suppressKeyClick = true;
+    if (event.pointerType === "touch" || event.pointerType === "pen") {
+      // Phone fallback for right-click: hold still on the pin to delete it. One-shot, tied to this press.
+      drag.timer = root.setTimeout(() => {
+        drag.timer = 0;
+        if (ui.pinDrag === drag && !drag.moved) {
+          ui.pinDrag = null;
+          deletePin(drag.laneId, drag.x);
+        }
+      }, 600);
+    }
+  }
+
+  function movePinDrag(event) {
+    const drag = ui.pinDrag;
+    const E = engine();
+    if (!drag || drag.pointerId !== event.pointerId || !E) return;
+    if (!drag.moved) {
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
+      drag.moved = true;
+      if (drag.timer) { root.clearTimeout(drag.timer); drag.timer = 0; }
+    }
+    const node = selectedNode();
+    const state = node && ensureState(node);
+    const lane = state && state.lanes.find((l) => l.id === drag.laneId);
+    if (!lane) return;
+    const to = plotPointToPin(event, lane, state);
+    if (!to) return;
+    const rest = lane.keys.filter((k) => k.x !== drag.x);
+    lane.keys = E.pinKey(rest, to.x, "offset", to.offset, state.snap);
+    const landed = lane.keys.find((k) => Math.abs(k.x - to.x) < 1e-9) || lane.keys.find((k) => k.x === drag.x);
+    drag.x = landed ? landed.x : to.x;
+    ui.pinMsg = "";
+    recordChange();
+    paintBoundKnobs();
+    refreshPlayhead();
+  }
+
   function onAxisPointerDown(event) {
+    const pinDot = event.target.closest && event.target.closest("[data-pm=pin-dot]");
+    if (pinDot) {
+      // A pin press is never a pan or a key tap. Only the primary button drags; right-click is the delete (contextmenu).
+      if (event.button === 0 || event.button === undefined) startPinDrag(event, pinDot);
+      return;
+    }
     const axis = event.target.closest("[data-pm=axis]");
     if (!axis) return;
     // A leftover suppress from a drag that never got a click is finished; a new gesture starts clean.
@@ -697,6 +828,10 @@
   }
 
   function onAxisPointerMove(event) {
+    if (ui.pinDrag) {
+      movePinDrag(event);
+      return;
+    }
     if (ui.pointers.has(event.pointerId)) {
       ui.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, axis: event.target.closest("[data-pm=axis]") });
     }
@@ -722,6 +857,16 @@
   }
 
   function onAxisPointerUp(event) {
+    if (ui.pinDrag && ui.pinDrag.pointerId === event.pointerId) {
+      const drag = ui.pinDrag;
+      ui.pinDrag = null;
+      if (drag.timer) root.clearTimeout(drag.timer);
+      if (drag.moved) {
+        recordChange("Pin moved");
+        renderOverlay();
+      }
+      return;
+    }
     ui.pointers.delete(event.pointerId);
     if (ui.pan && ui.pan.kind === "pinch") {
       if (ui.pointers.size < 2) {
@@ -776,52 +921,39 @@
       }
       parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + (faint ? 1 : 1.5) + '" opacity="' + (faint ? "0.35" : "1") + '" vector-effect="non-scaling-stroke"/>');
     };
-    const freqBake = state ? E.bakeFreqLane(state.freqLane) : { valid: false };
-    if (freqBake.valid) {
-      const minHz = E.hzFromNote(range.min);
-      const maxHz = E.hzFromNote(range.max);
-      const ys = [];
-      const xs = [];
-      for (let n = range.min; n <= range.max; n++) {
-        const hz = E.lookupFreqHz(freqBake.table, n, true) || minHz;
-        const t = (E.log2Hz(hz) - E.log2Hz(minHz)) / (E.log2Hz(maxHz) - E.log2Hz(minHz));
-        xs.push(xCenter(n));
-        ys.push((1 - Math.min(1, Math.max(0, t))) * (cssH - 6) + 3);
-      }
-      drawLane(xs, ys, node.color, state.activeLane !== "freq");
-    }
     for (const lane of (state && state.lanes) || []) {
       const baked = E.bakeOffsetLane(lane);
       if (!baked.valid) continue;
+      const laneMeta = paramMeta(lane.target);
+      const laneBase = E.sliderFromDomain(laneMeta, baseDomain(lane.target));
       const xs = [];
       const ys = [];
       for (let n = range.min; n <= range.max; n++) {
         const off = E.lookupOffset(baked.table, n, true) || 0;
-        const t = (off + 1) * 0.5;
+        // Height is the knob's own position (0 = its minimum, 1 = its maximum): the effective value, not the signed offset.
+        const t = laneBase + off;
         xs.push(xCenter(n));
         ys.push((1 - Math.min(1, Math.max(0, t))) * (cssH - 6) + 3);
       }
       drawLane(xs, ys, node.color, state.activeLane !== lane.id);
     }
-    // One dot per pin: at this note (column) the knob / frequency is set to this value (height).
-    const dot = (cx, cy, color, hollow) => parts.push(
-      '<circle class="pm-pin" cx="' + cx.toFixed(2) + '" cy="' + cy.toFixed(2) + '" r="3.5" fill="' + (hollow ? "none" : color) + '" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>',
-    );
-    if (state) {
-      const minHz = E.hzFromNote(range.min);
-      const maxHz = E.hzFromNote(range.max);
-      for (const k of (state.freqLane && state.freqLane.keys) || []) {
-        const tt = (E.log2Hz(k.hz) - E.log2Hz(minHz)) / (E.log2Hz(maxHz) - E.log2Hz(minHz));
-        dot(xCenter(k.x), (1 - Math.min(1, Math.max(0, tt))) * (cssH - 6) + 3, node.color, false);
+    // One dot per pin: at this note (column) the knob is set to this value (height). A 44 px invisible disc around each is its hit target.
+    const heightOf = (slider) => (1 - Math.min(1, Math.max(0, slider))) * (cssH - 6) + 3;
+    const dot = (cx, cy, color, hollow, laneId, keyX) => {
+      if (keyX != null) {
+        parts.push('<circle class="pm-pin-hit" data-pm="pin-dot" data-lane="' + laneId + '" data-x="' + keyX + '" cx="' + cx.toFixed(2) + '" cy="' + cy.toFixed(2) + '" r="22" fill="transparent"/>');
       }
-      for (const lane of state.lanes || []) {
-        for (const k of lane.keys || []) {
-          dot(xCenter(k.x), (1 - Math.min(1, Math.max(0, (k.offset + 1) * 0.5))) * (cssH - 6) + 3, node.color, false);
-        }
-        const pending = ui.pending;
-        if (pending && pending.mut === node.id && pending.lane === lane.id) {
-          dot(xCenter(pending.x), (1 - Math.min(1, Math.max(0, (pending.offset + 1) * 0.5))) * (cssH - 6) + 3, node.color, true);
-        }
+      parts.push(
+        '<circle class="pm-pin" cx="' + cx.toFixed(2) + '" cy="' + cy.toFixed(2) + '" r="3.5" fill="' + (hollow ? "none" : color) + '" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>',
+      );
+    };
+    for (const lane of (state && state.lanes) || []) {
+      const laneMeta = paramMeta(lane.target);
+      const laneBase = E.sliderFromDomain(laneMeta, baseDomain(lane.target));
+      for (const k of lane.keys || []) dot(xCenter(k.x), heightOf(laneBase + k.offset), node.color, false, lane.id, k.x);
+      const pending = ui.pending;
+      if (pending && pending.mut === node.id && pending.lane === lane.id) {
+        dot(xCenter(pending.x), heightOf(laneBase + pending.offset), node.color, true, lane.id, null);
       }
     }
     const px = snap(xCenter(soundingNote(node)));
@@ -848,7 +980,7 @@
     )).join("");
     const lanes = [];
     lanes.push(
-      '<button type="button" class="pm-lane-btn' + (state && state.activeLane === "freq" ? " active" : "") + '" data-pm="lane" data-lane="freq">Frequency</button>'
+      '<button type="button" class="pm-lane-btn' + (node && freqInSourceId(node) ? " node-under-construction-control" : "") + (state && state.activeLane === "freq" ? " active" : "") + '" data-pm="lane" data-lane="freq">Frequency' + (node && freqInSourceId(node) ? " (driven by Freq In)" : "") + "</button>"
     );
     if (state) {
       for (const lane of state.lanes) {
@@ -885,7 +1017,7 @@
       "</div>",
       '<div class="pm-tools">',
         '<button type="button" class="pm-btn" data-pm="arm" aria-pressed="' + (node && node._mutatorArmed ? "true" : "false") + '">Arm: ' + (node && node._mutatorArmed ? "On" : "Off") + "</button>",
-        '<button type="button" class="pm-btn" data-pm="pin">Pin Keyframe</button>',
+        '<button type="button" class="pm-btn' + (state && state.lanes.length ? "" : " node-under-construction-control") + '" data-pm="pin"' + (state && state.lanes.length ? "" : ' disabled aria-disabled="true"') + ">Pin Keyframe</button>",
         '<button type="button" class="pm-btn" data-pm="autopin" aria-pressed="' + (state && state.autoPin ? "true" : "false") + '">Auto-Pin: ' + (state && state.autoPin ? "On" : "Off") + "</button>",
         '<button type="button" class="pm-btn" data-pm="snap" aria-pressed="' + (state && state.snap ? "true" : "false") + '">Snap</button>',
         '<div class="pm-view">',
@@ -910,7 +1042,7 @@
         '<div class="pm-side">',
           '<div data-pm="playhead">' + escapeHtml(node ? playheadText(node, x) : "") + "</div>",
           state && state.activeLane === "freq"
-            ? '<label>Frequency Hz<input type="number" data-pm="hz" min="0" step="any" value="' + escapeAttr(hzValue) + '"></label>'
+            ? frequencyReadoutHtml(node, hzValue)
             : (activeLane ? '<label>Offset<input type="number" data-pm="offset" step="0.001" value="' + escapeAttr(offValue) + '"></label>' : "<div>Select a lane.</div>"),
           "<div>Wire Freq Out into a FREQUENCY input. Arm, turn one knob to bind it, then Pin Keyframe at each note (or turn Auto-Pin on and turn the knob).</div>",
           "<div>Dot = pin: at this note the knob is set to this value.</div>",
@@ -999,24 +1131,6 @@
       renderOverlay();
       return;
     }
-    if (act === "hz") {
-      const hz = Number(el.value);
-      if (!(hz > 0)) return;
-      const state = ensureState(node);
-      const x = soundingNote(node);
-      if (event.type === "change" || state.autoPin) {
-        if (state.autoPin || event.type === "change") {
-          if (state.freqLane.keys.length && !state.autoPin) {
-            const cur = freqAt(node, x);
-            if (cur > 0) state.freqLane.keys = E.shiftFreqKeysLog(state.freqLane.keys, E.log2Hz(hz) - E.log2Hz(cur));
-          } else {
-            state.freqLane.keys = E.pinKey(state.freqLane.keys, x, "hz", hz, state.snap);
-          }
-          recordChange("Frequency lane");
-          renderOverlay();
-        }
-      }
-    }
     if (act === "visible") {
       const nextVisible = Number(el.value);
       if (!Number.isFinite(nextVisible)) return;
@@ -1063,34 +1177,6 @@
     }
   }
 
-  function injectCommandCenter() {
-    if (ui.ccInjected) {
-      const existing = document.getElementById("pitchMutatorCcToggle");
-      if (existing) return;
-    }
-    const menu = document.getElementById("nodeSceneContextMenu");
-    if (!menu) return;
-    const heading = menu.querySelector(".scene-context-heading");
-    const bar = document.createElement("div");
-    bar.id = "pitchMutatorCcToggle";
-    bar.className = "pitch-mutator-cc-toggle";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "pm-btn";
-    btn.id = "pitchMutatorCcButton";
-    btn.textContent = navLabel();
-    btn.setAttribute("aria-pressed", ui.open ? "true" : "false");
-    btn.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleOverlay();
-    });
-    bar.append(btn);
-    if (heading && heading.nextSibling) heading.parentNode.insertBefore(bar, heading.nextSibling.nextSibling || heading.nextSibling);
-    else menu.prepend(bar);
-    ui.ccInjected = true;
-  }
-
   function hookNav() {
     if (ui.navHooked) return;
     const orig = root.buildNodeGraphUnifiedWindowNav;
@@ -1106,7 +1192,7 @@
       button.setAttribute("aria-label", "Mutators");
       button.setAttribute("aria-pressed", ui.open ? "true" : "false");
       if (ui.open) button.classList.add("active");
-      button.textContent = navLabel();
+      paintNavButton(button);
       button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1125,13 +1211,7 @@
       btn.classList.toggle("active", ui.open);
       btn.setAttribute("aria-pressed", ui.open ? "true" : "false");
     });
-    const cc = document.getElementById("pitchMutatorCcButton");
-    const label = navLabel();
-    document.querySelectorAll('[data-unified-action="mutators"]').forEach((btn) => { btn.textContent = label; });
-    if (cc) {
-      cc.setAttribute("aria-pressed", ui.open ? "true" : "false");
-      cc.textContent = label;
-    }
+    document.querySelectorAll('[data-unified-action="mutators"]').forEach((btn) => paintNavButton(btn));
   }
 
   function hookMidiKeyboard() {
@@ -1210,7 +1290,6 @@
   function boot() {
     ensureCss();
     ensureOverlay();
-    injectCommandCenter();
     hookNav();
     hookMidiKeyboard();
     hookKeyboardModuleSignal();

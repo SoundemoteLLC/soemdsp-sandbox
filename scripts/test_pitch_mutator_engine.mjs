@@ -294,18 +294,38 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 81 });
   assert(almost(effective(), 0.8, 1e-9), "unwired again: back to the audition key");
 
-  // D-M3: Pin on an empty Frequency lane writes the incoming Hz
+  // HP-09d: Frequency is never pinned. With no knob bound, Pin does nothing but say why; the Hz field and the lane stay empty.
   pm.mutator.activeLane = "freq";
   pm.mutator.freqLane.keys = [];
+  pm.mutator.lanes.length = 0;
   ctx2.nodeGraphMvp.patch.connections.push({ sourceNode: "kb", sourcePort: "f", destinationNode: "pm", destinationPort: "f" });
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: 523.25, gate: 1 });
   ctx2.togglePitchMutatorOverlay(true);
   const pinBtn = { getAttribute: (n) => (n === "data-pm" ? "pin" : null) };
   overlay.handlers.click({ target: { closest: () => pinBtn } });
-  assert(pm.mutator.freqLane.keys.length === 1 && almost(pm.mutator.freqLane.keys[0].hz, 523.25, 1e-6),
-    "empty lane pins the incoming Hz, got " + JSON.stringify(pm.mutator.freqLane.keys));
+  assert(pm.mutator.freqLane.keys.length === 0, "Pin with no knob bound leaves the Frequency lane empty");
+  assert(overlay.innerHTML.includes("cannot be pinned"), "the status line says why");
+  assert(overlay.innerHTML.includes("disabled aria-disabled") && overlay.innerHTML.includes("driven by Freq In"), "Pin is disabled and Frequency is driven by Freq In in words");
+  overlay.handlers.input({ target: { closest: () => ({ getAttribute: (n) => (n === "data-pm" ? "hz" : null), value: "300" }) }, type: "change" });
+  assert(pm.mutator.freqLane.keys.length === 0, "the Hz field never writes Frequency keys");
+  // a saved patch with Frequency pins AND a knob lane: the Frequency pins drop once, the knob lane keeps its keys
+  {
+    const legacy = { type: "pitchMutator", id: "pm-old", params: {}, mutator: {
+      freqLane: { keys: [{ x: 60, hz: 261.6 }, { x: 72, hz: 600 }] },
+      lanes: [{ id: "L1", target: { nodeId: "k1", paramKey: "cutoff" }, keys: [{ x: 60, offset: 0.1 }] }],
+      activeLane: "freq" } };
+    ctx2.nodeGraphMvp.patch.nodes.push(legacy);
+    ctx2.applyNodeGraphParamOffsets(ctx2.nodeGraphMvp.patch.nodes[2], { cutoff: 0.5 }, { notify: false }); // the live params walk every Mutator
+    assert(legacy.mutator.freqLane.keys.length === 0, "Frequency pins are dropped on load");
+    assert(legacy.mutator.lanes[0].keys.length === 1, "the knob lane is not touched");
+    assert(legacy.mutator.activeLane === "L1", "the knob lane is the active lane when one exists");
+    ctx2.nodeGraphMvp.patch.nodes.pop();
+  }
+  ctx2.nodeGraphMvp.patch.connections.length = 0;
 
   // 7: the overlay strip key changes the playhead on pointerdown; a drag still pans and eats the click
+  pm.mutator.lanes.push({ id: "L1", target: { nodeId: "k1", paramKey: "cutoff" }, keys: [], discrete: false });
+  pm.mutator.activeLane = "L1";
   ctx2.nodeGraphMvp.patch.connections.length = 0;
   const axis = { scrollLeft: 0, setPointerCapture() {} };
   const keyEl = (n) => ({ getAttribute: (a) => (a === "data-note" ? String(n) : a === "data-pm" ? "key" : null) });
@@ -378,6 +398,19 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
     assert(turn(0.8) === true, "bind + Auto-Pin in one turn");
     assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].keys.length === 1 && almost(pm.mutator.lanes[0].keys[0].offset, 0.3),
       "the pin is in node.mutator.lanes[0], got " + JSON.stringify(pm.mutator.lanes));
+    // HP-09d: never the Mutator's own controls; a bound-knob turn re-selects its lane; Pin ignores the Frequency chip
+    pm._mutatorArmed = true;
+    assert(ctx2.pitchMutatorMaybeInterceptSlider(slider("pm", "playheadHz"), 0.5) === false, "the Mutator's own playhead is never bound");
+    assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].target.nodeId === "k1", "no lane for the Mutator's own control");
+    pm._mutatorArmed = false;
+    pm.mutator.activeLane = "freq";
+    assert(turn(0.6) === true && pm.mutator.activeLane === "L1", "turning the bound knob re-selects its lane");
+    pm.mutator.activeLane = "freq";
+    ctx2.togglePitchMutatorOverlay(true);
+    const keysBeforePin = pm.mutator.lanes[0].keys.length;
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 66 });
+    overlay.handlers.click({ target: { closest: () => ({ getAttribute: (n) => (n === "data-pm" ? "pin" : null) }) } });
+    assert(pm.mutator.lanes[0].keys.length === keysBeforePin + 1 && pm.mutator.freqLane.keys.length === 0, "Pin with the Frequency chip showing still pins the knob lane");
   }
 
   // idle again after closing: no requestAnimationFrame left queued by the Mutator

@@ -69,6 +69,17 @@ try {
   }, ids.flt);
   const status = () => page.locator("#pitchMutatorOverlay [data-pm=status]").innerText();
   const shot = async (name) => { if (shots) await page.screenshot({ path: path.join(shots, name + ".png") }); };
+  // Open and close the overlay the way a person does: Command Center, then the DNA emoji in its nav; Close is the overlay's own button.
+  const openOverlayIfClosed = async () => { if (await page.evaluate(() => document.getElementById("pitchMutatorOverlay").hidden)) await openOverlay(); };
+  const openOverlay = async () => {
+    if (!(await page.locator("#nodeSceneContextMenu").isVisible())) await page.locator("#nodeCommandCenterButton").click();
+    await page.locator('#nodeSceneContextMenu [data-unified-action="mutators"]').click();
+    await page.waitForFunction(() => !document.getElementById("pitchMutatorOverlay").hidden);
+  };
+  const closeOverlay = async () => {
+    await page.locator('#pitchMutatorOverlay [data-pm="close"]').click();
+    await page.waitForFunction(() => document.getElementById("pitchMutatorOverlay").hidden);
+  };
   const clickPm = async (pm) => {
     const box = await page.locator(`#pitchMutatorOverlay [data-pm="${pm}"]`).first().boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
@@ -100,16 +111,40 @@ try {
 
   // 1. Auto-Pin ON -----------------------------------------------------------------------------------------------------------------
   step = "open overlay";
-  await page.evaluate(() => togglePitchMutatorOverlay(true));
+  await openOverlay();
+  const navInfo = await page.evaluate(() => {
+    const b = document.querySelector('#nodeSceneContextMenu [data-unified-action="mutators"]');
+    return { text: b.textContent, title: b.getAttribute("title"), cc: !!document.getElementById("pitchMutatorCcButton") || !!document.getElementById("pitchMutatorCcToggle") };
+  });
+  assert.ok(navInfo.text.includes("\u{1F9EC}"), "the Mutators nav button is the DNA emoji");
+  assert.equal(navInfo.title, null, "no title on the nav button");
+  assert.equal(navInfo.cc, false, "no extra Mutators button above the Command Center");
+  await shot("nav-not-armed");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=pin]").isDisabled(), true, "Pin is disabled with no knob bound");
+  assert.deepEqual((await mut()).freqLane.keys, [], "the Frequency lane starts empty");
   assert.match(await status(), /Not armed\. Press Arm, then turn the knob you want to control\./);
   const base0 = await base();
   step = "arm";
   await clickPm("arm");
+  assert.match(await page.evaluate(() => document.querySelector('#nodeSceneContextMenu [data-unified-action="mutators"]').textContent), /armed/, "the nav button says armed in words");
+  await shot("nav-armed");
   assert.match(await status(), /Armed: turn the knob you want to bind\./);
   assert.match(await page.locator('#pitchMutatorOverlay [data-pm="arm"]').innerText(), /On/, "Arm shows On in text");
   await clickPm("autopin");
   assert.match(await page.locator('#pitchMutatorOverlay [data-pm="autopin"]').innerText(), /On/, "Auto-Pin shows On in text");
   await clickNote(60);
+  step = "the Mutator's own control is never bound";
+  {
+    // The Mutator has no face widget (its only parameter, playheadHz, is hidden), so drive its real slider through the app's own write path.
+    await page.evaluate((id) => {
+      const slider = nodeGraphSliderForParameter(id, "playheadHz");
+      setNodeSliderValue(slider, 880, { interaction: "drag" });
+    }, ids.pm);
+    const own2 = await mut();
+    assert.equal(own2.lanes.length, 0, "Arm + a drag of the Mutator's own playhead binds nothing");
+    assert.deepEqual(own2.freqLane.keys, [], "and pins no Frequency keys");
+    assert.match(await status(), /Armed: turn the knob/, "still armed");
+  }
   step = "real drag binds";
   await drag(-60);
   let m = await mut();
@@ -176,10 +211,10 @@ try {
 
   // 4. Armed with the overlay closed -----------------------------------------------------------------------------------------------
   step = "closed overlay";
-  await page.evaluate((id) => { const n = nodeGraphPatchNode(id); n.mutator.lanes.length = 0; pitchMutatorRefreshOverlay(); }, ids.pm);
+  const keptLanes = await page.evaluate((id) => { const n = nodeGraphPatchNode(id); const saved = JSON.parse(JSON.stringify(n.mutator.lanes)); n.mutator.lanes.length = 0; pitchMutatorRefreshOverlay(); return saved; }, ids.pm);
   await clickPm("arm");
-  await page.evaluate(() => togglePitchMutatorOverlay(false));
-  assert.match(await page.evaluate(() => document.getElementById("pitchMutatorCcButton")?.textContent || ""), /armed/, "the Mutators button shows armed while closed");
+  await closeOverlay();
+  assert.match(await page.evaluate(() => document.querySelector('#nodeSceneContextMenu [data-unified-action="mutators"]').textContent), /armed/, "the nav button shows armed while the overlay is closed");
   await drag(-40);
   m = await mut();
   assert.equal(m.lanes.length, 1, "a drag with the overlay closed binds (D-M8)");
@@ -187,7 +222,9 @@ try {
   const before = await base();
   await drag(-40);
   assert.notEqual(await base(), before, "not armed, no lane: a normal base write");
+  await page.evaluate(({ id, lanes }) => { const n = nodeGraphPatchNode(id); n.mutator.lanes.length = 0; for (const l of lanes) n.mutator.lanes.push(l); n.mutator.activeLane = lanes[0].id; n.mutator.autoPin = false; }, { id: ids.pm, lanes: keptLanes });
   await page.evaluate(({ id, v }) => { nodeGraphPatchNode(id).params.frequency = v; }, { id: ids.flt, v: base0 });
+  await openOverlay();
 
   // 5. Freq In and the native playhead ---------------------------------------------------------------------------------------------
   step = "freq in";
@@ -195,8 +232,24 @@ try {
     nodeGraphMvp.patch.connections.push({ sourceNode: i.kb, sourcePort: "f", destinationNode: i.pm, destinationPort: "f" });
     commitNodeGraphPatch(nodeGraphMvp.patch, { status: "Wire Freq In" });
   }, ids);
+  const wiredBefore = await page.locator('#pitchMutatorOverlay [data-pm="lane"][data-lane="freq"]').innerText();
+  assert.ok(!/driven by Freq In/.test(wiredBefore), "the audition key alone does not disable Frequency");
   const wired = await page.evaluate((i) => nodeGraphMvp.patch.connections.some((c) => c.sourceNode === i.kb && c.destinationNode === i.pm && c.destinationPort === "f"), ids);
   assert.ok(wired, "keyboard f is wired into the Mutator's Freq In");
+  await page.waitForFunction(() => /driven by Freq In/.test(document.querySelector('#pitchMutatorOverlay [data-pm="lane"][data-lane="freq"]').innerText));
+  await page.locator('#pitchMutatorOverlay [data-pm="lane"][data-lane="freq"]').click();
+  const hzField = page.locator('#pitchMutatorOverlay [data-pm="hz"]');
+  assert.equal(await hzField.isDisabled(), true, "the Hz field is disabled while a cable drives Freq In");
+  assert.match(await page.locator("#pitchMutatorOverlay .pm-side").innerText(), /driven by Freq In/);
+  assert.ok(await hzField.evaluate((e) => e.classList.contains("node-under-construction-control")), "uses the under-construction styling");
+  await shot("freq-in-driven");
+  const cuts = [];
+  for (const hz of [130.8128, 880]) {
+    await page.evaluate(({ kb, hz }) => sendNodeGraphLiveKeyboardModuleSignal(kb, { frequency: hz, gate: 1, midi: 0 }), { kb: ids.kb, hz });
+    cuts.push((await effective()).live);
+  }
+  assert.notEqual(cuts[0], cuts[1], "the cutoff follows the note arriving on Freq In");
+  assert.equal(await base(), base0, "base untouched by Freq In");
   {
     for (const hz of [880, 130.8128]) {
       await page.evaluate(({ kb, hz }) => sendNodeGraphLiveKeyboardModuleSignal(kb, { frequency: hz, gate: 1, midi: 0 }), { kb: ids.kb, hz });
@@ -204,6 +257,75 @@ try {
       assert.ok(Math.abs(live - hz) < 1e-6, `live playheadHz follows Freq In (${hz}), got ${live}`);
     }
   }
+
+  // 5b. Interactive pins: drag, right-click delete, long-press delete, Delete key ------------------------------------------------------
+  step = "pins";
+  await page.evaluate(({ kb, pm }) => {
+    nodeGraphMvp.patch.connections = nodeGraphMvp.patch.connections.filter((c) => !(c.sourceNode === kb && c.destinationNode === pm));
+    commitNodeGraphPatch(nodeGraphMvp.patch, { status: "Unwire Freq In" });
+  }, ids);
+  await page.waitForFunction(() => !/driven by Freq In/.test(document.querySelector('#pitchMutatorOverlay [data-pm="lane"][data-lane="freq"]').innerText));
+  await page.evaluate(() => {
+    const n = nodeGraphMvp.patch.nodes.find((q) => q.type === "pitchMutator");
+    n.mutator.lanes[0].keys = [{ x: 48, offset: 0.1 }, { x: 60, offset: 0.2 }, { x: 72, offset: 0.3 }, { x: 84, offset: -0.1 }];
+    n.mutator.activeLane = n.mutator.lanes[0].id;
+    pitchMutatorRefreshOverlay();
+  });
+  const pinBox = async (x) => {
+    // C3..C6 are inside the default C0-C8 view, so no scrolling is needed.
+    const hit = page.locator(`#pitchMutatorOverlay circle.pm-pin-hit[data-x="${x}"]`);
+    const b = await hit.boundingBox();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2, w: b.width, h: b.height };
+  };
+  const laneKeys = () => page.evaluate((id) => JSON.parse(JSON.stringify(nodeGraphPatchNode(id).mutator.lanes[0].keys)), ids.pm);
+  let pb = await pinBox(60);
+  assert.ok(pb.w >= 43.5 && pb.h >= 43.5, `a pin's hit target is at least 44 px (${pb.w} x ${pb.h})`);
+  const plotRect = await page.locator("#pitchMutatorOverlay [data-pm=plot]").boundingBox();
+  const target = { x: pb.x + (plotRect.width / 128) * 6, y: pb.y - 25 };
+  await page.mouse.move(pb.x, pb.y); await page.mouse.down(); await page.mouse.move(target.x, target.y, { steps: 10 }); await page.mouse.up();
+  const dragged = await page.evaluate(({ id, flt, ty, plotTop, plotH }) => {
+    const E = PitchMutatorEngine;
+    const n = nodeGraphPatchNode(id); const f = nodeGraphPatchNode(flt);
+    const meta = f.paramMeta.frequency;
+    const sliderExpected = Math.min(1, Math.max(0, 1 - ((ty - plotTop) - 3) / Math.max(1, plotH - 6)));
+    const base = E.sliderFromDomain(meta, Number(f.params.frequency));
+    return { keys: JSON.parse(JSON.stringify(n.mutator.lanes[0].keys)), expectedOffset: sliderExpected - base };
+  }, { id: ids.pm, flt: ids.flt, ty: target.y, plotTop: plotRect.y, plotH: plotRect.height });
+  assert.deepEqual(dragged.keys.map((k) => k.x), [48, 66, 72, 84], "a horizontal drag moved the pin from C4 to F#4");
+  assert.ok(Math.abs(dragged.keys[1].offset - dragged.expectedOffset) < 1e-6, `vertical drag stores slider(effective) - slider(base): ${dragged.keys[1].offset} vs ${dragged.expectedOffset}`);
+  await shot("pin-dragged");
+  // dragged far above the plot: the effective value clamps at the parameter's own maximum, not at a -1..1 offset
+  pb = await pinBox(72);
+  await page.mouse.move(pb.x, pb.y); await page.mouse.down(); await page.mouse.move(pb.x, plotRect.y - 40, { steps: 6 }); await page.mouse.up();
+  const topKey = (await laneKeys()).find((k) => k.x === 72);
+  const topBase = await page.evaluate((flt) => PitchMutatorEngine.sliderFromDomain(nodeGraphPatchNode(flt).paramMeta.frequency, Number(nodeGraphPatchNode(flt).params.frequency)), ids.flt);
+  assert.ok(Math.abs(topKey.offset - (1 - topBase)) < 1e-6, `above the plot clamps at the definition maximum (offset ${topKey.offset}, expected ${1 - topBase})`);
+  // right-click deletes: no context menu, selection unchanged
+  const selBefore = await page.evaluate(() => JSON.stringify(nodeGraphMvp.selected ?? null));
+  const nodesBefore = await page.evaluate(() => nodeGraphMvp.patch.nodes.length);
+  pb = await pinBox(84);
+  await shot("pin-before-right-click");
+  await page.mouse.click(pb.x, pb.y, { button: "right" });
+  assert.deepEqual((await laneKeys()).map((k) => k.x), [48, 66, 72], "right-click deleted the C6 pin");
+  assert.equal(await page.evaluate(() => JSON.stringify(nodeGraphMvp.selected ?? null)), selBefore, "right-click did not change the selection");
+  assert.equal(await page.evaluate(() => !!document.querySelector(".node-context-menu:not([hidden])")), false, "no context menu appeared");
+  await shot("pin-deleted");
+  // Delete / Backspace never delete a module or a pin
+  pb = await pinBox(66);
+  await page.mouse.move(pb.x, pb.y);
+  await page.keyboard.press("Delete"); await page.keyboard.press("Backspace");
+  assert.equal(await page.evaluate(() => nodeGraphMvp.patch.nodes.length), nodesBefore, "Delete / Backspace do not delete a module");
+  assert.equal((await laneKeys()).length, 3, "and do not delete a pin");
+  // long-press on touch deletes
+  pb = await pinBox(48);
+  await page.evaluate(({ x, y }) => {
+    document.elementFromPoint(x, y).dispatchEvent(new PointerEvent("pointerdown", { pointerId: 7, pointerType: "touch", button: 0, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  }, { x: pb.x, y: pb.y });
+  await page.waitForFunction((id) => nodeGraphPatchNode(id).mutator.lanes[0].keys.length === 2, ids.pm);
+  await page.evaluate(({ x, y }) => document.getElementById("pitchMutatorOverlay").dispatchEvent(new PointerEvent("pointerup", { pointerId: 7, pointerType: "touch", button: 0, clientX: x, clientY: y, bubbles: true })), { x: pb.x, y: pb.y });
+  assert.deepEqual((await laneKeys()).map((k) => k.x), [66, 72], "long-press on touch deleted the C3 pin");
+  await clickNote(60);
+  assert.equal(await page.evaluate(() => document.querySelector("#pitchMutatorOverlay .pm-key.audition")?.dataset.note), "60", "a key tap still sets the note");
 
   // 6. Save and reload -------------------------------------------------------------------------------------------------------------
   step = "save and reload";
@@ -214,6 +336,8 @@ try {
     return JSON.parse(JSON.stringify(patch.nodes.find((n) => n.id === id).mutator));
   }, ids.pm);
   assert.deepEqual(reloaded.lanes, saved.lanes, "lane and keys survive a save and load");
+  assert.ok(saved.lanes.length === 1 && saved.lanes[0].keys.length >= 1, "the bound cutoff lane with pins is what was saved (not empty)");
+  assert.deepEqual(reloaded.freqLane.keys, [], "no Frequency keys");
 
   assert.deepEqual(errors, [], "no page errors");
   console.log("test_pitch_mutator_knob_lane_browser: ok");

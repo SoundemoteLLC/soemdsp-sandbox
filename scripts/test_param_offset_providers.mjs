@@ -221,8 +221,13 @@ function browserContext(extra = {}) {
       const base = JSON.stringify(newParams);
       oldCtx.pitchMutatorApplyLiveParams(oldNode, oldParams);
       newCtx.applyNodeGraphParamOffsets(newNode, newParams, { notify: false });
-      // HP-09c: the Mutator's live playheadHz now follows Freq In / the audition key instead of a stale stored value; that one key is the fix.
-      if (oldNode.type === "pitchMutator") { delete oldParams.playheadHz; delete newParams.playheadHz; }
+      // HP-09c: the Mutator's live playheadHz follows the incoming Hz when Freq In is wired, otherwise the audition key (C4 here, nothing wired),
+      // instead of the stale stored value the baseline sent. Assert that value; then the rest of the params must be identical.
+      if (oldNode.type === "pitchMutator") {
+        const expected = newCtx.PitchMutatorEngine.hzFromNote(60);
+        assert(Math.abs(newParams.playheadHz - expected) < 1e-9, `${label}: ${newNode.id} playheadHz is the audition-key Hz (${expected}), got ${newParams.playheadHz}`);
+        oldParams.playheadHz = newParams.playheadHz;
+      }
       if (JSON.stringify(oldParams) !== JSON.stringify(newParams)) {
         differing += 1;
         console.log("  differs", oldNode.id, JSON.stringify(oldParams), JSON.stringify(newParams));
@@ -240,7 +245,9 @@ function browserContext(extra = {}) {
         }
       }
       // the mutator's frequency table, set on the node as a side effect
-      same(newNode._mutatorFreqLut ?? null, oldNode._mutatorFreqLut ?? null, `${label}: ${oldNode.id} frequency table`);
+      // HP-09d: a Frequency lane with keys is no longer valid (the Mutator's own frequency is not pinnable): they are dropped on load.
+      if (oldNode._mutatorFreqLut?.valid) assert(newNode._mutatorFreqLut?.valid === false && newNode.mutator.freqLane.keys.length === 0, `${label}: ${oldNode.id} Frequency pins dropped`);
+      else same(newNode._mutatorFreqLut ?? null, oldNode._mutatorFreqLut ?? null, `${label}: ${oldNode.id} frequency table`);
     }
     assert(differing === 0, `${label}: effective params identical before and after (${differing} differ)`);
     return moved;
