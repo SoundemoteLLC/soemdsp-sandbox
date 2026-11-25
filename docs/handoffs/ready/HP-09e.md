@@ -17,6 +17,8 @@
 
 **Why (Argi, t437u, verbatim).** "mutator should not go through the parameter's smoother, and instead the playhead parameter's smoother has a smoother, we can use that for the source of truth of current value, so the changes actually move in sync with the playhead final value after smoothing".
 
+**Evidence (Argi, t441u, verbatim, during the HP-09d retest).** "i have the playhead pitch mutator parameter on ❌ for no smoothing and im still hearing smoothing. ok if i turn off cutoff smoothing then i don't hear smoothing". This confirms the bug: with playhead smoothing off, the bound Cutoff still glides because the Mutator offset is going through Cutoff's own smoother.
+
 **Goal.** The bound target (e.g. Flower Child Cutoff) moves in sync with the playhead's **smoothed** value, with no extra lag from the target's own smoother, in both the JS worklet path and the native path. The target's smoother keeps chasing the **base** value only. The lane offset is evaluated every block (or sample) from the smoothed `playheadHz` and added **after** the target's smoother.
 
 ## What HP-09d found (file areas, re-check line numbers)
@@ -34,6 +36,7 @@
 5. Knob-lane keys stay signed slider offsets (HP-09d); effective value clamps to the param definition only.
 
 ## Acceptance
+- **Playhead ❌, Cutoff smoothing on (Argi t441u).** Setup: the playhead smoothing is off (❌) and Cutoff has its own smoothing on. Expected: the bound Cutoff steps instantly with the note, with no glide, in both the JS worklet path and the native path. Also: with playhead smoothing on, the glide matches the playhead's smoothing time, not Cutoff's. Cover in a unit or worklet test and, if practical, the browser test, for JS and native.
 - With a long playhead / Freq In glide, the target tracks the lane value at the **smoothed** playhead, with no lag from its own smoother, even when the target has a long `smoothingSeconds`. Cover in a unit or worklet test and, if practical, the browser test, for JS and native.
 - Stored base value never changes; saved patches unchanged.
 - Existing `scripts/test_pitch_mutator_engine.mjs`, `test_param_offset_providers.mjs`, `test_pitch_mutator_knob_lane_browser.mjs` still pass.
