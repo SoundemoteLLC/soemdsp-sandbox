@@ -160,4 +160,168 @@ const warnings = [];
 const kept = E.dropMissingTargets(state.lanes, (t) => t.nodeId === "exists", warnings);
 assert(kept.length === 0 && warnings.length === 1, "missing target dropped with warning");
 
+// ---- HP-09: Freq Out pass-through (D-M3), engine side
+{
+  const empty = E.bakeFreqLane({ keys: [] });
+  assert(!empty.valid, "an empty Frequency lane bakes invalid");
+  assert(almost(E.freqOutHz(empty, 69, 523.25), 523.25), "empty lane passes the incoming Hz through");
+  assert(almost(E.freqOutHz(empty, 69, null), 440), "empty lane, nothing wired: the playhead note's Hz");
+  assert(almost(E.freqOutHz(empty, 69.5, 0), E.hzFromNote(69.5)), "empty lane, no Freq In Hz: playhead Hz");
+  const keyed = E.bakeFreqLane({ keys: [{ x: 36, hz: E.hzFromNote(36) }, { x: 84, hz: E.hzFromNote(84) * 2 }] });
+  assert(E.freqOutHz(keyed, 60, 123) > E.hzFromNote(60) * 1.0, "a keyed lane ignores the incoming Hz");
+}
+
+// ---- HP-09: the overlay (headless: stub DOM, counting requestAnimationFrame)
+{
+  const registry = {};
+  const timeouts = [];
+  let rafCalls = 0;
+  function makeEl(id) {
+    const handlers = {};
+    return {
+      id: id || "", hidden: false, dataset: {}, children: [], handlers,
+      style: { setProperty() {}, removeProperty() {} },
+      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+      addEventListener(type, fn) { handlers[type] = fn; },
+      append() {}, prepend() {}, setAttribute() {}, getAttribute() { return null; },
+      querySelector() { return null; }, querySelectorAll() { return []; }, contains() { return false; },
+      getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 20 }; },
+      innerHTML: "",
+    };
+  }
+  const reg = (e) => { if (e.id) registry[e.id] = e; };
+  const ctx2 = {
+    console,
+    document: {
+      readyState: "complete", activeElement: null,
+      getElementById: (id) => registry[id] || null,
+      createElement: () => makeEl(""),
+      body: { append: reg }, head: { append: reg },
+      querySelector: () => null, querySelectorAll: () => [],
+    },
+    requestAnimationFrame: () => { rafCalls += 1; return rafCalls; },
+    setTimeout: (fn) => { timeouts.push(fn); return timeouts.length; },
+    clearTimeout() {},
+    devicePixelRatio: 1,
+  };
+  vm.createContext(ctx2);
+  const commitListeners = [];
+  ctx2.addNodeGraphPatchCommitListener = (fn) => { commitListeners.push(fn); return () => {}; };
+  ctx2.scheduleNodeGraphLiveParameterSync = () => { ctx2.__syncs = (ctx2.__syncs || 0) + 1; };
+  ctx2.sendNodeGraphLiveMidiKeyboardSignal = () => {};
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal = () => {};
+  const num = (a, b) => ({ min: a, max: b });
+  ctx2.nodeGraphMvp = {
+    patch: {
+      nodes: [
+        { id: "pm", type: "pitchMutator", params: { playheadHz: 440 } },
+        { id: "kb", type: "keyboard", params: {} },
+        { id: "k1", type: "filter", params: { cutoff: 0.5 }, paramMeta: { cutoff: num(0, 1) } },
+        { id: "k2", type: "filter", params: { cutoff: 0.2 }, paramMeta: { cutoff: num(0, 1) } },
+      ],
+      connections: [],
+    },
+  };
+  for (const rel of [
+    "public/node-graph-segment-curves.js",
+    "public/pitch-mutator-engine.js",
+    "public/node-graph-param-offsets.js",
+    "public/node-graph-pitch-mutator-overlay.js",
+  ]) {
+    vm.runInContext(fs.readFileSync(path.join(root, rel), "utf8"), ctx2, { filename: path.basename(rel) });
+  }
+  const pm = ctx2.nodeGraphMvp.patch.nodes[0];
+  const overlay = registry.pitchMutatorOverlay;
+  assert(overlay && overlay.handlers.click && overlay.handlers.pointerdown, "overlay boots and listens");
+
+  // idle: nothing scheduled while closed
+  assert(rafCalls === 0, "boot schedules no requestAnimationFrame (got " + rafCalls + ")");
+  for (const fn of commitListeners) fn();
+  ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 64 });
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: 440 });
+  assert(commitListeners.length === 1, "one patch commit listener");
+  assert(rafCalls === 0, "closed overlay: commits and notes schedule no requestAnimationFrame (got " + rafCalls + ")");
+
+  // knob lane: first armed turn binds, second armed turn is ignored (D-M1)
+  ctx2.togglePitchMutatorOverlay(true);
+  pm.mutator.autoPin = true;
+  pm._mutatorArmed = true;
+  const slider = (node, param) => ({ dataset: { node, param }, value: "0", getAttribute() { return null; } });
+  const s1 = slider("k1", "cutoff");
+  const s2 = slider("k2", "cutoff");
+  assert(ctx2.pitchMutatorMaybeInterceptSlider(s1, 0.7) === true, "first armed turn binds and is taken");
+  assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].target.nodeId === "k1", "lane 1 is the first knob");
+  const keysBefore = JSON.stringify(pm.mutator.lanes[0].keys);
+  s2.value = "0.2";
+  assert(ctx2.pitchMutatorMaybeInterceptSlider(s2, 0.9) === false, "second armed knob is not taken");
+  assert(s2.value === "0.2", "second knob stays free");
+  assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].target.nodeId === "k1", "still one lane, still the first knob");
+  assert(JSON.stringify(pm.mutator.lanes[0].keys) === keysBefore, "lane 1 keys untouched by the second turn");
+  assert(JSON.stringify(ctx2.nodeGraphMvp.patch.nodes[2].params) === '{"cutoff":0.5}', "first knob's base slider untouched");
+  assert(overlay.innerHTML.includes("One knob lane for now"), "overlay shows the one-lane line");
+  ctx2.togglePitchMutatorOverlay(false);
+  assert(overlay.hidden === true, "overlay closes");
+
+  // D-M2: wired Freq In drives the playhead; unwired falls back to the audition key
+  pm.mutator.lanes[0].keys = [{ x: 60, offset: 0 }, { x: 81, offset: 0.3 }];
+  pm.mutator.autoPin = false;
+  pm.mutator.snap = false; // Snap rounds the playhead to a key; off, Freq In is continuous
+  const meta = ctx2.nodeGraphMvp.patch.nodes[2].paramMeta.cutoff;
+  const effective = () => ctx2.applyNodeGraphParamOffsetsToBase(ctx2.nodeGraphMvp.patch.nodes[2], "cutoff", 0.5, meta);
+  ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
+  assert(almost(effective(), 0.5, 1e-9), "unwired: the audition key (C4) sets the playhead");
+  ctx2.nodeGraphMvp.patch.connections.push({ sourceNode: "kb", sourcePort: "f", destinationNode: "pm", destinationPort: "f" });
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: E.hzFromNote(81), gate: 1 });
+  assert(almost(effective(), 0.8, 1e-9), "wired Freq In (A5) moves the playhead and the knob offset, got " + effective());
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: E.hzFromNote(70.5), gate: 1 });
+  const bakedLane = E.bakeOffsetLane(pm.mutator.lanes[0]);
+  const wiredMid = 0.5 + E.lookupOffset(bakedLane.table, 70.5, true);
+  assert(Math.abs(wiredMid - (0.5 + bakedLane.table[70])) > 1e-6 && Math.abs(wiredMid - (0.5 + bakedLane.table[71])) > 1e-6, "70.5 is between two keys");
+  assert(almost(effective(), wiredMid, 1e-6), "Freq In is read as a continuous signal, not a rounded key, got " + effective());
+  const syncsBefore = ctx2.__syncs || 0;
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: E.hzFromNote(60), gate: 1 });
+  assert((ctx2.__syncs || 0) > syncsBefore, "a note on the wired source asks for a live param sync");
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal("other", { frequency: 1000, gate: 1 });
+  ctx2.nodeGraphMvp.patch.connections.length = 0;
+  ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 81 });
+  assert(almost(effective(), 0.8, 1e-9), "unwired again: back to the audition key");
+
+  // D-M3: Pin on an empty Frequency lane writes the incoming Hz
+  pm.mutator.activeLane = "freq";
+  pm.mutator.freqLane.keys = [];
+  ctx2.nodeGraphMvp.patch.connections.push({ sourceNode: "kb", sourcePort: "f", destinationNode: "pm", destinationPort: "f" });
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: 523.25, gate: 1 });
+  ctx2.togglePitchMutatorOverlay(true);
+  const pinBtn = { getAttribute: (n) => (n === "data-pm" ? "pin" : null) };
+  overlay.handlers.click({ target: { closest: () => pinBtn } });
+  assert(pm.mutator.freqLane.keys.length === 1 && almost(pm.mutator.freqLane.keys[0].hz, 523.25, 1e-6),
+    "empty lane pins the incoming Hz, got " + JSON.stringify(pm.mutator.freqLane.keys));
+
+  // 7: the overlay strip key changes the playhead on pointerdown; a drag still pans and eats the click
+  ctx2.nodeGraphMvp.patch.connections.length = 0;
+  const axis = { scrollLeft: 0, setPointerCapture() {} };
+  const keyEl = (n) => ({ getAttribute: (a) => (a === "data-note" ? String(n) : a === "data-pm" ? "key" : null) });
+  const target = (k) => ({ closest: (sel) => (sel === "[data-pm=axis]" ? axis : sel === "[data-pm=key]" ? k : null) });
+  pm.mutator.freqLane.keys = [];
+  pm.mutator.lanes[0].keys = [{ x: 60, offset: 0 }, { x: 72, offset: 0.12 }];
+  overlay.handlers.pointerdown({ target: target(keyEl(72)), pointerId: 1, clientX: 100, clientY: 0 });
+  assert(almost(effective(), 0.62, 1e-9), "key pointerdown set the playhead before any click, got " + effective());
+  overlay.handlers.pointermove({ target: target(null), pointerId: 1, clientX: 140, clientY: 0 });
+  overlay.handlers.pointerup({ target: target(null), pointerId: 1, clientX: 140, clientY: 0 });
+  overlay.handlers.click({ target: { closest: () => keyEl(60) } });
+  assert(almost(effective(), 0.62, 1e-9), "the click after a drag-pan is suppressed");
+  while (timeouts.length) timeouts.shift()();
+  overlay.handlers.pointerdown({ target: target(keyEl(60)), pointerId: 2, clientX: 10, clientY: 0 });
+  overlay.handlers.pointerup({ target: target(keyEl(60)), pointerId: 2, clientX: 10, clientY: 0 });
+  assert(almost(effective(), 0.5, 1e-9), "a plain tap on another key moves the playhead");
+
+  // idle again after closing: no requestAnimationFrame left queued by the Mutator
+  ctx2.togglePitchMutatorOverlay(false);
+  const rafAtClose = rafCalls;
+  for (const fn of commitListeners) fn();
+  ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: 330, gate: 1 });
+  ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 50 });
+  assert(rafCalls === rafAtClose, "closed and idle again: no requestAnimationFrame scheduled");
+}
+
 console.log("test_pitch_mutator_engine: ok");

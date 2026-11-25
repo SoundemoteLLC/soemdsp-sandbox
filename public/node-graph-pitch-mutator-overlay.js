@@ -7,6 +7,8 @@
     "#7a6ad9", "#d35cc7", "#d14b4b", "#c7b14a",
   ]);
 
+  const ONE_LANE_NOTICE = "One knob lane for now";
+
   const ui = {
     open: false,
     selectedId: "",
@@ -14,6 +16,9 @@
     ccInjected: false,
     navHooked: false,
     raf: 0,
+    notice: "",
+    // Last frequency each possible Freq In source (keyboard / MIDI module) was heard at, from the signals it sends. Not a poll: set by the send hooks.
+    sourceHz: new Map(),
     pan: null,
     pointers: new Map(),
     suppressKeyClick: false,
@@ -62,11 +67,48 @@
     return (node && node.alias) || (engine() && engine().DEFAULT_NAME) || "Pitch Mutator";
   }
 
+  // The module wired into this Mutator's Freq In ("" when nothing is).
+  function freqInSourceId(node) {
+    const p = patch();
+    const cables = p && Array.isArray(p.connections) ? p.connections : [];
+    for (const c of cables) {
+      if (c && String(c.destinationNode) === String(node && node.id) && String(c.destinationPort) === "f") return String(c.sourceNode);
+    }
+    return "";
+  }
+
+  // Hz arriving on a wired Freq In, as far as the page can know it (the source's last signal); null when unwired or not heard yet.
+  function incomingHz(node) {
+    if (!node) return null;
+    const id = freqInSourceId(node);
+    let hz = id ? ui.sourceHz.get(id) : 0;
+    if (!(hz > 0) && id) {
+      // Not heard since load: the keyboard module may already hold a note.
+      const rt = root.nodeGraphMvp && root.nodeGraphMvp.keyboardRuntimeByNode;
+      const held = rt instanceof Map ? rt.get(id) : null;
+      hz = Number(held && held.signal && held.signal.frequency);
+    }
+    return hz > 0 ? hz : null;
+  }
+
+  // D-M2: a wired Freq In drives the playhead; unwired (or not heard yet) falls back to the audition key.
   function soundingNote(node) {
     const E = engine();
     const snap = !!(node && node.mutator && node.mutator.snap);
-    const x = E ? E.snapNote(ui.auditionNote, snap) : ui.auditionNote;
-    return x;
+    const hz = E ? incomingHz(node) : null;
+    const raw = hz ? E.noteFromHz(hz) : ui.auditionNote;
+    return E ? E.snapNote(raw, snap) : raw;
+  }
+
+  // Hz on Freq Out at note x (D-M3: an empty Frequency lane passes the incoming frequency through, like the native engine).
+  function freqOutHz(node, x) {
+    const E = engine();
+    if (!E || !node) return NaN;
+    return E.freqOutHz(E.bakeFreqLane(node.mutator && node.mutator.freqLane), x, incomingHz(node));
+  }
+
+  function mutatorsFedBy(sourceId) {
+    return mutatorNodes().filter((n) => freqInSourceId(n) === String(sourceId));
   }
 
   function paramMeta(target) {
@@ -111,6 +153,53 @@
     return E.lookupFreqHz(baked.table, x, baked.valid);
   }
 
+  // Redraw work is queued, never looped: one rAF while the overlay is open and something changed, nothing while closed or idle.
+  function queueRedraw() {
+    if (!ui.open || ui.raf) return;
+    ui.raf = root.requestAnimationFrame(() => {
+      ui.raf = 0;
+      if (!ui.open) return;
+      const el = document.getElementById("pitchMutatorOverlay");
+      const typing = el && document.activeElement && el.contains(document.activeElement)
+        && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+      if (typing) refreshPlayhead();
+      else renderOverlay();
+    });
+  }
+
+  // The playhead moved: key highlight, plot and readouts only. The strip keeps its DOM (a pan in progress holds a key element).
+  function refreshPlayhead() {
+    const el = document.getElementById("pitchMutatorOverlay");
+    const node = selectedNode();
+    if (!el || el.hidden || !node) return;
+    const x = soundingNote(node);
+    const lit = Math.round(x);
+    el.querySelectorAll(".pm-key.audition").forEach((k) => k.classList.remove("audition"));
+    const key = el.querySelector('.pm-key[data-note="' + lit + '"]');
+    if (key) key.classList.add("audition");
+    const readout = el.querySelector("[data-pm=playhead]");
+    if (readout) readout.textContent = playheadText(node, x);
+    const plot = el.querySelector("[data-pm=plot]");
+    if (plot) drawPlot(plot, node);
+    const state = ensureState(node);
+    const field = el.querySelector('[data-pm="hz"]');
+    if (field && document.activeElement !== field) field.value = hzText(node, x);
+    const off = el.querySelector('[data-pm="offset"]');
+    const lane = state && (state.lanes || []).find((l) => l.id === state.activeLane);
+    if (off && lane && document.activeElement !== off) off.value = offsetAt(node, lane, x).toFixed(3);
+  }
+
+  function hzText(node, x) {
+    const hz = freqOutHz(node, x);
+    return hz > 0 ? hz.toFixed(2) : "";
+  }
+
+  function playheadText(node, x) {
+    const E = engine();
+    const wired = freqInSourceId(node) && incomingHz(node);
+    return "Playhead " + midiName(x) + " (" + (Number.isFinite(x) ? x.toFixed(2) : "") + ")" + (wired ? " from Freq In" : "");
+  }
+
   function setAuditionNote(note) {
     const E = engine();
     if (!E || !Number.isFinite(Number(note))) return;
@@ -123,7 +212,7 @@
         root.scheduleNodeGraphLiveParameterSync();
       }
     }
-    renderOverlay();
+    refreshPlayhead();
     refreshRings();
   }
 
@@ -146,8 +235,7 @@
     if (!Number.isFinite(x)) return;
     const active = state.activeLane || "freq";
     if (active === "freq") {
-      let hz = freqAt(node, x);
-      if (!(hz > 0)) hz = E.hzFromNote(x);
+      const hz = freqOutHz(node, x);
       state.freqLane.keys = E.pinKey(state.freqLane.keys, x, "hz", hz, state.snap);
     } else {
       const lane = state.lanes.find((l) => l.id === active);
@@ -179,7 +267,14 @@
     const state = ensureState(node);
     const existing = state.lanes.find((l) => l.target.nodeId === nodeId && l.target.paramKey === paramKey);
     if (existing) return existing;
-    if (state.lanes.length) return state.lanes[0];
+    if (state.lanes.length) {
+      // D-M1: one knob lane for now. The second knob stays free; say so once in the overlay.
+      if (ui.notice !== ONE_LANE_NOTICE) {
+        ui.notice = ONE_LANE_NOTICE;
+        renderOverlay();
+      }
+      return null;
+    }
     const meta = paramMeta({ nodeId, paramKey });
     const lane = {
       id: "L1",
@@ -189,6 +284,7 @@
     };
     state.lanes.push(lane);
     state.activeLane = lane.id;
+    ui.notice = "";
     recordChange("Bind Mutator knob");
     return lane;
   }
@@ -260,11 +356,10 @@
       const state = ensureState(sourceNode);
       const baked = E.bakeFreqLane(state.freqLane);
       params.playheadHz = Number(sourceNode.params && sourceNode.params.playheadHz);
-      if (!Number.isFinite(params.playheadHz)) params.playheadHz = E.hzFromNote(ui.auditionNote);
+      if (!Number.isFinite(params.playheadHz)) params.playheadHz = E.hzFromNote(soundingNote(sourceNode));
       sourceNode._mutatorFreqLut = baked;
       return;
     }
-    const x = ui.auditionNote;
     const offsets = [];
     for (const node of mutatorNodes()) {
       const state = ensureState(node);
@@ -272,7 +367,7 @@
       for (const lane of state.lanes || []) {
         if (lane.target.nodeId !== sourceNode.id) continue;
         if (!(lane.target.paramKey in params)) continue;
-        offsets.push({ key: lane.target.paramKey, meta: paramMeta(lane.target), offset: offsetAt(node, lane, soundingNote(node) || x), discrete: lane.discrete });
+        offsets.push({ key: lane.target.paramKey, meta: paramMeta(lane.target), offset: offsetAt(node, lane, soundingNote(node)), discrete: lane.discrete });
       }
     }
     const byKey = {};
@@ -479,8 +574,11 @@
       ui.suppressKeyClick = true;
       return;
     }
-    if (event.target.closest("[data-pm=key]")) {
+    const keyEl = event.target.closest("[data-pm=key]");
+    if (keyEl) {
       ui.pan = { kind: "maybe-key", pointerId: event.pointerId, x: event.clientX, scroll0: axis.scrollLeft, axis: axis };
+      // The note changes now, on pointerdown; a drag past the threshold below still turns into a pan.
+      setAuditionNote(Number(keyEl.getAttribute("data-note")));
       return;
     }
     if (!event.target.closest(".pm-plot-wrap") && !event.target.closest(".pm-kbd")) return;
@@ -637,17 +735,17 @@
     const range = E ? (E.MIDI_RANGE || E.KEYBOARD_SPAN) : { min: 0, max: 127 };
     const view = state ? viewOf(state) : viewOf(null);
     let kbd = "";
+    const lit = Math.round(node ? soundingNote(node) : ui.auditionNote);
     for (let n = range.min; n <= range.max; n++) {
-      const on = Math.round(ui.auditionNote) === n;
+      const on = lit === n;
       kbd += '<button type="button" class="pm-key' + (isBlack(n) ? " black" : "") + (on ? " audition" : "") + '" data-pm="key" data-note="' + n + '">' +
         (n % 12 === 0 ? midiName(n) : "") + "</button>";
     }
     const x = node ? soundingNote(node) : ui.auditionNote;
-    const freq = node ? freqAt(node, x) : null;
     const activeLane = state && state.activeLane !== "freq"
       ? (state.lanes || []).find((l) => l.id === state.activeLane)
       : null;
-    const hzValue = freq && freq > 0 ? freq.toFixed(2) : "";
+    const hzValue = node ? hzText(node, x) : "";
     const offValue = activeLane ? String(offsetAt(node, activeLane, x).toFixed(3)) : "";
     el.innerHTML = [
       '<div class="pm-overlay-chrome">',
@@ -681,11 +779,12 @@
           "</div>",
         "</div>",
         '<div class="pm-side">',
-          "<div>Playhead " + escapeHtml(midiName(x)) + " (" + (Number.isFinite(x) ? x.toFixed(2) : "") + ")</div>",
+          '<div data-pm="playhead">' + escapeHtml(node ? playheadText(node, x) : "") + "</div>",
           state && state.activeLane === "freq"
             ? '<label>Frequency Hz<input type="number" data-pm="hz" min="0" step="any" value="' + escapeAttr(hzValue) + '"></label>'
             : (activeLane ? '<label>Offset<input type="number" data-pm="offset" step="0.001" value="' + escapeAttr(offValue) + '"></label>' : "<div>Select a lane.</div>"),
-          "<div>Wire Freq Out into a FREQUENCY input. Arm, then turn one knob to bind.</div>",
+          "<div>Wire Freq Out into a FREQUENCY input. Arm, turn one knob to bind it, then Pin Keyframe at each note (or turn Auto-Pin on and turn the knob).</div>",
+          ui.notice ? "<div>" + escapeHtml(ui.notice) + "</div>" : "",
         "</div>",
       "</div>",
     ].join("");
@@ -722,6 +821,7 @@
     }
     if (act === "arm" && node) {
       node._mutatorArmed = !node._mutatorArmed;
+      ui.notice = "";
       return renderOverlay();
     }
     if (act === "pin") return pinActiveLane();
@@ -741,7 +841,9 @@
     }
     if (act === "key") {
       if (ui.suppressKeyClick) return;
-      setAuditionNote(Number(btn.getAttribute("data-note")));
+      // Pointer taps already set the note on pointerdown; this serves keyboard activation (Enter / Space).
+      const note = Number(btn.getAttribute("data-note"));
+      if (note !== ui.auditionNote) setAuditionNote(note);
     }
     if (act === "view-c0c8" && node) setAxisView(node, { start: 12, visible: 97 }, true);
     if (act === "view-c1c7" && node) setAxisView(node, { start: 24, visible: 73 }, true);
@@ -905,26 +1007,49 @@
       const hz = Number(signal && (signal.hz ?? signal.frequency));
       const E = engine();
       if (E && hz > 0) ui.auditionNote = E.noteFromHz(hz);
-      if (ui.open) renderOverlay();
+      // A MIDI module wired to a Freq In sends its note as that module's frequency.
+      const heardHz = hz > 0 ? hz : (Number.isFinite(note) && E ? E.hzFromNote(note) : 0);
+      if (heardHz > 0) {
+        for (const n of (patch() && patch().nodes) || []) {
+          if (n && n.type === "keyboardController") noteMoved(n.id, heardHz);
+        }
+      }
+      noteMoved("", 0);
       return orig.apply(this, arguments);
     }
     wrapped._pitchMutatorHooked = true;
     root.sendNodeGraphLiveMidiKeyboardSignal = wrapped;
   }
 
-  function tick() {
-    injectCommandCenter();
-    hookNav();
-    hookMidiKeyboard();
-    if (ui.open) {
-      const el = document.getElementById("pitchMutatorOverlay");
-      if (el && !el.hidden) {
-        const plot = el.querySelector("[data-pm=plot]");
-        if (plot) drawPlot(plot, selectedNode());
-      }
+  // A keyboard module's own signal (the Keyboard on the canvas): remember its Hz for any Mutator wired to it.
+  function hookKeyboardModuleSignal() {
+    const orig = root.sendNodeGraphLiveKeyboardModuleSignal;
+    if (typeof orig !== "function" || orig._pitchMutatorHooked) return;
+    function wrapped(nodeId, signal) {
+      const hz = Number(signal && signal.frequency);
+      noteMoved(nodeId, hz > 0 ? hz : 0);
+      return orig.apply(this, arguments);
     }
+    wrapped._pitchMutatorHooked = true;
+    root.sendNodeGraphLiveKeyboardModuleSignal = wrapped;
+  }
+
+  // A source module's frequency changed (or, with no id, the audition key did): everything that reads the playhead follows.
+  function noteMoved(sourceId, hz) {
+    const id = String(sourceId || "");
+    if (id) {
+      if (hz > 0) ui.sourceHz.set(id, hz);
+      else ui.sourceHz.delete(id);
+      if (!mutatorsFedBy(id).length) return;
+    }
+    if (typeof root.scheduleNodeGraphLiveParameterSync === "function") root.scheduleNodeGraphLiveParameterSync();
+    queueRedraw();
+  }
+
+  // The patch changed (cables, knobs re-rendered, mutators added or removed): rings, the wired source and the overlay catch up.
+  function onPatchCommit() {
     refreshRings();
-    ui.raf = root.requestAnimationFrame(tick);
+    queueRedraw();
   }
 
   root.togglePitchMutatorOverlay = toggleOverlay;
@@ -949,7 +1074,13 @@
     injectCommandCenter();
     hookNav();
     hookMidiKeyboard();
-    if (!ui.raf) ui.raf = root.requestAnimationFrame(tick);
+    hookKeyboardModuleSignal();
+    if (typeof root.addNodeGraphPatchCommitListener === "function") {
+      root.addNodeGraphPatchCommitListener(onPatchCommit);
+    } else {
+      (root.__nodeGraphPatchCommitPending || (root.__nodeGraphPatchCommitPending = [])).push(onPatchCommit);
+    }
+    refreshRings();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();

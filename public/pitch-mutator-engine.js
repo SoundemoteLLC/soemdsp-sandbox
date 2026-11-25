@@ -248,6 +248,15 @@
     return logv == null ? null : exp2(logv);
   }
 
+  // What Freq Out carries at note x: the lane's Hz when it has keys, otherwise the incoming frequency unchanged (an empty lane passes through,
+  // as the native engine does). inHz is the wired Freq In frequency when known; without it the playhead note's Hz.
+  function freqOutHz(baked, x, inHz) {
+    const lane = baked && baked.valid ? lookupFreqHz(baked.table, x, true) : null;
+    if (lane > 0) return lane;
+    const through = finite(inHz, NaN);
+    return through > 0 ? through : hzFromNote(x);
+  }
+
   function lookupOffset(table, x, valid) {
     return lookupLut(table, x, valid);
   }
@@ -368,6 +377,7 @@
     bakeOffsetLane,
     lookupLut,
     lookupFreqHz,
+    freqOutHz,
     lookupOffset,
     sliderFromDomain,
     domainFromSlider,
