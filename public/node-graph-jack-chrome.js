@@ -785,10 +785,7 @@ function nodeGraphJackCensusShouldWait() {
   ) {
     return true;
   }
-  const workspace = typeof document !== "undefined"
-    ? document.getElementById("nodeGraphWorkspace")
-    : null;
-  return Boolean(workspace?.classList.contains("viewport-zooming"));
+  return false;
 }
 
 function nodeGraphScheduleJackVisibilityLog(reason = "census") {
@@ -801,8 +798,8 @@ function nodeGraphScheduleJackVisibilityLog(reason = "census") {
   nodeGraphJackVisibilityLogTimer = setTimeout(() => {
     nodeGraphJackVisibilityLogTimer = 0;
     const run = (attempt = 0) => {
-      // Boot keeps .shell visibility:hidden, and a zoom gesture hides jacks.
-      // Both still have a real layout box, so a census then is a false FAIL.
+      // Boot keeps .shell visibility:hidden, which still has a real layout
+      // box, so a census then is a false FAIL.
       if (nodeGraphJackCensusShouldWait() && attempt < 200) {
         setTimeout(() => run(attempt + 1), 250);
         return;

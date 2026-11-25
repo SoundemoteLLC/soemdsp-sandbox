@@ -7671,16 +7671,8 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   cursor: var(--node-dot-cursor);
 }
 
-/* Mid-zoom: use frozen stroke compensate (JS sets --node-module-stroke-
-   zoom-compensate-frozen at gesture start). Live --node-graph-zoom ticks
-   must not restyle every module outline (costly at 10-20x). Settle drops
-   viewport-zooming + the frozen var so the live 1/zoom calc resumes. */
-.node-graph-workspace.viewport-zooming {
-  --node-module-stroke-zoom-compensate: var(--node-module-stroke-zoom-compensate-frozen, 1);
-}
-
-/* Stage 3: do not hide ports while zooming. The old HTML-renderer
-   deferral hid jacks until settle; GL draws them live from records. */
+/* Stage 5: viewport-zooming and the frozen stroke-compensate var are gone.
+   Live --node-graph-zoom drives stroke compensate. GL draws jacks from records. */
 
 .node-graph-workspace.panning {
 }

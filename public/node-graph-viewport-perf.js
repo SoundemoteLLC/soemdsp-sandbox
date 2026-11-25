@@ -124,14 +124,10 @@ function nodeGraphWriteInheritedZoomVar(workspace) {
 
 const nodeGraphViewportPerf = {
   heavyRaf: 0,
-  settleTimer: 0,
   persistTimer: 0,
-  wheelActiveUntil: 0,
   lastWirePlanKey: "",
   lastWirePlan: null,
-  settleMs: 140,
   persistMs: 220,
-  wheelHoldMs: 160,
 };
 
 const nodeGraphViewCamera = {
@@ -231,6 +227,11 @@ function viewFrame() {
   if (typeof applyNodeGraphViewportCssLight === "function") {
     applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: true, skipSync: true, skipCull: true, skipHeatmap: true });
   }
+  // Mid-camera heatmap used to wait on a trailing rAF. Run the lite/phase-only
+  // update in this same camera frame so lights track pan/zoom.
+  if (typeof updateNodeGraphGridHeatmap === "function") {
+    updateNodeGraphGridHeatmap({ lite: true, phaseOnly: true });
+  }
   // Same live cull as WASD: schedule a refresh, do not synchronously wake
   // every newly visible module in this frame (that blew zoom-out past 20 ms).
   // GL chrome comes from records, so drawing does not wait on the HTML wake.
@@ -276,30 +277,6 @@ function markNodeGraphViewportGesture(kind = "gesture") {
   // stays only as a cursor hint. Do not hide ports or arm a settle timer.
 }
 
-/** Snapshot 1/zoom into a frozen CSS var; viewport-zooming uses it mid-gesture. */
-function freezeNodeGraphViewportStrokeCompensate(workspace) {
-  const el = workspace || document.getElementById("nodeGraphWorkspace");
-  if (!el?.style) {
-    return;
-  }
-  if (el.style.getPropertyValue("--node-module-stroke-zoom-compensate-frozen")) {
-    return;
-  }
-  const z = typeof nodeGraphZoom === "function"
-    ? nodeGraphZoom()
-    : (nodeGraphMvp?.zoom || 1);
-  const compensate = 1 / Math.max(0.0001, Number(z) || 1);
-  el.style.setProperty("--node-module-stroke-zoom-compensate-frozen", String(compensate));
-}
-
-function unfreezeNodeGraphViewportStrokeCompensate(workspace) {
-  const el = workspace || document.getElementById("nodeGraphWorkspace");
-  if (!el?.style) {
-    return;
-  }
-  el.style.removeProperty("--node-module-stroke-zoom-compensate-frozen");
-}
-
 /**
  * Pointer-up end of pan / pinch / smooth-zoom: one full lights+wires pass.
  * No debounce timer — user asked for mouse-up only.
@@ -334,24 +311,17 @@ function clearNodeGraphViewportGestureClass() {
     return;
   }
   nodeGraphWriteInheritedZoomVar(workspace);
-  workspace.classList.remove("viewport-gesturing", "viewport-zooming");
-  unfreezeNodeGraphViewportStrokeCompensate(workspace);
+  workspace.classList.remove("viewport-gesturing");
   if (typeof invalidateNodeGraphWorkspaceLayoutMetrics === "function") {
     invalidateNodeGraphWorkspaceLayoutMetrics();
   }
 }
 
-if (typeof window !== "undefined" && !window.__nodeGraphViewportStrokeRescue) {
-  window.__nodeGraphViewportStrokeRescue = true;
+if (typeof window !== "undefined" && !window.__nodeGraphViewportGestureRescue) {
+  window.__nodeGraphViewportGestureRescue = true;
   window.addEventListener("pageshow", () => {
     clearNodeGraphViewportGestureClass();
   });
-  document.addEventListener("pointerdown", () => {
-    const workspace = document.getElementById("nodeGraphWorkspace");
-    if (workspace?.classList.contains("viewport-zooming")) {
-      clearNodeGraphViewportGestureClass();
-    }
-  }, true);
 }
 
 /**
@@ -436,8 +406,6 @@ function applyNodeGraphViewportCssLight(options = {}) {
   }
   if (options.skipHeatmap !== true && typeof updateNodeGraphGridHeatmap === "function") {
     updateNodeGraphGridHeatmap({ lite: true });
-  } else if (typeof scheduleNodeGraphViewportGestureHeatmapPhase === "function") {
-    scheduleNodeGraphViewportGestureHeatmapPhase();
   }
   if (options.skipCull !== true && typeof scheduleNodeGraphViewportCullRefresh === "function") {
     scheduleNodeGraphViewportCullRefresh({ cacheSizesOnly: false, minIntervalMs: 0 });
@@ -495,10 +463,6 @@ function flushNodeGraphViewportHeavyChrome(options = {}) {
   // rebuild below skipped faces of modules that were still asleep (display:none
   // has no layout box) and nothing rebuilt them once they woke.
   nodeGraphViewportCullFlushNow();
-  if (typeof scheduleNodeGraphViewportGesturePopIn === "function") {
-    if (nodeGraphViewportPopIn.raf) { window.cancelAnimationFrame(nodeGraphViewportPopIn.raf); nodeGraphViewportPopIn.raf = 0; }
-    if (nodeGraphViewportPopIn.timer) { window.clearTimeout(nodeGraphViewportPopIn.timer); nodeGraphViewportPopIn.timer = 0; }
-  }
   // Republish modules that are on screen. Offscreen modules stay display:none
   // and keep the attaches they already have, so their cables still have ends.
   if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
@@ -512,8 +476,6 @@ function flushNodeGraphViewportHeavyChrome(options = {}) {
       skipSelection: false,
     });
   }
-  // pan-popin-2: plates popped in mid-gesture were patched in incrementally.
-  nodeGraphViewportPopInSettleFull();
   if (typeof scheduleNodeGraphModuleScopeDraw === "function") {
     scheduleNodeGraphModuleScopeDraw();
   }
@@ -544,11 +506,6 @@ function scheduleNodeGraphWorkspaceViewPersist() {
     saveNodeGraphWorkspaceViewToUserSettings({ status: false });
   }, nodeGraphViewportPerf.persistMs);
 }
-
-/** Immediate full chrome (no gesture). Use after reset / auto-frame. */
-const nodeGraphViewportCull = {
-  observer: null,
-};
 
 // Live HTMLCollections: the browser keeps them current, and in the modular
 // view they are empty, so the per-face "is it presented?" check is O(1)
@@ -869,11 +826,10 @@ function nodeGraphViewportCullSleepPainters(element) {
 }
 
 function nodeGraphViewportCullBootOrLayoutUnsafe() {
-  // During boot the shell is visibility:hidden. IntersectionObserver and a
-  // zero-sized workspace cull then mark every module viewport-asleep
-  // (display:none). After the loading screen fades, K still works (controller
-  // dock) but the graph stays black with no nodes. Never sleep while booting
-  // or when the workspace has no real layout box yet.
+  // During boot the shell is visibility:hidden. A cull then would mark every
+  // module viewport-asleep (display:none). After the loading screen fades, K
+  // still works (controller dock) but the graph stays black with no nodes.
+  // Never sleep while booting or when the workspace has no real layout box yet.
   const body = document.body;
   if (
     body?.classList?.contains("node-boot-loading")
@@ -886,8 +842,7 @@ function nodeGraphViewportCullBootOrLayoutUnsafe() {
 
 /** Module world layer plus every legal Text Box host.
  *  Those nodes sit outside the zoom surface. A cull that only walks the
- *  module world layer never clears viewport-asleep, and display:none
- *  stops IntersectionObserver from firing again. */
+ *  module world layer never clears viewport-asleep. */
 function nodeGraphViewportCullModuleRoots(surface) {
   const roots = [];
   const seen = new Set();
@@ -1133,18 +1088,6 @@ function nodeGraphViewportModuleWorldBox(element, options = {}) {
   return { x, y, w: size.w, h: size.h, guessed: false };
 }
 
-function scheduleNodeGraphViewportGestureHeatmapPhase() {
-  if (nodeGraphViewportPerf.gestureHeatmapRaf) {
-    return;
-  }
-  nodeGraphViewportPerf.gestureHeatmapRaf = window.requestAnimationFrame(() => {
-    nodeGraphViewportPerf.gestureHeatmapRaf = 0;
-    if (typeof updateNodeGraphGridHeatmap === "function") {
-      updateNodeGraphGridHeatmap({ lite: true, phaseOnly: true });
-    }
-  });
-}
-
 /** B-101: run the geometric cull now (live camera), dropping any queued one. */
 function nodeGraphViewportCullFlushNow() {
   if (nodeGraphViewportPerf.cullRaf) {
@@ -1211,117 +1154,6 @@ function nodeGraphViewportModuleAlreadyMeshed(id) {
     if ((layers[i]?.ids || []).some((x) => String(x) === want)) return true;
   }
   return false;
-}
-
-// pan-popin-1 (Argi): a module that scrolls into view while a pan, touch
-// pan, pinch or wheel zoom is still held used to stay blank (culled
-// display:none, no GL face) until pointer-up or the wheel settle, because the
-// frozen-HTML gesture (ZP-4) skips the cull and the GL rebuild. Now one pass a
-// frame wakes the culled modules that are on screen, nearest the view centre
-// first, at most POPIN_MAX modules or POPIN_BUDGET_MS of wake work, then
-// rebuilds the GL plates once. pan-popin-2: only the woken modules' plates
-// (nodeGraphGlGraphRebuildPlates({ ids })); before that the rebuild was a whole-patch pass (about
-// 20-40 ms on a 60-module patch, headless), so passes are at least
-// POPIN_MIN_INTERVAL_MS apart: modules entering in a burst share one.
-// The cull margin wakes a module a little before it reaches the edge.
-// Nothing sleeps mid-gesture; the settle pass still culls.
-const NODE_GRAPH_VIEWPORT_POPIN_MAX = 24;
-const NODE_GRAPH_VIEWPORT_POPIN_BUDGET_MS = 8;
-const NODE_GRAPH_VIEWPORT_POPIN_MIN_INTERVAL_MS = 100;
-const nodeGraphViewportPopIn = {
-  raf: 0, timer: 0, rebuild: false, lastAt: 0, lastWoke: 0, lastMs: 0,
-  // pan-popin-2: plates added incrementally this gesture; the settle pass owes
-  // a full rebuild + present so heatmap lights catch up on them.
-  partial: false, partialGen: 0, lastMode: "",
-};
-
-/** Awake on-screen modules the GL plate list does not have yet (woken outside the pop-in pass). */
-function nodeGraphViewportPopInPlatelessIds() {
-  const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
-  if (!state || !Array.isArray(state.plates)) return null;
-  const have = new Set(state.plates.map((plate) => String(plate?.id || "")));
-  const out = [];
-  nodeGraphViewportCullForEachNode(null, ".dsp-node:not(.viewport-asleep):not(.removed)", (element) => {
-    if (element.hidden) return;
-    const id = String(element.dataset?.node || "");
-    if (id && !have.has(id)) out.push(id);
-  });
-  return out;
-}
-
-/** Settle: if this gesture only patched plates in, do the full rebuild + present it skipped. */
-function nodeGraphViewportPopInSettleFull() {
-  if (!nodeGraphViewportPopIn.partial) return;
-  nodeGraphViewportPopIn.partial = false;
-  const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
-  // drawNodeGraphWires (full) normally did it already: a full GL rebuild bumps gen.
-  if (state && (state.gen || 0) !== nodeGraphViewportPopIn.partialGen) return;
-  if (typeof nodeGraphGlGraphRebuildPlates !== "function") return;
-  if (typeof nodeGraphGlGraphInvalidateMesh === "function") nodeGraphGlGraphInvalidateMesh("popin-settle-full");
-  nodeGraphGlGraphRebuildPlates();
-  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
-}
-
-function scheduleNodeGraphViewportGesturePopIn() {
-  if (nodeGraphViewportPopIn.raf || nodeGraphViewportPopIn.timer || typeof window === "undefined") return;
-  const wait = NODE_GRAPH_VIEWPORT_POPIN_MIN_INTERVAL_MS
-    - ((performance.now?.() || Date.now()) - nodeGraphViewportPopIn.lastAt);
-  const frame = () => {
-    nodeGraphViewportPopIn.raf = window.requestAnimationFrame(() => {
-      nodeGraphViewportPopIn.raf = 0;
-      nodeGraphViewportGesturePopIn();
-    });
-  };
-  if (wait > 0 && nodeGraphViewportPopIn.lastAt) {
-    nodeGraphViewportPopIn.timer = window.setTimeout(() => {
-      nodeGraphViewportPopIn.timer = 0;
-      frame();
-    }, wait);
-    return;
-  }
-  frame();
-}
-
-/** Culled modules inside the live view (+ cull margin), nearest the centre first. Cached sizes only. */
-function nodeGraphViewportPopInCandidates() {
-  const workspace = document.getElementById("nodeGraphWorkspace");
-  if (!workspace) return [];
-  const zoom = Math.max(
-    0.0001,
-    typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphFiniteNumber(nodeGraphMvp?.zoom, 1)),
-  );
-  const origin = typeof nodeGraphRenderedOriginOffset === "function"
-    ? nodeGraphRenderedOriginOffset()
-    : { x: 0, y: 0 };
-  const box = typeof nodeGraphWorkspaceLayoutMetrics === "function"
-    ? nodeGraphWorkspaceLayoutMetrics(workspace)
-    : { width: workspace.clientWidth, height: workspace.clientHeight };
-  const boxW = nodeGraphFiniteNumber(box.width);
-  const boxH = nodeGraphFiniteNumber(box.height);
-  if (boxW < 32 || boxH < 32) return [];
-  const margin = 96;
-  const ox = nodeGraphFiniteNumber(origin.x);
-  const oy = nodeGraphFiniteNumber(origin.y);
-  const left = (0 - margin - ox) / zoom;
-  const top = (0 - margin - oy) / zoom;
-  const right = (boxW + margin - ox) / zoom;
-  const bottom = (boxH + margin - oy) / zoom;
-  const cx = (boxW / 2 - ox) / zoom;
-  const cy = (boxH / 2 - oy) / zoom;
-  const out = [];
-  nodeGraphViewportCullForEachNode(null, ".dsp-node.viewport-asleep:not(.removed)", (element) => {
-    if (element.hidden) return;
-    // view-1: same world-unit box as the cull (no layout reads mid-gesture).
-    const { x, y, w: width, h: height } = nodeGraphViewportModuleWorldBox(element);
-    if (!(x < right && (x + width) > left && y < bottom && (y + height) > top)) return;
-    out.push({ element, d: Math.hypot(x + width / 2 - cx, y + height / 2 - cy) });
-  });
-  out.sort((a, b) => a.d - b.d);
-  return out;
-}
-
-function nodeGraphViewportGesturePopIn() {
-  // Obsolete HTML-renderer mid-gesture wake. viewFrame runs live cull + present.
 }
 
 function scheduleNodeGraphViewportCullRefresh(options = {}) {
@@ -1497,71 +1329,13 @@ function nodeGraphViewportCullApply(element, intersecting) {
   }
 }
 
-function ensureNodeGraphViewportModuleCull() {
-  const root = document.getElementById("nodeGraphWorkspace");
-  if (!root || typeof IntersectionObserver !== "function") {
-    return null;
-  }
-  if (nodeGraphViewportCull.observer) {
-    return nodeGraphViewportCull.observer;
-  }
-  nodeGraphViewportCull.observer = new IntersectionObserver((entries) => {
-    if (nodeGraphViewportCullBootOrLayoutUnsafe()) {
-      for (const entry of entries) {
-        const node = entry.target?.classList?.contains("dsp-node")
-          ? entry.target
-          : entry.target?.closest?.(".dsp-node");
-        if (node) {
-          nodeGraphViewportCullApply(node, true);
-        }
-      }
-      return;
-    }
-    // B-101: the observer may only WAKE. Its entries arrive async and can
-    // describe an older camera: pan out (geometric cull sleeps the module,
-    // queuing a "not intersecting" entry), pan back fast (geometric cull
-    // wakes it), then the stale entry lands and sleeps it again. display:none
-    // never changes intersection again, so the module stayed bodiless. A
-    // non-intersect now asks the geometric cull (live camera) to decide.
-    let needsGeometricCull = false;
-    for (const entry of entries) {
-      const node = entry.target?.classList?.contains("dsp-node")
-        ? entry.target
-        : entry.target?.closest?.(".dsp-node");
-      if (!node) continue;
-      if (entry.isIntersecting) {
-        nodeGraphViewportCullApply(node, true);
-      } else {
-        needsGeometricCull = true;
-      }
-    }
-    if (needsGeometricCull) {
-      scheduleNodeGraphViewportCullRefresh();
-    }
-  }, {
-    root,
-    rootMargin: "160px",
-    threshold: 0,
-  });
-  return nodeGraphViewportCull.observer;
-}
-
 function nodeGraphViewportCullObserve(element) {
-  const node = element?.classList?.contains("dsp-node")
-    ? element
-    : element?.closest?.(".dsp-node");
-  if (!node) {
-    return;
+  // Stage 5: the IntersectionObserver cull is gone. New or replaced modules
+  // just ask the live geometric cull to run.
+  if (!element) return;
+  if (typeof scheduleNodeGraphViewportCullRefresh === "function") {
+    scheduleNodeGraphViewportCullRefresh();
   }
-  const observer = ensureNodeGraphViewportModuleCull();
-  if (observer) {
-    try {
-      observer.observe(node);
-    } catch (_error) {
-      // Ignore detached / double-observe.
-    }
-  }
-  scheduleNodeGraphViewportCullRefresh();
 }
 
 function nodeGraphViewportCullSyncSelection() {

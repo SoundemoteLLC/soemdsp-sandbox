@@ -86,5 +86,38 @@ else ok("zoom path calls viewCameraSet");
 if (!view.includes("viewCameraSet")) fail("applyNodeGraphPan path does not call viewCameraSet");
 else ok("pan path calls viewCameraSet");
 
+if (/wheelActiveUntil|settleMs\s*:|wheelHoldMs\s*:/.test(perf) || /function\s+freezeNodeGraphViewportStrokeCompensate/.test(perf)) {
+  fail("wheel/settle leftover or stroke-compensate freeze is still present");
+} else {
+  ok("wheelActiveUntil / settleTimer / stroke-compensate freeze were deleted");
+}
+if (/new IntersectionObserver/.test(perf) || /function\s+ensureNodeGraphViewportModuleCull/.test(perf)) {
+  fail("IntersectionObserver cull is still present");
+} else {
+  ok("IntersectionObserver cull was deleted");
+}
+if (/function\s+scheduleNodeGraphViewportGesturePopIn/.test(perf) || /function\s+nodeGraphViewportGesturePopIn/.test(perf) || /function\s+nodeGraphViewportPopInSettleFull/.test(perf)) {
+  fail("Moth pop-in pass is still present");
+} else {
+  ok("Moth pop-in pass was deleted");
+}
+if (/gestureHeatmapRaf/.test(perf) || /function\s+scheduleNodeGraphViewportGestureHeatmapPhase/.test(perf)) {
+  fail("gestureHeatmapRaf is still present");
+} else {
+  ok("gestureHeatmapRaf was deleted; heatmap is folded into viewFrame");
+}
+if (!/function\s+nodeGraphViewportCullRefresh/.test(perf) || !/function\s+nodeGraphViewportCullMustStayAwake/.test(perf) || !/function\s+nodeGraphViewportCullSyncSelection/.test(perf)) {
+  fail("live budgeted cull, MustStayAwake, or selection sync is missing");
+} else {
+  ok("live budgeted cull, MustStayAwake, and selection sync remain");
+}
+if (!/updateNodeGraphGridHeatmap\(\{\s*lite:\s*true,\s*phaseOnly:\s*true\s*\}/.test(perf)) {
+  fail("viewFrame no longer runs the lite/phaseOnly heatmap update");
+} else {
+  ok("viewFrame runs lite/phaseOnly heatmap");
+}
+
+
+
 console.log(bad ? `\n${bad} check(s) FAILED` : "\nall source checks passed");
 process.exit(bad ? 1 : 0);
