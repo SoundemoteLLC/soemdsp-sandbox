@@ -4,17 +4,17 @@
 |-------|-------|
 | **Author** | Misty (for Argi) |
 | **Date** | 2026-11-25 |
-| **Status** | Design only. Do not implement from this revision. |
+| **Status** | Design only. §§1–6 accuracy plan; §7 STFT processor display styles. Do not implement from this revision. |
 | **Repo** | `C:\Users\argit\Documents\_PROGRAMMING\soemdsp-sandbox` |
-| **Related** | `docs/SPECTRUM_1D.md`, `docs/CIRCULAR_SPECTROGRAM.md`, `docs/SPECTRUM_CIRCLE.md` |
+| **Related** | `docs/SPECTRUM_1D.md`, `docs/CIRCULAR_SPECTROGRAM.md`, `docs/SPECTRUM_CIRCLE.md`, `docs/SPECTRAL_BLUR.md` |
 
-Handoff for an outside coding AI. Upgrade STFT / FFT *displays* one module at a time. Get the proof-of-concept perfect, then a few more, then the rest. Do not start every display at once. Do not change audio DSP modules (Spectral Blur, Warp, Delay, etc.) unless a display needs a read-only analysis tap. Leave other agents' dirty files alone.
+Handoff for an outside coding AI. Upgrade STFT / FFT *displays* one module at a time. Get the proof-of-concept perfect, then a few more, then the rest. Do not start every display at once. Do not change audio DSP except a read-only band/bin tap when a processor face needs it (see §7). Leave other agents' dirty files alone.
 
 ---
 
 ## 1. Inventory
 
-These four are the live FFT / STFT *faces*. Other "waterfall" displays in the app are scrolling signal history, not spectra. Matrix Waterfall is glyph rain. Spectral Oscillator's face is a baked one-cycle plot (`spectralOscBakeCycle`), not a live FFT. Spectral Blur and the other STFT processors use a 1D scope trace. `fftReconstruction` is still a stub with no DSP. Those are out of scope except as later consumers of a shared analysis core.
+These four are the live FFT / STFT *faces*. Other "waterfall" displays in the app are scrolling signal history, not spectra. Matrix Waterfall is glyph rain. Spectral Oscillator's face is a baked one-cycle plot (`spectralOscBakeCycle`), not a live FFT. Spectral Blur and the other STFT processors use a 1D scope trace. `fftReconstruction` is still a stub with no DSP. STFT / spectral processors get visual styles in §7; they stay out of the analyzer accuracy PoC except as later consumers of the shared analysis core.
 
 | Module | Type / files | How the FFT is computed | How it is drawn | Display Settings / face | Visible weaknesses |
 |--------|----------------|-------------------------|-----------------|-------------------------|--------------------|
@@ -96,7 +96,7 @@ Do two or three faces that already share the worklet, so they inherit the core.
 
 1. **Spectrum Circle** (`videoFeedback`) — stop the main-thread per-video-frame FFT; consume the shared worklet (or the same helper driven by audio hops). Keep the ray / mirror presentation. Give it a real ceiling, not only a floor. Update `docs/SPECTRUM_CIRCLE.md` and `scripts/test_spectrum_circle.mjs`.
 2. **Generic scope "Spectrum" mode** — point it at the shared core and 1D mapping, or remove it and send people to 1D Spectrum (no dead code).
-3. Any later FFT display (or a video 📺 tap from these faces) must use the shared core. Audio STFT modules stay out of this plan.
+3. Any later FFT display (or a video 📺 tap from these faces) must use the shared core. Processor faces use the style menu in §7; their audio DSP stays put except a read-only tap.
 
 ---
 
@@ -109,4 +109,107 @@ Do two or three faces that already share the worklet, so they inherit the core.
 5. Keep Mel / Bark, or is the 0…1 linear↔log curve enough?
 6. Should the worklet FFT eventually move to native C++, or is the JS worklet the long-term analysis core?
 
-Listening acceptance by Argi on the 1D Spectrum PoC is required before Phase 2 starts.
+Listening acceptance by Argi on the 1D Spectrum accuracy PoC is required before analyzer Phase 2 starts.
+The STFT processor style PoC (Vocoder, §7) may proceed beside it once the shared style renderer can take a band vector.
+
+---
+
+## 7. Display styles for STFT modules
+
+Argi's "upgrade" is two layers: the accuracy work in §§1–6, **and** new visual designs on the *processor* modules (not only the Multimeter analyzers). One example is Vocodex-style bars that grow and shrink per band — useful, but no module should be locked to that look. Style is a Display Settings choice. The 1D Spectrum accuracy PoC stays first (or can overlap only if it does not block this). This section is the style plan.
+
+DSP stays as-is except a **read-only** tap of band or bin levels when a display needs the module's own analysis (preferred over a second FFT of the output).
+
+### 7.1 Processor inventory (current faces)
+
+`process_stft_dynamics` in `graph_engine.cpp` (~16379, dispatched ~19636) runs **Spectral Blur**, **STFT Contrast**, and **STFT Gate**. Other spectral processors have their own process functions in the same file. Almost every live one currently shows a generic **1D oscilloscope trace** (`displayType: "scope1dTrace"`) — a waveform, not bands. That is the gap.
+
+| Module | Type / native | Engine | Current face | Notes |
+|--------|----------------|--------|--------------|-------|
+| Spectral Blur | `spectralBlur` (272), `native_modules/spectral_blur/spectral_blur.cpp` | `process_stft_dynamics` | `scope1dTrace`. Face: FFT size, Time Smear, Frequency Blur, Diffusion, Stereo, smoothers, Swarm / Level / Rate / Drift / Seed, Mix. | Live STFT effect. Swarm/Cloud wants a look that can feel fuzzy, not only a waveform. |
+| STFT Contrast | `stftContrast` (270), `native_modules/stft_contrast/` | `process_stft_dynamics` | `scope1dTrace`. Contrast, Scale, Threshold, Ratio, Attack / Release, boost / gain, Mix. | Stereo-linked spectral dynamics. The interesting picture is per-band gain, not the output wave. |
+| STFT Gate | `stftGate` (271), `native_modules/stft_gate/` | `process_stft_dynamics` | `scope1dTrace`. Hold, knee, profile, threshold, margin, depth, Attack / Release, smooth, Mix. | Same story: which bands are open or shut. |
+| Spectral Freeze | `spectralFreeze` (273), `native_modules/spectral_freeze/` | own process (~19625) | `scope1dTrace`. | Frozen vs live spectrum is the story. |
+| Spectral Delay | `spectralDelay` (275), `native_modules/spectral_delay/` | own process (~19631) | `scope1dTrace`. FFT size, delay / spread, pivot, curve, feedback, Mix. | Delay-vs-frequency, or a short history of the wet spectrum. |
+| Spectral Warp | `spectralWarp` (279), `native_modules/spectral_warp/` | own process (~19614) | `scope1dTrace`. | Input vs output spectrum shows the warp. |
+| Spectral Cross Synthesis | `spectralCrossSynthesis` (278), `native_modules/spectral_cross_synthesis/` | own process (~19617) | `scope1dTrace`. | Two sources; an overlay earns its keep. |
+| Vocoder | `vocoder` (269), `native_modules/vocoder/vocoder.cpp` | own process (~19621) | `scope1dTrace`. Bands (5–100, default 32, log IIR 40 Hz–90% Nyquist), Band Width, Follower, Formant Shift, Mix. Inputs: Voice L/R, Synth L/R. | **Filter-bank vocoder, not an STFT**, but it is the Vocodex analogue: real per-band envelopes already exist in the DSP. Best style PoC. |
+| Convolution Resonator | `convolutionResonator`, has an STFT vocoder blend | own process | **Already a custom WebGL face** `convolutionResonatorFace` ("Body / Bands"). | Do not replace that default. Later, offer the shared style menu as an *optional* display mode. |
+| Spectral Smear (`spectralSmear`), FFT Reconstruction (`fftReconstruction`) | stubs | none | empty defs, no face, no DSP. | Skip until they exist. |
+| Spectral Oscillator | oscillator, not a processor | `process_spectral_osc` | baked cycle (`additiveWaveform`), not a live STFT. | Out of this section. |
+| Dispersion, Material Resonator, Noise Convolution Reverb, Early Reflections | also `scope1dTrace` or their own FX faces | not STFT analysis | — | Out of the shared STFT style menu unless a later pass offers the same renderer on any processor. |
+
+`stftBlur` remains a dead passthrough (see `docs/SPECTRAL_BLUR_SWARM_PLAN.md` §7) and is not a display target.
+
+### 7.2 Shared style menu
+
+One WebGL style renderer (new helper, e.g. `public/lib/spectral-display-styles.js` + a shader face), fed by a **band or bin vector** plus optional second vector (input, carrier, or per-band gain). Sources, in order of preference:
+
+1. A read-only tap of the module's own bands (Vocoder IIR envelopes, STFT Gate / Contrast gain, Freeze magnitudes, etc.).
+2. The shared analysis core from §2, on In and/or Out (and a second input when the module has one).
+
+Do not run a second heavy FFT when the DSP already has the bands. Updates follow audio hops or the module's own band-rate posts (`hopSerial` or equivalent) — **events only, no timers or polling**.
+
+Style is a **Display Settings choice** (`spectralDisplayStyle` or similar), not hardcoded in the module. Band count, frequency scale (log/lin; Vocoder should default to its real IIR band map), dB floor/ceiling, colors / gradient, peak-cap and attack/release times all take their **limits from parameter definitions** (or settings whose min/max/step live in those defs). Docked tips are real sentences. **No hover tooltips.** Phone-friendly: the style view fills the module display area under the existing knob rows; dense options stay in Display Settings. Canvas and Mini Canvas: one rendered tile, Mini Canvas is a **uniformly scaled copy**, not a second analysis. Display scaling must **not fake clipping** (same rule as §2). WebGL only, no Canvas2D fallback, no dead style branches.
+
+| Style key | What it looks like | Fits best |
+|-----------|--------------------|-----------|
+| `bars` | Vertical (or radial, later) bars that grow and shrink with each band's level. Optional peak caps with hold then fall. Attack/release from defs so motion can be snappy or creamy. Vocodex-class. | **Vocoder** default. Also a strong option on Gate / Contrast (level or gain). |
+| `curve` | Smooth filled (and/or stroked) spectrum, log or lin X, honest dB Y — the 1D Spectrum look on a processor face. | Safe, readable default for Warp, Delay, Freeze, and Blur if particles feel too busy. |
+| `particles` | A dot / particle field that gathers around the current spectrum (or Swarm/Cloud bins). Fuzzy, not a hard bar graph. | **Spectral Blur** default (matches Swarm / Cloud). Optional elsewhere. |
+| `mirrorBars` | Two sets of bars, mirrored: L/R, or In/Out, or Voice/Synth. | Stereo Blur, Vocoder (Voice vs Synth), Cross Synthesis. |
+| `miniWaterfall` | A short scrolling spectrum history in the face (not a full Spectrogram module). | **Spectral Delay** default; also Freeze (frozen plate + live trickle). |
+| `overlay` | Input and output (or two sources) drawn together — two curves, or bars in two colors. | **Spectral Warp** and **Cross Synthesis** defaults. |
+| `bandGain` | Per-band gain or gain-reduction: a zero line, boost up, cut down (or a dim bar for "shut"). | **STFT Gate** and **STFT Contrast** defaults. |
+
+A module may hide styles that make no sense (no `bandGain` on Warp unless it exposes a gain vector). Adding a style later must not require forking a new renderer per module.
+
+### 7.3 Recommended default per module
+
+| Module | Default style | Why |
+|--------|---------------|-----|
+| Vocoder | **Bars** | This is the Vocodex picture: one bar per real IIR band, following the Voice envelope that drives the Synth. Curve is the fallback if bars feel too busy at 100 bands. |
+| STFT Gate | **Band gain** | You need to see which bands are open. Bars of output level hide the gate. |
+| STFT Contrast | **Band gain** | Contrast/compression is a per-band gain story; overlay or bars are options. |
+| Spectral Blur | **Particles** | Waveform and hard bars fight the cloudy/fuzzy identity (Swarm / Cloud). A filled curve is the sober alternative if particles are not ready in the first style slice. |
+| Spectral Freeze | **Mini waterfall** or a **curve** of the held spectrum with a live-input ghost | The hold is the point; a bouncing output wave is not. |
+| Spectral Delay | **Mini waterfall** | Time-across-frequency is the module. A later specialized "delay vs Hz" curve is welcome but not the first style. |
+| Spectral Warp | **Overlay** (in vs out) | You want to see the spectrum stretch, not just a wet waveform. |
+| Spectral Cross Synthesis | **Overlay** (two sources and/or in vs out) | Two inputs. |
+| Convolution Resonator | Keep **Body / Bands** | Already designed. Shared styles can be an optional mode later, not the spawn default. |
+
+The 1D Spectrum *monitor* already has Filled / Line / Bars; it can stay on that schema, or later offer the same style keys where they overlap. Do not delay the accuracy PoC on this menu.
+
+### 7.4 Style proof of concept: Vocoder
+
+**Pick: Vocoder (`vocoder`).** After (or beside, without blocking) the 1D Spectrum accuracy PoC.
+
+Reasons: Argi's reference is Vocodex-style growing bars, and this module already has a real band count and log IIR envelopes — the display can match the sound instead of a generic FFT of the output. It is a *processor*, so it proves the style menu on the modules that today only show `scope1dTrace`. Spectral Blur is a better later customer (default particles) once the renderer exists; Gate / Contrast follow with `bandGain`.
+
+**"Perfect" for this slice**
+
+- Spawn shows **bars**, one per Vocoder band (the `bands` parameter, log 40 Hz–90% Nyquist), levels from a read-only tap of the DSP envelopes (Voice analysis at least; Synth or output as a second color or mirror option). A 0 dBFS tone in one band fills that bar honestly; floor/ceiling come from defs; no fake clip.
+- Peak caps and attack/release are real and definition-owned. Follower (ms) already in the module may drive or default the visual lag; do not invent a second undocumented smoother.
+- Display Settings includes **Style** (at least Bars, Curve, Overlay / Mirror, and a documented subset of the menu). Switching style does not change the audio. Changing `bands` resizes the picture with the same 20 ms warm / crossfade the DSP already uses.
+- WebGL only, phone-friendly under the existing three knob rows. Canvas and Mini Canvas share one tile; Mini Canvas is a uniform scale. Events / envelope posts only — no timers. No hover tooltips. Thru / dry-wet audio unchanged. Old patches load; they just *gain* a spectral face (document the new default so a bare `scope1dTrace` waveform is not silently required).
+- Tests: envelope-to-bar correspondence, band-count changes, style switch, peak caps, no NaN, no second audio path, Mini Canvas is a scale of the same picture.
+
+**Steps and files**
+
+1. Read-only band tap in `native_modules/vocoder/vocoder.cpp` (and `process` in `graph_engine.cpp` ~19621): post Voice (and Synth or output) envelope arrays plus band-center Hz, count, and a serial. Do not alter the audio path. Wire through the worklet / data bus the same way Spectrogram posts `Spectrum` (`public/node-live-audio-worklet-native-graph.js` as needed).
+2. Shared style renderer (new, under `public/lib/` or `public/modules/spectralDisplay/`): WebGL bars / curve / overlay (particles may wait for the Blur slice if time is tight — say so if dropped). Consume a generic `{ hz[], levelA[], levelB?, gain[]? }` buffer so Gate and Blur can reuse it.
+3. Vocoder face: `public/node-graph-module-definitions.js` (`vocoder`, ~9148) — keep the knob rows; change or add a display type/mode (do not leave only `scope1dTrace` as the only mode). Settings schema in `public/node-graph-module-scope-trace-controls.js` and defaults in `public/node-graph-module-scope-defaults.js`: Style, floor/ceiling, peak, colors/gradient, scale. Limits only from defs. Docked tips.
+4. Tests: new `scripts/test_vocoder_display.mjs` (and a small browser smoke if that is house style). Docs: a short note in a vocoder doc if one exists, otherwise a subsection here or `docs/VOCODER.md` only if the repo already has it.
+5. Leave Convolution Resonator's custom face alone. Leave other agents' dirty files alone. MasterBot's graph / camera / cull files stay off-limits. No server kills, no app restart; Argi Ctrl+F5s. Append `?v=` tags if HTML boot lists must change.
+
+**After the Vocoder style PoC:** STFT Gate and STFT Contrast (`bandGain`, taps from `process_stft_dynamics` / `stft_gate.cpp` / `stft_contrast.cpp`), then Spectral Blur (`particles`, after or with Cloud), then Warp / Cross Synthesis (`overlay`) and Delay / Freeze (`miniWaterfall`).
+
+### 7.5 Open questions (styles)
+
+1. For Vocoder bars, is the primary height the Voice envelope, the vocoded output, or a default overlay of both?
+2. Should a "Waveform" style remain (today's `scope1dTrace`) as an explicit choice so nothing is taken away?
+3. Particle style in the Vocoder PoC, or only once Spectral Blur picks it up?
+4. Visual attack/release: reuse Follower (ms), or a separate definition-owned pair so the sound can stay crunchy while the face stays calm?
+5. When is the 1D Spectrum accuracy PoC required to land relative to this style PoC? (Recommended: accuracy core first or in parallel; do not block bars on multi-res bass FFT.)
+
+Listening acceptance by Argi on the Vocoder bars (and on switching to at least one other style) is required before rolling the menu to the other processors.
