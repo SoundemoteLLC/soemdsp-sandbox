@@ -6,7 +6,10 @@ const latency = x.soemdsp_spectral_blur_latency();
 assert.equal(latency, 4096);
 const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,
   x.soemdsp_spectral_blur_metadata_json(), x.soemdsp_spectral_blur_metadata_json_size())));
-assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'swarm', 'swarmRate', 'swarmDrift', 'swarmSeed', 'mix']);
+assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'swarm', 'swarmLevel', 'swarmRate', 'swarmDrift', 'swarmSeed', 'mix']);
+assert.equal(meta.parameters.find(p => p.key === 'swarm').unit, '°');
+assert.equal(meta.parameters.find(p => p.key === 'swarmLevel').unit, 'dB');
+assert.equal(meta.parameters.find(p => p.key === 'swarmDrift').unit, 'Hz');
 assert.equal(meta.parameters.find(p => p.key === 'swarm').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmDrift').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmSeed').kind, 'seed');
@@ -146,7 +149,8 @@ x.soemdsp_spectral_blur_destroy(h);
 // Swarm (+ Rate, Drift, Seed): fuzzy per-bin wobble that stays in place in time. Separate from Diffusion, which is not touched.
 {
   const sr = 48000;
-  const swarmSet = (h, swarm, rate, drift, seed) => x.soemdsp_spectral_blur_set_swarm(h, swarm, rate, drift, seed);
+  // Test shorthand: swarm 1 = 180 degrees of phase wobble and 6 dB of level wobble, drift 1 = 3 Hz of pitch wander (the real units go to the module).
+  const swarmSet = (h, swarm, rate, drift, seed) => x.soemdsp_spectral_blur_set_swarm(h, swarm * 180, swarm * 6, rate, drift * 3, seed);
   const fresh = (stereoSpread = 0) => { const h = x.soemdsp_spectral_blur_create(); x.soemdsp_spectral_blur_set_stereo_spread(h, stereoSpread); x.soemdsp_spectral_blur_set_smoothing(h, 10, 0); return h; };
   const tone = i => { const v = 0.1 * Math.sin(2 * Math.PI * 440 * i / sr) + 0.05 * Math.sin(2 * Math.PI * 1234 * i / sr); return [v, 0.4 * v]; };
   const sameArrays = (a, b) => { for (let c = 0; c < 2; ++c) for (let i = 0; i < a[c].length; ++i) if (a[c][i] !== b[c][i]) return false; return true; };

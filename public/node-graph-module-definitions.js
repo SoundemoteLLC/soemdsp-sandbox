@@ -8652,8 +8652,9 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["smearSeconds", "Time Smear"], ["blurHz", "Frequency Blur"]], h: 40 },
       { kind: "cells", params: [["diffusion", "Diffusion"], ["stereoSpread", "Stereo Spread"]], h: 40 },
       { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
-      { kind: "cells", params: [["swarm", "Swarm"], ["swarmRate", "Rate"]], h: 40 },
-      { kind: "cells", params: [["swarmDrift", "Drift"], ["swarmSeed", "Seed"]], h: 40 },
+      { kind: "cells", params: [["swarm", "Swarm"], ["swarmLevel", "Level"]], h: 40 },
+      { kind: "cells", params: [["swarmRate", "Rate"], ["swarmDrift", "Drift"]], h: 40 },
+      { kind: "cells", params: [["swarmSeed", "Seed", "horizontal"]], h: 26 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
     ],
     parameters: [
@@ -8775,11 +8776,22 @@ const nodeGraphModuleDefinitions = (
         "label": "Swarm",
         "defaultValue": "0",
         "min": "0",
-        "mid": "0.5",
-        "max": "1",
-        "unit": "%",
+        "mid": "45",
+        "max": "180",
+        "unit": "°",
         "step": "any",
-        "tooltip": "Fuzzy, buzzing wobble of each partial's phase and level that stays in place in time. Zero is off and leaves the sound unchanged. It is not a smear: with Time Smear, Frequency Blur and Diffusion at zero, transients keep their time (plus the FFT Size delay). Wobble updates at the STFT hop rate."
+        "tooltip": "Peak phase wobble of each partial, in degrees, a fuzzy buzz that stays in place in time. Zero is off and leaves the sound unchanged. It is not a smear: with Time Smear, Frequency Blur and Diffusion at zero, transients keep their time (plus the FFT Size delay). Wobble updates at the STFT hop rate."
+      },
+      {
+        "key": "swarmLevel",
+        "label": "Level",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "6",
+        "max": "24",
+        "unit": "dB",
+        "step": "any",
+        "tooltip": "Level wobble of each partial, in dB (plus or minus at its peak), applied after Amplitude Smooth. Zero leaves levels alone. Updates at the STFT hop rate."
       },
       {
         "key": "swarmRate",
@@ -8792,18 +8804,20 @@ const nodeGraphModuleDefinitions = (
         "unit": "Hz",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm and Drift are zero."
+        "tooltip": "How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm, Level and Drift are zero."
       },
       {
         "key": "swarmDrift",
         "label": "Drift",
+        "kind": "frequency",
         "defaultValue": "0",
         "min": "0",
-        "mid": "0.5",
-        "max": "1",
-        "unit": "%",
+        "mid": "1",
+        "max": "20",
+        "unit": "Hz",
         "step": "any",
-        "tooltip": "A tiny mean-reverting pitch wander of each partial around its own frequency, a few Hz at most. It is not Frequency Blur: no power moves to neighboring bins. Uses the Swarm Rate."
+        "nonlinearSlider": true,
+        "tooltip": "Pitch wander of each partial around its own frequency, in Hz at its peak. It is not Frequency Blur: no power moves to neighboring bins. Uses the Swarm Rate."
       },
       {
         "key": "swarmSeed",
@@ -8816,7 +8830,7 @@ const nodeGraphModuleDefinitions = (
         "step": "1",
         "linearSmoothing": false,
         "smoothingType": "none",
-        "tooltip": "Seed for the Swarm and Drift noise. Same Seed, same input and same settings give the same sound. No effect while Swarm and Drift are zero."
+        "tooltip": "Seed for the Swarm, Level and Drift noise. Same Seed, same input and same settings give the same sound. No effect while Swarm, Level and Drift are zero."
       },
       {
         "key": "mix",
@@ -8827,7 +8841,7 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "unit": "%",
         "step": "any",
-        "tooltip": "Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion, Amplitude Smooth, Swarm and Drift for neutral reconstruction."
+        "tooltip": "Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion, Amplitude Smooth, Swarm, Level and Drift for neutral reconstruction."
       }
     ],
   },

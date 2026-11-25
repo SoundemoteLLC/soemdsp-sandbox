@@ -76,21 +76,23 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
   }
   // Swarm: defaults are Swarm 0, Rate 5, Drift 0, Seed 1; the face has the controls; turning it up keeps the audio running
   const swarmState = await page.evaluate(id => {
-    const n = nodeGraphPatchNode(id), keys = ['swarm', 'swarmRate', 'swarmDrift', 'swarmSeed'];
+    const n = nodeGraphPatchNode(id), keys = ['swarm', 'swarmLevel', 'swarmRate', 'swarmDrift', 'swarmSeed'];
     return { values: keys.map(k => nodeGraphReadPatchParameterValue(n, k)), sliders: keys.map(k => !!nodeGraphSliderForParameter(id, k)) };
   }, id);
-  assert.deepEqual(swarmState.values.slice(0, 3), [0, 5, 0], 'Swarm 0, Rate 5, Drift 0 by default');
+  assert.deepEqual(swarmState.values.slice(0, 4), [0, 0, 5, 0], 'Swarm 0, Level 0, Rate 5, Drift 0 by default');
   // the app gives every new seed-kind parameter a random spawn value (like the other seeded modules); an old patch without the key reads 1
-  assert.ok(Number.isInteger(swarmState.values[3]) && swarmState.values[3] >= 0 && swarmState.values[3] <= 16777215, 'Seed is an integer in range');
-  assert.ok(swarmState.sliders.every(Boolean), 'Swarm, Rate, Drift and Seed are on the face');
+  assert.ok(Number.isInteger(swarmState.values[4]) && swarmState.values[4] >= 0 && swarmState.values[4] <= 16777215, 'Seed is an integer in range');
+  assert.ok(swarmState.sliders.every(Boolean), 'Swarm, Level, Rate, Drift and Seed are on the face');
   await page.evaluate(id => {
-    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'swarm'), '1');
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'swarm'), '90');
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'swarmLevel'), '3');
     updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'swarmDrift'), '0.5');
     updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'swarmSeed'), '7');
   }, id);
   await page.waitForFunction(() => nodeGraphMvp.live.outputLevelSmooth > 0.00001, null, { timeout: 30000 });
   await page.evaluate(id => {
     updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'swarm'), '0');
+    updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'swarmLevel'), '0');
     updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'swarmDrift'), '0');
   }, id);
   await page.evaluate(id => {

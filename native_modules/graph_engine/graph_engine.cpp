@@ -891,7 +891,7 @@ extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double
 extern "C" double soemdsp_spectral_blur_right(int h);
 extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, double amplitudeMs);
 extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount);
-extern "C" void soemdsp_spectral_blur_set_swarm(int h, double amount, double rateHz, double drift, double seed);
+extern "C" void soemdsp_spectral_blur_set_swarm(int h, double phaseDegrees, double levelDb, double rateHz, double driftHz, double seed);
 extern "C" int soemdsp_spectral_blur_set_fft_size(int h, int length);
 extern "C" int soemdsp_stft_contrast_create();
 extern "C" void soemdsp_stft_contrast_destroy(int handle);
@@ -5112,9 +5112,10 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.mix, 1, false);
     init_control(n.offsetMs, 10, false);
     init_control(n.diffusionSize, 0, false);
-    init_control(n.shape, 0, false);        // swarm
+    init_control(n.shape, 0, false);        // swarm: phase wobble (degrees)
+    init_control(n.amplitude, 0, false);    // swarm level wobble (dB)
     init_control(n.lfoRate, 5, false);      // swarm rate (Hz)
-    init_control(n.lfoVariation, 0, false); // swarm drift
+    init_control(n.lfoVariation, 0, false); // swarm drift (Hz)
     init_control(n.seed, 1, true);          // swarm seed (discrete)
   }
   if (typeId == kTypeSpectralFreeze) {
@@ -16408,8 +16409,8 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
       soemdsp_spectral_blur_set_stereo_spread(node.nativeHandle, control_audio(g, node.pan, f));
       soemdsp_spectral_blur_set_smoothing(node.nativeHandle,
         control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionSize, f));
-      soemdsp_spectral_blur_set_swarm(node.nativeHandle, control_audio(g, node.shape, f), control_audio(g, node.lfoRate, f),
-        control_audio(g, node.lfoVariation, f), control_audio(g, node.seed, f));
+      soemdsp_spectral_blur_set_swarm(node.nativeHandle, control_audio(g, node.shape, f), control_audio(g, node.amplitude, f),
+        control_audio(g, node.lfoRate, f), control_audio(g, node.lfoVariation, f), control_audio(g, node.seed, f));
       y = soemdsp_spectral_blur_sample(node.nativeHandle, left, right,
         control_audio(g, node.timeNumerator, f), control_audio(g, node.width, f),
         control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);
