@@ -455,7 +455,10 @@
           <button id="nodeSliderPositionToggleButton" type="button" role="menuitem" aria-pressed="true">⬜ Position Slider</button>
           <button id="nodeBadValueMonitorButton" class="node-debug-only" type="button" role="menuitem" aria-pressed="false" title="Arm the bad-value (NaN/Inf/denormal) monitor; events: soemdspDebug.badValueMonitor()">BADVAL Monitor</button>
           <button id="nodeExportLivePlanButton" class="node-debug-only" type="button" role="menuitem" title="Download the portable JSON plan (nodeGraphBuildLivePlan) for testing the native C++ graph interpreter">Download Live Plan</button>
-          <button id="nodeKeyboardDebugToggleButton" type="button" role="menuitem" aria-pressed="false"><span>⬛ Debug</span></button>
+          <button id="nodeKeyboardDebugToggleButton" type="button" role="menuitem" aria-pressed="false">
+            <span>⬛ Debug</span>
+            <kbd>G</kbd>
+          </button>
         </div>
         <button
           id="nodeVisibilityMenuResizeHandle"
@@ -526,7 +529,7 @@
           </div>
           <div class="node-hotkeys-group">
             <div class="node-hotkeys-row"><kbd>Del</kbd><span>Delete selection</span></div>
-            <div class="node-hotkeys-row"><kbd>Shift+D</kbd><span>Debug</span></div>
+            <div class="node-hotkeys-row"><kbd>G</kbd><span>Debug</span></div>
           </div>
           <div class="node-hotkeys-group">
             <div class="node-hotkeys-row"><kbd>Ctrl</kbd><span>Snake: keep / add trail</span></div>
@@ -3871,7 +3874,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-panels.js?v=uidev-page-1-cols-1org"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-persistence.js?v=cell-slider-1-round-1-jlit4-modface1-toprnd1-cm1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=tooltip-min-12-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-live-1-pre-1-hex12capxdvmsnhxadkcorbnckqdrsmp2mlgpuinlcspwdfst-wlit1-jlit4-wdot1-mstk1-bg19-mstk2-toprnd1-toprnd22-glowmix1sfgfx7-crmg1-gr1-gm1-gt2-gk-cm1-gdr2-gg1-uc4-gl2-d4-gs1-hm1-hm1-pview2"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-shortcuts.js?v=pt-preset-2-sg-fix-1-cam1-hk7"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-shortcuts.js?v=pt-preset-2-sg-fix-1-cam1-hk7-debug-g-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-camera-keys.js?v=cam-3-vp-revert-popin-1-view-3-live"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-text.js?v=live-plan-preserve-20260634"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-controls.js?v=slider-unit-color-1780307400000"></script>

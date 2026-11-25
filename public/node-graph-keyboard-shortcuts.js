@@ -624,7 +624,15 @@ function handleNodeGraphKeydown(event) {
     }
     return;
   }
-  // Shift+D (D alone is the camera's "move right", see node-graph-camera-keys.js).
+  // G → Debug chrome (D is the camera's "move right", see node-graph-camera-keys.js).
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") {
+    event.preventDefault();
+    if (typeof toggleNodeGraphKeyboardDebugVisibility === "function") {
+      toggleNodeGraphKeyboardDebugVisibility();
+    }
+    return;
+  }
+  // Shift+D → constraint / chip guide (D alone is the camera's "move right").
   if (!event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && event.key.toLowerCase() === "d") {
     event.preventDefault();
     if (typeof toggleNodeGraphConstraintGuideVisibility === "function") {
