@@ -6,7 +6,11 @@ const latency = x.soemdsp_spectral_blur_latency();
 assert.equal(latency, 4096);
 const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,
   x.soemdsp_spectral_blur_metadata_json(), x.soemdsp_spectral_blur_metadata_json_size())));
-assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'swarm', 'swarmLevel', 'swarmRate', 'swarmDrift', 'swarmSeed', 'mix']);
+assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'swarm', 'swarmLevel', 'swarmRate', 'swarmDrift', 'swarmSeed', 'swarmCharacter', 'swarmFuzz', 'swarmVoices', 'mix']);
+assert.equal(meta.parameters.find(p => p.key === 'swarmCharacter').defaultValue, '0');
+assert.equal(meta.parameters.find(p => p.key === 'swarmFuzz').defaultValue, '0');
+assert.equal(meta.parameters.find(p => p.key === 'swarmFuzz').unit, '\u00a2');
+assert.equal(meta.parameters.find(p => p.key === 'swarmVoices').defaultValue, '3');
 assert.equal(meta.parameters.find(p => p.key === 'swarm').unit, '°');
 assert.equal(meta.parameters.find(p => p.key === 'swarmLevel').unit, 'dB');
 assert.equal(meta.parameters.find(p => p.key === 'swarmDrift').unit, 'Hz');
@@ -14,7 +18,7 @@ assert.equal(meta.parameters.find(p => p.key === 'swarm').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmDrift').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmSeed').kind, 'seed');
 assert.equal(meta.parameters.find(p => p.key === 'swarmRate').unit, 'Hz');
-assert.equal(x.soemdsp_spectral_blur_version(), 5);
+assert.equal(x.soemdsp_spectral_blur_version(), 6);
 assert.equal(meta.parameters.find(p => p.key === 'smearSeconds').unit, 's');
 assert.equal(meta.parameters.find(p => p.key === 'blurHz').unit, 'Hz');
 assert.ok(meta.parameters.every(p => p.tooltip));
@@ -263,4 +267,121 @@ x.soemdsp_spectral_blur_destroy(h);
     assert.ok(on < off * 2.5 + 50, 'no large CPU regression with Swarm on');
   }
   console.log('Swarm: off is bit-identical, deterministic, reseeds, in place, linked stereo, finite and recovers.');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Cloud: fuzz in CENTS (a log-frequency spray, so a high partial gets the same relative width as a low one), white per-hop scatter,
+// voices from one analysis, 8x overlap. Warble (character 0) is the Swarm path above.
+{
+  const sr = 48000;
+  const cloudSet = (h, fuzz, voices = 3) => x.soemdsp_spectral_blur_set_cloud(h, 1, fuzz, voices);
+  const fresh = () => { const h = x.soemdsp_spectral_blur_create(); x.soemdsp_spectral_blur_set_stereo_spread(h, 0); x.soemdsp_spectral_blur_set_smoothing(h, 10, 0); return h; };
+  const sine = (f0) => i => { const v = 0.1 * Math.sin(2 * Math.PI * f0 * i / sr); return [v, v]; };
+  // spectral spread of a sine's output, in cents RMS around the fundamental (a fine grid of DFT lines, +-600 cents)
+  const spreadCents = (out, f0) => {
+    let num = 0, den = 0;
+    for (let c = -600; c <= 600; c += 6) {
+      const f = f0 * 2 ** (c / 1200); let re = 0, im = 0;
+      for (let i = 0; i < out.length; ++i) { const ph = 2 * Math.PI * f * i / sr; re += out[i] * Math.cos(ph); im += out[i] * Math.sin(ph); }
+      const p = re * re + im * im; num += p * c * c; den += p;
+    }
+    return Math.sqrt(num / den);
+  };
+  const m = 24576, settle = 20000;
+  const run = (setup, f0) => { const h = fresh(); setup(h); const out = render(h, settle + m, sr, [0, 0, 0, 1], sine(f0))[0].slice(settle); x.soemdsp_spectral_blur_destroy(h); return out; };
+
+  // Fuzz 0 is dry: Cloud on with no Fuzz reconstructs the delayed input
+  {
+    const h = fresh(); cloudSet(h, 0);
+    const input = i => [0.1 * Math.sin(i * 0.13) + (i % 173 === 0 ? 0.1 : 0), -0.03 * Math.cos(i * 0.07)];
+    const lat = 4096, out = render(h, lat + 30000, sr, [0, 0, 0, 1], input);
+    let error = 0;
+    for (let i = lat + 12000; i < out[0].length; ++i) for (let c = 0; c < 2; ++c) error = Math.max(error, Math.abs(out[c][i] - input(i - lat)[c]));
+    assert.ok(error < 1e-4, `Cloud with Fuzz 0 is dry at the usual window delay (${error})`);
+    x.soemdsp_spectral_blur_destroy(h);
+  }
+  // constant in cents: the same Fuzz spreads a 2 kHz sine about as wide, in cents, as a 500 Hz sine (a 100 Hz sine is under one FFT bin of fuzz, below the analysis resolution); Warble leaves 2 kHz a tight line
+  {
+    const low = spreadCents(run(h => cloudSet(h, 50), 500), 500);
+    const high = spreadCents(run(h => cloudSet(h, 50), 2000), 2000);
+    const warbleHigh = spreadCents(run(h => x.soemdsp_spectral_blur_set_swarm(h, 90, 0, 5, 0, 1), 2000), 2000);
+    console.log(`Cloud 50 cents: 500 Hz spreads ${low.toFixed(1)} cents, 2 kHz ${high.toFixed(1)} cents; Warble 2 kHz ${warbleHigh.toFixed(1)} cents.`);
+    assert.ok(low > 5 && high > 5, `Cloud spreads both (${low}, ${high})`);
+    assert.ok(high / low > 0.4 && high / low < 2.5, `the width is about the same in cents at 500 Hz and 2 kHz (${low} vs ${high})`);
+    assert.ok(high > warbleHigh * 2, `Cloud at 2 kHz is much fuzzier than a Warble line (${high} vs ${warbleHigh})`);
+    const narrow = spreadCents(run(h => cloudSet(h, 10), 2000), 2000), wide = spreadCents(run(h => cloudSet(h, 100), 2000), 2000);
+    assert.ok(narrow < high && high < wide, `more Fuzz is wider (${narrow} < ${high} < ${wide})`);
+  }
+  // in place: a short impulse leaves no tail past the window (8x overlap compensated: comparable energy, delay unchanged)
+  {
+    const h = fresh(); cloudSet(h, 100);
+    const size = 4096, imp = render(h, size * 6, sr, [0, 0, 0, 1], i => [i === 0 ? 1 : 0, 0]);
+    const e = energy(imp[0]);
+    assert.ok(e > 0.2 && e < 4, `an impulse keeps a comparable energy under Cloud (${e})`);
+    assert.ok(energy(imp[0], size * 2 + 64) < e * 1e-6, 'no tail past the analysis window after the impulse');
+    x.soemdsp_spectral_blur_destroy(h);
+  }
+  // overall level: the fur does not change the loudness (power-preserving)
+  {
+    const rms = (a) => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
+    const dry = rms(run(h => cloudSet(h, 0), 1000)), fur = rms(run(h => cloudSet(h, 100, 4), 1000));
+    assert.ok(Math.abs(fur / dry - 1) < 0.25, `Cloud keeps the level (${fur} vs ${dry})`);
+  }
+  // determinism, Seed and voices
+  {
+    const go = (seed, voices) => { const h = fresh(); x.soemdsp_spectral_blur_set_swarm(h, 0, 0, 5, 0, seed); cloudSet(h, 80, voices); const o = render(h, 30000, sr, [0, 0, 0, 1], sine(1000)); x.soemdsp_spectral_blur_destroy(h); return o; };
+    const a = go(1, 3), b = go(1, 3), c = go(2, 3), d = go(1, 2);
+    let same = true, diffSeed = 0, diffVoices = 0;
+    for (let i = 0; i < a[0].length; ++i) { if (a[0][i] !== b[0][i]) same = false; diffSeed += (a[0][i] - c[0][i]) ** 2; diffVoices += (a[0][i] - d[0][i]) ** 2; }
+    assert.ok(same, 'same Seed, same input, same settings: identical output');
+    assert.ok(diffSeed > energy(a[0]) * 0.01, 'a different Seed changes the fur');
+    assert.ok(diffVoices > energy(a[0]) * 0.001, 'a different voice count changes the fur');
+  }
+  // stereo is linked: mono in, Stereo Spread 0, Cloud on -> Left and Right match
+  {
+    const h = fresh(); cloudSet(h, 100, 4);
+    const out = render(h, 30000, sr, [0, 0, 0, 1], i => { const v = 0.1 * Math.sin(i * 0.11) + 0.03 * Math.sin(i * 0.37); return [v, v]; });
+    let worst = 0; for (let i = 0; i < out[0].length; ++i) worst = Math.max(worst, Math.abs(out[0][i] - out[1][i]));
+    assert.ok(worst < 1e-9, `Cloud keeps Left and Right linked (${worst})`);
+    x.soemdsp_spectral_blur_destroy(h);
+  }
+  // Character switching (hop 4x <-> 8x, warm second core + crossfade): finite, no gaps, no jump on a steady tone
+  {
+    const h = fresh(); x.soemdsp_spectral_blur_set_cloud(h, 0, 0, 3);
+    const tone = i => { const v = 0.1 * Math.sin(2 * Math.PI * 330 * i / sr); return [v, v]; };
+    let max = 0; const out = [];
+    for (let i = 0; i < 6 * sr; ++i) {
+      if (i === sr) cloudSet(h, 0); // to Cloud with no fuzz: a switch that must be inaudible on a steady tone
+      if (i === 3 * sr) x.soemdsp_spectral_blur_set_cloud(h, 0, 0, 3);
+      const a = tone(i); const y = x.soemdsp_spectral_blur_sample(h, a[0], a[1], 0, 0, 0, 1, sr);
+      assert.ok(Number.isFinite(y), 'finite through the switch'); out.push(y);
+    }
+    for (let i = 8000; i < out.length; ++i) max = Math.max(max, Math.abs(out[i]));
+    assert.ok(max < 0.1 * 1.05, `no level jump at the 4x/8x switch (peak ${max})`);
+    for (const [lo, hi, label] of [[sr + 3000, 2 * sr, 'Cloud'], [4 * sr, 5 * sr, 'Warble again']]) {
+      let peak = 0; for (let i = lo; i < hi; ++i) peak = Math.max(peak, Math.abs(out[i]));
+      assert.ok(peak > 0.09 && peak < 0.105, `steady tone keeps its level in ${label} (${peak})`);
+    }
+    x.soemdsp_spectral_blur_destroy(h);
+  }
+  // no NaN / Inf under rapid edits and size changes; local reset recovers; the CPU is bounded by the 8x hop, 4 voices and the cap, not by pitch
+  {
+    const h = fresh(); let seed = 5; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    for (let i = 0; i < 60000; ++i) {
+      if (i % 64 === 0) { x.soemdsp_spectral_blur_set_cloud(h, rnd() < 0.7 ? 1 : 0, rnd() * 400, 1 + Math.floor(rnd() * 6)); x.soemdsp_spectral_blur_set_fft_size(h, [512, 1024, 2048, 4096][Math.floor(rnd() * 4)]); x.soemdsp_spectral_blur_set_swarm(h, rnd() * 200, rnd() * 12, rnd() * 50, rnd() * 20, Math.floor(rnd() * 99999)); }
+      const burst = i % 9000 < 300 ? 8 : 0.1;
+      const l = x.soemdsp_spectral_blur_sample(h, burst * Math.sin(i * 0.2), -burst * Math.sin(i * 0.31), rnd() * 2, rnd() * 3000, rnd(), 1, sr);
+      assert.ok(Number.isFinite(l) && Number.isFinite(x.soemdsp_spectral_blur_right(h)), 'finite under rapid Cloud edits');
+    }
+    x.soemdsp_spectral_blur_set_cloud(h, NaN, NaN, NaN);
+    assert.equal(x.soemdsp_spectral_blur_sample(h, NaN, 0, 1, 200, 1, 1, sr), 0);
+    x.soemdsp_spectral_blur_destroy(h);
+    const time = (f0) => { const hh = fresh(); x.soemdsp_spectral_blur_set_fft_size(hh, 16384); cloudSet(hh, 200, 4); render(hh, 20000, sr, [0, 0, 0, 1], sine(f0)); const t0 = performance.now(); render(hh, sr, sr, [0, 0, 0, 1], sine(f0)); const dt = performance.now() - t0; x.soemdsp_spectral_blur_destroy(hh); return dt; };
+    const lowCost = time(100), highCost = time(8000);
+    const warble = (() => { const hh = fresh(); x.soemdsp_spectral_blur_set_fft_size(hh, 16384); render(hh, 20000, sr, [0, 0, 0, 1], sine(100)); const t0 = performance.now(); render(hh, sr, sr, [0, 0, 0, 1], sine(100)); const dt = performance.now() - t0; x.soemdsp_spectral_blur_destroy(hh); return dt; })();
+    console.log(`Cloud CPU at 16384, 8x hop, 4 voices, one audio second: 100 Hz ${lowCost.toFixed(1)} ms, 8 kHz ${highCost.toFixed(1)} ms; plain ${warble.toFixed(1)} ms (JS harness numbers, not a DAW CPU reading).`);
+    assert.ok(Math.abs(lowCost - highCost) < Math.max(lowCost, highCost) * 0.5 + 20, 'Cloud cost does not depend on the input pitch');
+    assert.ok(Math.max(lowCost, highCost) < warble * 12 + 100, 'Cloud at its worst case stays bounded');
+  }
+  console.log('Cloud: dry at Fuzz 0, cents-wide at every pitch, in place, level-preserving, deterministic, linked stereo, crossfaded hop switch, finite.');
 }

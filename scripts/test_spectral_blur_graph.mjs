@@ -9,6 +9,8 @@ const specs = [
   [272, "spectral_blur", [[52, 0.46], [31, 490.89], [42, 0.402], [40, 1], [55, 10], [41, 20], [1, 0.7], [22, 512]], true],
   // Swarm slots: 13 = swarm (degrees), 12 = level (dB), 57 = rate (Hz), 47 = drift (Hz), 48 = seed
   [272, "spectral_blur", [[52, 0], [31, 0], [42, 0], [40, 1], [55, 10], [41, 0], [1, 0], [22, 2048], [13, 144], [12, 4], [57, 7], [47, 0.6], [48, 3]], true],
+  // Cloud slots: 21 = character (1 = Cloud), 30 = fuzz (cents), 32 = voices
+  [272, "spectral_blur", [[52, 0], [31, 0], [42, 0], [40, 1], [55, 10], [41, 0], [1, 0], [22, 2048], [21, 1], [30, 80], [32, 4], [12, 1.5], [48, 5]], true],
 ];
 for (const [type, name, params, configure = false] of specs) {
   for (const sides of [[0], [1], [2], [1, 2], [0, 1, 2]]) {
@@ -42,7 +44,8 @@ for (const [type, name, params, configure = false] of specs) {
         // an unset Swarm slot is the native default: Swarm 0, Level 0, Rate 5, Drift 0, Seed 1
         const swarmOf = (id, fallback) => (params.find(([i]) => i === id) ?? [id, fallback])[1];
         x[prefix + "set_swarm"](ref, swarmOf(13, 0), swarmOf(12, 0), swarmOf(57, 5), swarmOf(47, 0), swarmOf(48, 1));
-        const args = params.filter(([id]) => id !== 55 && id !== 41 && id !== 1 && id !== 22 && ![13, 12, 57, 47, 48].includes(id)).map(p => p[1]);
+        x[prefix + "set_cloud"](ref, swarmOf(21, 0), swarmOf(30, 0), swarmOf(32, 3));
+        const args = params.filter(([id]) => id !== 55 && id !== 41 && id !== 1 && id !== 22 && ![13, 12, 57, 47, 48, 21, 30, 32].includes(id)).map(p => p[1]);
         const expected = x[prefix + "sample"](ref, a, z, ...args, rate);
         const expectedR = x[prefix + "right"](ref);
         assert.ok(Math.abs(out[1][i] - expected) < 1e-10 && Math.abs(out[2][i] - expectedR) < 1e-10, `${name} graph/native routing and params`);

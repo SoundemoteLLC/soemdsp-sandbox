@@ -892,6 +892,7 @@ extern "C" double soemdsp_spectral_blur_right(int h);
 extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, double amplitudeMs);
 extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount);
 extern "C" void soemdsp_spectral_blur_set_swarm(int h, double phaseDegrees, double levelDb, double rateHz, double driftHz, double seed);
+extern "C" void soemdsp_spectral_blur_set_cloud(int h, double character, double fuzzCents, double voices);
 extern "C" int soemdsp_spectral_blur_set_fft_size(int h, int length);
 extern "C" int soemdsp_stft_contrast_create();
 extern "C" void soemdsp_stft_contrast_destroy(int handle);
@@ -5117,6 +5118,9 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.lfoRate, 5, false);      // swarm rate (Hz)
     init_control(n.lfoVariation, 0, false); // swarm drift (Hz)
     init_control(n.seed, 1, true);          // swarm seed (discrete)
+    init_control(n.mode, 0, true);          // character: 0 Warble, 1 Cloud (discrete)
+    init_control(n.center, 0, false);       // cloud fuzz (cents)
+    init_control(n.oversample, 3, true);    // cloud voices (discrete)
   }
   if (typeId == kTypeSpectralFreeze) {
     init_control(n.stages, 4096, true); init_control(n.offsetMs, 20, false);
@@ -16393,6 +16397,8 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
         control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionSize, f));
       soemdsp_spectral_blur_set_swarm(node.nativeHandle, control_audio(g, node.shape, f), control_audio(g, node.amplitude, f),
         control_audio(g, node.lfoRate, f), control_audio(g, node.lfoVariation, f), control_audio(g, node.seed, f));
+      soemdsp_spectral_blur_set_cloud(node.nativeHandle, control_audio(g, node.mode, f), control_audio(g, node.center, f),
+        control_audio(g, node.oversample, f));
       y = soemdsp_spectral_blur_sample(node.nativeHandle, left, right,
         control_audio(g, node.timeNumerator, f), control_audio(g, node.width, f),
         control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);

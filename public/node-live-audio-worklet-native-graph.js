@@ -647,6 +647,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "swarmRate") return P.NATIVE_GRAPH_PARAM_LFO_RATE;
     if (k === "swarmDrift") return P.NATIVE_GRAPH_PARAM_LFO_VARIATION;
     if (k === "swarmSeed") return P.NATIVE_GRAPH_PARAM_SEED;
+    if (k === "swarmCharacter") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "swarmFuzz") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "swarmVoices") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if(t==="dispersion") {
@@ -6300,6 +6303,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("swarmRate", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("swarmRate", 5));
       push("swarmDrift", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("swarmDrift", 0));
       push("swarmSeed", P.NATIVE_GRAPH_PARAM_SEED, disc("swarmSeed", 1));
+      push("swarmCharacter", P.NATIVE_GRAPH_PARAM_MODE, disc("swarmCharacter", 0));
+      push("swarmFuzz", P.NATIVE_GRAPH_PARAM_CENTER, cont("swarmFuzz", 0));
+      push("swarmVoices", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("swarmVoices", 3));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;
     }

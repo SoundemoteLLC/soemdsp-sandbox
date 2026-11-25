@@ -12,6 +12,10 @@ constexpr int size = 16384, bins = size / 2 + 1, capacity = 64;
 constexpr double twoPi = 6.283185307179586;
 // Swarm is in real units: Swarm = phase wobble in degrees, Level = level wobble in dB, Drift = pitch wander in Hz. No other scaling.
 constexpr double kDegrees = 0.017453292519943295;
+// Cloud: up to 4 voices; each source bin may be sprayed at most this many bins away so a high bin cannot fan across the spectrum (a cost / fan-out guard).
+constexpr int kMaxVoices = 4, kCloudCapBins = 32, kCloudKnot = 8;
+// dsp_sin_cos wants an angle near one turn; Cloud's per-hop offsets can be many turns, so they are wrapped first.
+inline double wrapTurns(double a) { return a - twoPi * (double)(long long)(a / twoPi + (a < 0 ? -0.5 : 0.5)); }
 soemdsp::fft::Radix2<size> fft{};
 soemdsp::fft::Radix2<512> fft512{};
 soemdsp::fft::Radix2<1024> fft1024{};
@@ -39,6 +43,14 @@ struct Core {
   double swarmSin[bins], swarmCos[bins], swarmGain[bins];
   unsigned int rng, sideRng, swarmRng, swarmSeed;
   double swarm, swarmLevel, swarmRate, swarmDrift; // degrees, dB, Hz, Hz
+  // Cloud: fuzz in cents (log-frequency spray), white per-hop scatter, voices from one analysis. Runs at an 8x overlap (hop = N/8).
+  bool cloud;
+  double cloudFuzz;
+  int cloudVoices;
+  unsigned int cloudRng[kMaxVoices];
+  int cloudTarget[kMaxVoices][bins];
+  float cloudLo[kMaxVoices][bins], cloudHi[kMaxVoices][bins], cloudCos[kMaxVoices][bins], cloudSin[kMaxVoices][bins];
+  double specRe[bins], specIm[bins], accRe[bins], accIm[bins], cloudCorr[bins];
   int position, hop, windowSize;
   double right, lastRate, phaseSmoothMs, amplitudeSmoothMs, stereoSpread;
 
@@ -66,6 +78,19 @@ struct Core {
     }
     position = hop = 0; right = lastRate = 0; rng = 0x9e3779b9u; sideRng = 0xC2B2AE35u;
     seedSwarm();
+    seedCloud();
+  }
+  // Each Cloud voice has its own stream, from Seed + voice index: same Seed, input and settings give the same fur.
+  void seedCloud() {
+    for (int v = 0; v < kMaxVoices; ++v) {
+      cloudRng[v] = (swarmSeed + (unsigned int)v) * 2654435761u ^ 0x68E31DA4u;
+      if (!cloudRng[v]) cloudRng[v] = 0x1B873593u;
+    }
+  }
+  double cloudRandom(int v) {
+    unsigned int& s = cloudRng[v];
+    s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+    return (double)s * (2.0 / 4294967296.0) - 1.0;
   }
   // The Swarm stream is its own: same Seed + same input + same params gives the same output after a reset.
   void seedSwarm() {
@@ -102,7 +127,9 @@ struct Core {
     }
   }
   bool frame(double seconds, double widthHz, double diffusion, double rate) {
-    const int size = windowSize, hopSize = size / 4, bins = size / 2 + 1;
+    const int size = windowSize, hopSize = size / (cloud ? 8 : 4), bins = size / 2 + 1;
+    // Overlap-add gain for the Hann analysis * Hann synthesis windows: the squared windows sum to 3 * overlap / 8, so 8 / (3 * overlap).
+    const float olaGain = cloud ? 1.0f / 3 : 2.0f / 3;
     const double pole = seconds > 0 ? soemdsp_maths::dsp_exp(-hopSize / (rate * seconds)) : 0;
     double radius = widthHz * size / rate;
     if (radius > bins - 1) radius = bins - 1;
@@ -118,8 +145,58 @@ struct Core {
       sideOffset[k] += sideRandom() * jitter;
       smoothSideOffset[k] = sideOffset[k] + phasePole * (smoothSideOffset[k] - sideOffset[k]);
     }
-    const bool swarming = swarm != 0 || swarmLevel != 0 || swarmDrift != 0;
-    if (swarming) {
+    const bool swarming = !cloud && (swarm != 0 || swarmLevel != 0 || swarmDrift != 0);
+    if (cloud) {
+      // Fuzz in cents. Per hop and per voice a random spray offset (a triangular variable, +-Fuzz cents) is drawn at knots every kCloudKnot bins
+      // (about two Hann main lobes) and interpolated across the spectrum, so the whole lobe of one partial moves together: its grain keeps its
+      // shape and the partial becomes a line that jumps by a few cents every hop (a band), not noise. The offset is in cents, so its width in bins
+      // grows with the bin and a 2 kHz partial gets the same relative fuzz as a 100 Hz one. A source bin is moved to bin k + delta (linear
+      // interpolation between the two neighbours, capped at kCloudCapBins) and its phase advances by that frequency offset held for one hop
+      // (2 pi delta hop / N): a tiny Fuzz stays coherent, a wide one decorrelates. Draws are white per hop and shared by Left and Right (linked).
+      // Level adds a small white level dither per bin and voice (+-Level dB). Each voice takes 1/L of the amplitude (the voices average).
+      const int voices = cloudVoices < 1 ? 1 : cloudVoices > kMaxVoices ? kMaxVoices : cloudVoices;
+      const double centsToRatio = 0.6931471805599453 / 1200.0;
+      const double voiceGain = 1.0 / voices;
+      // Frame-to-frame correlation of a bin's sum, from the statistics of its spray (nothing is measured per hop): the phase offset one hop applies
+      // is a triangular variable of peak kappa = 2 pi spread hop / N, with characteristic function psi = (sin(kappa/2) / (kappa/2))^2; L voices
+      // correlate r = L psi^2 / (1 + (L - 1) psi^2) between hops. Decorrelated frames overlap-add with less power than coherent ones (a grain that
+      // is no longer Hann-shaped passes less of the synthesis window: at 8x with the 1/3 gain the power falls from 1 toward 1/8), which the
+      // per-frame makeup below undoes.
+      for (int k = 1; k < bins - 1; ++k) {
+        double spread = k * (soemdsp_maths::dsp_exp((cloudFuzz < 0 ? -cloudFuzz : cloudFuzz) * centsToRatio) - 1.0);
+        if (spread > kCloudCapBins) spread = kCloudCapBins;
+        const double half = 0.5 * twoPi * spread * hopSize / size;
+        double psi = 1;
+        if (half > 1e-6) { double sn, cs; soemdsp_maths::dsp_sin_cos(wrapTurns(half), &sn, &cs); psi = (sn / half) * (sn / half); }
+        const double psi2 = psi * psi;
+        cloudCorr[k] = voices * psi2 / (1.0 + (voices - 1.0) * psi2);
+      }
+      double knot[bins / kCloudKnot + 3];
+      for (int v = 0; v < voices; ++v) {
+        const int knots = (bins - 1) / kCloudKnot + 2;
+        for (int n = 0; n < knots; ++n) knot[n] = 0.5 * (cloudRandom(v) + cloudRandom(v));
+        for (int k = 1; k < bins - 1; ++k) {
+          const int n = k / kCloudKnot;
+          const double along = (double)(k - n * kCloudKnot) / kCloudKnot;
+          const double u = knot[n] + (knot[n + 1] - knot[n]) * along;
+          double delta = k * (soemdsp_maths::dsp_exp(cloudFuzz * u * centsToRatio) - 1.0);
+          if (delta > kCloudCapBins) delta = kCloudCapBins;
+          if (delta < -kCloudCapBins) delta = -kCloudCapBins;
+          double t = k + delta;
+          if (t < 1.0) t = 1.0;
+          if (t > bins - 2.0 - 1e-9) t = bins - 2.0 - 1e-9;
+          const int t0 = (int)t;
+          const double frac = t - t0;
+          double sn, cs;
+          soemdsp_maths::dsp_sin_cos(wrapTurns(twoPi * (t - k) * hopSize / size), &sn, &cs);
+          const double gain = voiceGain * soemdsp_maths::dsp_exp(swarmLevel * cloudRandom(v) * 0.11512925464970229);
+          cloudTarget[v][k] = t0;
+          cloudLo[v][k] = (float)(gain * (1.0 - frac));
+          cloudHi[v][k] = (float)(gain * frac);
+          cloudCos[v][k] = (float)cs; cloudSin[v][k] = (float)sn;
+        }
+      }
+    } else if (swarming) {
       // One-pole, hop-rate, mean-reverting noise: state = pole * state + sqrt(1 - pole^2) * noise. The sqrt keeps the depth the same at
       // every Rate (only the speed changes); the state is clamped to +-1 and always comes back to 0, it never integrates like Diffusion.
       const double swarmPole = soemdsp_maths::dsp_exp(-twoPi * (swarmRate > 0 ? swarmRate : 0) * hopSize / rate);
@@ -187,18 +264,58 @@ struct Core {
           magnitude *= swarmGain[k];
         }
         const double pr = phaseR[c][k], pi = phaseI[c][k];
+        if (cloud) {
+          specRe[k] = magnitude * (pr * cs - pi * sn);
+          specIm[k] = edge ? 0 : magnitude * (pr * sn + pi * cs);
+          continue;
+        }
         re[c][k] = (float)(magnitude * (pr * cs - pi * sn));
         im[c][k] = edge ? 0 : (float)(magnitude * (pr * sn + pi * cs));
         if (k > 0 && k < bins - 1) { re[c][size - k] = re[c][k]; im[c][size - k] = -im[c][k]; }
       }
+      if (cloud) {
+        const int voices = cloudVoices < 1 ? 1 : cloudVoices > kMaxVoices ? kMaxVoices : cloudVoices;
+        for (int k = 0; k < bins; ++k) accRe[k] = accIm[k] = 0;
+        accRe[0] = specRe[0]; accRe[bins - 1] = specRe[bins - 1]; // DC and Nyquist stay where they are
+        double sourcePower = specRe[0] * specRe[0] + specRe[bins - 1] * specRe[bins - 1];
+        for (int k = 1; k < bins - 1; ++k) {
+          const double xr = specRe[k], xi = specIm[k];
+          sourcePower += 2 * (xr * xr + xi * xi);
+          for (int v = 0; v < voices; ++v) {
+            const double yr = xr * cloudCos[v][k] - xi * cloudSin[v][k], yi = xr * cloudSin[v][k] + xi * cloudCos[v][k];
+            const int t0 = cloudTarget[v][k];
+            accRe[t0] += yr * cloudLo[v][k]; accIm[t0] += yi * cloudLo[v][k];
+            accRe[t0 + 1] += yr * cloudHi[v][k]; accIm[t0 + 1] += yi * cloudHi[v][k];
+          }
+        }
+        // One normalisation per frame keeps the frame's power equal to the power it came from, so Fuzz changes the character and not the level
+        // (the voices average to exactly the source at Fuzz 0; a wide spray is power-preserving). It is a level match, not a clip.
+        double accPower = accRe[0] * accRe[0] + accRe[bins - 1] * accRe[bins - 1];
+        double correlated = 0;
+        for (int k = 1; k < bins - 1; ++k) {
+          const double bp = 2 * (specRe[k] * specRe[k] + specIm[k] * specIm[k]);
+          accPower += 2 * (accRe[k] * accRe[k] + accIm[k] * accIm[k]);
+          correlated += bp * cloudCorr[k];
+        }
+        // Makeup for the overlap-add of decorrelated frames: the power-weighted correlation r of the frame gives 1 / sqrt((1 - r) / 8 + r).
+        const double r = sourcePower > 0 ? correlated / sourcePower : 1.0;
+        const double makeup = 1.0 / __builtin_sqrt((1.0 - r) * 0.125 + r);
+        const double normal = accPower > 1e-30 && sourcePower > 0 ? makeup * __builtin_sqrt(sourcePower / accPower) : 1.0;
+        for (int k = 0; k < bins; ++k) {
+          const bool edge = k == 0 || k == bins - 1;
+          re[c][k] = (float)(accRe[k] * normal);
+          im[c][k] = edge ? 0 : (float)(accIm[k] * normal);
+          if (!edge) { re[c][size - k] = re[c][k]; im[c][size - k] = -im[c][k]; }
+        }
+      }
       transform(size, re[c], im[c], true);
       for (int i = 0; i < size; ++i)
-        ola[c][(position + 1 + i) % size] += re[c][i] * window[i] * (2.0f / 3);
+        ola[c][(position + 1 + i) % size] += re[c][i] * window[i] * olaGain;
     }
     return true;
   }
   double tick(double left, double r, double seconds, double width, double diffusion, double mix, double rate) {
-    const int size = windowSize, hopSize = size / 4;
+    const int size = windowSize, hopSize = size / (cloud ? 8 : 4);
     const double values[] = {left, r, seconds, width, diffusion, mix, rate};
     for (double v : values)
       if (!__builtin_isfinite(v)) { reset(); return 0; }
@@ -225,22 +342,26 @@ struct Core {
 struct State {
   Core cores[2];
   int current, desired, warm;
+  bool desiredCloud;
   double fade, right, rate;
   bool changing, started;
   void reset() {
     for (auto& core : cores) core.reset(4096);
+    cores[0].cloud = cores[1].cloud = desiredCloud;
     current = warm = 0; fade = right = rate = 0; changing = started = false;
   }
   void initialize() {
-    desired = 4096;
+    desired = 4096; desiredCloud = false;
     for (auto& core : cores) {
       core.phaseSmoothMs = 10; core.amplitudeSmoothMs = 0; core.stereoSpread = 1;
       core.swarm = 0; core.swarmLevel = 0; core.swarmRate = 5; core.swarmDrift = 0; core.swarmSeed = 1;
+      core.cloud = false; core.cloudFuzz = 0; core.cloudVoices = 3;
     }
     reset();
   }
   void beginChange() {
     Core& from = cores[current]; Core& to = cores[1 - current];
+    to.cloud = desiredCloud; // the hop (N/4 or N/8) is part of the core; it changes with the same warm-and-crossfade as an FFT size change
     to.reset(desired);
     // Conservatively remap one-sided power, with FFT normalization accounted for.
     const double scale = (double)to.windowSize / from.windowSize;
@@ -258,7 +379,7 @@ struct State {
     if (rate != 0 && rate != sr) reset();
     rate = sr;
     if (!started) { cores[current].reset(desired); started = true; }
-    if (!changing && cores[current].windowSize != desired) beginChange();
+    if (!changing && (cores[current].windowSize != desired || cores[current].cloud != desiredCloud)) beginChange();
     const double a = cores[current].tick(l, r, seconds, hz, diffusion, mix, sr);
     right = cores[current].right;
     if (!changing) return a;
@@ -287,6 +408,9 @@ const char metadata[] = R"json({"module":"spectral_blur","targetType":"spectralB
 {"key":"swarmRate","label":"Rate","kind":"frequency","defaultValue":"5","min":"0","mid":"5","max":"1000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm, Level and Drift are zero."},
 {"key":"swarmDrift","label":"Drift","kind":"frequency","defaultValue":"0","min":"0","mid":"1","max":"20","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"Pitch wander of each partial around its own frequency, in Hz at its peak. It is not Frequency Blur: no power moves to neighboring bins. Uses the Swarm Rate."},
 {"key":"swarmSeed","label":"Seed","kind":"seed","defaultValue":"1","min":"0","mid":"1","max":"16777215","step":"1","linearSmoothing":false,"smoothingType":"none","tooltip":"Seed for the Swarm, Level and Drift noise. Same Seed, same input and same settings give the same sound. No effect while Swarm, Level and Drift are zero."},
+{"key":"swarmCharacter","label":"Character","kind":"choice","choices":["Warble","Cloud"],"defaultValue":"0","min":"0","mid":"0","max":"1","step":"1","linearSmoothing":false,"displayChoices":true,"divideChoicesVisibly":true,"tooltip":"Warble is the slow per-partial wobble (Swarm, Level, Rate, Drift). Cloud smears each partial into a soft band that is the same width in cents at every pitch, so a high note gets the same fuzz as a low one, still in place in time (no Time Smear needed). Cloud runs at an 8x overlap and uses Fuzz, Level (as a fast level dither), Voices and Seed; Swarm, Rate and Drift are Warble-only. A Character change warms a second core and crossfades."},
+{"key":"swarmFuzz","label":"Fuzz","defaultValue":"0","min":"0","mid":"50","max":"200","unit":"\u00a2","step":"any","nonlinearSlider":true,"tooltip":"Cloud width in cents: each partial is sprayed to within plus or minus this many cents of itself, a different amount every hop. Zero is dry. The spray reaches at most 32 bins from a partial. Only used by Cloud."},
+{"key":"swarmVoices","label":"Voices","defaultValue":"3","min":"2","mid":"3","max":"4","step":"1","linearSmoothing":false,"hidden":true,"tooltip":"Cloud voices: independent sprays of the same single analysis, summed power-for-power. More voices is a denser fur. Only used by Cloud."},
 {"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion, Amplitude Smooth, Swarm, Level and Drift for neutral reconstruction."}]})json";
 }
 extern "C" int soemdsp_spectral_blur_create() {
@@ -323,7 +447,19 @@ extern "C" void soemdsp_spectral_blur_set_swarm(int h, double phaseDegrees, doub
       core.swarmLevel = __builtin_isfinite(levelDb) ? levelDb : 0;
       core.swarmDrift = __builtin_isfinite(driftHz) ? driftHz : 0;
       core.swarmRate = __builtin_isfinite(rateHz) && rateHz > 0 ? rateHz : 0;
-      if (sd != core.swarmSeed) { core.swarmSeed = sd; core.seedSwarm(); }
+      if (sd != core.swarmSeed) { core.swarmSeed = sd; core.seedSwarm(); core.seedCloud(); }
+    }
+  }
+}
+// Character (0 = Warble, 1 = Cloud), Fuzz in cents, Voices. Cheap to call every sample; a Character change warms a second core and crossfades.
+extern "C" void soemdsp_spectral_blur_set_cloud(int h, double character, double fuzzCents, double voices) {
+  if (auto* s = get(h)) {
+    s->desiredCloud = __builtin_isfinite(character) && character >= 0.5;
+    for (auto& core : s->cores) {
+      core.cloudFuzz = __builtin_isfinite(fuzzCents) ? fuzzCents : 0;
+      // Voices is rounded to a whole number; the arrays hold 4, so more than that is held to the array size (a storage guard).
+      const double v = __builtin_isfinite(voices) ? voices : 1;
+      core.cloudVoices = v < 1 ? 1 : v > kMaxVoices ? kMaxVoices : (int)(v + 0.5);
     }
   }
 }
@@ -341,6 +477,6 @@ extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double
 extern "C" double soemdsp_spectral_blur_right(int h) { auto* s = get(h); return s ? s->right : 0; }
 extern "C" int soemdsp_spectral_blur_latency() { return 4096; }
 extern "C" int soemdsp_spectral_blur_latency_for_handle(int h) { return soemdsp_spectral_blur_fft_size(h); }
-extern "C" int soemdsp_spectral_blur_version() { return 5; }
+extern "C" int soemdsp_spectral_blur_version() { return 6; }
 extern "C" const char* soemdsp_spectral_blur_metadata_json() { return metadata; }
 extern "C" int soemdsp_spectral_blur_metadata_json_size() { return sizeof(metadata) - 1; }

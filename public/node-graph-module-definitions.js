@@ -8652,9 +8652,10 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["smearSeconds", "Time Smear"], ["blurHz", "Frequency Blur"]], h: 40 },
       { kind: "cells", params: [["diffusion", "Diffusion"], ["stereoSpread", "Stereo Spread"]], h: 40 },
       { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
+      { kind: "choices", param: "swarmCharacter", labels: ["Warble", "Cloud"], h: 26 },
       { kind: "cells", params: [["swarm", "Swarm"], ["swarmLevel", "Level"]], h: 40 },
       { kind: "cells", params: [["swarmRate", "Rate"], ["swarmDrift", "Drift"]], h: 40 },
-      { kind: "cells", params: [["swarmSeed", "Seed", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["swarmFuzz", "Fuzz"], ["swarmSeed", "Seed"]], h: 40 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
     ],
     parameters: [
@@ -8831,6 +8832,45 @@ const nodeGraphModuleDefinitions = (
         "linearSmoothing": false,
         "smoothingType": "none",
         "tooltip": "Seed for the Swarm, Level and Drift noise. Same Seed, same input and same settings give the same sound. No effect while Swarm, Level and Drift are zero."
+      },
+      {
+        "key": "swarmCharacter",
+        "label": "Character",
+        "kind": "choice",
+        "choices": ["Warble", "Cloud"],
+        "defaultValue": "0",
+        "displayChoices": true,
+        "divideChoicesVisibly": true,
+        "min": "0",
+        "mid": "0",
+        "max": "1",
+        "step": "1",
+        "linearSmoothing": false,
+        "tooltip": "Warble is the slow per-partial wobble (Swarm, Level, Rate, Drift). Cloud smears each partial into a soft band that is the same width in cents at every pitch, so a high note gets the same fuzz as a low one, still in place in time (no Time Smear needed). Cloud runs at an 8x overlap and uses Fuzz, Level (as a fast level dither), Voices and Seed; Swarm, Rate and Drift are Warble-only. A Character change warms a second core and crossfades."
+      },
+      {
+        "key": "swarmFuzz",
+        "label": "Fuzz",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "50",
+        "max": "200",
+        "unit": "\u00a2",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Cloud width in cents: each partial is sprayed to within plus or minus this many cents of itself, a different amount every hop. Zero is dry. The spray reaches at most 32 bins from a partial. Only used by Cloud."
+      },
+      {
+        "key": "swarmVoices",
+        "label": "Voices",
+        "defaultValue": "3",
+        "min": "2",
+        "mid": "3",
+        "max": "4",
+        "step": "1",
+        "linearSmoothing": false,
+        "hidden": true,
+        "tooltip": "Cloud voices: independent sprays of the same single analysis, summed power-for-power. More voices is a denser fur. Only used by Cloud."
       },
       {
         "key": "mix",
