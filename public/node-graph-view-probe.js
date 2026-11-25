@@ -161,9 +161,15 @@
       const laidOut = !el.classList.contains("viewport-asleep") && !el.hidden;
       const jackMissing = laidOut && Boolean(el.querySelector(".node-port, .node-param-port")) && !jacksN;
       // has-module-face hides .node-parameter-control (display:none). Params
-      // live on the face / as other GL chrome. Do not offsetWidth / computed
-      // style here: this probe runs every wheel frame and must not force layout.
-      const hasFace = el.classList.contains("has-module-face");
+      // live on the face / as other GL chrome. Scope/display faces (Onset,
+      // plot, waterfall, …) also own their params — Position is the playhead
+      // on the face, and the params band may be hidden — even when the
+      // Clock-style has-module-face class is absent. Do not offsetWidth /
+      // computed style here: this probe runs every wheel frame.
+      const type = el.dataset.nodeType || "";
+      const hasFace = el.classList.contains("has-module-face")
+        || (typeof nodeGraphModuleHasFace === "function" && nodeGraphModuleHasFace(type))
+        || Boolean(el.querySelector(".node-face, .node-module-face, .node-module-trace-display-window, .node-module-scope-window, .node-module-graph-display"));
       const paramMissing = laidOut && !hasFace && Boolean(el.querySelector(".node-slider-readout")) && !slidersN;
       const chromeMissing = titleMissing || jackMissing || paramMissing;
       if (asleep) out.asleepInView += 1;
@@ -187,7 +193,8 @@
             cacheJacks: cacheRec?.lists?.jacks?.length || 0,
             cacheLabels: cacheRec?.lists?.labels?.length || 0,
             cacheSliders: cacheRec?.lists?.sliders?.length || 0,
-            hasFace: el.classList.contains("has-module-face"),
+            hasFace,
+            hasFaceClass: el.classList.contains("has-module-face"),
           });
         }
         if (!probe.entering.has(id)) {
