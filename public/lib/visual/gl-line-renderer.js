@@ -1107,6 +1107,8 @@ void main() {
       keepMesh: options?.keepMesh === true,
       // Camera text never bakes a missing atlas size inside the record (see textAtlasQueue).
       lazyText: options?.lazyText === true,
+      // Face text bakes per exact device-pixel size; the view tiles opt out (exactText false).
+      exactText: options?.exactText !== false,
       // Edge kind (APP_POLICY section 3): "chrome" = smootherstep for the
       // circuit builder's fixed-width edges; anything else = display Expo skirt.
       edge: options?.edge === "chrome" ? "chrome" : "display",
@@ -2254,9 +2256,17 @@ void main() {
     return g;
   }
 
-  function atlasKey(family, weight, camBake) {
+  function atlasKey(family, weight, camBake, face = false) {
+    if (face && camBake > 0) return `${weight}|${family}|f${camBake}`;
     return camBake > 0 ? `${weight}|${family}|${camBake}` : `${weight}|${family}`;
   }
+
+  // Display-face text atlases: one per exact whole device-pixel size, baked once
+  // and sampled texel-for-pixel (see FACE_TEXT_MIN / nodeGraphGlLinesText).
+  const FACE_TEXT_MIN = TEXT_CAM_BAKE_MIN;
+  const FACE_TEXT_MAX = 96;
+  const FACE_ATLAS_LIMIT = 40;
+  let faceAtlasTick = 0;
 
   function bakeAtlas(s, family, weight, chars, camBake) {
     const tBake0 = performance.now();
@@ -2380,10 +2390,10 @@ void main() {
   }
 
   /** Shared glyph atlas for a font (grows when new characters show up). */
-  function nodeGraphGlLinesTextAtlas(family = TEXT_DEFAULT_FAMILY, weight = 600, text = "", camBake = 0, lazy = null) {
+  function nodeGraphGlLinesTextAtlas(family = TEXT_DEFAULT_FAMILY, weight = 600, text = "", camBake = 0, lazy = null, face = false) {
     const s = ensure();
     if (!s) return null;
-    const key = atlasKey(family, weight, camBake);
+    const key = atlasKey(family, weight, camBake, face);
     let atlas = s.atlases.get(key);
     const missing = [...String(text)].filter((ch) => !atlas?.glyphs.has(ch));
     if ((!atlas || missing.length) && camBake > 0 && lazy) {
@@ -2398,6 +2408,13 @@ void main() {
     if (!atlas || missing.length) {
       const next = bakeAtlas(s, family, weight, (atlas?.chars || textAtlasKnownChars.get(key) || TEXT_BASE_CHARS) + missing.join(""), camBake);
       if (!next) return null;
+      if (face) {
+        // A face atlas is not a camera atlas: the epoch sweeps and the camera
+        // generation leave it alone, and a bake-size change does not retire it.
+        next.cam = false;
+        next.face = true;
+        faceAtlasEvict(s, key);
+      }
       textAtlasKnownChars.set(key, next.chars);
       // This frame's text runs already stored the old texture. Delete it
       // after drawTexts, not while those runs are still queued.
@@ -2408,7 +2425,8 @@ void main() {
         } else {
           if (!s.deadTextures) s.deadTextures = [];
           s.deadTextures.push(atlas.texture);
-          textAtlasGen += 1;
+          // Face atlases are only referenced by the batch that is recording now.
+          if (!atlas.face) textAtlasGen += 1;
           if (atlas.cam) textAtlasCamGen += 1;
         }
       }
@@ -2418,7 +2436,28 @@ void main() {
       if (textAtlasBaking?.pick.key === key) textAtlasBaking = null;
     }
     atlas.usedEpoch = textAtlasEpoch;
+    if (atlas.face) atlas.faceTick = ++faceAtlasTick;
     return atlas;
+  }
+
+  /** Keep the face atlases bounded: retire the least recently used past the limit. */
+  function faceAtlasEvict(s, keepKey) {
+    let count = 0;
+    for (const a of s.atlases.values()) if (a?.face) count += 1;
+    while (count >= FACE_ATLAS_LIMIT) {
+      let oldKey = null;
+      let oldTick = Infinity;
+      for (const [k, a] of s.atlases) {
+        if (!a?.face || k === keepKey) continue;
+        if ((a.faceTick || 0) < oldTick) { oldTick = a.faceTick || 0; oldKey = k; }
+      }
+      if (oldKey == null) break;
+      const old = s.atlases.get(oldKey);
+      if (old?.texture) { if (!s.deadTextures) s.deadTextures = []; s.deadTextures.push(old.texture); }
+      s.atlases.delete(oldKey);
+      textAtlasKnownChars.delete(oldKey);
+      count -= 1;
+    }
   }
 
   /** Nearest live camera atlas of this font that has every character of text. */
@@ -2584,7 +2623,7 @@ void main() {
   /** Live atlases: [{ weight, bakePx, cam }] (tests / diagnostics). */
   function nodeGraphGlLinesTextAtlasInfo() {
     const out = [];
-    if (state?.atlases) for (const [key, a] of state.atlases) out.push({ key, bakePx: a.bakePx, cam: Boolean(a.cam), glyphs: a.glyphs.size, sheetW: a.sheetW, sheetH: a.sheetH });
+    if (state?.atlases) for (const [key, a] of state.atlases) out.push({ key, bakePx: a.bakePx, cam: Boolean(a.cam), face: Boolean(a.face), glyphs: a.glyphs.size, sheetW: a.sheetW, sheetH: a.sheetH });
     return out;
   }
 
@@ -2805,8 +2844,14 @@ void main() {
     const capped = cam && Math.abs(px * devScale - wantBake) > 0.02;
     // Lazy camera atlases: a missing size draws with the nearest live atlas and is queued.
     const lazy = cam && batch.lazyText ? textLazyReq(batch, x, y, devScale) : null;
-    let atlas = nodeGraphGlLinesTextAtlas(family, weight, str, wantBake, lazy);
+    // Display-face text: baked at its exact whole device-pixel size (a face is a
+    // fixed-size texture, so this is the same at every zoom) and sampled
+    // texel-for-pixel. Sizes below FACE_TEXT_MIN and the Performance-view tiles
+    // (exactText false: their size follows the view zoom) keep the shared atlas.
+    let faceBake = !cam && batch.exactText !== false && px >= FACE_TEXT_MIN && px <= FACE_TEXT_MAX ? px : 0;
+    let atlas = nodeGraphGlLinesTextAtlas(family, weight, str, faceBake || wantBake, lazy, faceBake > 0);
     if (!atlas) return;
+    if (faceBake > 0 && atlas.bakePx !== px) faceBake = 0;
     let g = px / atlas.bakePx;
     const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
     let hasEmoji = false;
@@ -2842,6 +2887,23 @@ void main() {
           let adv = 0;
           for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
           width = adv * g;
+        }
+      }
+    }
+    // Face text too wide for maxWidth: the next whole pixel size below the fit,
+    // baked exactly, so the run is still 1:1 (the uniform squeeze below only
+    // takes what is left once even FACE_TEXT_MIN does not fit).
+    if (faceBake > 0 && !hasEmoji && maxW > 0 && width > maxW) {
+      const fitPx = Math.floor(px * (maxW / width));
+      if (fitPx >= FACE_TEXT_MIN) {
+        const fitAtlas = nodeGraphGlLinesTextAtlas(family, weight, str, fitPx, null, true);
+        if (fitAtlas && fitAtlas.bakePx === fitPx) {
+          atlas = fitAtlas;
+          px = fitPx;
+          g = 1;
+          let adv = 0;
+          for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
+          width = adv;
         }
       }
     }
@@ -2922,8 +2984,26 @@ void main() {
     return out;
   }
 
+  // Display-face text (non-camera batches): how many glyph quads sample their
+  // atlas texel-for-pixel (x and y scale 1) and the mean atlas-texel : pixel
+  // ratio (1 = 1:1, 5 = a 64 px bake minified to 13 px). Tests / diagnostics.
+  const faceTextStats = { glyphs: 0, exact: 0, texelRatioSum: 0, runs: 0, minSx: 1 };
+  function nodeGraphGlLinesFaceTextStats(reset = false) {
+    const out = { ...faceTextStats, meanTexelRatio: faceTextStats.glyphs ? faceTextStats.texelRatioSum / faceTextStats.glyphs : 1 };
+    if (reset) { faceTextStats.glyphs = 0; faceTextStats.exact = 0; faceTextStats.texelRatioSum = 0; faceTextStats.runs = 0; faceTextStats.minSx = 1; }
+    return out;
+  }
+
   function pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca, snapScale = 0) {
     const ratio = sx / Math.max(1e-9, g);
+    if (!batch.camera) {
+      const n = [...str].length;
+      faceTextStats.runs += 1;
+      faceTextStats.glyphs += n;
+      if (sx < faceTextStats.minSx) faceTextStats.minSx = sx;
+      faceTextStats.texelRatioSum += n / Math.max(1e-9, sx);
+      if (Math.abs(sx - 1) < 1e-6 && Math.abs(g - 1) < 1e-6) faceTextStats.exact += n;
+    }
     textAspect.quads += 1;
     if (ratio < textAspect.minRatio) textAspect.minRatio = ratio;
     if (ratio > textAspect.maxRatio) textAspect.maxRatio = ratio;
@@ -4372,7 +4452,7 @@ void main() {
       // Camera atlases are per size and per zoom: the sweep retires them.
       let retired = 0;
       for (const [key, atlas] of [...s.atlases]) {
-        if (atlas?.cam) continue;
+        if (atlas?.cam || atlas?.face) continue;
         if (atlas?.texture) s.deadTextures.push(atlas.texture);
         s.atlases.delete(key);
         retired += 1;
@@ -4726,6 +4806,7 @@ void main() {
     nodeGraphGlLinesTextSegments,
     nodeGraphGlLinesEmojiStats,
     nodeGraphGlLinesTextAspectStats,
+    nodeGraphGlLinesFaceTextStats,
     nodeGraphGlLinesCss,
     nodeGraphGlLinesHsl,
     nodeGraphGlLinesEnd,

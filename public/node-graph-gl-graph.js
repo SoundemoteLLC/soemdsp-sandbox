@@ -4729,7 +4729,7 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   // An explicit resharpen (options.resharpenText) bakes what it needs now;
   // every other record draws missing sizes with the nearest atlas and lets
   // the sharpen job bake them a few glyphs per frame.
-  const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true, lazyText: !view && options.resharpenText !== true };
+  const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true, lazyText: !view && options.resharpenText !== true, exactText: !view };
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);
   // Free wire ends (drag cursor) as straight coverage, then "Show on top"
