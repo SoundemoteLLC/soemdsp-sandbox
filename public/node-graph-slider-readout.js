@@ -381,18 +381,21 @@ function syncNodeSliderReadout(slider) {
   }
   // Command Center rows paint even when the module row is hidden or collapsed.
   paintNodeSliderMirrorReadouts(slider);
-  if (
+  const skipped = (
     typeof nodeGraphElementInSkippedContentVisibility === "function"
     && nodeGraphElementInSkippedContentVisibility(slider)
-  ) {
-    return;
-  }
+  );
   const readout = slider.closest("label")?.querySelector(".node-slider-readout");
-  if (!readout) {
-    return;
+  // Always paint the bound readout (including CSS --value-start / --value-end)
+  // so an incremental plate repaint can read live travel even when the module
+  // is display:none or content-visibility skipped.
+  if (readout) paintNodeSliderReadout(slider, readout);
+  if (!skipped) {
+    syncNodeSliderMetadataTooltip(slider);
   }
-  paintNodeSliderReadout(slider, readout);
-  syncNodeSliderMetadataTooltip(slider);
+  if (typeof nodeGraphGlGraphNoteValueChrome === "function") {
+    nodeGraphGlGraphNoteValueChrome(slider);
+  }
   if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 

@@ -593,6 +593,156 @@ function nodeGraphGlGraphPatchPlateMesh(newGroups, wantSet) {
   return true;
 }
 
+
+function nodeGraphGlGraphNodeIdFromEl(el) {
+  if (el == null) return "";
+  if (typeof el === "string" || typeof el === "number") return String(el);
+  return String(el.closest?.(".dsp-node")?.dataset?.node || el.dataset?.node || "");
+}
+
+function nodeGraphGlGraphNoteSliderTravel(input, travel, extras) {
+  const readout = extras?.readout || input?.closest?.("label")?.querySelector?.(".node-slider-readout") || null;
+  const id = nodeGraphGlGraphNodeIdFromEl(input) || nodeGraphGlGraphNodeIdFromEl(readout);
+  const param = String(input?.dataset?.param || input?.name || extras?.param || "");
+  if (!id && !param) return;
+  const rec = {
+    id,
+    param,
+    travel: Number(travel),
+    valueText: String(extras?.valueText ?? readout?.querySelector?.(".node-slider-readout-value")?.textContent ?? ""),
+  };
+  if (extras && Number.isFinite(extras.handleStart)) rec.handleStart = extras.handleStart;
+  if (extras && Number.isFinite(extras.handleEnd)) rec.handleEnd = extras.handleEnd;
+  const map = nodeGraphGlGraphState.sliderTravel || (nodeGraphGlGraphState.sliderTravel = new Map());
+  map.set(`${id}::${param}`, rec);
+}
+
+function nodeGraphGlGraphSliderTravelSnapshot(id, param) {
+  const map = nodeGraphGlGraphState.sliderTravel;
+  const out = [];
+  if (!map) return out;
+  const wantId = id != null && id !== "" ? String(id) : null;
+  const wantParam = param != null && param !== "" ? String(param) : null;
+  map.forEach((rec) => {
+    if (wantId && rec.id !== wantId) return;
+    if (wantParam && rec.param !== wantParam) return;
+    out.push({ ...rec });
+  });
+  return out;
+}
+
+function nodeGraphGlGraphNoteValueChrome(idOrEl) {
+  const id = nodeGraphGlGraphNodeIdFromEl(idOrEl);
+  if (!id) return;
+  const dirty = nodeGraphGlGraphState.valueChromeDirty || (nodeGraphGlGraphState.valueChromeDirty = new Set());
+  dirty.add(id);
+}
+
+function nodeGraphGlGraphTakeValueChromeDirty() {
+  const dirty = nodeGraphGlGraphState.valueChromeDirty;
+  if (!dirty || !dirty.size) return [];
+  const ids = [...dirty];
+  dirty.clear();
+  return ids;
+}
+
+function nodeGraphGlGraphGroupForPlateRange(ids) {
+  const idList = (ids || []).map(String);
+  const groups = nodeGraphGlGraphState.stack?.groups || [];
+  for (let i = 0; i < groups.length; i += 1) {
+    const plates = groups[i].plates || [];
+    if (plates.length !== idList.length) continue;
+    let same = true;
+    for (let j = 0; j < plates.length; j += 1) {
+      if (String(plates[j].id) !== idList[j]) { same = false; break; }
+    }
+    if (same) return groups[i];
+  }
+  const byId = new Map();
+  for (const plate of (nodeGraphGlGraphState.plates || [])) byId.set(String(plate.id), plate);
+  const plates = [];
+  for (const id of idList) {
+    const plate = byId.get(id);
+    if (!plate) return null;
+    plates.push(plate);
+  }
+  const want = new Set(idList);
+  const displays = (nodeGraphGlGraphState.displays || []).filter((d) => want.has(String(d.id)));
+  return { plates, displays };
+}
+
+// Redraw the plate-group layer ranges that contain any of `ids`, leaving the
+// rest of the cached mesh in place. Slider fills, handles, stacked text,
+// toggle captions, and seed readouts are drawn from live DOM values.
+function nodeGraphGlGraphRepaintMeshedPlates(ids) {
+  const state = nodeGraphGlGraphState;
+  const mesh = state.mesh;
+  if (!mesh || mesh.gen !== state.gen) return false;
+  const want = new Set((ids || []).map(String).filter(Boolean));
+  if (!want.size) return true;
+  const batch = mesh.batches?.[0];
+  if (!batch?.layers || !Array.isArray(mesh.plateGroupLayers) || typeof nodeGraphGlLinesLayer !== "function") {
+    return false;
+  }
+  const ctx = nodeGraphGlGraphIncrementalDrawCtx(mesh);
+  if (!ctx || typeof nodeGraphGlGraphDrawStackGroup !== "function") return false;
+  const ranges = mesh.plateGroupLayers;
+  if (!ranges.length) return false;
+  const prefixStart = ranges[0].layerStart;
+  const suffixEnd = ranges[ranges.length - 1].layerEnd;
+  const startLen = batch.layers.length;
+  const prefix = batch.layers.slice(0, prefixStart);
+  const suffix = batch.layers.slice(suffixEnd);
+  const nextRanges = [];
+  const mid = [];
+  try {
+    ctx.pictures = (mesh.pictures || []).slice();
+    batch.textPixelated = ctx.pixelated;
+    for (let i = 0; i < ranges.length; i += 1) {
+      const range = ranges[i];
+      const hits = range.ids.some((id) => want.has(String(id)));
+      if (!hits) {
+        const start = prefix.length + mid.length;
+        mid.push(...batch.layers.slice(range.layerStart, range.layerEnd));
+        nextRanges.push({
+          ids: range.ids.slice(),
+          layerStart: start,
+          layerEnd: prefix.length + mid.length,
+        });
+        continue;
+      }
+      const group = nodeGraphGlGraphGroupForPlateRange(range.ids);
+      if (!group) throw new Error("missing plate group");
+      const before = batch.layers.length;
+      nodeGraphGlGraphDrawStackGroup(batch, group, ctx);
+      if (nodeGraphGlGraphMeshOverCapacity(batch)) throw new Error("mesh capacity");
+      const drawn = batch.layers.slice(before, batch.layers.length);
+      batch.layers.length = before;
+      const start = prefix.length + mid.length;
+      mid.push(...drawn);
+      nextRanges.push({
+        ids: range.ids.slice(),
+        layerStart: start,
+        layerEnd: prefix.length + mid.length,
+      });
+    }
+    batch.layers = prefix.concat(mid, suffix);
+    mesh.plateGroupLayers = nextRanges;
+    mesh.pictures = ctx.pictures;
+    if (ctx.inks) mesh.inks = ctx.inks;
+  } catch (err) {
+    batch.layers.length = startLen;
+    return false;
+  }
+  const counts = state.presentCounts || (state.presentCounts = {
+    replay: 0, replayFail: 0, full: 0, fails: {}, replayFailDuringCamera: 0, fullDuringCamera: 0, valueChromeRepaint: 0,
+  });
+  counts.valueChromeRepaint = (counts.valueChromeRepaint || 0) + 1;
+  state.lastValueChromeRepaint = { t: (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(), ids: [...want] };
+  return true;
+}
+
+
 function nodeGraphGlGraphIncrementalDrawCtx(mesh) {
   const host = document.getElementById("nodeGraphWorkspace");
   if (!host || !nodeGraphGlGraphState.plateStyle) return null;
@@ -1463,6 +1613,7 @@ function nodeGraphGlGraphDrawSliderFillVertical(batch, readout, input, x, y, w, 
   const domainRaw = Number(input.dataset?.domainValue);
   const t = nodeGraphGlGraphSliderTravel(input, Number.isFinite(domainRaw) ? domainRaw : Number(input.value));
   if (!Number.isFinite(t)) return;
+  nodeGraphGlGraphNoteSliderTravel(input, t);
   const bipolar = input.dataset?.bipolar === "true";
   let mid = 0.5;
   if (bipolar) {
@@ -1502,6 +1653,12 @@ function nodeGraphGlGraphDrawSliderHandle(batch, readout, x, y, h, zoom, layoutW
   const valueStart = nodeGraphGlGraphCssPx(readout, "--value-start");
   const valueEnd = nodeGraphGlGraphCssPx(readout, "--value-end");
   if (!(valueEnd > valueStart) || !(layoutW > 0)) return;
+  const handleInput = readout?.closest?.("label")?.querySelector?.("input[type='range']") || readout;
+  nodeGraphGlGraphNoteSliderTravel(handleInput, (valueStart + valueEnd) * 0.5 / layoutW, {
+    handleStart: valueStart,
+    handleEnd: valueEnd,
+    readout,
+  });
   const wrap = readout?.classList?.contains("wraparound-slider");
   const start = wrap ? Math.max(0, valueStart) : valueStart;
   const end = wrap ? Math.min(layoutW, valueEnd) : valueEnd;
@@ -4228,6 +4385,21 @@ function nodeGraphGlGraphPresent(options = {}) {
   const liveUnchanged = Boolean(nodeGraphGlGraphState.mesh && meshSel === liveKey);
   if (!view && frameCamera && liveUnchanged) {
     nodeGraphGlGraphEnsureRecordedPlatesInMesh();
+    const dirty = typeof nodeGraphGlGraphTakeValueChromeDirty === "function"
+      ? nodeGraphGlGraphTakeValueChromeDirty()
+      : [];
+    let valueChromeOk = true;
+    if (dirty.length) {
+      const meshed = new Set();
+      for (const range of (nodeGraphGlGraphState.mesh?.plateGroupLayers || [])) {
+        for (const id of range.ids || []) meshed.add(String(id));
+      }
+      valueChromeOk = dirty.every((id) => meshed.has(String(id)))
+        && nodeGraphGlGraphRepaintMeshedPlates(dirty);
+    }
+    if (!valueChromeOk) {
+      // Fall through to a full present so the fill still moves this frame.
+    } else {
     const replayed = nodeGraphGlGraphReplayMesh("all");
     nodeGraphGlGraphNotePresent("replay", {
       ok: replayed,
@@ -4240,10 +4412,12 @@ function nodeGraphGlGraphPresent(options = {}) {
       // Redraw the live snake (and only that canvas) so a camera move mid-
       // lasso keeps the path growing.
       nodeGraphGlGraphPresentTrail({ skipReplayOthers: true, fromReplay: true });
-      nodeGraphGlGraphNoteLiveDraw({ path: "replay", trailOnly: true });
+      nodeGraphGlGraphNoteLiveDraw({ path: "replay", trailOnly: true, valueChrome: dirty.length > 0 });
       return true;
     }
+    }
   }
+  if (nodeGraphGlGraphState.valueChromeDirty) nodeGraphGlGraphState.valueChromeDirty.clear();
   const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true };
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);

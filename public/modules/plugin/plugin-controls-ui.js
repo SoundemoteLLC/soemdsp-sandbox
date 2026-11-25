@@ -315,6 +315,8 @@ function createNodeGraphToggleButtonFace(node, type) {
     const on = nodeGraphPluginButtonFacePaint(face, btn, label, node);
     btn.classList.toggle("is-on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
+    if (typeof nodeGraphGlGraphNoteValueChrome === "function") nodeGraphGlGraphNoteValueChrome(node);
+    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
   };
   btn.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
@@ -340,6 +342,8 @@ function createNodeGraphMomentaryButtonFace(node, type) {
   const sync = () => {
     const down = nodeGraphPluginButtonFacePaint(face, btn, label, node);
     btn.classList.toggle("is-down", down);
+    if (typeof nodeGraphGlGraphNoteValueChrome === "function") nodeGraphGlGraphNoteValueChrome(node);
+    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
   };
   const setDown = (down) => {
     nodeGraphPluginWriteParamValue(node, "offset", nodeGraphControllerBiasEnd(node, down), {
