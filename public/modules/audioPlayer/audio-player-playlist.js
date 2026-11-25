@@ -806,6 +806,65 @@ function nodeGraphAudioPlayerPlaylistSelectDelta(nodeId, dir) {
   nodeGraphAudioPlayerPlaylistPersist(nodeId);
 }
 
+/**
+ * Ended-track state, kept from engine status events (no polling). The engine parks
+ * the playhead at the range end and stays "completed" on a play mode, so the same
+ * mode written again changes nothing: only a transport change (Stop) re-arms it.
+ * That is why Play after the end looked dead. Cleared as soon as status shows the
+ * track moving, stopped, paused or reset.
+ */
+const nodeGraphAudioPlayerTrackEnded = new Map();
+/** Restart waiting for the engine to report Stop: node id -> play mode to write then. */
+const nodeGraphAudioPlayerRestartPending = new Map();
+
+function nodeGraphAudioPlayerPlaylistRange(node) {
+  const num = (v, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+  };
+  const a = num(node?.params?.start, 0);
+  const b = num(node?.params?.end, 1);
+  if (Math.abs(b - a) <= 1e-6) {
+    return { start: 0, end: 1 };
+  }
+  return a < b ? { start: a, end: b } : { start: b, end: a };
+}
+
+function nodeGraphAudioPlayerPlaylistTrackEnded(nodeId) {
+  return nodeGraphAudioPlayerTrackEnded.get(String(nodeId || "")) === true;
+}
+
+/** Called from the engine status event: track ended / restart-after-Stop bookkeeping. */
+function nodeGraphAudioPlayerPlaylistNoteEngineStatus(nodeId, node, reason) {
+  const id = String(nodeId || "");
+  const text = String(reason || "").trim().toLowerCase();
+  const transport = Math.round(nodeGraphFiniteNumber(node?.params?.transport, 0));
+  const pendingMode = nodeGraphAudioPlayerRestartPending.get(id);
+  if (pendingMode !== undefined) {
+    if (transport !== 1) {
+      // The user chose something else since the restart was queued: drop it.
+      nodeGraphAudioPlayerRestartPending.delete(id);
+    } else if (text === "engine stopped") {
+      // Engine has now seen Stop (playhead back at the start, completed cleared): play again.
+      nodeGraphAudioPlayerRestartPending.delete(id);
+      nodeGraphAudioPlayerTrackEnded.set(id, false);
+      nodeGraphAudioPlayerWriteTransport(id, pendingMode);
+      return;
+    }
+  }
+  let ended = false;
+  if (transport >= 4 && text !== "engine stopped" && text !== "engine paused" && text !== "engine off reset"
+    && !text.includes("sample")) {
+    const phase = Number(nodeGraphMvp?.sampleRuntimeStatus?.get?.(id)?.phase);
+    const range = nodeGraphAudioPlayerPlaylistRange(node);
+    const speed = nodeGraphFiniteNumber(node?.params?.speed, 1) + nodeGraphFiniteNumber(node?.params?.direction, 0);
+    ended = text === "engine complete"
+      || (Number.isFinite(phase)
+        && (speed >= 0 ? phase >= range.end - 1e-6 : phase <= range.start + 1e-6));
+  }
+  nodeGraphAudioPlayerTrackEnded.set(id, ended);
+}
+
 function nodeGraphAudioPlayerPlaylistPlay(nodeId, options = {}) {
   const pl = nodeGraphAudioPlayerPlaylistForNode(nodeId);
   const i = Number.isInteger(pl.selectedIndex) ? pl.selectedIndex : pl.index;
@@ -834,6 +893,21 @@ function nodeGraphAudioPlayerPlaylistPlay(nodeId, options = {}) {
     });
   }
   void nodeGraphAudioPlayerEnsureLiveOutput();
+  // Play after the track ended: restart from the beginning. Stop re-arms the engine; the
+  // play mode is written back when the engine reports Stop (see NoteEngineStatus).
+  const endedNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  const endedSid = endedNode?.sample?.id;
+  if (ctxRunning && endedSid && nodeGraphMvp?.sampleBuffers?.get?.(endedSid)
+    && !nodeGraphAudioPlayerPlaylistLoadBusy.get(String(nodeId))
+    && nodeGraphAudioPlayerPlaylistTrackEnded(nodeId)) {
+    const resumeMode = Number.isFinite(wantTransport) && wantTransport >= 3 && wantTransport <= 5
+      ? wantTransport
+      : (transport >= 3 ? transport : nodeGraphAudioPlayerPlaylistPlayModeForLoop(pl.loopMode));
+    nodeGraphAudioPlayerRestartPending.set(String(nodeId), resumeMode);
+    nodeGraphAudioPlayerRestartPhaseSet(nodeId, nodeGraphAudioPlayerPlaylistRange(endedNode).start);
+    nodeGraphAudioPlayerPlaylistStop(nodeId);
+    return;
+  }
   // After a file ends the engine stays on Play (4) with completed=true.
   // Writing 4 again does not clear completed — Stop then Play does.
   // Same reset when audio never started (embed: transport already Play, context dead).
@@ -878,7 +952,8 @@ function nodeGraphAudioPlayerPlaylistPause(nodeId) {
 
 function nodeGraphAudioPlayerPlaylistTogglePlayPause(nodeId) {
   const transport = nodeGraphAudioPlayerTransportBase(nodeId);
-  if (transport >= 3) {
+  // A finished track still sits on its play mode: Play must restart it, not Pause it.
+  if (transport >= 3 && !nodeGraphAudioPlayerPlaylistTrackEnded(nodeId)) {
     nodeGraphAudioPlayerPlaylistPause(nodeId);
     return;
   }
@@ -1092,6 +1167,7 @@ function nodeGraphAudioPlayerPlaylistTransportAction(nodeId, action) {
     return;
   }
   if (action === "stop") {
+    nodeGraphAudioPlayerRestartPending.delete(String(nodeId));
     nodeGraphAudioPlayerPlaylistStop(nodeId);
     return;
   }
@@ -1100,6 +1176,7 @@ function nodeGraphAudioPlayerPlaylistTransportAction(nodeId, action) {
     return;
   }
   if (action === "pause") {
+    nodeGraphAudioPlayerRestartPending.delete(String(nodeId));
     nodeGraphAudioPlayerPlaylistPause(nodeId);
     return;
   }
@@ -1877,6 +1954,7 @@ function nodeGraphAudioPlayerPlaylistOnRuntimeStatus(nodeId, reason = "", workle
   if (!node || node.type !== "audioPlayer") {
     return;
   }
+  nodeGraphAudioPlayerPlaylistNoteEngineStatus(nodeId, node, reason);
   const pl = (node.playlist && Array.isArray(node.playlist.items))
     ? node.playlist
     : nodeGraphAudioPlayerPlaylistForNode(nodeId);
