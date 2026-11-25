@@ -1513,12 +1513,22 @@ function nodeGraphGlGraphSettleTextBake() {
   // After zoom stops: raise the atlas to the on-screen size so zoomed-in
   // titles and labels are sharp. Zooming out keeps the floor (scaled down).
   const zoom = typeof nodeGraphGlGraphZoom === "function" ? nodeGraphGlGraphZoom() : (nodeGraphMvp?.zoom || 1);
-  if (zoom > 1) px = Math.max(px, Math.round(px * zoom));
+  // On-screen scale of one world px: zoom x the canvas device scale.
+  const wsHost = nodeGraphGlGraphState.view ? null : document.getElementById("nodeGraphWorkspace");
+  const dev = wsHost && wsHost.clientWidth > 0
+    ? nodeGraphGlGraphDeviceScale(wsHost.clientWidth, Math.max(1, wsHost.clientHeight))
+    : 1;
+  const screenScale = zoom * dev;
+  if (screenScale > 1) px = Math.max(px, Math.round(px * screenScale));
   px = Math.max(16, Math.min(384, Math.round(px)));
   nodeGraphGlGraphState.emojiPx = px;
-  const changed = typeof nodeGraphGlLinesSetGlyphBakePx === "function"
+  let changed = typeof nodeGraphGlLinesSetGlyphBakePx === "function"
     ? nodeGraphGlLinesSetGlyphBakePx(px) === true
     : false;
+  // Camera text is baked per size at the on-screen size: a settled zoom that
+  // differs from the scale the mesh was recorded at needs a text remesh.
+  const recorded = nodeGraphGlGraphState.textRecordScale || 0;
+  if (recorded > 0 && Math.abs(recorded - screenScale) > 1e-4 * screenScale) changed = true;
   if (changed) nodeGraphGlGraphState.textBakeDirty = true;
   const prev = nodeGraphGlGraphState.lastTextBake;
   // A no-op at the same size must not erase a just-successful change
@@ -3439,12 +3449,41 @@ function nodeGraphGlGraphRebuild(options = {}) {
   }
 }
 
-function nodeGraphGlGraphFit(canvas, cssW, cssH) {
-  const bw = Math.min(4096, cssW);
-  const bh = Math.min(4096, cssH);
+/**
+ * Backing store for a GL graph canvas. The workspace canvases (deviceScale
+ * true) are sized in device pixels (css x devicePixelRatio, at most 2x and
+ * 4096 a side) and their CSS box is set to exactly that many device pixels,
+ * so the browser never resamples them. Before this they were css-sized, and
+ * the browser stretched them by the device pixel ratio: every glyph, edge and
+ * line was bilinear-blurred on any display above 100%. Returns the device
+ * scale (backing px per css px) that the batches and shaders take.
+ */
+function nodeGraphGlGraphDeviceScale(cssW, cssH) {
+  const dpr = Math.max(1, Math.min(2, Number(window.devicePixelRatio) || 1));
+  return Math.max(1, Math.min(dpr, 4096 / Math.max(1, cssW), 4096 / Math.max(1, cssH)));
+}
+
+function nodeGraphGlGraphFit(canvas, cssW, cssH, deviceScale = false) {
+  if (!deviceScale) {
+    const bw = Math.min(4096, cssW);
+    const bh = Math.min(4096, cssH);
+    if (canvas.width !== bw) canvas.width = bw;
+    if (canvas.height !== bh) canvas.height = bh;
+    if (canvas._glFitStyled) { canvas.style.width = ""; canvas.style.height = ""; canvas._glFitStyled = false; }
+    return bw / cssW;
+  }
+  const dev = nodeGraphGlGraphDeviceScale(cssW, cssH);
+  if (!(dev > 1 + 1e-6)) return nodeGraphGlGraphFit(canvas, cssW, cssH, false);
+  const bw = Math.ceil(cssW * dev - 1e-6);
+  const bh = Math.ceil(cssH * dev - 1e-6);
   if (canvas.width !== bw) canvas.width = bw;
   if (canvas.height !== bh) canvas.height = bh;
-  return bw / cssW;
+  const sw = `${bw / dev}px`;
+  const sh = `${bh / dev}px`;
+  if (canvas.style.width !== sw) canvas.style.width = sw;
+  if (canvas.style.height !== sh) canvas.style.height = sh;
+  canvas._glFitStyled = true;
+  return dev;
 }
 
 // UIDEV "pixelate wires on zoom" (off by default; off = the vector replay
@@ -4415,10 +4454,11 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   );
   const cssW = Math.max(1, host.clientWidth || 1);
   const cssH = Math.max(1, host.clientHeight || 1);
-  const scale = nodeGraphGlGraphFit(canvas, cssW, cssH);
-  nodeGraphGlGraphFit(wireCanvas, cssW, cssH);
-  nodeGraphGlGraphFit(dotsCanvas, cssW, cssH);
-  if (snakeCanvas) nodeGraphGlGraphFit(snakeCanvas, cssW, cssH);
+  const devScaleOn = !view;
+  const scale = nodeGraphGlGraphFit(canvas, cssW, cssH, devScaleOn);
+  nodeGraphGlGraphFit(wireCanvas, cssW, cssH, devScaleOn);
+  nodeGraphGlGraphFit(dotsCanvas, cssW, cssH, devScaleOn);
+  if (snakeCanvas) nodeGraphGlGraphFit(snakeCanvas, cssW, cssH, devScaleOn);
   const zoom = nodeGraphGlGraphZoom();
   let cam = { x: 0, y: 0 };
   if (view) cam = view.cam;
@@ -4473,6 +4513,9 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   }
   if (nodeGraphGlGraphState.valueChromeDirty) nodeGraphGlGraphState.valueChromeDirty.clear();
   nodeGraphGlGraphState.textBakeDirty = false;
+  // Camera text atlases are per size and zoom: this full record asks for the
+  // ones it needs, then retires the rest (see the sweep below).
+  if (!view && typeof nodeGraphGlLinesTextAtlasEpoch === "function") nodeGraphGlLinesTextAtlasEpoch();
   const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true };
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);
@@ -4811,6 +4854,10 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   if (trailBatch) trailBatch._blend = "max";
   const trailOk = !trailBatch || nodeGraphGlLinesEnd(trailBatch, "max") !== false;
   if (!view) {
+    nodeGraphGlGraphState.textRecordScale = frameCamera ? frameCamera.zoom * scale : 0;
+    // This record already used the settled atlas sizes: no second remesh.
+    nodeGraphGlGraphState.textBakeDirty = false;
+    if (typeof nodeGraphGlLinesTextAtlasSweep === "function") nodeGraphGlLinesTextAtlasSweep();
     nodeGraphGlGraphState.mesh = {
       gen: nodeGraphGlGraphState.gen,
       displayGen: nodeGraphGlGraphState.displayGen || 0,

@@ -31,7 +31,7 @@ try {
   }
   for (let i = 0; i < 240; i += 1) { try { if ((await fetch(baseUrl)).ok) break; } catch { /* not up */ } await new Promise((r) => setTimeout(r, 250)); }
   browser = await chromium.launch({ headless: true, channel: "chrome" });
-  const context = await browser.newContext({ viewport: { width: W, height: H }, hasTouch: true });
+  const context = await browser.newContext({ viewport: { width: W, height: H }, hasTouch: true, deviceScaleFactor: Number(process.env.DPR || 1) });
   const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (e) => pageErrors.push(String(e.message || e)));

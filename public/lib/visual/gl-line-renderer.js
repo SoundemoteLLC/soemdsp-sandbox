@@ -302,6 +302,8 @@ uniform float uPixel;
 uniform vec3 uCam;
 uniform vec2 uVp;
 uniform float uDevice;
+// 1 = glyph quads of a 1:1 atlas: corners land on whole device pixels.
+uniform float uSnap;
 varying vec2 vUv;
 varying vec4 vTint;
 varying highp vec2 vWorld;
@@ -310,6 +312,7 @@ void main() {
   if (uPixel > 0.5) {
     vec2 css = (position - uCam.xy) * max(uCam.z, 0.0001);
     vec2 dev = css * uDevice;
+    if (uSnap > 0.5) dev = floor(dev + 0.5);
     gl_Position = vec4(dev.x / uVp.x * 2.0 - 1.0, 1.0 - dev.y / uVp.y * 2.0, 0.0, 1.0);
   } else {
     gl_Position = vec4(position, 0.0, 1.0);
@@ -386,9 +389,15 @@ void main() {
   const textAtlasKnownChars = new Map();
   const TEXT_WHITE = Object.freeze([1, 1, 1, 1]);
   const TEXT_PAD = 6;
-  // Empty texels between atlas cells: 64 px bake at 1/8 draw (mip 3) still
-  // keeps 4 empty texels between glyphs, so no neighbour bleed.
-  const TEXT_GUTTER = 32;
+  // Empty texels between atlas cells, a quarter of the bake size (4..32): a
+  // 64 px bake keeps 16, enough for a 1/4 minified draw (mip 2) without
+  // neighbour bleed. A 1:1 bake of a 13 px label needs only 4.
+  function textGutter(bakePx) { return Math.max(4, Math.min(32, Math.round(bakePx * 0.25))); }
+  // Camera text (the workspace graph) bakes each size at its own device size,
+  // quantised to 1/64 px so equal sizes share one atlas.
+  const TEXT_CAM_BAKE_MIN = 8;
+  const TEXT_CAM_BAKE_MAX = 256;
+  let textAtlasEpoch = 0;
   // Colour emoji atlas.
   const EMOJI_SHEET = 1024;
   const EMOJI_PAD = 2;
@@ -1010,6 +1019,7 @@ void main() {
         imgAlphaLoc: gl.getUniformLocation(imgProgram, "alpha"),
         imgTintLoc: gl.getUniformLocation(imgProgram, "tint"),
         imgTextDark: gl.getUniformLocation(imgProgram, "uTextDark"),
+        imgSnap: gl.getUniformLocation(imgProgram, "uSnap"),
         imgLamp: gl.getUniformLocation(imgProgram, "uLamp"),
         imgModeLoc: gl.getUniformLocation(imgProgram, "mode"),
         imgHoleCount: gl.getUniformLocation(imgProgram, "uHoleCount"),
@@ -2201,11 +2211,11 @@ void main() {
   }
 
   // ---- text atlas ---------------------------------------------------------
-  function atlasKey(family, weight) {
-    return `${weight}|${family}`;
+  function atlasKey(family, weight, camBake) {
+    return camBake > 0 ? `${weight}|${family}|${camBake}` : `${weight}|${family}`;
   }
 
-  function bakeAtlas(s, family, weight, chars) {
+  function bakeAtlas(s, family, weight, chars, camBake) {
     const doc = global.document;
     if (!doc?.createElement) return null;
     const cv = doc.createElement("canvas");
@@ -2214,12 +2224,15 @@ void main() {
     const list = [...new Set([...chars])];
     const maxTex = s.gl.getParameter(s.gl.MAX_TEXTURE_SIZE) || 4096;
     const sheetW = Math.min(1024, maxTex);
-    let bakePx = glyphBakePx;
+    let bakePx = camBake > 0 ? camBake : glyphBakePx;
     let glyphs = new Map();
     let sheetH = 0;
     let cellH = 0;
     let head = 0;
-    while (bakePx >= 16) {
+    const minBake = camBake > 0 ? TEXT_CAM_BAKE_MIN : 16;
+    let gutter = textGutter(bakePx);
+    while (bakePx >= minBake) {
+      gutter = textGutter(bakePx);
       const fontTry = `${weight} ${bakePx}px ${family}`;
       cx.font = fontTry;
       // Room above the em ascent for fonts whose glyphs rise higher (DSEG7 digits).
@@ -2236,17 +2249,20 @@ void main() {
         if (gw > sheetW || y + cellH > maxTex) { fits = false; break; }
         if (x + gw > sheetW) {
           x = 0;
-          y += cellH + TEXT_GUTTER;
+          y += cellH + gutter;
           if (y + cellH > maxTex) { fits = false; break; }
         }
         glyphs.set(ch, { x, y, w: gw, h: cellH, adv });
-        x += gw + TEXT_GUTTER;
+        x += gw + gutter;
       }
       sheetH = y + cellH;
       if (fits && sheetH <= maxTex && glyphs.size === list.length) break;
-      bakePx = Math.floor(bakePx * 0.9);
+      bakePx = camBake > 0 ? Math.floor(bakePx * 0.9 * 64) / 64 : Math.floor(bakePx * 0.9);
     }
-    if (bakePx < 16 || glyphs.size !== list.length) return null;
+    if (bakePx < minBake || glyphs.size !== list.length) return null;
+    // Baseline on a whole texel row: canvas text at a fractional y is
+    // resampled vertically, which softens every glyph.
+    const baseRow = TEXT_PAD + head + Math.round(bakePx * TEXT_ASCENT);
     const font = `${weight} ${bakePx}px ${family}`;
     cv.width = sheetW;
     cv.height = sheetH;
@@ -2256,7 +2272,7 @@ void main() {
     cx.fillStyle = "#fff";
     cx.clearRect(0, 0, sheetW, sheetH);
     for (const [ch, g] of glyphs) {
-      cx.fillText(ch, g.x + TEXT_PAD, g.y + TEXT_PAD + head + bakePx * TEXT_ASCENT);
+      cx.fillText(ch, g.x + TEXT_PAD, g.y + baseRow);
     }
     const gl = s.gl;
     const texture = gl.createTexture();
@@ -2270,18 +2286,18 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
-    return { texture, glyphs, sheetW, sheetH, head: head / bakePx, bakePx, chars: list.join("") };
+    return { texture, glyphs, sheetW, sheetH, head: head / bakePx, baseRow, bakePx, chars: list.join(""), cam: camBake > 0, usedEpoch: textAtlasEpoch };
   }
 
   /** Shared glyph atlas for a font (grows when new characters show up). */
-  function nodeGraphGlLinesTextAtlas(family = TEXT_DEFAULT_FAMILY, weight = 600, text = "") {
+  function nodeGraphGlLinesTextAtlas(family = TEXT_DEFAULT_FAMILY, weight = 600, text = "", camBake = 0) {
     const s = ensure();
     if (!s) return null;
-    const key = atlasKey(family, weight);
+    const key = atlasKey(family, weight, camBake);
     let atlas = s.atlases.get(key);
     const missing = [...String(text)].filter((ch) => !atlas?.glyphs.has(ch));
     if (!atlas || missing.length) {
-      const next = bakeAtlas(s, family, weight, (atlas?.chars || textAtlasKnownChars.get(key) || TEXT_BASE_CHARS) + missing.join(""));
+      const next = bakeAtlas(s, family, weight, (atlas?.chars || textAtlasKnownChars.get(key) || TEXT_BASE_CHARS) + missing.join(""), camBake);
       if (!next) return null;
       textAtlasKnownChars.set(key, next.chars);
       // This frame's text runs already stored the old texture. Delete it
@@ -2294,7 +2310,43 @@ void main() {
       atlas = next;
       s.atlases.set(key, atlas);
     }
+    atlas.usedEpoch = textAtlasEpoch;
     return atlas;
+  }
+
+  /** Start of a full record of the camera mesh: atlases not asked for since are stale. */
+  function nodeGraphGlLinesTextAtlasEpoch() {
+    textAtlasEpoch += 1;
+    return textAtlasEpoch;
+  }
+
+  /**
+   * End of a full record: retire camera atlases (per-size, per-zoom) that this
+   * record did not use. The whole mesh was just re-recorded, so nothing kept
+   * points at them (no generation bump, no re-record). Deleted after the next
+   * text draw like any retired atlas.
+   */
+  function nodeGraphGlLinesTextAtlasSweep() {
+    const s = state;
+    if (!s?.atlases) return 0;
+    let n = 0;
+    for (const [key, atlas] of [...s.atlases]) {
+      if (!atlas?.cam || atlas.usedEpoch === textAtlasEpoch) continue;
+      if (atlas.texture) {
+        if (!s.deadTextures) s.deadTextures = [];
+        s.deadTextures.push(atlas.texture);
+      }
+      s.atlases.delete(key);
+      n += 1;
+    }
+    return n;
+  }
+
+  /** Live atlases: [{ weight, bakePx, cam }] (tests / diagnostics). */
+  function nodeGraphGlLinesTextAtlasInfo() {
+    const out = [];
+    if (state?.atlases) for (const [key, a] of state.atlases) out.push({ key, bakePx: a.bakePx, cam: Boolean(a.cam), glyphs: a.glyphs.size, sheetW: a.sheetW, sheetH: a.sheetH });
+    return out;
   }
 
   // ---- colour emoji ---------------------------------------------------------
@@ -2496,15 +2548,22 @@ void main() {
     if (!batch || !str) return;
     const family = options.family || TEXT_DEFAULT_FAMILY;
     const weight = options.weight || 600;
-    const atlas = nodeGraphGlLinesTextAtlas(family, weight, str);
+    const cam = batch.camera || null;
+    // Camera text is baked at the size it lands on screen (world px x zoom x
+    // device scale), so the atlas is sampled 1:1 and nothing is resampled.
+    const devScale = cam ? (cam.zoom > 0 ? cam.zoom : 1) * (batch.scale > 0 ? batch.scale : 1) : 0;
+    const k = cam ? 1 : (batch.scale || 1) * (batch.textInk || 1);
+    let px = cam ? Math.max(1, Number(options.px) || 12) : Math.max(1, Math.round((Number(options.px) || 12) * k));
+    let wantBake = cam
+      ? Math.min(TEXT_CAM_BAKE_MAX, Math.max(TEXT_CAM_BAKE_MIN, Math.round(px * devScale * 64) / 64))
+      : 0;
+    let atlas = nodeGraphGlLinesTextAtlas(family, weight, str, wantBake);
     if (!atlas) return;
-    const k = batch.camera ? 1 : (batch.scale || 1) * (batch.textInk || 1);
-    const px = Math.max(1, Math.round((Number(options.px) || 12) * k));
-    const g = px / atlas.bakePx;
+    let g = px / atlas.bakePx;
     const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
     let hasEmoji = false;
     if (segs) for (let i = 0; i < segs.length; i += 1) if (segs[i].emoji) { hasEmoji = true; break; }
-    const emojiPx = options.emojiPx != null ? emojiBasePx(options.emojiPx) : emojiBasePx(px);
+    const emojiPx = options.emojiPx != null ? emojiBasePx(options.emojiPx) : emojiBasePx(Math.round(px));
     const emojiScale = options.emojiPx != null ? px / Math.max(1, emojiPx) : 1;
     let width = 0;
     if (hasEmoji) {
@@ -2519,6 +2578,25 @@ void main() {
     }
     let squeeze = 1;
     const maxW = Number(options.maxWidth) * k;
+    // Camera text too wide for maxWidth: shrink to the next half-device-pixel
+    // size below the fit and bake that size, so the run is still sampled 1:1
+    // (a resampled squeeze is what made fitted titles soft). Sizes are
+    // quantised, so many titles share a few atlases.
+    if (cam && !hasEmoji && maxW > 0 && width > maxW && Math.abs(atlas.bakePx - wantBake) < 0.02) {
+      const fitBake = Math.floor(wantBake * (maxW / width) * 2) / 2;
+      if (fitBake >= TEXT_CAM_BAKE_MIN) {
+        const fitAtlas = nodeGraphGlLinesTextAtlas(family, weight, str, fitBake);
+        if (fitAtlas && Math.abs(fitAtlas.bakePx - fitBake) < 0.02) {
+          atlas = fitAtlas;
+          wantBake = fitBake;
+          px = fitBake / devScale;
+          g = px / atlas.bakePx;
+          let adv = 0;
+          for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
+          width = adv * g;
+        }
+      }
+    }
     // Too wide for maxWidth: shrink the whole run uniformly (x and y), never
     // squeeze glyphs horizontally — controls keep their proportions.
     if (maxW > 0 && width > maxW) { squeeze = maxW / width; width = maxW; }
@@ -2526,21 +2604,26 @@ void main() {
     const pxRun = px * squeeze;
     const align = options.align || "center";
     const base = options.baseline || "middle";
-    let pen = Math.round(x * k - (align === "center" ? width * 0.5 : (align === "right" ? width : 0)));
-    let baseline = Math.round(y * k);
+    // Camera text keeps fractional world positions; the shader snaps to device pixels.
+    const place = cam ? (v) => v : Math.round;
+    let pen = place(x * k - (align === "center" ? width * 0.5 : (align === "right" ? width : 0)));
+    let baseline = place(y * k);
     if (base === "middle") baseline += pxRun * (TEXT_ASCENT - 0.5);
     else if (base === "top") baseline += pxRun * TEXT_ASCENT;
     else if (base === "bottom") baseline -= pxRun * (1 - TEXT_ASCENT);
     const sx = g * squeeze;
     const c = options.rgba || TEXT_WHITE;
     const cr = c[0]; const cg = c[1]; const cb = c[2]; const ca = c.length > 3 ? c[3] : 1;
+    // 1:1 runs (atlas baked at the on-screen size, no squeeze) have their
+    // origins snapped to whole device pixels by the vertex shader.
+    const snapScale = cam && squeeze === 1 && Math.abs(atlas.bakePx - wantBake) < 0.02 ? devScale : 0;
     if (!hasEmoji) {
-      pen = pushGlyphs(batch, atlas, str, pen, baseline, gy, sx, cr, cg, cb, ca);
+      pen = pushGlyphs(batch, atlas, str, pen, baseline, gy, sx, cr, cg, cb, ca, snapScale);
       return;
     }
     for (const seg of segs) {
       if (!seg.emoji) {
-        pen = pushGlyphs(batch, atlas, seg.text, pen, baseline, gy, sx, cr, cg, cb, ca);
+        pen = pushGlyphs(batch, atlas, seg.text, pen, baseline, gy, sx, cr, cg, cb, ca, snapScale);
         continue;
       }
       const entry = emojiEntry(batch.s, seg.text, emojiPx);
@@ -2560,10 +2643,10 @@ void main() {
   }
 
   /** Current run for a texture (consecutive same-texture quads share one draw). */
-  function textRun(batch, texture, color) {
+  function textRun(batch, texture, color, snapScale = 0) {
     let run = batch.texts.length ? batch.texts[batch.texts.length - 1] : null;
-    if (!run || run.texture !== texture) {
-      run = { texture, color, start: batch.tn, end: batch.tn };
+    if (!run || run.texture !== texture || (run.snapScale || 0) !== snapScale) {
+      run = { texture, color, start: batch.tn, end: batch.tn, snapScale };
       batch.texts.push(run);
     }
     return run;
@@ -2577,19 +2660,25 @@ void main() {
     return out;
   }
 
-  function pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca) {
+  function pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca, snapScale = 0) {
     const ratio = sx / Math.max(1e-9, g);
     textAspect.quads += 1;
     if (ratio < textAspect.minRatio) textAspect.minRatio = ratio;
     if (ratio > textAspect.maxRatio) textAspect.maxRatio = ratio;
-    const run = textRun(batch, atlas.texture, false);
+    const run = textRun(batch, atlas.texture, false, snapScale);
+    // Atlas size of this run (tests / diagnostics): texels per glyph em.
+    if (run.bakePx === undefined) run.bakePx = atlas.bakePx;
     for (const ch of str) {
       const gl = atlas.glyphs.get(ch);
       if (!gl) continue;
-      const x0 = Math.round(pen - TEXT_PAD * sx);
-      const y0 = Math.round(baseline - (TEXT_PAD + atlas.bakePx * ((atlas.head || 0) + TEXT_ASCENT)) * g);
-      const x1 = Math.round(x0 + gl.w * sx);
-      const y1 = Math.round(y0 + gl.h * g);
+      // 1:1 runs keep exact world coordinates (the vertex shader snaps the
+      // corners to device pixels). Rounding to whole world px here made the
+      // quad a different size than its texels at any non-integer zoom x dpr.
+      const exact = snapScale > 0;
+      const x0 = exact ? pen - TEXT_PAD * sx : Math.round(pen - TEXT_PAD * sx);
+      const y0 = exact ? baseline - atlas.baseRow * g : Math.round(baseline - atlas.baseRow * g);
+      const x1 = exact ? x0 + gl.w * sx : Math.round(x0 + gl.w * sx);
+      const y1 = exact ? y0 + gl.h * g : Math.round(y0 + gl.h * g);
       const u0 = gl.x / atlas.sheetW; const u1 = (gl.x + gl.w) / atlas.sheetW;
       const v0 = gl.y / atlas.sheetH; const v1 = (gl.y + gl.h) / atlas.sheetH;
       pushTextQuad(batch, x0, y0, x1, y1, u0, v0, u1, v1, cr, cg, cb, ca);
@@ -2660,18 +2749,29 @@ void main() {
 
   /** Tinted textured triangles: data = pos2 uv2 rgba4 per vertex (device px). */
   function drawTexturedTinted(s, w, h, data, start, end, mode = 1) {
+    drawTexturedTintedRanges(s, w, h, data, [{ start, end }], mode);
+  }
+
+  /** Several [start, end) ranges of one vertex array drawn as one upload and one draw. */
+  function drawTexturedTintedRanges(s, w, h, data, ranges, mode = 1) {
     const gl = s.gl;
-    const len = end - start;
+    let len = 0;
+    for (let r = 0; r < ranges.length; r += 1) len += Math.max(0, ranges[r].end - ranges[r].start);
     if (len <= 0) return;
     const out = scratch(s, "tintScratch", len);
     const pix = s._drawBatch && s._drawBatch.camera;
     bindCam(gl, { pixel: s.imgCamPixel, cam: s.imgCamCam, vp: s.imgCamVp, device: s.imgCamDevice }, s._drawBatch);
-    for (let i = 0; i < len; i += 8) {
-      const j = start + i;
-      out[i] = pix ? data[j] : (data[j] / w) * 2 - 1;
-      out[i + 1] = pix ? data[j + 1] : 1 - (data[j + 1] / h) * 2;
-      out[i + 2] = data[j + 2]; out[i + 3] = data[j + 3];
-      out[i + 4] = data[j + 4]; out[i + 5] = data[j + 5]; out[i + 6] = data[j + 6]; out[i + 7] = data[j + 7];
+    let i = 0;
+    for (let r = 0; r < ranges.length; r += 1) {
+      const start = ranges[r].start;
+      const n = Math.max(0, ranges[r].end - start);
+      for (let q = 0; q < n; q += 8, i += 8) {
+        const j = start + q;
+        out[i] = pix ? data[j] : (data[j] / w) * 2 - 1;
+        out[i + 1] = pix ? data[j + 1] : 1 - (data[j + 1] / h) * 2;
+        out[i + 2] = data[j + 2]; out[i + 3] = data[j + 3];
+        out[i + 4] = data[j + 4]; out[i + 5] = data[j + 5]; out[i + 6] = data[j + 6]; out[i + 7] = data[j + 7];
+      }
     }
     gl.uniform1f(s.imgModeLoc, mode);
     gl.bindBuffer(gl.ARRAY_BUFFER, s.imgBuf);
@@ -2693,6 +2793,7 @@ void main() {
     gl.uniform1i(s.imgTexLoc, 0);
     // Jack holes are per picture (drawImages sets them); every other textured draw has none.
     if (s.imgHoleCount) gl.uniform1i(s.imgHoleCount, 0);
+    if (s.imgSnap) gl.uniform1f(s.imgSnap, 0);
   }
 
   function nodeGraphGlLinesSnapImageQuad(batch, im) {
@@ -2841,13 +2942,31 @@ void main() {
       const lamp = dark > 0 && typeof global.nodeGraphRoomLightUniform === "function" ? global.nodeGraphRoomLightUniform() : null;
       if (s.imgLamp) gl.uniform4f(s.imgLamp, lamp ? lamp[0] : 0, lamp ? lamp[1] : 0, lamp ? lamp[2] : 1, lamp ? lamp[3] : 0);
     }
-    // One draw call per texture run (glyph atlas or colour emoji page).
+    // One draw call per texture (glyph atlas or colour emoji page) and snap
+    // state: several sizes alternate within a module, but each size has its own
+    // atlas, so runs are grouped here rather than drawn one by one.
+    const cam = batch.camera;
+    const camScale = cam ? (cam.zoom > 0 ? cam.zoom : 1) * (batch.scale > 0 ? batch.scale : 1) : 0;
+    const groups = [];
     for (const t of batch.texts) {
       if (t.end <= t.start || !t.texture) continue;
       // A retired atlas is marked at delete. gl.isTexture is a synchronous GPU
       // round trip per run; on replayed meshes it cost ~4 ms a frame.
       if (t.texture.__glDeleted) continue;
+      // Origins snap only while the camera still matches the scale the run
+      // was recorded at (a mid-zoom replay is scaled, so snapping would jitter).
+      const snap = camScale > 0 && t.snapScale > 0 && Math.abs(t.snapScale - camScale) <= 1e-3 * camScale ? 1 : 0;
+      let grp = null;
+      for (let gi = 0; gi < groups.length; gi += 1) {
+        const c = groups[gi];
+        if (c.texture === t.texture && c.snap === snap && c.color === Boolean(t.color)) { grp = c; break; }
+      }
+      if (!grp) { grp = { texture: t.texture, color: Boolean(t.color), snap, ranges: [] }; groups.push(grp); }
+      grp.ranges.push(t);
+    }
+    for (const t of groups) {
       gl.bindTexture(gl.TEXTURE_2D, t.texture);
+      if (s.imgSnap) gl.uniform1f(s.imgSnap, t.snap);
       // Workspace zoom above 2.5 samples the 64px glyph bake nearest, same
       // policy as .pixelated-canvas-zoom. Emoji pages stay NEAREST always.
       if (!t.color) {
@@ -2859,8 +2978,9 @@ void main() {
       }
       if (t.color) gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
       else gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
-      drawTexturedTinted(s, w, h, batch.tdata, t.start, t.end, t.color ? 3 : 1);
+      drawTexturedTintedRanges(s, w, h, batch.tdata, t.ranges, t.color ? 3 : 1);
     }
+    if (s.imgSnap) gl.uniform1f(s.imgSnap, 0);
     gl.bindTexture(gl.TEXTURE_2D, null);
     if (s.imgTextDark) gl.uniform1f(s.imgTextDark, 0);
     const dead = s.deadTextures;
@@ -3987,11 +4107,15 @@ void main() {
     const s = ensure();
     if (s?.atlases) {
       if (!s.deadTextures) s.deadTextures = [];
-      for (const atlas of s.atlases.values()) {
+      // Camera atlases are per size and per zoom: the sweep retires them.
+      let retired = 0;
+      for (const [key, atlas] of [...s.atlases]) {
+        if (atlas?.cam) continue;
         if (atlas?.texture) s.deadTextures.push(atlas.texture);
+        s.atlases.delete(key);
+        retired += 1;
       }
-      if (s.atlases.size) textAtlasGen += 1;
-      s.atlases.clear();
+      if (retired) textAtlasGen += 1;
     }
     return true;
   }
@@ -4330,6 +4454,9 @@ void main() {
     nodeGraphGlLinesMeasureInk,
     nodeGraphGlLinesTextAtlas,
     nodeGraphGlLinesTextAtlasGen,
+    nodeGraphGlLinesTextAtlasEpoch,
+    nodeGraphGlLinesTextAtlasSweep,
+    nodeGraphGlLinesTextAtlasInfo,
     nodeGraphGlLinesTextSegments,
     nodeGraphGlLinesEmojiStats,
     nodeGraphGlLinesTextAspectStats,
