@@ -6,16 +6,16 @@ Keeper: Badger. Source: the 2026-11-25 Sandbox roadmap (patch system, Mutator sy
 
 - Update this index **on events only** (an agent reports, a commit lands, or Argi answers a decision). No timers, no polling. On Argi's request, run one pass over `git log` and the agents' latest reports.
 - Serve one plan at a time when Argi asks for the next one (Phase A is the exception: its five independent plans are served together). A card is: goal, why now, decisions he must make with the recommended default, size, owner, and the paste-ready handoff path.
-- **Never mark a plan `done`** without (a) the tests listed in that plan passing, (b) MasterBot's review where the plan requires one, and (c) Argi's retest for anything visual or audible. When a handoff returns, check its acceptance criteria line by line and record gaps, not just "done".
+- **Never mark a plan `done`** without (a) the tests listed in that plan passing, (b) MasterBot's review where the plan requires one, and (c) Argi's retest for anything visual or audible, in the sandbox app or browser. No REAPER testing in handoffs until Argi says otherwise (D-R1). When a handoff returns, check its acceptance criteria line by line and record gaps, not just "done".
 - **Only Argi's own words answer a decision.** Approvals relayed by other agents do not count. Leave Status as Open and Argi's answer blank until then.
 - Keep stale docs honest (HP-00 item 3) and mark superseded plans so a fresh reader is not misled.
 - Do not push; MasterBot pushes. Coordination is through the other bots and MasterBot.
 
-**Status values** (roadmap section 6): `planned` → `ready` (dependencies and gates clear) → `handed-off (<who>, <date>)` → `in-progress` → `for-review (MasterBot)` → `for-retest (Argi, Ctrl+F5)` → `done (<commit hashes>)`; plus `blocked-on-decision (<D-id>)` and `parked`.
+**Status values** (roadmap section 6): `planned` → `ready` (dependencies and gates clear) → `handed-off (<who>, <date>)` → `in-progress` → `for-review (MasterBot)` → `for-retest (Argi, sandbox app/browser)` → `done (<commit hashes>)`; plus `blocked-on-decision (<D-id>)` and `parked`.
 
 Phase A rows (HP-00, HP-01, HP-02, HP-06, HP-09) start as `ready, serving`. Later-phase rows start as `planned` until their dependencies and gates are clear. Side tracks start as `parked` (they begin when Argi says go).
 
-Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M1 to D-M3 before HP-09 ships; D-M5, D-M6, D-M7 before HP-10; D-G1 after the HP-04 prototype; D-M4 before HP-13. **Decided 2026-11-25:** D-P1, D-M1, D-M2, D-M3, D-C1 (t401u, t402u).
+Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M1 to D-M3 before HP-09 ships; D-M5, D-M6, D-M7 before HP-10; D-G1 after the HP-04 prototype; D-M4 before HP-13. **Decided 2026-11-25:** D-P1, D-M1, D-M2, D-M3, D-C1 (t401u, t402u); D-R1 (t415u, t417u) — no REAPER testing in handoffs until Argi says otherwise. HP-09 files were left untouched while the big AI is working from them; ignore or clean any REAPER wording there after that handoff returns.
 
 ---
 
@@ -25,7 +25,7 @@ Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M
 |----|-------|-------|-------|---------|-----------|--------|-----------|---------|------------|
 | HP-00 | Housekeeping and unblockers | big AI | A | — | D-C1 (decided 2026-11-25) | ready, serving | — | — | 2026-11-25: trimmed to cursors + stale docs; Patch View Remove done in `afaee444`; `55a0a3aa` is on origin; `cursor: move` is at styles.css:12634 |
 | HP-01 | Stage 1 removal (broom circuit presets, Trigger Patch, Pages menu, orphan presets) | Moth | A | — | D-P1 (decided: keep bank/program in data and filename) | ready, serving | — | — | 2026-11-25: D-P1 decided (keep bank/program; bank = category in the filename; one flat folder) |
-| HP-02 | Stage A1, one param-offset provider list (+ plugin-host reads effective params) | Moth | A | — | — | reviewed + pushed, browser retest passed 2026-11-25, Reaper retest pending (needs plugin rebuild) | big AI | 5bd52c53 | 2026-11-25 Argi browser retest passed (t412u); Reaper retest pending (needs plugin rebuild) |
+| HP-02 | Stage A1, one param-offset provider list (+ plugin-host reads effective params) | Moth | A | — | — | done for now (browser retest passed; REAPER retest dropped by Argi) | big AI | 5bd52c53 | 2026-11-25: browser retest passed (t412u); REAPER retest dropped (D-R1); done for now |
 | HP-03 | Stage A2, gradient data and engine effect (no UI) | Moth | B | HP-02 | — | ready, serving | — | — | served to Argi 2026-11-25 |
 | HP-04 | Stage A3, the Gradients page | Misty | C | HP-01, HP-03 | D-G1 (after the page prototype) | planned | — | — | 2026-11-25: index created |
 | HP-05 | Stage A4, slider ghost uses the effective value, 1 to 2 px outline, "Holds still" line | Misty | C | HP-03, HP-04 | — | planned | — | — | 2026-11-25: index created |
@@ -33,7 +33,7 @@ Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M
 | HP-06b | Plugin mirror of the variations / rename / remove API | Moth (plugin repo) | B | HP-06 | — | planned | — | — | 2026-11-25: index created |
 | HP-07 | Stage B2, the Preset Explorer UI | Misty | B | HP-01, HP-06 | D-P1 (decided 2026-11-25) | planned | — | — | 2026-11-25: D-P1 decided (keep bank/program filename stem; one flat folder) |
 | HP-08 | Stage B3, first-iteration audition (▶) and lazy thumbnails | Misty | C | HP-07 | D-P3 | planned | — | — | 2026-11-25: index created |
-| HP-09 | Mutator first slice, model-independent fixes (the MAS-1 open decisions) | Misty | A | — (D-M1, D-M2, D-M3 decided 2026-11-25) | D-M1, D-M2, D-M3 (decided 2026-11-25) | serving next | — | — | 2026-11-25: Argi t412u notes recorded (overlay Gate deferred to HP-12; pointerdown playhead added to scope) |
+| HP-09 | Mutator first slice, model-independent fixes (the MAS-1 open decisions) | Misty | A | — (D-M1, D-M2, D-M3 decided 2026-11-25) | D-M1, D-M2, D-M3 (decided 2026-11-25) | in progress (2026-11-25 2:54 AM) | big AI | — | 2026-11-25 2:54 AM: handed to big AI, in progress |
 | HP-10 | Stage A5, rebase the Pitch Mutator onto gradients | Misty | D | HP-03, HP-04, HP-09 | D-M5, D-M6, D-M7 | planned | — | — | 2026-11-25: index created |
 | HP-11 | Mutator native offset path and polyphony | Moth | D | HP-10, S-4 | — | planned | — | — | 2026-11-25: index created |
 | HP-12 | Mutator editing depth | Misty | D (parallel with HP-11) | HP-10 | — | planned | — | — | 2026-11-25: index created |
@@ -89,3 +89,4 @@ Recommended defaults are quoted from the 2026-11-25 roadmap or from the named pl
 | D-S5 | Is wraparound still broken on current master? (DSF Phase wraps to 0 then the drag sticks.) If yes, Moth takes `docs/WRAPAROUND_CONTROLS_ESCALATION.md` sections 7 to 10 as the handoff. If fixed by incidental work, close the doc. | Needs a repro from Argi if it is still broken. | S-5 | Open | — | — |
 | D-S6 | Which Sandy backlog item to start next, and in what order? Spectral Oscillator 3D display and a dedicated perfect-shape module are both "waiting on your go"; also Wing Thump Explorer (locked 11-13), Fluvv, S-curve envelope, Euclidean Circles, snare/kick follow-ups. | None stated; Argi chooses order. | S-6 | Open | — | — |
 | D-C1 | Moth found `cursor: move` at `styles.css:12715` (from commit `cfbaa592`, Elan's) breaks the no-arrow-cursor lint (APP_POLICY §24). HP-00 already lists Patch View arrow cursors (`.node-patch-view-label` `cursor: move` and the resize handles) as Moth's to replace. | Delete it and use the shared mouse-dot cursor path per §24. | HP-00 | Decided | "uhh uh, yes" | 2026-11-25 |
+| D-R1 | No REAPER testing in handoffs until Argi says otherwise. | Leave REAPER testing out of the remaining handoffs; Argi retest is in the sandbox app or browser only. | Remaining handoffs (not HP-09, which is already in progress) | Decided | "i would like to leave reaper testing out for now, it has too many bugs" (t415u); "while we are at it get rid of reaper testing from the rest of the docs we will be handing out, i don't want reaper mentioned or time wasted on it" (t417u) | 2026-11-25 |
