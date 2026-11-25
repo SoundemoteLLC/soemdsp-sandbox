@@ -8,7 +8,7 @@
 | **Repo** | `C:\Users\argit\Documents\_PROGRAMMING\soemdsp-sandbox` |
 | **Replaces** | `docs/PRESET_EXPLORER_PLAN.md` (deleted earlier). Findings that still apply are in §11. |
 | **Replaces in the app** | The broom page circuit presets (`node-graph-circuit-patches.js`) and the 📄 Pages menu (`node-graph-pages.js`). Trigger Patch is removed and is **not** replaced. |
-| **Related** | `docs/MUTATOR_PLAN.md`, `docs/APP_POLICY.md`, `docs/MODULE_DISPLAY_REWRITE_PLAN.md` (MasterBot's files, hands off). A1 touches `node-graph-live-plan-runtime.js` only after coordination with MasterBot (§14). |
+| **Related** | `docs/MUTATOR_PLAN.md`, `docs/APP_POLICY.md`, `docs/MODULE_DISPLAY_REWRITE_PLAN.md` (MasterBot's files, hands off). Stage A1 is approved to edit `node-graph-live-plan-runtime.js` (not MasterBot's file); conditions in §14. |
 | **Not this work** | The **Patch View box** (a red box with handles, saved in the patch, that sets what loading a patch frames, with the + origin at its center) is a separate feature being built now. This plan does not implement it and does not add a competing reframe rule. Load uses whatever that feature defines once it lands. |
 
 ---
@@ -139,7 +139,7 @@ Choice, switch and other discrete params do not use this sum; they snap as in §
 
 **Engine hook.** The first Pitch Mutator slice already applies offsets on the main thread to the live params and leaves the base alone: `pitchMutatorApplyLiveParams` (`public/node-graph-pitch-mutator-overlay.js`) is called from `nodeGraphBuildLiveParameterNodes` (`node-graph-live-plan-runtime.js`, near lines 191 and 333). Stage A1 generalizes that call into one **param offset provider list**: gradients first, then the Pitch Mutator. Both go through the same function, so there is exactly one place where "effective param" is computed (APP_POLICY §5). Later this becomes the native offset-table hook the Mutator plan already describes (per-voice tables, ZOH).
 
-**A1 is pending coordination with MasterBot**, because it edits `node-graph-live-plan-runtime.js`. Do not start A1 until she agrees, or use a hook she approves. See §14.
+**A1 is approved.** `node-graph-live-plan-runtime.js` is not MasterBot's file. A1 handles parameter values only; any visual feedback goes through `nodeGraphGlGraphNoteValueChrome(id)` so the GPU-drawn controls repaint; nothing touches camera or cull code. See §14.
 
 **Updates are events.** A change of a gradient position or stop calls the existing param update path (`scheduleNodeGraphLiveParameterSync`, `sendNodeGraphLiveParameterUpdate`). No timers or polling.
 
@@ -369,7 +369,7 @@ The fingerprint is not used for "morph links". It is a cheap identity for a circ
 - **Single entry point:** `commitNodeGraphPatch(patch, options)` (`node-graph-patch-core.js:2122`). Listeners from `addNodeGraphPatchCommitListener` run **once per outer commit, in a microtask**. That is the event hook MasterBot's wake uses, so any preset or variation load through this function wakes everything correctly. No Explorer code builds DOM or geometry.
 - **Full load** (presets and variations): `commitNodeGraphScript(text)` (`node-graph-script-status.js:29`) = `commitNodeGraphPatch(loadNodeGraphPatchFromScript(text), { status })`. After it: `setNodeGraphCurrentSavedPatch`, `nodeGraphRefreshServerPatchFileBaseline`, `syncNodeGraphHeaderPatchTitle`.
 - **`resetEditorView`** is not passed by this work. Framing a load is the **Patch View box** feature, not this plan.
-- **Hook for MasterBot:** none needed beyond the A1 question in §14. If another hook is ever wanted, it is a commit listener, not a call into her files.
+- **Hook for MasterBot:** none needed. A1 is approved (§14). If another hook is ever wanted, it is a commit listener, not a call into her files.
 
 ### 11.2 Undo
 
@@ -428,7 +428,7 @@ Two tracks that share only Stage 1.
 
 **Track A: gradients**
 
-- **A1. Offset provider refactor.** Generalize `pitchMutatorApplyLiveParams` into one param offset provider list with no behavior change. Check: the Pitch Mutator sounds the same. Plugin: make the `plugin-host.js` diff read effective params. **Do not start until MasterBot has agreed about `node-graph-live-plan-runtime.js` (§14).**
+- **A1. Offset provider refactor.** Generalize `pitchMutatorApplyLiveParams` into one param offset provider list with no behavior change. Check: the Pitch Mutator sounds the same. Plugin: make the `plugin-host.js` diff read effective params. After a value change, call `nodeGraphGlGraphNoteValueChrome(id)` so GPU-drawn controls repaint. **Approved** by MasterBot (§14): parameter values only; no camera or cull code.
 - **A2. Gradient data and engine effect, no UI.** Normalize and serialize `patch.gradients`, the slider-space offset sum and clamp, the morphable predicate, halfway snap for choice / switch / discrete params, hold outside the ends, auto-drop of all-zero params. Missing node ids are skipped at apply time. Check with a headless script (`scripts/test_gradients.mjs`).
 - **A3. Gradients page:** list, strip, snapshot, auto names and rename, position 0..1, undo on drag release, Snapshot / Delete stop / Set start. After A3, use a **clickable prototype** to decide duplicate / delete module behavior, then record the decision in this doc.
 - **A4. Holds-still line, the touching-selected-module filter, slider ghost uses the effective value, 1–2 px outline on sliders of the gradient being edited.**
@@ -451,13 +451,13 @@ Two tracks that share only Stage 1.
 
 ## 13. Files to touch
 
-Nothing here is MasterBot's, except the **pending** A1 edit of `node-graph-live-plan-runtime.js` (§14).
+Nothing here is MasterBot's. `node-graph-live-plan-runtime.js` is not her file; A1 may edit it under the conditions in §14.
 
 **Track A**
 
 - `public/node-graph-patch-core.js` (normalize `patch.gradients`, drop circuit-patch fields)
 - `public/node-graph-patch-serialization.js`
-- `public/node-graph-live-plan-runtime.js` (the provider call sites near lines 191 and 333 — **pending MasterBot**)
+- `public/node-graph-live-plan-runtime.js` (the provider call sites near lines 191 and 333 — **approved**, §14)
 - `public/node-graph-pitch-mutator-overlay.js`, `public/pitch-mutator-engine.js` (A1, A5)
 - `public/plugin-host.js` (effective-param diff)
 - `public/node-graph-ghost-sliders.js` (ghost includes gradient offsets; 1–2 px outline while editing)
@@ -479,7 +479,7 @@ Nothing here is MasterBot's, except the **pending** A1 edit of `node-graph-live-
 ## 14. Rules check
 
 - **MasterBot's files:** do not edit `node-graph-gl-graph.js`, `node-graph-module-geometry.js`, `node-graph-viewport-perf.js`, `node-graph-view-probe.js`, `node-graph-jack-chrome.js`, or any cull, present or camera code. The slider ghost and the 1–2 px outline go through `node-graph-ghost-sliders.js` and the existing slider DOM, not those files.
-- **Pending coordination (A1):** MasterBot is being asked whether Stage A1 may touch `node-graph-live-plan-runtime.js` (the live-parameter build that already calls `pitchMutatorApplyLiveParams`). Treat that as **not approved** until she says so. If she refuses, A1 must use a hook she approves; do not patch around her files.
+- **A1 approved by MasterBot.** `node-graph-live-plan-runtime.js` is not her file. Conditions: A1 handles **parameter values only**; any visual feedback goes through `nodeGraphGlGraphNoteValueChrome(id)` so the GPU-drawn controls repaint; and nothing touches camera or cull code.
 - **Events only, no timers or polling:** position and stop edits, commits, selection, confirm clearing and the edit outline all run on events. Do not reuse `confirmNodeGraphDefaultButtonClick` (it has a 2 s timeout). Keep the existing 5 s worklet startup timeout as shared legacy when robust audition uses it. `plugin-host.js` has its own legacy timers, which stay; the diff just reads effective params.
 - **Phone-friendly, no hover tooltips:** 44 px rows, a 44 px tall strip, 28 px handles, no `title=`, no hover-only action. Info lines are plain text.
 - **No dead code:** Stage 1 deletes the broom presets, Trigger Patch, Pages and the orphan localStorage presets.
@@ -517,5 +517,5 @@ These are decided enough to implement, or explicitly parked. There is no remaini
 | 50 generic plugin slots later; no builder-side automation of gradient position | Decided, later stages / §4.4 |
 | Duplicate or delete of a module that a gradient references | **Parked:** decide with a clickable prototype after A3, then write the rule into §4.1 |
 | Patch View box (load framing, + at center) | Separate feature, not these stages |
-| A1 and `node-graph-live-plan-runtime.js` | **Pending** MasterBot, §14 |
+| A1 and `node-graph-live-plan-runtime.js` | **Approved** by MasterBot. Not her file. Parameter values only; visuals via `nodeGraphGlGraphNoteValueChrome(id)`; no camera or cull code. §14 |
 | Smooth Graph `Out` range and cable scaling for Gradient to Module | Check in `smooth_graph.cpp` before A6, §6 |
