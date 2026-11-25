@@ -287,7 +287,7 @@ function endNodeGraphPatchViewDrag(event) {
   setNodeGraphPatchViewBox(next, "patch view adjusted");
 }
 
-/** After a patch load: show a saved box. Do not invent a box or reframe the camera. */
+/** After a patch load: show a saved box and frame the camera on it. Never invents a box. */
 function frameNodeGraphPatchViewAfterLoad() {
   if (!nodeGraphMvp) {
     return;
@@ -295,8 +295,10 @@ function frameNodeGraphPatchViewAfterLoad() {
   const rect = nodeGraphPatchViewBox();
   nodeGraphMvp.patchViewVisible = Boolean(rect);
   syncNodeGraphPatchViewChrome();
-  // viewFrame() does not accept a world rect today. MasterBot owns that hook,
-  // so this function does not call it or patch around it.
+  // A saved box frames the camera on load (viewFrame(rect): fit + centre).
+  if (rect && typeof viewFrame === "function") {
+    viewFrame(rect);
+  }
 }
 
 function bindNodeGraphPatchViewControls() {

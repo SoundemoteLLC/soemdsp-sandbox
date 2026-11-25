@@ -293,8 +293,61 @@ function nodeGraphViewSettleTick() {
   if (typeof nodeGraphGlGraphSharpenResume === "function") nodeGraphGlGraphSharpenResume();
 }
 
-/** Stage 3: the only per-frame camera apply. Same path for WASD, wheel, Q/E, and middle-drag. */
-function viewFrame() {
+// Margin around a framed world rect, per side (fraction of the rect).
+const NODE_GRAPH_VIEW_FRAME_MARGIN = 0.05;
+
+/**
+ * Frame a world rect { x, y, w, h }: zoom so it fits the workspace with
+ * NODE_GRAPH_VIEW_FRAME_MARGIN per side, clamped to the zoom limits
+ * (clampNodeGraphZoom / nodeGraphZoomLimits), and centre it. Writes zoom and
+ * pan, then applies them through viewCameraSet (one immediate frame, no
+ * timers). False when the rect or the workspace size is unusable.
+ */
+function viewFrameRect(rect, options = {}) {
+  const x = Number(rect?.x); const y = Number(rect?.y);
+  const w = Number(rect?.w); const h = Number(rect?.h);
+  if (![x, y, w, h].every(Number.isFinite) || !(w > 0) || !(h > 0) || !nodeGraphMvp) return false;
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  if (!workspace) return false;
+  const box = typeof nodeGraphWorkspaceLayoutMetrics === "function" ? nodeGraphWorkspaceLayoutMetrics(workspace) : null;
+  let W = Number(box?.width) || 0;
+  let H = Number(box?.height) || 0;
+  if (!(W > 0) || !(H > 0)) {
+    const r = workspace.getBoundingClientRect();
+    W = r.width; H = r.height;
+  }
+  if (!(W > 0) || !(H > 0)) return false;
+  const k = 1 + 2 * NODE_GRAPH_VIEW_FRAME_MARGIN;
+  const fit = Math.min(W / (w * k), H / (h * k));
+  const zoom = typeof clampNodeGraphZoom === "function" ? clampNodeGraphZoom(fit) : fit;
+  nodeGraphMvp.zoom = zoom;
+  if (typeof syncNodeGraphPatchViewZoom === "function") syncNodeGraphPatchViewZoom(zoom);
+  // Screen = origin + world x zoom, and the rendered origin moves 1:1 with pan:
+  // shift pan so the rect centre lands on the workspace centre.
+  const cx = x + w / 2; const cy = y + h / 2;
+  let pan = { x: Number(nodeGraphMvp.pan?.x) || 0, y: Number(nodeGraphMvp.pan?.y) || 0 };
+  for (let i = 0; i < 2; i += 1) {
+    const origin = typeof nodeGraphRenderedOriginOffset === "function" ? nodeGraphRenderedOriginOffset(pan, workspace) : pan;
+    pan = {
+      x: pan.x + (W / 2 - cx * zoom) - (Number(origin?.x) || 0),
+      y: pan.y + (H / 2 - cy * zoom) - (Number(origin?.y) || 0),
+    };
+  }
+  nodeGraphMvp.pan = pan;
+  viewCameraSet({ immediate: true, persist: options.persist !== false });
+  return true;
+}
+
+/**
+ * Stage 3: the only per-frame camera apply. Same path for WASD, wheel, Q/E,
+ * and middle-drag. viewFrame(rect) with a world rect { x, y, w, h } frames
+ * that rect instead (see viewFrameRect); no argument keeps the frame apply.
+ */
+function viewFrame(rect) {
+  if (rect && typeof rect === "object") {
+    viewFrameRect(rect);
+    return;
+  }
   if (nodeGraphViewFrameRaf) {
     window.cancelAnimationFrame(nodeGraphViewFrameRaf);
     nodeGraphViewFrameRaf = 0;
