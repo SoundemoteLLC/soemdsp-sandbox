@@ -188,9 +188,8 @@ function nodeGraphBuildLiveParameterNodes(activeNodeIds = null, bypassedNodes = 
         paramMeta[parameter.key] = nodeGraphReadPatchParameterMetadata(node, parameter.key);
       }
       nodeGraphInjectSpectrogramWorkletParams(node, params);
-      if (typeof pitchMutatorApplyLiveParams === "function") {
-        pitchMutatorApplyLiveParams(node, params);
-      }
+      // The one place "effective param" is computed: every param offset provider (gradients, Pitch Mutator) over this node's params.
+      applyNodeGraphParamOffsets(node, params);
       const runtimeNode = {
         id: node.id,
         paramMeta,
@@ -330,9 +329,8 @@ function nodeGraphBuildLiveParameterNodesForPatch(patch, activeNodeIds = null, b
         ) || nodeGraphParameterDefinitionMetadata(parameter);
       }
       nodeGraphInjectSpectrogramWorkletParams(node, params);
-      if (typeof pitchMutatorApplyLiveParams === "function") {
-        pitchMutatorApplyLiveParams(node, params);
-      }
+      // Not the patch on screen: same providers, no repaint request.
+      applyNodeGraphParamOffsets(node, params, { notify: false });
       const runtimeNode = {
         id: node.id,
         paramMeta,

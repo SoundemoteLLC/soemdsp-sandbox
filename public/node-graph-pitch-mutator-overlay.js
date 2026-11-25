@@ -928,8 +928,13 @@
   }
 
   root.togglePitchMutatorOverlay = toggleOverlay;
-  root.pitchMutatorApplyLiveParams = applyLiveParams;
-  root.pitchMutatorApplyToBase = applyToBase;
+  // After the gradients (order 0): the Mutator's offsets are added on top of theirs.
+  root.registerNodeGraphParamOffsetProvider({
+    id: "pitchMutator",
+    order: 20,
+    applyParams: applyLiveParams,
+    applyToBase,
+  });
   root.pitchMutatorMaybeInterceptSlider = applySliderIntercept;
   root.pitchMutatorRefreshOverlay = renderOverlay;
   root.pitchMutatorFreqLutForNode = function (node) {

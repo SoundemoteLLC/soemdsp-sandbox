@@ -209,11 +209,18 @@
     return out;
   }
 
+  // What the native engine should hear: the effective params (base plus every param offset provider), not just node.params. A
+  // provider's offset is not in node.params, so a diff of node.params alone would miss it.
+  function effectiveParams(node) {
+    var effective = global.nodeGraphEffectiveNodeParams;
+    return typeof effective === "function" ? effective(node) : node.params;
+  }
+
   function snapshotParams() {
     lastParams.clear();
     var nodes = patchNodes();
     for (var i = 0; i < nodes.length; i += 1) {
-      if (nodes[i] && nodes[i].id) lastParams.set(String(nodes[i].id), copyParams(nodes[i].params));
+      if (nodes[i] && nodes[i].id) lastParams.set(String(nodes[i].id), copyParams(effectiveParams(nodes[i])));
     }
   }
 
@@ -223,7 +230,7 @@
       var n = nodes[i];
       if (!n || !n.id) continue;
       var id = String(n.id);
-      var now = copyParams(n.params);
+      var now = copyParams(effectiveParams(n));
       var prev = lastParams.get(id);
       if (prev) {
         var keys = Object.keys(now);
