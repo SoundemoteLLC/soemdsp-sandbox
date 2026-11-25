@@ -677,7 +677,15 @@ function nodeGraphGlGraphGroupForPlateRange(ids) {
 // Redraw the plate-group layer ranges that contain any of `ids`, leaving the
 // rest of the cached mesh in place. Slider fills, handles, stacked text,
 // toggle captions, and seed readouts are drawn from live DOM values.
-function nodeGraphGlGraphRepaintMeshedPlates(ids) {
+//
+// options.strict (the lazy sharpen job): a stack that would draw any text with a
+// fallback atlas (its exact size is not baked yet) is NOT swapped in. The
+// record only queues the sizes; the old picture keeps drawing, and the job bakes
+// them and records the stack again. Each piece of text then changes once, from
+// the old atlas to the exact one, instead of old -> fallback -> exact.
+// Returns "fallback" for that case (truthy only for non-strict callers' sake:
+// check with ===), true when swapped, false when the caller must full-present.
+function nodeGraphGlGraphRepaintMeshedPlates(ids, options = null) {
   const state = nodeGraphGlGraphState;
   const mesh = state.mesh;
   if (!mesh || mesh.gen !== state.gen) return false;
@@ -699,6 +707,8 @@ function nodeGraphGlGraphRepaintMeshedPlates(ids) {
   const nextRanges = [];
   const mid = [];
   const atlasGen = nodeGraphGlGraphTextAtlasGen();
+  const strict = options?.strict === true && typeof nodeGraphGlLinesTextAtlasStats === "function";
+  const fallbacks0 = strict ? nodeGraphGlLinesTextAtlasStats().fallbacks : 0;
   try {
     ctx.pictures = (mesh.pictures || []).slice();
     batch.textPixelated = ctx.pixelated;
@@ -733,6 +743,10 @@ function nodeGraphGlGraphRepaintMeshedPlates(ids) {
     // A retired atlas leaves the kept ranges pointing at a deleted texture:
     // let the caller fall through to a full present.
     if (nodeGraphGlGraphTextAtlasGen() !== atlasGen) throw new Error("glyph atlas retired");
+    if (strict && nodeGraphGlLinesTextAtlasStats().fallbacks !== fallbacks0) {
+      batch.layers.length = startLen;
+      return "fallback";
+    }
     batch.layers = prefix.concat(mid, suffix);
     mesh.plateGroupLayers = nextRanges;
     mesh.pictures = ctx.pictures;
@@ -4560,16 +4574,28 @@ function nodeGraphGlGraphSharpenTick() {
     }
     const next = sh.queue.shift();
     if (!next) break;
-    if (!nodeGraphGlGraphRepaintMeshedPlates([next.id])) {
+    // A record that needs a fallback atlas is discarded, so a stack swaps once,
+    // straight to its exact atlas. Fitted titles need their base atlas before
+    // their fit size is known, so a stack can take a few rounds; after 6 an atlas
+    // that cannot bake is accepted (no endless loop).
+    const tried = sh.tries.get(next.id) || 0;
+    const swapped = nodeGraphGlGraphRepaintMeshedPlates([next.id], { strict: tried < 6 });
+    if (swapped === "fallback") {
+      sh.tries.set(next.id, tried + 1);
+      sh.discarded = (sh.discarded || 0) + 1;
+      sh.queue.unshift(next);
+      continue;
+    }
+    if (!swapped) {
       // The mesh changed under us (records / capacity): a full present follows.
       sh.queue = null;
       break;
     }
     repainted = true;
     sh.repaints += 1;
-    // The repaint found sizes still missing: bake them, then repaint this stack again.
+    // Sizes still missing after an accepted (non-strict) repaint: bake, repaint once more.
     if (nodeGraphGlLinesTextAtlasPending(scale) > 0) {
-      const n = (sh.tries.get(next.id) || 0) + 1;
+      const n = tried + 1;
       sh.tries.set(next.id, n);
       if (n < 3) sh.queue.unshift(next);
     }

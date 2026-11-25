@@ -920,6 +920,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
       return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : 1;
     },
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
+    lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     dottedThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.7), 0, 16),
     dotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 6), 0, 32),
     ghostAlpha: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.38), 0, 1),

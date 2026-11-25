@@ -26,7 +26,7 @@
     "resize": "drag to resize workspace by grid units",
     "resizeTitle": "resize modular workspace",
     "origin": "world origin: X 0, Y 0",
-    "recenterOrigin": "recenter modular view at X 0, Y 0",
+    "recenterOrigin": "recenter modular view (on the Patch View box when there is one, else X 0, Y 0)",
     "backToFull": "return to full modular view"
   },
   "view": {

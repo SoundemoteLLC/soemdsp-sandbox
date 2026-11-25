@@ -10,6 +10,8 @@ const nodeGraphGraphFaceDisplaySettingsDefaults = Object.freeze({
   zoomMin: -1,
   zoomMax: 1,
   lineThickness: 2,
+  // Line blur: the shared display Expo skirt in CSS px (nodeGraphLineSmoothingPx), 0..8.
+  lineSmoothing: 1,
   dottedThickness: 0.7,
   dotSize: 6,
   strokeColor: "#5ce8d4",
@@ -142,6 +144,9 @@ function normalizeNodeGraphGraphFaceDisplaySettings(settings = {}) {
   const dotSize = Math.max(0, Math.min(32, Number.isFinite(Number(source.dotSize))
     ? Number(source.dotSize)
     : nodeGraphGraphFaceDisplaySettingsDefaults.dotSize));
+  const lineSmoothing = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(source, nodeGraphGraphFaceDisplaySettingsDefaults.lineSmoothing)
+    : Math.max(0, Math.min(8, Number.isFinite(Number(source.lineSmoothing)) ? Number(source.lineSmoothing) : nodeGraphGraphFaceDisplaySettingsDefaults.lineSmoothing));
   const strokeColor = nodeGraphGraphNormalizeCssColor(
     source.strokeColor,
     nodeGraphGraphFaceDisplaySettingsDefaults.strokeColor,
@@ -183,6 +188,7 @@ function normalizeNodeGraphGraphFaceDisplaySettings(settings = {}) {
     zoomMin,
     zoomMax,
     lineThickness,
+    lineSmoothing,
     dottedThickness,
     dotSize,
     strokeColor,

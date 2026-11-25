@@ -250,6 +250,10 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Line";
     title = "";
   }
+  if (formType === "graphFace" && key === "lineSmoothing") {
+    label = "Line blur";
+    title = "";
+  }
   if (formType === "graphFace" && key === "dottedThickness") {
     label = "Dotted";
     title = "";

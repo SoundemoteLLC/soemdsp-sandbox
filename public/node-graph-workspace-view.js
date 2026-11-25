@@ -122,7 +122,7 @@ function syncNodeGraphWorldPositionReadout() {
   );
   readout.setAttribute(
     "aria-label",
-    `World position X ${nodeGraphWorldPositionLabel(worldX)}, Y ${nodeGraphWorldPositionLabel(worldY)}. Click to recenter view at X 0, Y 0.`,
+    `World position X ${nodeGraphWorldPositionLabel(worldX)}, Y ${nodeGraphWorldPositionLabel(worldY)}. ${typeof nodeGraphPatchViewBox === "function" && nodeGraphPatchViewBox() ? "Click to centre the view on the Patch View box." : "Click to recenter view at X 0, Y 0."}`,
   );
   if (typeof nodeGraphApplyTooltip === "function") {
     nodeGraphApplyTooltip(readout, "workspace.recenterOrigin");
@@ -190,10 +190,23 @@ function syncNodeGraphModularViewSizeReadout(size = null) {
   }
 }
 
+/**
+ * The X / Y readout button. With a Patch View box it frames the box: viewFrame(rect)
+ * fits it and puts its centre on the centre of the workspace (the visible canvas).
+ * It used to always pan to world X 0, Y 0, which only centres a box that happens to
+ * surround the origin (otherwise the box sat off-centre, often low on the screen).
+ * Without a box: world X 0, Y 0 at the current zoom, as before.
+ */
 function recenterNodeGraphViewAtWorldOrigin(event) {
+  event?.preventDefault?.();
+  const rect = typeof nodeGraphPatchViewBox === "function" ? nodeGraphPatchViewBox() : null;
+  if (rect && typeof viewFrame === "function") {
+    viewFrame(rect);
+    setNodeInteractionHelp("View centered on the Patch View box.");
+    return;
+  }
   setNodeGraphPan(0, 0);
   setNodeInteractionHelp("View centered at X 0, Y 0.");
-  event?.preventDefault?.();
 }
 
 function nodeGraphLogModularViewPan() {
