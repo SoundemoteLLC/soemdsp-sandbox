@@ -912,16 +912,16 @@
     root.setAttribute("data-shared-gradient-editor", "");
     root.dataset.channels = mono ? "bw" : "full";
     root.innerHTML = `
-      <div class="sge-bar-wrap" data-sge-bar-wrap title="Click bar to add a stop at that position">
+      <div class="sge-bar-wrap" data-sge-bar-wrap aria-label="Gradient bar: click to add a stop">
         <div class="sge-bar" data-sge-bar></div>
       </div>
       <div class="sge-stops" data-sge-stops aria-label="Gradient stops"></div>
       <div class="sge-color-widget-host" data-sge-color-widget></div>
-      <div class="title-stepper" data-sge-hue-row title="Rotate the gradient colors in degrees (0-360). 0 = authored stops.">
+      <div class="title-stepper" data-sge-hue-row>
         <span class="title-stepper-title">Hue Rotation</span>
         <span class="metadata-stepper-control">
           <button type="button" data-trace-display-step-target="backgroundHue" data-trace-display-step-direction="-1" aria-label="Decrease hue rotation">-</button>
-          <input type="text" inputmode="decimal" data-trace-display-field="backgroundHue" data-sge-hue readonly value="0" aria-label="Hue rotation 0-360" title="Rotate the gradient colors in degrees (0-360). 0 = authored stops. Drag or -/+. Double-click to type.">
+          <input type="text" inputmode="decimal" data-trace-display-field="backgroundHue" data-sge-hue readonly value="0" aria-label="Hue rotation 0-360">
           <button type="button" data-trace-display-step-target="backgroundHue" data-trace-display-step-direction="1" aria-label="Increase hue rotation">+</button>
         </span>
       </div>
@@ -931,7 +931,6 @@
       </div>
       <textarea class="sge-hex" data-sge-list rows="2" spellcheck="false"
         aria-label="Gradient stops as hex and position percent"
-        title="Copy for art tools (Photoshop Location 0-100%). Format: #hex 0%, #hex 42%, #hex 100%. Color-only lists still import with even spacing."
         placeholder="#000000 0%, #00ff88 42%, #ffffff 100%"></textarea>
       <div class="sge-presets" data-sge-presets aria-label="Gradient presets"></div>
     `;
@@ -1009,7 +1008,7 @@
         const pos = cell.querySelector(".sge-stop-pos");
         if (!stop || !pos) return;
         pos.textContent = Number(stop.t).toFixed(2);
-        cell.title = `${stop.color} @ ${stop.t.toFixed(3)}`;
+        cell.setAttribute("aria-label", `${stop.color} @ ${stop.t.toFixed(3)}`);
         cell.dataset.active = String(i === activeIndex);
       });
     };
@@ -1086,7 +1085,7 @@
         btn.type = "button";
         btn.className = "sge-preset";
         btn.dataset.active = String(preset.id === activePresetId);
-        btn.title = preset.colors.join(", ");
+        btn.setAttribute("aria-label", preset.colors.join(", "));
         // Gradient swatch behind the label.
         let swatchStops;
         if (Array.isArray(preset.stops) && preset.stops.length >= 2) {
@@ -1133,16 +1132,16 @@
         cell.dataset.index = String(index);
         cell.dataset.active = String(index === activeIndex);
         cell.dataset.locked = locked ? "true" : "false";
-        cell.title = `${stop.color} @ ${stop.t.toFixed(3)}`;
+        cell.setAttribute("aria-label", `${stop.color} @ ${stop.t.toFixed(3)}`);
         const swatch = document.createElement("span");
         swatch.className = "sge-stop-swatch";
         swatch.style.background = stop.color;
         const pos = document.createElement("span");
         pos.className = "sge-stop-pos";
         pos.textContent = Number(stop.t).toFixed(2);
-        pos.title = locked
+        pos.setAttribute("aria-label", locked
           ? "End stop stays at this position"
-          : "Drag to move this stop along the gradient";
+          : "Drag to move this stop along the gradient");
         cell.append(swatch, pos);
         cell.addEventListener("click", (event) => {
           if (cell.dataset.didDrag === "1") {
