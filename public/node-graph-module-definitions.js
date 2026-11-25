@@ -24139,9 +24139,10 @@ const nodeGraphModuleDefinitions = (
   // live in Display Settings. Min/Max Freq are face knobs like Spectrogram.
   spectrum1d: {
     defaultWidthGu: 7,
-    // Hand-written face (node-graph-module-face.js): Freq band.
+    // Hand-written face (node-graph-module-face.js): Freq band, Level band.
     face: [
       { kind: "band", lo: "minFreq", hi: "maxFreq", label: "Freq", h: 34 },
+      { kind: "band", lo: "floorDb", hi: "ceilingDb", label: "Level", h: 34 },
     ],
     planRole: "monitor",
     customDisplayArea: true,
@@ -24179,6 +24180,30 @@ const nodeGraphModuleDefinitions = (
         maxDigits: 5,
         unit: "Hz",
         tooltip: "Highest frequency at the right edge of the face (must stay above Min Freq)."
+      },
+      {
+        key: "floorDb",
+        label: "Floor",
+        defaultValue: "-96",
+        min: "-160",
+        mid: "-40",
+        max: "24",
+        unit: "dB",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Level in dBFS at the bottom of the face (Exact dB scale). Lower it to see quieter detail."
+      },
+      {
+        key: "ceilingDb",
+        label: "Ceiling",
+        defaultValue: "0",
+        min: "-160",
+        mid: "-40",
+        max: "24",
+        unit: "dB",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Level in dBFS at the top of the face (Exact dB scale). A full-scale sine reads 0 dBFS. Anything louder than Ceiling is marked with a bright cap at the top edge instead of looking clipped."
       },
     ],
     visualInputs: [

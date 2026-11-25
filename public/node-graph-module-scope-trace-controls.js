@@ -244,6 +244,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "spectrumBarWidth",
     "spectrumMinBarPx",
     "spectrumMinGapPx",
+    "spectrumPeakDecay",
     "pill",
     "squircle",
     "lightThickness",
@@ -304,11 +305,9 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "cornerShape",
     "spectrumAxis",
     "spectrumDbMode",
-    "spectrumDbFloor",
-    "spectrumDbCeiling",
+    "spectrumBassDetail",
     "spectrumDrawStyle",
     "spectrumPeakHold",
-    "spectrumPeakDecay",
     "shape",
     "outerPlate",
     "lightBlend",
@@ -879,7 +878,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   // 1D Spectrum: same FFT analysis choices as Spectrogram (shared keys) + its
   // own axis / dB / draw / peak choices. Colors on the shared color row.
   spectrumLine: Object.freeze({
-    fields: Object.freeze(["frequencyCurve", "spectrumSmoothMs", "spectrumBarCount", "spectrumBarWidth", "spectrumMinBarPx", "spectrumMinGapPx"]),
+    fields: Object.freeze(["frequencyCurve", "spectrumSmoothMs", "spectrumPeakDecay", "spectrumBarCount", "spectrumBarWidth", "spectrumMinBarPx", "spectrumMinGapPx"]),
     colors: Object.freeze(["dot1Color", "backgroundColor"]),
     toggles: Object.freeze([]),
     choices: Object.freeze([
@@ -887,12 +886,10 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "window",
       "overlap",
       "freqOverlap",
+      "spectrumBassDetail",
       "spectrumDbMode",
-      "spectrumDbFloor",
-      "spectrumDbCeiling",
       "spectrumDrawStyle",
       "spectrumPeakHold",
-      "spectrumPeakDecay",
     ]),
   }),
   // Videoscope / bank / hypersaw: mono energy phosphor (same knobs as 2D Phosphor).
@@ -1296,6 +1293,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
     fields: Object.freeze([
       "spectrumMinBarPx",
       "spectrumMinGapPx",
+      "spectrumPeakDecay",
       "spectrumSmoothMs",
       "spectrumBarCount",
       "spectrumBarWidth",
@@ -1398,11 +1396,9 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "barInk",
       "spectrumAxis",
       "spectrumDbMode",
-      "spectrumDbFloor",
-      "spectrumDbCeiling",
+      "spectrumBassDetail",
       "spectrumDrawStyle",
       "spectrumPeakHold",
-      "spectrumPeakDecay",
       "stereoBlend",
       "cornerShape",
       "polarity",
@@ -1616,6 +1612,10 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
   spectrumSmoothMs: Object.freeze({
     label: "Smooth (ms)", inputmode: "decimal",
     title: "Time constant for live spectrum height smoothing, independent of peak hold. 0 = off. Applies to Filled, Line, and Bars. Display only; does not smooth the audio.",
+  }),
+  spectrumPeakDecay: Object.freeze({
+    label: "Peak decay (dB/s)", inputmode: "decimal",
+    title: "How fast held peaks fall, in dB per second. Used by Peak hold Hold and Fall.",
   }),
   spectrumBarCount: Object.freeze({
     label: "Max bars", inputmode: "numeric",
@@ -3084,21 +3084,21 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     label: "Scale",
     aria: "1D Spectrum magnitude scaling",
     id: "nodeTraceDisplaySpectrumDbMode",
-    title: "Compressed = Spectrogram look log10(1+x·100). dB = that value inverted to dBFS (smoothed). Exact dB = raw last-hop magnitude in dBFS. Linear = raw magnitude, full-scale sine = top.",
+    title: "Exact dB = last-hop magnitude in dBFS between the face Level band's Floor and Ceiling; a full-scale sine reads 0 dBFS. Linear = magnitude, full-scale sine at the top.",
     options: Object.freeze([
       Object.freeze({ value: "exactDb", label: "Exact dB" }),
-      Object.freeze({ value: "db", label: "dB (smoothed)" }),
-      Object.freeze({ value: "compressed", label: "Compressed" }),
       Object.freeze({ value: "linear", label: "Linear" }),
     ]),
   }),
-  spectrumDbFloor: Object.freeze({
-    label: "dB floor",
-    aria: "1D Spectrum bottom of range in dBFS",
-    id: "nodeTraceDisplaySpectrumDbFloor",
-    title: "Bottom of the face in dBFS (dB / Exact dB only).",
-    options: Object.freeze(["-144", "-120", "-96", "-84", "-72", "-60", "-48", "-36", "-24"]
-      .map((v) => Object.freeze({ value: v, label: v + " dB" }))),
+  spectrumBassDetail: Object.freeze({
+    label: "Bass detail",
+    aria: "1D Spectrum bass detail",
+    id: "nodeTraceDisplaySpectrumBassDetail",
+    title: "On adds a second analysis with a 4x longer window (up to 16384 samples), used below about 200 Hz so close bass notes separate. Bass then reacts a little slower. Off uses the FFT size everywhere.",
+    options: Object.freeze([
+      Object.freeze({ value: "on", label: "On" }),
+      Object.freeze({ value: "off", label: "Off" }),
+    ]),
   }),
   spectrumCircleBands: Object.freeze({
     label: "Bands",
@@ -3131,14 +3131,6 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     title: "Default Off: higher frequencies at the top, bass at the bottom, so a falling-pitch kick travels downward. On reverses frequency-bin order without changing circle geometry or Rotate.",
     options: Object.freeze([Object.freeze({ value: "off", label: "Off" }), Object.freeze({ value: "on", label: "On" })]),
   }),
-  spectrumDbCeiling: Object.freeze({
-    label: "dB ceiling",
-    aria: "1D Spectrum top of range in dBFS",
-    id: "nodeTraceDisplaySpectrumDbCeiling",
-    title: "Top of the face in dBFS (dB / Exact dB only). 0 = full-scale sine.",
-    options: Object.freeze(["12", "6", "0", "-6", "-12", "-24"]
-      .map((v) => Object.freeze({ value: v, label: (Number(v) > 0 ? "+" : "") + v + " dB" }))),
-  }),
   spectrumDrawStyle: Object.freeze({
     label: "Draw",
     aria: "1D Spectrum draw style",
@@ -3159,13 +3151,6 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
       Object.freeze({ value: "hold", label: "Hold, then fall" }),
       Object.freeze({ value: "fall", label: "Fall" }),
     ]),
-  }),
-  spectrumPeakDecay: Object.freeze({
-    label: "Peak decay",
-    aria: "1D Spectrum peak fall rate in dB per second",
-    id: "nodeTraceDisplaySpectrumPeakDecay",
-    options: Object.freeze(["3", "6", "12", "24", "48", "96"]
-      .map((v) => Object.freeze({ value: v, label: v + " dB/s" }))),
   }),
 });
 

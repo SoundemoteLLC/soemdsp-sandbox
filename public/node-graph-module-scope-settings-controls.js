@@ -345,6 +345,7 @@ const NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT = 4 / NODE_GRAPH_DISPLAY_SETTINGS_
 /** Keys whose spec does not follow from a classifier or a finite clamp. */
 const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
   spectrumSmoothMs: { min: 0, max: 5000, taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.025 },
+  spectrumPeakDecay: { min: 0.1, max: 1000, taper: "log", step: 0.025 },
   spectrumCircleRayWidth: { min: 0, max: 1, taper: "linear", step: 0.01 },
   spectrumDbFloor: { min: -180, max: -0.1, taper: "linear", step: 1 },
   timeMs: { min: 0.1, max: 10000, taper: "log", step: 0.025 },
@@ -576,6 +577,7 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   circularSweepFade: nodeGraphTraceDisplayClampUnit,
   frequencyCurve: nodeGraphTraceDisplayClampUnit,
   spectrumSmoothMs: (value) => Math.max(0, Math.min(5000, nodeGraphFiniteNumber(value))),
+  spectrumPeakDecay: (value) => Math.max(0.1, Math.min(1000, nodeGraphFiniteNumber(value, 12))),
   spectrumBarCount: (value) => Math.max(1, Math.min(512, Math.round(nodeGraphFiniteNumber(value, 64)))),
   spectrumBarWidth: nodeGraphTraceDisplayClampUnit,
   spectrumMinBarPx: (value) => Math.max(1, Math.min(32, Math.round(nodeGraphFiniteNumber(value, 2)))),

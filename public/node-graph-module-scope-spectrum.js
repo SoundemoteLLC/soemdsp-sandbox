@@ -4,55 +4,8 @@
 const nodeGraphSpectrumFftSize = 1024;
 const nodeGraphSpectrumBarCount = 160;
 
-function nodeGraphSpectrumHannWindow(size) {
-  const window = new Float64Array(size);
-  for (let i = 0; i < size; i += 1) {
-    window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (size - 1));
-  }
-  return window;
-}
-
-const nodeGraphSpectrumHannWindowCache = nodeGraphSpectrumHannWindow(nodeGraphSpectrumFftSize);
-
-// Iterative in-place radix-2 Cooley-Tukey FFT. `real`/`imag` must be
-// same-length power-of-two Float64Arrays; results are written back in place.
-function nodeGraphSpectrumFftInPlace(real, imag) {
-  const n = real.length;
-  for (let i = 1, j = 0; i < n; i += 1) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) {
-      j ^= bit;
-    }
-    j ^= bit;
-    if (i < j) {
-      const tempReal = real[i];
-      real[i] = real[j];
-      real[j] = tempReal;
-      const tempImag = imag[i];
-      imag[i] = imag[j];
-      imag[j] = tempImag;
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const halfLen = len >> 1;
-    const angleStep = (-2 * Math.PI) / len;
-    for (let start = 0; start < n; start += len) {
-      for (let k = 0; k < halfLen; k += 1) {
-        const angle = angleStep * k;
-        const wr = Math.cos(angle);
-        const wi = Math.sin(angle);
-        const evenIndex = start + k;
-        const oddIndex = start + k + halfLen;
-        const oddR = real[oddIndex] * wr - imag[oddIndex] * wi;
-        const oddI = real[oddIndex] * wi + imag[oddIndex] * wr;
-        real[oddIndex] = real[evenIndex] - oddR;
-        imag[oddIndex] = imag[evenIndex] - oddI;
-        real[evenIndex] += oddR;
-        imag[evenIndex] += oddI;
-      }
-    }
-  }
-}
+// FFT and Hann window come from the shared core (public/lib/spectral-analysis.js).
+const nodeGraphSpectrumHannWindowCache = nodeGraphSpectralWindow(nodeGraphSpectrumFftSize, 1).values;
 
 // Builds a bar-height buffer (values 0..1, tagged nodeGraphScopeSpectrum) from
 // the same raw time-domain sample buffer the waveform trace renderer reads,
@@ -73,7 +26,7 @@ function nodeGraphModuleScopeSpectrumBuffer(capturedBuffer) {
     real[windowOffset + i] = (nodeGraphFiniteNumber(capturedBuffer[offset + i])) *
       nodeGraphSpectrumHannWindowCache[windowOffset + i];
   }
-  nodeGraphSpectrumFftInPlace(real, imag);
+  nodeGraphSpectralFftInPlace(real, imag);
   const bins = size / 2;
   const minDb = -100;
   const maxDb = 0;

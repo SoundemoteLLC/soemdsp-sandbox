@@ -211,7 +211,7 @@ function nodeGraphVideoFeedbackSpectrumLevels(canvas, ring, settings, smooth) {
   for (let i = 0; i < take; i += 1) {
     st.real[dst0 + i] = (Number(ring[src0 + i]) || 0) * st.win[dst0 + i];
   }
-  nodeGraphSpectrumFftInPlace(st.real, st.imag);
+  nodeGraphSpectralFftInPlace(st.real, st.imag);
   for (let k = 0; k < bins; k += 1) {
     st.mag[k] = Math.hypot(st.real[k], st.imag[k]) / st.gain;
   }

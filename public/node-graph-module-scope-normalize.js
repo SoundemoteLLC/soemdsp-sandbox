@@ -451,8 +451,7 @@ const nodeGraphSpectrumLineSettingsDefaults = Object.freeze({
   freqOverlap: 0,
   frequencyCurve: 1,
   spectrumDbMode: "exactDb",
-  spectrumDbFloor: -96,
-  spectrumDbCeiling: 0,
+  spectrumBassDetail: "on",
   spectrumDrawStyle: "filled",
   spectrumSmoothMs: 0,
   spectrumBarCount: 64,
@@ -476,13 +475,6 @@ function normalizeNodeGraphSpectrumLineSettings(settings = {}, node = null) {
     freqOverlap: source.freqOverlap ?? node?.params?.freqOverlap ?? d.freqOverlap,
   }, null);
   const pick = (raw, allowed, fallback) => (allowed.includes(String(raw)) ? String(raw) : fallback);
-  const pickNum = (raw, allowed, fallback) => {
-    const n = Number(raw);
-    return allowed.includes(n) ? n : fallback;
-  };
-  let dbFloor = pickNum(source.spectrumDbFloor, [-144, -120, -96, -84, -72, -60, -48, -36, -24], d.spectrumDbFloor);
-  const dbCeiling = pickNum(source.spectrumDbCeiling, [12, 6, 0, -6, -12, -24], d.spectrumDbCeiling);
-  if (!(dbCeiling > dbFloor)) dbFloor = d.spectrumDbFloor < dbCeiling ? d.spectrumDbFloor : dbCeiling - 24;
   const backgroundColor = normalizeNodeGraphTraceDisplayColor(source.backgroundColor ?? source.background, d.backgroundColor);
   return {
     background: backgroundColor,
@@ -495,9 +487,8 @@ function normalizeNodeGraphSpectrumLineSettings(settings = {}, node = null) {
     // Worklet ignores freqScale; kept so shared param injection stays well-formed.
     freqScale: 0,
     frequencyCurve: normalizeNodeGraphTraceDisplayNumber(source.frequencyCurve, source.spectrumAxis === "linear" ? 0 : 1, 0, 1),
-    spectrumDbMode: pick(source.spectrumDbMode, ["exactDb", "db", "compressed", "linear"], d.spectrumDbMode),
-    spectrumDbFloor: dbFloor,
-    spectrumDbCeiling: dbCeiling,
+    spectrumDbMode: pick(source.spectrumDbMode, ["exactDb", "linear"], d.spectrumDbMode),
+    spectrumBassDetail: pick(source.spectrumBassDetail, ["on", "off"], d.spectrumBassDetail),
     spectrumDrawStyle: pick(source.spectrumDrawStyle, ["filled", "line", "bars"], d.spectrumDrawStyle),
     spectrumSmoothMs: normalizeNodeGraphTraceDisplayNumber(source.spectrumSmoothMs, d.spectrumSmoothMs, 0, 5000),
     spectrumBarCount: Math.round(normalizeNodeGraphTraceDisplayNumber(source.spectrumBarCount, d.spectrumBarCount, 1, 512)),
@@ -505,7 +496,7 @@ function normalizeNodeGraphSpectrumLineSettings(settings = {}, node = null) {
     spectrumMinBarPx: Math.round(normalizeNodeGraphTraceDisplayNumber(source.spectrumMinBarPx, d.spectrumMinBarPx, 1, 32)),
     spectrumMinGapPx: Math.round(normalizeNodeGraphTraceDisplayNumber(source.spectrumMinGapPx, d.spectrumMinGapPx, 0, 16)),
     spectrumPeakHold: pick(source.spectrumPeakHold, ["off", "hold", "fall"], d.spectrumPeakHold),
-    spectrumPeakDecay: pickNum(source.spectrumPeakDecay, [3, 6, 12, 24, 48, 96], d.spectrumPeakDecay),
+    spectrumPeakDecay: normalizeNodeGraphTraceDisplayNumber(source.spectrumPeakDecay, d.spectrumPeakDecay, 0.1, 1000),
   };
 }
 
@@ -517,6 +508,7 @@ function syncNodeGraphSpectrumLineDisplaySettingsToParams(node, settings) {
   node.params.window = safe.window;
   node.params.overlap = safe.overlap;
   node.params.freqOverlap = safe.freqOverlap;
+  node.params.bassDetail = safe.spectrumBassDetail === "on" ? 1 : 0;
 }
 
 function syncNodeGraphSpectrogramDisplaySettingsToParams(node, settings) {

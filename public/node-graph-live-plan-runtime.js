@@ -140,6 +140,7 @@ function nodeGraphInjectSpectrogramWorkletParams(node, params) {
     params.overlap = safe.overlap;
     params.freqOverlap = safe.freqOverlap;
     params.freqScale = safe.freqScale;
+    if (node.type === "spectrum1d") params.bassDetail = safe.spectrumBassDetail === "on" ? 1 : 0;
     // Face view: module sliders win; fall back to legacy display settings.
     const hist = Number(p.historySeconds ?? safe.historySeconds);
     params.historySeconds = Number.isFinite(hist) && hist > 0 ? hist : 2;

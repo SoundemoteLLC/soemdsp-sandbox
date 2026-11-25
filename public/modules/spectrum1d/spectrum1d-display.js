@@ -1,10 +1,13 @@
-// 1D Spectrum: classic magnitude-vs-frequency analyzer face (line / filled).
-// Data comes from the Spectrogram worklet FFT (same analysis gate set):
-//   Spectrum      compressed EMA column, log10(1 + mag·100)   (shared with Spectrogram)
-//   SpectrumRaw   raw |X[k]| of the last hop (1D Spectrum only, no EMA)
-//   SpectrumGain  [window sum] so a full-scale sine reads 0 dBFS
-//   FftSize       hop meta (fftLen, halfN, bins, hop, sampleRate, hopSerial, …)
-// Display only. No DSP here.
+// 1D Spectrum: classic magnitude-vs-frequency analyzer face (filled / line / bars).
+// Data comes from the shared worklet analysis (spectrogram-worklet-evaluator.js,
+// FFT and windows from public/lib/spectral-analysis.js):
+//   SpectrumRaw      |X[k]| of the last analysis (no EMA, no compression)
+//   SpectrumGain     [window sum] so a full-scale sine reads 0 dBFS
+//   SpectrumLowRaw   Bass detail: |X[k]| from a 4x longer window
+//   SpectrumLowMeta  [fftLen, window sum] for SpectrumLowRaw
+//   FftSize          hop meta (fftLen, halfN, bins, hop, sampleRate, hopSerial, …)
+// Floor / Ceiling and Min / Max Freq are module parameters (face Level / Freq
+// bands). Display only. No DSP here.
 
 const nodeGraphSpectrumLineStates = new Map();
 const NODE_GRAPH_SPECTRUM_LINE_PEAK_HOLD_SECONDS = 0.5;
@@ -14,127 +17,91 @@ function nodeGraphSpectrumLineBusGet(nodeId, port) {
   return nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, port)) || null;
 }
 
-/** Pixel position t (0 left … 1 right) → Hz for the frequency curve. */
-function nodeGraphSpectrumLineTToHz(t, curve, lo, hi) {
-  return nodeGraphFrequencyCurveHz(t, curve, lo, hi);
+// Bass detail blend: below LO the long-window spectrum is used, above HI the
+// main one, with a log-frequency smoothstep between (no visible seam).
+const NODE_GRAPH_SPECTRUM_LINE_BASS_LO_HZ = 150;
+const NODE_GRAPH_SPECTRUM_LINE_BASS_HI_HZ = 300;
+
+/** Weight of the bass (long-window) spectrum at hz: 1 below LO, 0 above HI. */
+function nodeGraphSpectrumLineBassWeight(hz) {
+  if (!(hz > NODE_GRAPH_SPECTRUM_LINE_BASS_LO_HZ)) return 1;
+  if (hz >= NODE_GRAPH_SPECTRUM_LINE_BASS_HI_HZ) return 0;
+  const t = Math.log(hz / NODE_GRAPH_SPECTRUM_LINE_BASS_LO_HZ)
+    / Math.log(NODE_GRAPH_SPECTRUM_LINE_BASS_HI_HZ / NODE_GRAPH_SPECTRUM_LINE_BASS_LO_HZ);
+  return 1 - t * t * (3 - 2 * t);
 }
 
 /**
- * One FFT bin → 0…1 face height for the chosen dB mode.
- *   compressed  spectrogram value c / c(full-scale sine)
- *   db          invert c → EMA magnitude → dBFS → floor…ceiling
- *   exactDb     raw last-hop magnitude → dBFS → floor…ceiling
- *   linear      raw magnitude / full-scale magnitude (0…1)
+ * Face heights for one magnitude spectrum: 0 = Floor (or silence in Linear),
+ * 1 = Ceiling (or full scale in Linear). Values above 1 are kept so the face
+ * can mark over-range instead of drawing a fake clip.
+ * Each pixel column takes the max over its bin span (narrow peaks survive the
+ * log axis), with linear interpolation between bins at the span edges.
  */
-function nodeGraphSpectrumLineBinTo01(i, ctx) {
-  const { mode, compressed, raw, fullMag, compressedRef, floorDb, spanDb } = ctx;
-  if (mode === "compressed") {
-    const c = compressed ? compressed[i] : 0;
-    return c / compressedRef;
-  }
-  let mag;
-  if ((mode === "exactDb" || mode === "linear") && raw) {
-    mag = raw[i];
-  } else {
-    const c = compressed ? compressed[i] : 0;
-    mag = (Math.pow(10, c) - 1) / 100;
-  }
-  const amp = Math.max(0, mag) / fullMag;
-  if (mode === "linear") return amp;
-  const db = 20 * Math.log10(Math.max(amp, 1e-12));
-  return (db - floorDb) / spanDb;
-}
-
-/** Bin value at fractional bin x (linear between neighbours). */
-function nodeGraphSpectrumLineBinAt01(x, bins, ctx) {
-  const a = Math.max(0, Math.min(bins - 1, Math.floor(x)));
-  const b = Math.min(bins - 1, a + 1);
-  const f = Math.max(0, Math.min(1, x - a));
-  return nodeGraphSpectrumLineBinTo01(a, ctx) * (1 - f) + nodeGraphSpectrumLineBinTo01(b, ctx) * f;
-}
-
-/**
- * Max of the spectrum over one pixel column's bin span [binA, binB].
- * Only bins inside the span count, plus the interpolated edges. (The old
- * version took floor(lo)..ceil(hi) whenever the span straddled a bin edge
- * and interpolated otherwise, so narrow columns alternated between the two
- * and drew a comb of regular one-bin-period spikes on the log axis.)
- */
-function nodeGraphSpectrumLineColumn01(binA, binB, bins, ctx) {
-  const lo = Math.max(0, Math.min(bins - 1, Math.min(binA, binB)));
-  const hi = Math.max(0, Math.min(bins - 1, Math.max(binA, binB)));
-  if (hi - lo < 1) return nodeGraphSpectrumLineBinAt01((lo + hi) * 0.5, bins, ctx);
-  let best = Math.max(nodeGraphSpectrumLineBinAt01(lo, bins, ctx), nodeGraphSpectrumLineBinAt01(hi, bins, ctx));
-  for (let i = Math.ceil(lo); i <= Math.floor(hi); i += 1) {
-    const v = nodeGraphSpectrumLineBinTo01(i, ctx);
-    if (v > best) best = v;
-  }
-  return best;
-}
-
-/**
- * Pure column computation (also used by smoke / headless checks).
- * Returns Float32Array(width) of 0…1 heights (unclamped above 1 is clipped).
- */
-function nodeGraphSpectrumLineComputeColumns(width, data, settings) {
-  const w = Math.max(1, width | 0);
-  const out = new Float32Array(w);
-  const compressed = data.compressed instanceof Float32Array ? data.compressed : null;
-  const raw = data.raw instanceof Float32Array ? data.raw : null;
-  const bins = (compressed || raw)?.length || 0;
-  if (bins < 2) return out;
-  const sampleRate = Math.max(1, nodeGraphFiniteNumber(data.sampleRate, 44100));
-  const nyquist = sampleRate / 2;
-  let lo = Math.max(1, Math.min(nyquist - 1, nodeGraphFiniteNumber(settings.minFreq, 20)));
-  let hi = Math.max(lo + 1, Math.min(nyquist, nodeGraphFiniteNumber(settings.maxFreq, 20000)));
-  const windowSum = Math.max(1e-9, nodeGraphFiniteNumber(data.windowSum, (data.fftSize || bins * 2) / 2));
-  const fullMag = windowSum / 2;
-  const floorDb = nodeGraphFiniteNumber(settings.spectrumDbFloor, -96);
-  const ceilDb = nodeGraphFiniteNumber(settings.spectrumDbCeiling, 0);
-  const ctx = {
-    mode: settings.spectrumDbMode || "exactDb",
-    compressed,
-    raw,
-    fullMag,
-    compressedRef: Math.max(1e-9, Math.log10(1 + fullMag * 100)),
-    floorDb,
-    spanDb: Math.max(1, ceilDb - floorDb),
-  };
-  const axis = nodeGraphFiniteNumber(settings.frequencyCurve, 1);
-  const map = nodeGraphSpectrumLineColumnMap(w, bins, axis, lo, hi, nyquist);
-  // Each bin converted once per frame (was: per column touch, with the
-  // interp helper re-converting neighbours), only over the visible bin range.
-  const v01 = nodeGraphSpectrumLineScratch(bins);
-  const { mode, compressedRef, floorDb: fl, spanDb } = ctx;
-  const useRaw = (mode === "exactDb" || mode === "linear") && raw;
+function nodeGraphSpectrumLineSpectrumColumns(out, raw, fullMag, map, ctx) {
+  const bins = raw.length;
+  const v = nodeGraphSpectrumLineScratch(bins);
+  const linear = ctx.mode === "linear";
   for (let i = map.firstBin; i <= map.lastBin; i += 1) {
-    if (mode === "compressed") {
-      v01[i] = (compressed ? compressed[i] : 0) / compressedRef;
-      continue;
-    }
-    const mag = useRaw ? raw[i] : (Math.pow(10, compressed ? compressed[i] : 0) - 1) / 100;
-    const amp = Math.max(0, mag) / fullMag;
-    v01[i] = mode === "linear" ? amp : (20 * Math.log10(Math.max(amp, 1e-12)) - fl) / spanDb;
+    const amp = Math.max(0, raw[i]) / fullMag;
+    v[i] = linear ? amp : (20 * Math.log10(Math.max(amp, 1e-12)) - ctx.floorDb) / ctx.spanDb;
   }
   const at = (xb) => {
     const a = Math.max(0, Math.min(bins - 1, Math.floor(xb)));
     const b = Math.min(bins - 1, a + 1);
     const f = Math.max(0, Math.min(1, xb - a));
-    return v01[a] * (1 - f) + v01[b] * f;
+    return v[a] * (1 - f) + v[b] * f;
   };
-  // Same rule as nodeGraphSpectrumLineColumn01 (spike fix), on cached spans.
-  for (let x = 0; x < w; x += 1) {
+  for (let x = 0; x < out.length; x += 1) {
+    // Bins inside the column span plus its interpolated edges (comb-spike fix).
+    // Spans tile the axis, so every bin lands at full value in exactly one
+    // column: a bin-centred sine reads its true level even when columns are
+    // narrower than a bin.
     const cl = map.lo[x];
     const ch = map.hi[x];
-    let v;
-    if (ch - cl < 1) {
-      v = at((cl + ch) * 0.5);
-    } else {
-      v = Math.max(at(cl), at(ch));
-      const end = Math.floor(ch);
-      for (let i = Math.ceil(cl); i <= end; i += 1) if (v01[i] > v) v = v01[i];
+    let value = Math.max(at(cl), at(ch));
+    const end = Math.floor(ch);
+    for (let i = Math.ceil(cl); i <= end; i += 1) if (v[i] > value) value = v[i];
+    out[x] = Number.isFinite(value) ? Math.max(0, value) : 0;
+  }
+  return out;
+}
+
+/**
+ * Pure column computation (also used by tests). Returns Float32Array(width)
+ * of face heights, 0 = bottom, 1 = top; values above 1 are over-range.
+ * data: { raw, windowSum, sampleRate, low?: { raw, windowSum } }
+ */
+function nodeGraphSpectrumLineComputeColumns(width, data, settings) {
+  const w = Math.max(1, width | 0);
+  const out = new Float32Array(w);
+  const raw = data.raw instanceof Float32Array ? data.raw : null;
+  if (!raw || raw.length < 2) return out;
+  const sampleRate = Math.max(1, nodeGraphFiniteNumber(data.sampleRate, 44100));
+  const nyquist = sampleRate / 2;
+  const lo = Math.max(1, Math.min(nyquist - 1, nodeGraphFiniteNumber(settings.minFreq, 20)));
+  const hi = Math.max(lo + 1, Math.min(nyquist, nodeGraphFiniteNumber(settings.maxFreq, 20000)));
+  const floorDb = nodeGraphFiniteNumber(settings.spectrumDbFloor, -96);
+  const ceilDb = nodeGraphFiniteNumber(settings.spectrumDbCeiling, 0);
+  const ctx = {
+    mode: settings.spectrumDbMode === "linear" ? "linear" : "exactDb",
+    floorDb,
+    // Ceiling at or below Floor is a 0.1 dB window rather than a divide by zero.
+    spanDb: Math.max(0.1, ceilDb - floorDb),
+  };
+  const axis = nodeGraphFiniteNumber(settings.frequencyCurve, 1);
+  const fullMag = (src) => Math.max(1e-9, nodeGraphFiniteNumber(src.windowSum, raw.length) / 2);
+  const map = nodeGraphSpectrumLineColumnMap(w, raw.length, axis, lo, hi, nyquist);
+  nodeGraphSpectrumLineSpectrumColumns(out, raw, fullMag(data), map, ctx);
+  const low = data.low;
+  if (low?.raw instanceof Float32Array && low.raw.length > raw.length && lo < NODE_GRAPH_SPECTRUM_LINE_BASS_HI_HZ) {
+    const lowMap = nodeGraphSpectrumLineColumnMap(w, low.raw.length, axis, lo, hi, nyquist);
+    const lowCols = nodeGraphSpectrumLineSpectrumColumns(nodeGraphSpectrumLineLowScratch(w), low.raw, fullMag(low), lowMap, ctx);
+    for (let x = 0; x < w; x += 1) {
+      const k = map.centerHz[x];
+      const wb = nodeGraphSpectrumLineBassWeight(k);
+      if (wb > 0) out[x] = out[x] * (1 - wb) + lowCols[x] * wb;
     }
-    out[x] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
   }
   return out;
 }
@@ -147,33 +114,43 @@ function nodeGraphSpectrumLineScratch(n) {
   return nodeGraphSpectrumLineScratchBuf;
 }
 
+let nodeGraphSpectrumLineLowScratchBuf = null;
+function nodeGraphSpectrumLineLowScratch(w) {
+  if (!nodeGraphSpectrumLineLowScratchBuf || nodeGraphSpectrumLineLowScratchBuf.length !== w) {
+    nodeGraphSpectrumLineLowScratchBuf = new Float32Array(w);
+  }
+  return nodeGraphSpectrumLineLowScratchBuf;
+}
+
 /**
- * Column -> clamped fractional bin span [lo[x], hi[x]], cached per
- * (width, bins, axis, range, nyquist): the Hz mapping (continuous linear/log blend) runs
- * once per size or axis change, not every frame.
+ * Column -> clamped fractional bin span [lo[x], hi[x]] and centre Hz, cached
+ * per (width, bins, axis, range, nyquist): the Hz mapping runs once per size or
+ * axis change, not every frame. bins = FFT length / 2, so bin k sits at
+ * k / bins x Nyquist (k x sampleRate / fftLength).
  */
 const nodeGraphSpectrumLineColumnMaps = new Map();
 function nodeGraphSpectrumLineColumnMap(w, bins, axis, loHz, hiHz, nyquist) {
   const key = `${w}|${bins}|${axis}|${loHz}|${hiHz}|${nyquist}`;
   let m = nodeGraphSpectrumLineColumnMaps.get(key);
   if (m) return m;
-  // Bin k sits at k / (bins - 1) · Nyquist (matches spectrogramHzToLinearBin).
-  const hzToBin = (hz) => (Math.max(0, hz) / nyquist) * (bins - 1);
+  const hzToBin = (hz) => (Math.max(0, hz) / nyquist) * bins;
   const lo = new Float64Array(w);
   const hi = new Float64Array(w);
+  const centerHz = new Float64Array(w);
   let firstBin = bins - 1;
   let lastBin = 0;
   for (let x = 0; x < w; x += 1) {
     const ta = w > 1 ? (x - 0.5) / (w - 1) : 0;
     const tb = w > 1 ? (x + 0.5) / (w - 1) : 1;
-    const ba = hzToBin(nodeGraphSpectrumLineTToHz(ta, axis, loHz, hiHz));
-    const bb = hzToBin(nodeGraphSpectrumLineTToHz(tb, axis, loHz, hiHz));
+    const ba = hzToBin(nodeGraphFrequencyCurveHz(ta, axis, loHz, hiHz));
+    const bb = hzToBin(nodeGraphFrequencyCurveHz(tb, axis, loHz, hiHz));
+    centerHz[x] = nodeGraphFrequencyCurveHz(w > 1 ? x / (w - 1) : 0, axis, loHz, hiHz);
     lo[x] = Math.max(0, Math.min(bins - 1, Math.min(ba, bb)));
     hi[x] = Math.max(0, Math.min(bins - 1, Math.max(ba, bb)));
     firstBin = Math.min(firstBin, Math.floor(lo[x]));
     lastBin = Math.max(lastBin, Math.min(bins - 1, Math.floor(hi[x]) + 1));
   }
-  m = { lo, hi, firstBin: Math.max(0, firstBin), lastBin };
+  m = { lo, hi, centerHz, firstBin: Math.max(0, firstBin), lastBin };
   if (nodeGraphSpectrumLineColumnMaps.size > 16) nodeGraphSpectrumLineColumnMaps.clear();
   nodeGraphSpectrumLineColumnMaps.set(key, m);
   return m;
@@ -184,12 +161,14 @@ function nodeGraphSpectrumLineSettingsForNode(node) {
     ? normalizeNodeGraphSpectrumLineSettings(node?.traceDisplaySettings, node)
     : {};
   const p = node?.params && typeof node.params === "object" ? node.params : {};
-  const minFreq = Number(p.minFreq);
-  const maxFreq = Number(p.maxFreq);
+  const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  // Freq and Level bands are module parameters (limits from the definition).
   return {
     ...base,
-    minFreq: Number.isFinite(minFreq) ? minFreq : 20,
-    maxFreq: Number.isFinite(maxFreq) ? maxFreq : 20000,
+    minFreq: num(p.minFreq, 20),
+    maxFreq: num(p.maxFreq, 20000),
+    spectrumDbFloor: num(p.floorDb, -96),
+    spectrumDbCeiling: num(p.ceilingDb, 0),
   };
 }
 
@@ -204,7 +183,7 @@ function nodeGraphSpectrumLinePoints(cols, W, H) {
   const pts = new Array(cols.length * 2);
   for (let x = 0; x < cols.length; x += 1) {
     pts[x * 2] = cols.length > 1 ? (x / (cols.length - 1)) * W : 0;
-    pts[x * 2 + 1] = H - cols[x] * H;
+    pts[x * 2 + 1] = H - Math.max(0, Math.min(1, cols[x])) * H;
   }
   return pts;
 }
@@ -315,11 +294,30 @@ function nodeGraphSpectrumLineResizeState(st, width) {
 
 function nodeGraphSpectrumLineUpdatePeaks(st, cols, mode, now, dt, decayPerSecond) {
   for (let x = 0; x < cols.length; x += 1) {
-    if (cols[x] >= st.peak[x]) {
-      st.peak[x] = cols[x];
+    const level = Math.min(1, cols[x]);
+    if (level >= st.peak[x]) {
+      st.peak[x] = level;
       st.holdUntil[x] = now + (mode === "hold" ? NODE_GRAPH_SPECTRUM_LINE_PEAK_HOLD_SECONDS * 1000 : 0);
     } else if (mode === "fall" || now > st.holdUntil[x]) {
       st.peak[x] = Math.max(cols[x], st.peak[x] - decayPerSecond * dt);
+    }
+  }
+}
+
+/**
+ * Over-range cue: a bright cap along the top edge wherever the spectrum is
+ * louder than Ceiling, so a level past the view reads as "above the window",
+ * not as a flat clipped plateau.
+ */
+function nodeGraphSpectrumLineDrawOverRange(batch, cols, W, capPx) {
+  const scale = cols.length > 1 ? W / cols.length : W;
+  let start = -1;
+  for (let x = 0; x <= cols.length; x += 1) {
+    const over = x < cols.length && cols[x] > 1;
+    if (over && start < 0) start = x;
+    if (!over && start >= 0) {
+      nodeGraphGlLinesRect(batch, Math.floor(start * scale), 0, Math.max(1, Math.ceil((x - start) * scale)), capPx, [1, 1, 1, 0.9]);
+      start = -1;
     }
   }
 }
@@ -350,14 +348,18 @@ function drawNodeGraphSpectrumLineItem(renderer, item, pixelRatio) {
 
   const meta = nodeGraphSpectrumLineBusGet(nodeId, "FftSize");
   const gain = nodeGraphSpectrumLineBusGet(nodeId, "SpectrumGain");
+  const lowMeta = settings.spectrumBassDetail === "on" ? nodeGraphSpectrumLineBusGet(nodeId, "SpectrumLowMeta") : null;
+  const lowRaw = lowMeta instanceof Float32Array ? nodeGraphSpectrumLineBusGet(nodeId, "SpectrumLowRaw") : null;
   const data = {
-    compressed: nodeGraphSpectrumLineBusGet(nodeId, "Spectrum"),
     raw: nodeGraphSpectrumLineBusGet(nodeId, "SpectrumRaw"),
-    fftSize: meta instanceof Float32Array ? meta[0] : settings.fftSize,
     sampleRate: meta instanceof Float32Array && meta.length >= 5
       ? meta[4]
       : nodeGraphFiniteNumber(nodeGraphModuleScopeState?.sampleRate, 44100),
     windowSum: gain instanceof Float32Array ? gain[0] : undefined,
+    // Only a long-window spectrum that matches the current FFT size counts.
+    low: lowRaw instanceof Float32Array && lowMeta[0] > (meta instanceof Float32Array ? meta[0] : 0)
+      ? { raw: lowRaw, windowSum: lowMeta[1] }
+      : null,
   };
 
   // Nothing new since the last paint (same FFT hop, size, settings): the face
@@ -366,7 +368,7 @@ function drawNodeGraphSpectrumLineItem(renderer, item, pixelRatio) {
   const frozen = typeof nodeGraphModuleScopePhosphorFrozen === "function" && nodeGraphModuleScopePhosphorFrozen();
   const smoothing = Math.max(0, nodeGraphFiniteNumber(settings.spectrumSmoothMs));
   const peakMode = settings.spectrumPeakHold;
-  const sig = `${hopSerial}|${W}x${H}|${bg}|${ink}|${settings.frequencyCurve}|${settings.spectrumDbMode}|${settings.spectrumDbFloor}|${settings.spectrumDbCeiling}|${settings.spectrumDrawStyle}|${settings.spectrumSmoothMs}|${settings.spectrumBarCount}|${settings.spectrumBarWidth}|${settings.spectrumMinBarPx}|${settings.spectrumMinGapPx}|${settings.spectrumPeakHold}|${settings.spectrumPeakDecay}|${settings.minFreq}|${settings.maxFreq}|${pixelRatio}`;
+  const sig = `${hopSerial}|${W}x${H}|${bg}|${ink}|${settings.frequencyCurve}|${settings.spectrumDbMode}|${settings.spectrumDbFloor}|${settings.spectrumDbCeiling}|${settings.spectrumDrawStyle}|${settings.spectrumSmoothMs}|${settings.spectrumBarCount}|${settings.spectrumBarWidth}|${settings.spectrumMinBarPx}|${settings.spectrumMinGapPx}|${settings.spectrumPeakHold}|${settings.spectrumPeakDecay}|${settings.spectrumBassDetail}|${settings.minFreq}|${settings.maxFreq}|${pixelRatio}`;
   if (hopSerial >= 0 && peakMode !== "hold" && peakMode !== "fall" && !(smoothing > 0 && !frozen) && canvas._spectrumLineSig === sig) return;
   canvas._spectrumLineSig = sig;
 
@@ -401,12 +403,13 @@ function drawNodeGraphSpectrumLineItem(renderer, item, pixelRatio) {
     if (settings.spectrumDrawStyle !== "line") nodeGraphGlLinesFillUnder(batch, pts, H, inkA(0.35));
     nodeGraphGlLinesPolyline(batch, pts, Math.max(0, lineW * 0.5 - 0.35), 0.7, inkRgba);
   }
+  nodeGraphSpectrumLineDrawOverRange(batch, cols, W, Math.max(2, Math.round(lineW * 1.6)));
 
   if (peakMode === "hold" || peakMode === "fall") {
-    const dbModes = settings.spectrumDbMode === "db" || settings.spectrumDbMode === "exactDb";
-    const span = dbModes
-      ? Math.max(1, nodeGraphFiniteNumber(settings.spectrumDbCeiling, 0) - nodeGraphFiniteNumber(settings.spectrumDbFloor, -96))
-      : 96;
+    // Peak decay is dB/s; in Linear the top-to-bottom span counts as 96 dB.
+    const span = settings.spectrumDbMode === "linear"
+      ? 96
+      : Math.max(0.1, settings.spectrumDbCeiling - settings.spectrumDbFloor);
     nodeGraphSpectrumLineUpdatePeaks(st, cols, peakMode, now, dt, nodeGraphFiniteNumber(settings.spectrumPeakDecay, 12) / span);
     if (bars) {
       nodeGraphSpectrumLineDrawBars(batch, st.peak, W, H, settings.spectrumBarCount, settings.spectrumBarWidth, inkA(0.6), lineW, settings.spectrumMinBarPx, settings.spectrumMinGapPx);

@@ -44,9 +44,10 @@ NodeLiveAudioProcessor.prototype.createSpectrogramState = function createSpectro
   };
 };
 
-// Module types that get this display FFT. 1D Spectrum additionally receives
-// SpectrumRaw (last-hop |X[k]|, no EMA) + SpectrumGain ([window sum]).
-// Circular Spectrogram gets exactly what Spectrogram gets.
+// Module types that get this display FFT. Spectrogram and Circular
+// Spectrogram get Spectrum / SpectrumBatch columns. 1D Spectrum gets
+// SpectrumRaw (last-hop |X[k]|, no EMA), SpectrumGain ([window sum]) and,
+// with Bass detail on, SpectrumLowRaw + SpectrumLowMeta (long-window FFT).
 const SPECTROGRAM_ANALYSIS_TYPES = new Set(["spectrogram", "spectrum1d", "circularSpectrogram"]);
 
 // Display analysis only. setPlan must not call create*State (DSP door).
@@ -75,102 +76,9 @@ NodeLiveAudioProcessor.prototype.syncSpectrogramDisplayAnalysis = function syncS
 };
 
 
-// Radix-2 Cooley-Tukey FFT (in-place on real/imag arrays).
-// Bit-reverse permutation and twiddles are cached per size (they used to be
-// recomputed per hop: n/2·log2(n) cos+sin calls on the audio thread).
-const SPECTROGRAM_FFT_TABLES = new Map();
-function spectrogramFftTables(n) {
-  let t = SPECTROGRAM_FFT_TABLES.get(n);
-  if (t) return t;
-  const bits = Math.log2(n);
-  const rev = new Uint32Array(n);
-  for (let i = 0; i < n; i++) {
-    let j = 0;
-    for (let b = 0; b < bits; b++) {
-      if (i & (1 << b)) j |= (1 << (bits - 1 - b));
-    }
-    rev[i] = j;
-  }
-  const half = n >> 1;
-  const cos = new Float64Array(half);
-  const sin = new Float64Array(half);
-  for (let k = 0; k < half; k++) {
-    const ang = (-2 * Math.PI * k) / n;
-    cos[k] = Math.cos(ang);
-    sin[k] = Math.sin(ang);
-  }
-  t = { rev, cos, sin };
-  SPECTROGRAM_FFT_TABLES.set(n, t);
-  return t;
-}
-
-NodeLiveAudioProcessor.prototype.spectrogramFft = function spectrogramFft(real, imag) {
-  const n = real.length;
-  if (n <= 1 || (n & (n - 1)) !== 0) return;
-  const { rev, cos, sin } = spectrogramFftTables(n);
-  for (let i = 0; i < n; i++) {
-    const j = rev[i];
-    if (j > i) {
-      let t = real[i]; real[i] = real[j]; real[j] = t;
-      t = imag[i]; imag[i] = imag[j]; imag[j] = t;
-    }
-  }
-  for (let len = 2; len <= n; len *= 2) {
-    const half = len / 2;
-    const step = n / len;
-    for (let i = 0; i < n; i += len) {
-      for (let j = 0; j < half; j++) {
-        const wr = cos[j * step];
-        const wi = sin[j * step];
-        const a = i + j;
-        const b = a + half;
-        const tr = real[b] * wr - imag[b] * wi;
-        const ti = real[b] * wi + imag[b] * wr;
-        real[b] = real[a] - tr;
-        imag[b] = imag[a] - ti;
-        real[a] += tr;
-        imag[a] += ti;
-      }
-    }
-  }
-};
-
-/**
- * Analysis window of length n.
- * kind: 0 Rectangular, 1 Hann, 2 Hamming, 3 Blackman, 4 Blackman–Harris
- */
-NodeLiveAudioProcessor.prototype.spectrogramMakeWindow = function spectrogramMakeWindow(n, kind) {
-  const w = new Float32Array(n);
-  const k = Math.max(0, Math.min(4, Math.round(nodeGraphFiniteNumber(kind, 1))));
-  const denom = Math.max(1, n - 1);
-  for (let i = 0; i < n; i++) {
-    const x = (2 * Math.PI * i) / denom;
-    if (k === 0) {
-      w[i] = 1;
-    } else if (k === 1) {
-      // Hann
-      w[i] = 0.5 * (1 - Math.cos(x));
-    } else if (k === 2) {
-      // Hamming
-      w[i] = 0.54 - 0.46 * Math.cos(x);
-    } else if (k === 3) {
-      // Blackman
-      w[i] = 0.42 - 0.5 * Math.cos(x) + 0.08 * Math.cos(2 * x);
-    } else {
-      // Blackman–Harris (4-term)
-      w[i] = 0.35875
-        - 0.48829 * Math.cos(x)
-        + 0.14128 * Math.cos(2 * x)
-        - 0.01168 * Math.cos(3 * x);
-    }
-  }
-  return w;
-};
-
-// Legacy alias
-NodeLiveAudioProcessor.prototype.spectrogramHannWindow = function spectrogramHannWindow(n) {
-  return this.spectrogramMakeWindow(n, 1);
-};
+// FFT and windows come from the shared core (public/lib/spectral-analysis.js,
+// loaded earlier in the worklet blob): nodeGraphSpectralFftInPlace,
+// nodeGraphSpectralWindow.
 
 /**
  * Resolve analysis window size from worklet params.
@@ -217,7 +125,6 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
   // FFT length = window × pad (denser bins); cap 32768.
   let fftLen = winSize * padFactor;
   if (fftLen > 32768) fftLen = 32768;
-  // Ensure power of two (winSize and padFactor already are).
   const halfN = fftLen >> 1;
   const engineRate = Math.max(1, nodeGraphFiniteNumber(this.engineSampleRate, nodeGraphFiniteNumber(sampleRate, 44100)));
   const sampleStride = Math.max(1, Math.round(nodeGraphFiniteNumber(buf.sampleStride, 1)));
@@ -227,7 +134,35 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
     nodeGraphFiniteNumber(buf.writeSampleRate, sourceRate / sampleStride),
   );
 
-  // Allocate/reallocate when window, pad, or window kind changes.
+  // Fresh samples since the last call (own frame tracking, see header note).
+  const absFrame = Math.max(0, Math.floor(nodeGraphFiniteNumber(buf.absoluteFrame)));
+  const lastFrame = Math.max(0, nodeGraphFiniteNumber(state.lastAbsoluteFrame));
+  const capacity = buf.capacity || buf.buffer.length;
+  let freshCount = lastFrame > 0
+    ? Math.max(0, absFrame - lastFrame)
+    : Math.min(capacity, Math.ceil(writeRate / 30));
+  freshCount = Math.min(capacity, freshCount);
+  if (freshCount <= 0) return;
+  state.lastAbsoluteFrame = absFrame;
+  const writeIdx = nodeGraphFiniteNumber(buf.writeIndex);
+  const start = (writeIdx - freshCount + capacity) % capacity;
+
+  const geometry = { winSize, windowKind, hopSize, fftLen, halfN, writeRate };
+  if (String(node?.type || "") === "spectrum1d") {
+    this.spectrumLineCollect(nodeId, state, dataPorts, buf, start, freshCount, capacity, geometry, params);
+    return;
+  }
+  this.spectrogramCollectColumns(nodeId, state, dataPorts, buf, start, freshCount, capacity, geometry);
+};
+
+// Spectrogram / Circular Spectrogram: every hop becomes a waterfall column.
+// The EMA and log10(1 + mag x 100) compression are the spectrogram faces look
+// only; 1D Spectrum never goes through this path.
+const SPECTROGRAM_COLUMN_EMA_OLD = 0.35;
+NodeLiveAudioProcessor.prototype.spectrogramCollectColumns = function spectrogramCollectColumns(
+  nodeId, state, dataPorts, buf, start, freshCount, capacity, g,
+) {
+  const { winSize, windowKind, hopSize, fftLen, halfN, writeRate } = g;
   if (
     !state.fftReal
     || state.windowSize !== winSize
@@ -239,151 +174,160 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
     state.windowSize = winSize;
     state.fftLen = fftLen;
     state.windowKind = windowKind;
-    state.analysisWindow = this.spectrogramMakeWindow(winSize, windowKind);
+    state.analysis = nodeGraphSpectralWindow(winSize, windowKind);
     state.accumulator = new Float32Array(winSize);
     state.accumCount = 0;
     state.emaBins = new Float32Array(halfN);
     state.spectrumOut = new Float32Array(halfN);
     state.batchScratch = null;
   }
-
-  if (!state.emaBins || state.emaBins.length !== halfN) {
-    state.emaBins = new Float32Array(halfN);
-  }
-  if (!state.spectrumOut || state.spectrumOut.length !== halfN) {
-    state.spectrumOut = new Float32Array(halfN);
-  }
-  // 1D Spectrum: raw last-hop magnitudes for Exact dB / Linear (Spectrogram skips).
-  const wantRaw = String(node?.type || "") === "spectrum1d";
-  if (wantRaw) {
-    if (!state.rawOut || state.rawOut.length !== halfN) {
-      state.rawOut = new Float32Array(halfN);
-    }
-  }
-  if (state.windowSumFor !== state.analysisWindow) {
-    let sum = 0;
-    for (let j = 0; j < winSize; j++) sum += state.analysisWindow[j];
-    state.windowSum = sum;
-    state.windowSumFor = state.analysisWindow;
-  }
-  const rawCol = wantRaw ? state.rawOut : null;
-  // 1D Spectrum shows one curve: analyse at most ~60 hops/s (display rate)
-  // and skip the SpectrumBatch history the Spectrogram waterfall needs.
-  const minGap = wantRaw ? Math.max(1, Math.floor(writeRate / 60)) : 0;
-  if (wantRaw && (!state.colScratch || state.colScratch.length !== halfN)) {
-    state.colScratch = new Float32Array(halfN);
-  }
-
-  // Extract fresh samples using own frame tracking
-  const absFrame = Math.max(0, Math.floor(nodeGraphFiniteNumber(buf.absoluteFrame)));
-  const lastFrame = Math.max(0, nodeGraphFiniteNumber(state.lastAbsoluteFrame));
-  const capacity = buf.capacity || buf.buffer.length;
-  let freshCount = lastFrame > 0
-    ? Math.max(0, absFrame - lastFrame)
-    : Math.min(capacity, Math.ceil(writeRate / 30));
-  freshCount = Math.min(capacity, freshCount);
-
-  if (freshCount <= 0) return;
-  state.lastAbsoluteFrame = absFrame;
-
-  const writeIdx = nodeGraphFiniteNumber(buf.writeIndex);
-  const start = (writeIdx - freshCount + capacity) % capacity;
   let accIdx = state.accumCount;
   let hopsThisFrame = 0;
-  // Cap batch columns so a huge quantum doesn't explode transfer (still hop-serial paints).
+  // Cap batch columns so a huge quantum does not explode transfer.
   const maxBatchCols = 64;
   const hopColumns = [];
-
+  const aw = state.analysis.values;
   for (let i = 0; i < freshCount; i++) {
-    const sample = buf.buffer[(start + i) % capacity] || 0;
     if (accIdx < winSize) {
-      state.accumulator[accIdx] = sample;
+      state.accumulator[accIdx] = buf.buffer[(start + i) % capacity] || 0;
       accIdx++;
     }
-    if (accIdx >= winSize && wantRaw && (state.sinceFft = (state.sinceFft || 0) + hopSize) < minGap) {
-      // Throttled hop (1D Spectrum): slide the window, skip the FFT.
-      state.accumulator.copyWithin(0, hopSize, winSize);
-      accIdx = winSize - hopSize;
+    if (accIdx < winSize) continue;
+    state.fftReal.fill(0);
+    state.fftImag.fill(0);
+    for (let j = 0; j < winSize; j++) state.fftReal[j] = state.accumulator[j] * aw[j];
+    nodeGraphSpectralFftInPlace(state.fftReal, state.fftImag);
+    const col = new Float32Array(halfN);
+    for (let j = 0; j < halfN; j++) {
+      const mag = Math.sqrt(state.fftReal[j] * state.fftReal[j] + state.fftImag[j] * state.fftImag[j]);
+      state.emaBins[j] = SPECTROGRAM_COLUMN_EMA_OLD * state.emaBins[j] + (1 - SPECTROGRAM_COLUMN_EMA_OLD) * mag;
+      col[j] = Math.max(0, Math.log10(1 + state.emaBins[j] * 100));
     }
-    if (accIdx >= winSize) {
-      state.sinceFft = 0;
-      // Window + zero-pad into FFT buffer.
-      state.fftReal.fill(0);
-      state.fftImag.fill(0);
-      const aw = state.analysisWindow;
-      for (let j = 0; j < winSize; j++) {
-        state.fftReal[j] = state.accumulator[j] * aw[j];
-      }
-      this.spectrogramFft(state.fftReal, state.fftImag);
-
-      const col = wantRaw ? state.colScratch : new Float32Array(halfN);
-      for (let j = 0; j < halfN; j++) {
-        const mag = Math.sqrt(
-          state.fftReal[j] * state.fftReal[j] + state.fftImag[j] * state.fftImag[j],
-        );
-        // Light temporal EMA for stability; still post per-hop columns.
-        state.emaBins[j] = 0.35 * state.emaBins[j] + 0.65 * mag;
-        col[j] = Math.max(0, Math.log10(1 + state.emaBins[j] * 100));
-        if (rawCol) rawCol[j] = mag;
-      }
-      if (hopColumns.length < maxBatchCols) {
-        hopColumns.push(col);
-      } else {
-        // Keep latest columns if over cap (overwrite from start of overflow).
-        hopColumns.shift();
-        hopColumns.push(col);
-      }
-      hopsThisFrame += 1;
-
-      state.accumulator.copyWithin(0, hopSize, winSize);
-      accIdx = winSize - hopSize;
-    }
+    if (hopColumns.length >= maxBatchCols) hopColumns.shift();
+    hopColumns.push(col);
+    hopsThisFrame += 1;
+    state.accumulator.copyWithin(0, hopSize, winSize);
+    accIdx = winSize - hopSize;
   }
   state.accumCount = accIdx;
-
-  // Nothing new to paint until the first full FFT window is filled.
-  if (hopsThisFrame <= 0 && !(state.hopSerial > 0)) return;
   if (hopsThisFrame <= 0) return;
 
   const batchCols = hopColumns.length;
-  // Last hop as Spectrum (compat) + full batch for smooth multi-pixel scroll.
-  const lastCol = hopColumns[batchCols - 1];
-  state.spectrumOut.set(lastCol);
-
+  state.spectrumOut.set(hopColumns[batchCols - 1]);
   let batchFlat = state.batchScratch;
-  if (!wantRaw) {
-    if (!batchFlat || batchFlat.length !== batchCols * halfN) {
-      batchFlat = new Float32Array(batchCols * halfN);
-      state.batchScratch = batchFlat;
-    }
-    for (let c = 0; c < batchCols; c++) {
-      batchFlat.set(hopColumns[c], c * halfN);
-    }
+  if (!batchFlat || batchFlat.length !== batchCols * halfN) {
+    batchFlat = new Float32Array(batchCols * halfN);
+    state.batchScratch = batchFlat;
   }
-
-  state.hopSerial = (nodeGraphFiniteNumber(state.hopSerial)) + 1;
-
+  for (let c = 0; c < batchCols; c++) batchFlat.set(hopColumns[c], c * halfN);
+  state.hopSerial = nodeGraphFiniteNumber(state.hopSerial) + 1;
   dataPorts.push([nodeId, "Spectrum", state.spectrumOut]);
-  if (!wantRaw) dataPorts.push([nodeId, "SpectrumBatch", batchFlat]);
-  if (rawCol) {
-    dataPorts.push([nodeId, "SpectrumRaw", rawCol]);
-    dataPorts.push([nodeId, "SpectrumGain", new Float32Array([state.windowSum || winSize / 2])]);
+  dataPorts.push([nodeId, "SpectrumBatch", batchFlat]);
+  // [0]=fftLen [1]=halfN [2]=spectrumBins [3]=hopSize (one hop) [4]=sampleRate
+  // [5]=hopSerial [6]=batchColumns [7]=windowSum (coherent gain)
+  dataPorts.push([nodeId, "FftSize", new Float32Array([
+    fftLen, halfN, halfN, hopSize, writeRate, state.hopSerial, batchCols, state.analysis.sum,
+  ])]);
+};
+
+// 1D Spectrum: honest last-hop magnitudes, at most 60 analyses per second
+// (one curve, no waterfall history). With Bass detail on, a second FFT with a
+// 4x longer window (capped at 16384 samples) runs at most 30 times per second;
+// the face uses it below the crossover. Cost is two FFTs at fixed rates,
+// independent of the input.
+const SPECTRUM_LINE_MAX_ANALYSES_PER_SECOND = 60;
+const SPECTRUM_LINE_BASS_ANALYSES_PER_SECOND = 30;
+const SPECTRUM_LINE_BASS_WINDOW_FACTOR = 4;
+const SPECTRUM_LINE_BASS_WINDOW_MAX = 16384;
+NodeLiveAudioProcessor.prototype.spectrumLineCollect = function spectrumLineCollect(
+  nodeId, state, dataPorts, buf, start, freshCount, capacity, g, params,
+) {
+  const { winSize, windowKind, hopSize, fftLen, halfN, writeRate } = g;
+  const bassOn = Math.round(nodeGraphFiniteNumber(params.bassDetail, 1)) !== 0;
+  const bassWin = Math.min(SPECTRUM_LINE_BASS_WINDOW_MAX, winSize * SPECTRUM_LINE_BASS_WINDOW_FACTOR);
+  const lowWin = bassOn && bassWin > winSize ? bassWin : 0;
+  const histLen = Math.max(winSize, lowWin);
+  if (
+    !state.history
+    || state.history.length !== histLen
+    || state.windowSize !== winSize
+    || state.fftLen !== fftLen
+    || state.windowKind !== windowKind
+    || state.lowWin !== lowWin
+  ) {
+    state.history = new Float32Array(histLen);
+    state.histWrite = 0;
+    state.histFilled = 0;
+    state.windowSize = winSize;
+    state.fftLen = fftLen;
+    state.windowKind = windowKind;
+    state.lowWin = lowWin;
+    state.analysis = nodeGraphSpectralWindow(winSize, windowKind);
+    state.fftReal = new Float32Array(fftLen);
+    state.fftImag = new Float32Array(fftLen);
+    state.rawOut = new Float32Array(halfN);
+    state.gainOut = new Float32Array([state.analysis.sum]);
+    state.sinceMain = 0;
+    state.sinceLow = 0;
+    if (lowWin) {
+      state.lowAnalysis = nodeGraphSpectralWindow(lowWin, windowKind);
+      state.lowReal = new Float32Array(lowWin);
+      state.lowImag = new Float32Array(lowWin);
+      state.lowOut = new Float32Array(lowWin >> 1);
+      state.lowMeta = new Float32Array([lowWin, state.lowAnalysis.sum]);
+    } else {
+      state.lowAnalysis = state.lowReal = state.lowImag = state.lowOut = state.lowMeta = null;
+    }
   }
-  // [0]=fftLen (display bin count basis) [1]=halfN [2]=spectrumBins
-  // [3]=hopSize (ONE hop — batch walks columns) [4]=sampleRate
-  // [5]=hopSerial [6]=batchColumns [7]=windowSum (Hann/etc coherent gain)
-  dataPorts.push([
-    nodeId,
-    "FftSize",
-    new Float32Array([
-      fftLen,
-      halfN,
-      halfN,
-      hopSize,
-      writeRate,
-      state.hopSerial,
-      batchCols,
-      state.windowSum || 0,
-    ]),
-  ]);
+  const hist = state.history;
+  for (let i = 0; i < freshCount; i++) {
+    hist[state.histWrite] = buf.buffer[(start + i) % capacity] || 0;
+    state.histWrite = (state.histWrite + 1) % histLen;
+  }
+  state.histFilled = Math.min(histLen, state.histFilled + freshCount);
+  state.sinceMain += freshCount;
+  state.sinceLow += freshCount;
+
+  // Window the newest n samples into re (zero-padded to re.length) and FFT.
+  const analyse = (re, im, n, win) => {
+    re.fill(0);
+    im.fill(0);
+    let r = (state.histWrite - n + histLen) % histLen;
+    for (let j = 0; j < n; j++) {
+      re[j] = hist[r] * win[j];
+      if (++r === histLen) r = 0;
+    }
+    nodeGraphSpectralFftInPlace(re, im);
+  };
+  const mainGap = Math.max(hopSize, Math.floor(writeRate / SPECTRUM_LINE_MAX_ANALYSES_PER_SECOND));
+  let posted = false;
+  if (state.histFilled >= winSize && state.sinceMain >= mainGap) {
+    state.sinceMain = 0;
+    analyse(state.fftReal, state.fftImag, winSize, state.analysis.values);
+    for (let j = 0; j < halfN; j++) {
+      state.rawOut[j] = Math.sqrt(state.fftReal[j] * state.fftReal[j] + state.fftImag[j] * state.fftImag[j]);
+    }
+    dataPorts.push([nodeId, "SpectrumRaw", state.rawOut]);
+    dataPorts.push([nodeId, "SpectrumGain", state.gainOut]);
+    posted = true;
+  }
+  const lowGap = Math.max(lowWin >> 2, Math.floor(writeRate / SPECTRUM_LINE_BASS_ANALYSES_PER_SECOND));
+  if (lowWin && state.histFilled >= lowWin && state.sinceLow >= lowGap) {
+    state.sinceLow = 0;
+    analyse(state.lowReal, state.lowImag, lowWin, state.lowAnalysis.values);
+    const half = lowWin >> 1;
+    for (let j = 0; j < half; j++) {
+      state.lowOut[j] = Math.sqrt(state.lowReal[j] * state.lowReal[j] + state.lowImag[j] * state.lowImag[j]);
+    }
+    // SpectrumLowMeta: [0]=fftLen [1]=windowSum (coherent gain)
+    dataPorts.push([nodeId, "SpectrumLowRaw", state.lowOut]);
+    dataPorts.push([nodeId, "SpectrumLowMeta", state.lowMeta]);
+    posted = true;
+  }
+  if (!posted) return;
+  state.hopSerial = nodeGraphFiniteNumber(state.hopSerial) + 1;
+  // Same FftSize layout as the spectrograms (batchColumns 0: no history).
+  dataPorts.push([nodeId, "FftSize", new Float32Array([
+    fftLen, halfN, halfN, hopSize, writeRate, state.hopSerial, 0, state.analysis.sum,
+  ])]);
 };
