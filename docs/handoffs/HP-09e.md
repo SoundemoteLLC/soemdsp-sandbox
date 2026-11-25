@@ -1,7 +1,7 @@
 ## HP-09e: Mutator lane offsets bypass the target param's smoother (split out of HP-09d item 9)
 **Owner:** big AI · **Size:** L · **Depends on:** HP-09d (`ae1e2e50`, local, unpushed) · **Phase:** A · **Related:** HP-11 (native offsets), HP-03 (gradients stay out of scope)
 **Paste-ready path:** `docs/handoffs/ready/HP-09e.md`
-**Queued after HP-09d passes**, then HP-09b, HP-03, HP-18.
+**Queued with the AI now.** After this: HP-18, then HP-09b, then HP-03 (Argi t444u moved HP-18 up).
 
 **Why (Argi, t437u, verbatim).** "mutator should not go through the parameter's smoother, and instead the playhead parameter's smoother has a smoother, we can use that for the source of truth of current value, so the changes actually move in sync with the playhead final value after smoothing".
 
