@@ -246,19 +246,27 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   ctx2.togglePitchMutatorOverlay(true);
   pm.mutator.autoPin = true;
   pm._mutatorArmed = true;
-  const slider = (node, param) => ({ dataset: { node, param }, value: "0", getAttribute() { return null; } });
+  // The real range input has only dataset.param; its node id lives on the parent .dsp-node article.
+  const slider = (node, param) => ({
+    dataset: { param }, value: "0", getAttribute() { return null; },
+    closest: (sel) => (sel === ".dsp-node" ? { dataset: { node } } : null),
+  });
   const s1 = slider("k1", "cutoff");
   const s2 = slider("k2", "cutoff");
   assert(ctx2.pitchMutatorMaybeInterceptSlider(s1, 0.7) === true, "first armed turn binds and is taken");
   assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].target.nodeId === "k1", "lane 1 is the first knob");
   const keysBefore = JSON.stringify(pm.mutator.lanes[0].keys);
   s2.value = "0.2";
+  assert(pm._mutatorArmed === false, "Arm ends with the first bind (D-M8)");
+  assert(ctx2.pitchMutatorMaybeInterceptSlider(s2, 0.9) === false, "disarmed: the second knob is a normal base write");
+  pm._mutatorArmed = true;
   assert(ctx2.pitchMutatorMaybeInterceptSlider(s2, 0.9) === false, "second armed knob is not taken");
   assert(s2.value === "0.2", "second knob stays free");
   assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].target.nodeId === "k1", "still one lane, still the first knob");
   assert(JSON.stringify(pm.mutator.lanes[0].keys) === keysBefore, "lane 1 keys untouched by the second turn");
   assert(JSON.stringify(ctx2.nodeGraphMvp.patch.nodes[2].params) === '{"cutoff":0.5}', "first knob's base slider untouched");
   assert(overlay.innerHTML.includes("One knob lane for now"), "overlay shows the one-lane line");
+  assert(pm._mutatorArmed === false, "an ignored second knob disarms");
   ctx2.togglePitchMutatorOverlay(false);
   assert(overlay.hidden === true, "overlay closes");
 
@@ -310,10 +318,67 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   overlay.handlers.pointerup({ target: target(null), pointerId: 1, clientX: 140, clientY: 0 });
   overlay.handlers.click({ target: { closest: () => keyEl(60) } });
   assert(almost(effective(), 0.62, 1e-9), "the click after a drag-pan is suppressed");
-  while (timeouts.length) timeouts.shift()();
+  // No 0ms timer: leftover suppress is cleared on the next pointerdown (and consumed by the click above).
   overlay.handlers.pointerdown({ target: target(keyEl(60)), pointerId: 2, clientX: 10, clientY: 0 });
   overlay.handlers.pointerup({ target: target(keyEl(60)), pointerId: 2, clientX: 10, clientY: 0 });
   assert(almost(effective(), 0.5, 1e-9), "a plain tap on another key moves the playhead");
+
+  // HP-09c: Auto-Pin OFF flow on a fresh lane (pending value, Pin Keyframe, drop on another note), base untouched
+  {
+    pm.mutator.lanes.length = 0;
+    pm.mutator.freqLane.keys = [];
+    pm.mutator.autoPin = false;
+    pm.mutator.snap = true;
+    ctx2.nodeGraphMvp.patch.connections.length = 0;
+    ctx2.togglePitchMutatorOverlay(false);
+    const k1 = ctx2.nodeGraphMvp.patch.nodes[2];
+    const knob = slider("k1", "cutoff");
+    const turn = (v) => { knob.value = String(v); return ctx2.pitchMutatorMaybeInterceptSlider(knob, v); };
+    const eff = () => ctx2.applyNodeGraphParamOffsetsToBase(k1, "cutoff", k1.params.cutoff, k1.paramMeta.cutoff);
+    const live = () => { const p = { cutoff: k1.params.cutoff }; ctx2.applyNodeGraphParamOffsets(k1, p, { notify: false }); return p.cutoff; };
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
+    assert(turn(0.9) === false, "not armed, no lane: a normal base write");
+    pm._mutatorArmed = true; // armed with the overlay CLOSED (D-M8)
+    assert(turn(0.9) === true, "armed with the overlay closed: the turn binds");
+    assert(pm.mutator.lanes.length === 1 && pm._mutatorArmed === false, "bound and disarmed");
+    assert(almost(k1.params.cutoff, 0.5), "base slider never written by a bound turn");
+    assert(pm.mutator.lanes[0].keys.length === 0, "Auto-Pin off: the turn is pending, nothing pinned");
+    assert(almost(eff(), 0.9) && almost(live(), 0.9), "the pending value shows at the playhead");
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 72 });
+    assert(almost(eff(), 0.5) && almost(live(), 0.5), "moving to another note drops the pending value");
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
+    assert(almost(eff(), 0.5), "and it does not come back");
+    assert(turn(0.9) === true, "a bound knob turn is always taken");
+    ctx2.togglePitchMutatorOverlay(true);
+    const pinBtn2 = { getAttribute: (n) => (n === "data-pm" ? "pin" : null) };
+    overlay.handlers.click({ target: { closest: () => pinBtn2 } });
+    assert(pm.mutator.lanes[0].keys.length === 1 && pm.mutator.lanes[0].keys[0].x === 60, "Pin Keyframe pins the pending value at C4");
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 84 });
+    assert(turn(0.1) === true, "turn at C6");
+    overlay.handlers.click({ target: { closest: () => pinBtn2 } });
+    const keys2 = pm.mutator.lanes[0].keys;
+    assert(keys2.length === 2 && keys2[0].x === 60 && keys2[1].x === 84, "second pin at C6");
+    assert(almost(keys2[0].offset, 0.4) && almost(keys2[1].offset, -0.4), "two different, signed offsets: " + JSON.stringify(keys2));
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
+    assert(almost(eff(), 0.9) && almost(live(), 0.9), "C4 gives the first pin");
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 84 });
+    assert(almost(eff(), 0.1) && almost(live(), 0.1), "C6 gives the second pin");
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 72 });
+    assert(almost(eff(), 0.5, 1e-9), "C5 is interpolated between the pins, got " + eff());
+    assert(almost(k1.params.cutoff, 0.5), "base slider still untouched");
+    // Auto-Pin on: each turn pins at the playing note
+    pm.mutator.autoPin = true;
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 48 });
+    assert(turn(0.7) === true && pm.mutator.lanes[0].keys.some((k) => k.x === 48 && almost(k.offset, 0.2)), "Auto-Pin on pins at the playing note");
+    // lane identity: a bind and pin in the very same turn lands in node.mutator.lanes (the bug stored it in a stale copy)
+    pm.mutator.lanes.length = 0;
+    pm.mutator.autoPin = true;
+    pm._mutatorArmed = true;
+    ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 60 });
+    assert(turn(0.8) === true, "bind + Auto-Pin in one turn");
+    assert(pm.mutator.lanes.length === 1 && pm.mutator.lanes[0].keys.length === 1 && almost(pm.mutator.lanes[0].keys[0].offset, 0.3),
+      "the pin is in node.mutator.lanes[0], got " + JSON.stringify(pm.mutator.lanes));
+  }
 
   // idle again after closing: no requestAnimationFrame left queued by the Mutator
   ctx2.togglePitchMutatorOverlay(false);
@@ -322,6 +387,14 @@ assert(kept.length === 0 && warnings.length === 1, "missing target dropped with 
   ctx2.sendNodeGraphLiveKeyboardModuleSignal("kb", { frequency: 330, gate: 1 });
   ctx2.sendNodeGraphLiveMidiKeyboardSignal({ note: 50 });
   assert(rafCalls === rafAtClose, "closed and idle again: no requestAnimationFrame scheduled");
+}
+
+// Offsets are signed: shifting keeps negatives (clamped to -1..1, not 0..1)
+{
+  const s = E.shiftOffsets([{ x: 36, offset: -0.5 }, { x: 60, offset: 0.2 }], -0.2, { min: 0, max: 1 });
+  assert(almost(s[0].offset, -0.7) && almost(s[1].offset, 0), "negative offsets survive a shift, got " + JSON.stringify(s));
+  const lo = E.shiftOffsets([{ x: 36, offset: -0.9 }], -0.5, { min: 0, max: 1 });
+  assert(almost(lo[0].offset, -1), "clamps at -1");
 }
 
 console.log("test_pitch_mutator_engine: ok");

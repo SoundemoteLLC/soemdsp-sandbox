@@ -321,7 +321,8 @@
   function shiftOffsets(keys, delta, meta) {
     const d = finite(delta, 0);
     if (!d) return keys.slice();
-    return keys.map((k) => ({ ...k, offset: clampSlider(meta, k.offset + d) }));
+    // Offsets are signed slider distances: -1..1, not the 0..1 of a slider position.
+    return keys.map((k) => ({ ...k, offset: clamp(k.offset + d, -1, 1) }));
   }
 
   function shiftFreqKeysLog(keys, logDelta) {

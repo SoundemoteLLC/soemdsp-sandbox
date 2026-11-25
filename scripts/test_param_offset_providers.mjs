@@ -221,6 +221,8 @@ function browserContext(extra = {}) {
       const base = JSON.stringify(newParams);
       oldCtx.pitchMutatorApplyLiveParams(oldNode, oldParams);
       newCtx.applyNodeGraphParamOffsets(newNode, newParams, { notify: false });
+      // HP-09c: the Mutator's live playheadHz now follows Freq In / the audition key instead of a stale stored value; that one key is the fix.
+      if (oldNode.type === "pitchMutator") { delete oldParams.playheadHz; delete newParams.playheadHz; }
       if (JSON.stringify(oldParams) !== JSON.stringify(newParams)) {
         differing += 1;
         console.log("  differs", oldNode.id, JSON.stringify(oldParams), JSON.stringify(newParams));
