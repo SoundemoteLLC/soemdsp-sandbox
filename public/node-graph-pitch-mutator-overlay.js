@@ -666,6 +666,15 @@
     return root.nodeGraphKeyboardPitchLabel(n);
   }
 
+  // A labeled key (the Cs) shows the octave number over the note letter, stacked, so the label stays inside its own key at any key count.
+  // The name still comes from the one shared helper (MIDI 0 = C-2, MIDI 60 = C3).
+  function keyLabelHtml(n) {
+    if (n % 12 !== 0) return "";
+    const m = /^([A-G][#b\u266f\u266d]?)(-?\d+)$/.exec(midiName(n));
+    if (!m) return escapeHtml(midiName(n));
+    return '<span class="pm-key-oct">' + m[2] + '</span><span class="pm-key-letter">' + m[1] + "</span>";
+  }
+
   function isBlack(note) {
     const pc = ((Math.round(note) % 12) + 12) % 12;
     return pc === 1 || pc === 3 || pc === 6 || pc === 8 || pc === 10;
@@ -1172,7 +1181,7 @@
     const wireKey = node ? wireKeyOf(node) : -1;
     for (let n = range.min; n <= range.max; n++) {
       kbd += '<button type="button" class="pm-key' + (isBlack(n) ? " black" : "") + (knobKey === n ? " audition" : "") + (wireKey === n ? " wire" : "") + '" data-pm="key" data-note="' + n + '">' +
-        (n % 12 === 0 ? midiName(n) : "") + "</button>";
+        keyLabelHtml(n) + "</button>";
     }
     const x = node ? soundingNote(node) : 0;
     const activeLane = state ? (state.lanes || []).find((l) => l.id === state.activeLane) : null;

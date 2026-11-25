@@ -990,7 +990,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "pitch") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW; // MIDI-note units: Pitch In + the Pitch knob
-    if (p === "unit" || p === "0-1" || p === "0\u20131" || p === "0\u20261") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01; // the bound knob's lane value, 0..1
+    if (p === "unit" || p === "0-1" || p === "0\u20131" || p === "0\u20261") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01; // (Pitch In + Pitch knob) / 127
     if (p === "velocity") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
   if (t === "stftGate" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;

@@ -7356,21 +7356,10 @@ static void process_pitch_mutator(Circuit& g, Node& node, int frames) {
   const bool liveGate = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
   const bool liveVel = mix_live_port(g, node, kPortMorph, frames, g.mixMorph);
   double laneHz = 0.0; // the playhead's final value at the last frame of this block
-  // Outputs: Mono = f (Hz), Saw = pitch (MIDI-note units, the mixed playhead), Phase01 = the knob lane's value normalized: where the bound
-  // knob ends up on its own range (its base position + the lane offset, clamped to 0..1). 0 when no lane is bound.
+  // Outputs: Mono = f (Hz), Saw = pitch (MIDI-note units: the mixed playhead, Pitch In + the Pitch knob), Phase01 = the same playhead as a
+  // 0-1 signal, playhead / 127 (MIDI 0 -> 0, MIDI 127 -> 1). Pitch and 0-1 are the honest mixed value; only the lane lookup and the Hz
+  // output below use the playhead held to the keyboard (a table / array-bounds guard, not a range for the user).
   const bool laneOn = node.mutatorLaneValid && node.mutatorLaneTargetCount > 0;
-  Control* laneCtl = nullptr;
-  double laneBaseUnit = 0.0;
-  if (laneOn) {
-    const int ti0 = find_node(g, node.mutatorLaneTargets[0]);
-    if (ti0 >= 0) {
-      Control* c0 = control_for_param(g.nodes[ti0], node.mutatorLaneParam);
-      if (c0 && (c0->domainMax - c0->domainMin) > 0.0) {
-        laneCtl = c0;
-        laneBaseUnit = (c0->out - c0->domainMin) / (c0->domainMax - c0->domainMin);
-      }
-    }
-  }
   double lastOff = 0.0;
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
@@ -7378,23 +7367,16 @@ static void process_pitch_mutator(Circuit& g, Node& node, int frames) {
     const double vel = liveVel ? g.mixMorph[f] : 0.0;
     // Playhead in keyboard units: Pitch In (MIDI notes, summed cables) + the Playhead knob. The knob is smoothed on its own; cables and
     // modulation land after that smoother (control_audio), so a signal is never smoothed by the parameter. Clamped to the keyboard.
-    double note = (liveF ? g.mixF[f] : 0.0) + control_audio(g, node.frequency, f);
-    if (!(note == note)) note = 0.0;
+    double playhead = (liveF ? g.mixF[f] : 0.0) + control_audio(g, node.frequency, f);
+    if (!(playhead == playhead)) playhead = 0.0;
+    double note = playhead; // held to the keyboard for the lookup table and the Hz output only
     if (note < 0.0) note = 0.0;
     if (note > 127.0) note = 127.0;
     const double inHz = 440.0 * dsp_exp(((note - 69.0) / 12.0) * 0.6931471805599453);
     laneHz = inHz;
-    node.buf[kPortSaw][f] = note;
-    double unitOut = 0.0;
-    if (laneOn) {
-      lastOff = mutator_lane_offset(node, note);
-      if (laneCtl) {
-        unitOut = laneBaseUnit + lastOff;
-        if (unitOut < 0.0) unitOut = 0.0;
-        if (unitOut > 1.0) unitOut = 1.0;
-      }
-    }
-    node.buf[kPortPhase01][f] = unitOut;
+    node.buf[kPortSaw][f] = playhead;
+    node.buf[kPortPhase01][f] = playhead * (1.0 / 127.0);
+    if (laneOn) lastOff = mutator_lane_offset(node, note);
     double outHz = 0.0;
     if (node.mutatorFreqLutValid) {
       if (note == node.mutatorLutLastX) {

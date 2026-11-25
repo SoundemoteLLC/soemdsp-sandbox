@@ -11223,7 +11223,7 @@ const nodeGraphModuleDefinitions = (
     inputLabels: { pitch: "♯/♭" },
     outputLabels: { pitch: "♯/♭", f: "ƒ", unit: "0–1" },
     inputs: ["Gate", "pitch", "Velocity"],
-    // pitch = MIDI-note units (Pitch In + the Pitch knob), f = Hz, 0-1 = the bound knob's lane value normalized.
+    // pitch = MIDI-note units (Pitch In + the Pitch knob), f = Hz, 0-1 = (Pitch In + Pitch knob) / 127 (MIDI 0 -> 0, MIDI 127 -> 1).
     outputs: ["Gate", "pitch", "f", "unit", "Velocity"],
     digitalInputs: ["Gate"],
     digitalOutputs: ["Gate"],

@@ -90,7 +90,7 @@ try {
       for (const [k, v] of Object.entries(got)) if (v !== want) bad.push(`${n} ${k}: ${v} != ${want}`);
     }
     const caps = {};
-    for (const n of [0, 12, 60]) caps[n] = document.querySelector(`#pitchMutatorOverlay .pm-key[data-note="${n}"]`).textContent;
+    for (const n of [0, 12, 60]) { const k = document.querySelector(`#pitchMutatorOverlay .pm-key[data-note="${n}"]`); caps[n] = k.querySelector(".pm-key-letter").textContent + k.querySelector(".pm-key-oct").textContent; } // stacked: letter + octave
     return { bad, c0: nodeGraphKeyboardPitchLabel(0), c60: nodeGraphKeyboardPitchLabel(60), caps };
   });
   assert.deepEqual(names.bad, [], "every note-name display agrees with the shared helper");

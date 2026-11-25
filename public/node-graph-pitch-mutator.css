@@ -202,6 +202,7 @@
 
 /* Unified graph + keyboard: one scrolled chromatic axis. */
 .pm-axis-scroll {
+  container-type: inline-size;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -262,6 +263,12 @@
 .pm-key {
   flex: 1 1 0;
   min-width: 0;
+  /* Labeled keys stack the octave number over the letter. The label never overflows its key: the font follows the key width. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   /* The global button rule gives min-height 38px and a 6px radius: that cut the key off at the bottom of its 22px strip and
      rounded narrow keys into arches. Fill the strip exactly: flat bottom, only the two top corners are round, by a hair. */
   min-height: 0;
@@ -276,6 +283,17 @@
   font: 8px/1 ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
+}
+
+.pm-key-oct,
+.pm-key-letter {
+  display: block;
+  line-height: 1;
+  white-space: nowrap;
+  /* the visible axis width / the keys shown = one key; "-2" is two characters, so the type is at most that key / 1.4 (and never past 9px) */
+  font-size: min(9px, calc(100cqw / var(--pm-visible, 97) / 1.4));
+  font-weight: 700;
+  pointer-events: none;
 }
 
 .pm-key.black {

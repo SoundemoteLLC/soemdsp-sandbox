@@ -112,17 +112,17 @@ assert.ok(near(before, 600), `0.1 flat gives base + 100, got ${before}`);
   run(3);
   tuning = run(2);
   assert.ok(near(tuning, 300), `Pitch In (12 keys) + knob (60) = C5: tuning 300, got ${tuning}`);
-  // outputs: Saw = pitch in note units (the mixed playhead), Phase01 = the bound knob's lane value normalized (base 500/1000 + offset)
+  // outputs: Saw = pitch in note units (the mixed playhead), Phase01 = the same playhead / 127 (not the bound knob's position)
   const portOf = (n) => new Float64Array(ex.memory.buffer, ex.soemdsp_graph_node_port_ptr(h, M, n), BLOCK)[BLOCK - 1];
   assert.ok(Math.abs(portOf(3) - 72) < 1e-9, `pitch out is 72, got ${portOf(3)}`);
-  assert.ok(Math.abs(portOf(10) - 0.3) < 1e-6, `0-1 out is 0.5 - 0.2 = 0.3 at C5, got ${portOf(10)}`);
+  assert.ok(Math.abs(portOf(10) - 72 / 127) < 1e-12, `0-1 out is 72 / 127 at C5, got ${portOf(10)}`);
   assert.ok(Math.abs(portOf(0) - noteHz(72)) < 1e-6 * noteHz(72), `f out is still Hz (${portOf(0)})`);
   ex.soemdsp_graph_set_param(h, B, kParamOffset, 0);
   ex.soemdsp_graph_snap_param(h, B, kParamOffset);
   run(3);
   tuning = run(2);
   assert.ok(near(tuning, 700), `Pitch In 0 + knob 60 = C4: tuning 700, got ${tuning}`);
-  assert.ok(Math.abs(portOf(3) - 60) < 1e-9 && Math.abs(portOf(10) - 0.7) < 1e-6, `at C4 pitch out 60 and 0-1 out 0.7, got ${portOf(3)} / ${portOf(10)}`);
+  assert.ok(Math.abs(portOf(3) - 60) < 1e-9 && Math.abs(portOf(10) - 60 / 127) < 1e-12, `at C4 pitch out 60 and 0-1 out 60 / 127, got ${portOf(3)} / ${portOf(10)}`);
   // a huge cable value is clamped to the keyboard, never past it
   ex.soemdsp_graph_set_param(h, B, kParamOffset, 900);
   ex.soemdsp_graph_snap_param(h, B, kParamOffset);
@@ -130,8 +130,20 @@ assert.ok(near(before, 600), `0.1 flat gives base + 100, got ${before}`);
   tuning = run(2);
   assert.ok(near(tuning, 300), `clamped at the top key: tuning 300, got ${tuning}`);
   assert.ok(Math.abs(ex.soemdsp_graph_mutator_playhead_hz(h, M) - noteHz(127)) < 1e-6 * noteHz(127), "reported playhead Hz is the clamped top key");
+  assert.ok(Math.abs(portOf(3) - 960) < 1e-9 && Math.abs(portOf(10) - 960 / 127) < 1e-12, `pitch and 0-1 outputs are the honest mixed playhead past the keyboard (960 / 960 / 127), got ${portOf(3)} / ${portOf(10)}`);
   ex.soemdsp_graph_set_param(h, B, kParamOffset, 0);
   ex.soemdsp_graph_snap_param(h, B, kParamOffset);
+}
+
+// the 0-1 output is the playhead / 127: MIDI 0 -> 0, MIDI 127 -> 1, independent of any bound knob
+{
+  for (const [key, want] of [[0, 0], [127, 1], [60, 60 / 127]]) {
+    setPlayhead(key);
+    ex.soemdsp_graph_snap_param(h, M, kParamFrequency);
+    run(3);
+    const got = new Float64Array(ex.memory.buffer, ex.soemdsp_graph_node_port_ptr(h, M, 10), BLOCK)[BLOCK - 1];
+    assert.ok(Math.abs(got - want) < 1e-12, `playhead ${key} gives 0-1 out ${want}, got ${got}`);
+  }
 }
 
 // removing the Mutator releases the target

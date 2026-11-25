@@ -1,5 +1,5 @@
 // HP-09g: the Pitch Mutator's output ports map to the native buffers the engine fills (Mono = f Hz, Saw = pitch in note units,
-// Phase01 = the knob lane's value 0-1). Loads the shipped worklet host file into a vm with a stub processor class.
+// Phase01 = the mixed playhead / 127). Loads the shipped worklet host file into a vm with a stub processor class.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
