@@ -25,7 +25,7 @@ Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M
 |----|-------|-------|-------|---------|-----------|--------|-----------|---------|------------|
 | HP-00 | Housekeeping and unblockers | big AI | A | — | D-C1 (decided 2026-11-25) | ready, serving | — | — | 2026-11-25: trimmed to cursors + stale docs; Patch View Remove done in `afaee444`; `55a0a3aa` is on origin; `cursor: move` is at styles.css:12634 |
 | HP-01 | Stage 1 removal (broom circuit presets, Trigger Patch, Pages menu, orphan presets) | Moth | A | — | D-P1 (decided: keep bank/program in data and filename) | ready, serving | — | — | 2026-11-25: D-P1 decided (keep bank/program; bank = category in the filename; one flat folder) |
-| HP-02 | Stage A1, one param-offset provider list (+ plugin-host reads effective params) | Moth | A | — | — | reviewed + pushed, awaiting Argi retest (Ctrl+F5; plugin not yet tested in a real DAW) | big AI | 5bd52c53 | 2026-11-25 MasterBot review passed, pushed b7313e6d |
+| HP-02 | Stage A1, one param-offset provider list (+ plugin-host reads effective params) | Moth | A | — | — | reviewed + pushed, browser retest passed 2026-11-25, Reaper retest pending (needs plugin rebuild) | big AI | 5bd52c53 | 2026-11-25 Argi browser retest passed (t412u); Reaper retest pending (needs plugin rebuild) |
 | HP-03 | Stage A2, gradient data and engine effect (no UI) | Moth | B | HP-02 | — | ready, serving | — | — | served to Argi 2026-11-25 |
 | HP-04 | Stage A3, the Gradients page | Misty | C | HP-01, HP-03 | D-G1 (after the page prototype) | planned | — | — | 2026-11-25: index created |
 | HP-05 | Stage A4, slider ghost uses the effective value, 1 to 2 px outline, "Holds still" line | Misty | C | HP-03, HP-04 | — | planned | — | — | 2026-11-25: index created |
@@ -33,7 +33,7 @@ Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M
 | HP-06b | Plugin mirror of the variations / rename / remove API | Moth (plugin repo) | B | HP-06 | — | planned | — | — | 2026-11-25: index created |
 | HP-07 | Stage B2, the Preset Explorer UI | Misty | B | HP-01, HP-06 | D-P1 (decided 2026-11-25) | planned | — | — | 2026-11-25: D-P1 decided (keep bank/program filename stem; one flat folder) |
 | HP-08 | Stage B3, first-iteration audition (▶) and lazy thumbnails | Misty | C | HP-07 | D-P3 | planned | — | — | 2026-11-25: index created |
-| HP-09 | Mutator first slice, model-independent fixes (the MAS-1 open decisions) | Misty | A | — (D-M1, D-M2, D-M3 decided 2026-11-25) | D-M1, D-M2, D-M3 (decided 2026-11-25) | serving next | — | — | 2026-11-25: D-M1, D-M2, D-M3 decided (ignore second armed knob; Freq In drives the playhead; empty Frequency lane passes through) |
+| HP-09 | Mutator first slice, model-independent fixes (the MAS-1 open decisions) | Misty | A | — (D-M1, D-M2, D-M3 decided 2026-11-25) | D-M1, D-M2, D-M3 (decided 2026-11-25) | serving next | — | — | 2026-11-25: Argi t412u notes recorded (overlay Gate deferred to HP-12; pointerdown playhead added to scope) |
 | HP-10 | Stage A5, rebase the Pitch Mutator onto gradients | Misty | D | HP-03, HP-04, HP-09 | D-M5, D-M6, D-M7 | planned | — | — | 2026-11-25: index created |
 | HP-11 | Mutator native offset path and polyphony | Moth | D | HP-10, S-4 | — | planned | — | — | 2026-11-25: index created |
 | HP-12 | Mutator editing depth | Misty | D (parallel with HP-11) | HP-10 | — | planned | — | — | 2026-11-25: index created |
