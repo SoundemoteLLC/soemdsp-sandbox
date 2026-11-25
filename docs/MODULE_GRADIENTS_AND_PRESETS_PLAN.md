@@ -137,13 +137,13 @@ Choice, switch and other discrete params do not use this sum; they snap as in §
 - Wire modulation is applied after this, natively, exactly as today (`unitAdd`, then the native clamp to min and max, B-082). A cable and a gradient on the same param add.
 - `node.params` (the base) is **never rewritten** by a gradient. Saving, undo, snapshots and variations stay honest.
 
-**Engine hook.** The first Pitch Mutator slice already applies offsets on the main thread to the live params and leaves the base alone: `pitchMutatorApplyLiveParams` (`public/node-graph-pitch-mutator-overlay.js`) is called from `nodeGraphBuildLiveParameterNodes` (`node-graph-live-plan-runtime.js`, near lines 191 and 333). Stage A1 generalizes that call into one **param offset provider list**: gradients first, then the Pitch Mutator. Both go through the same function, so there is exactly one place where "effective param" is computed (APP_POLICY §5). Later this becomes the native offset-table hook the Mutator plan already describes (per-voice tables, ZOH).
+**Engine hook.** Effective params are computed in one place: the **param offset provider list** in `public/node-graph-param-offsets.js` (`registerNodeGraphParamOffsetProvider`, `applyNodeGraphParamOffsets`). Live-plan builders and the single-value path call that list; the Pitch Mutator registers itself (after gradients). `node.params` (the base) is left alone. There is exactly one place where "effective param" is computed (APP_POLICY §5). Later this becomes the native offset-table hook the Mutator plan already describes (per-voice tables, ZOH).
 
 **A1 is approved.** `node-graph-live-plan-runtime.js` is not MasterBot's file. A1 handles parameter values only; any visual feedback goes through `nodeGraphGlGraphNoteValueChrome(id)` so the GPU-drawn controls repaint; nothing touches camera or cull code. See §14.
 
 **Updates are events.** A change of a gradient position or stop calls the existing param update path (`scheduleNodeGraphLiveParameterSync`, `sendNodeGraphLiveParameterUpdate`). No timers or polling.
 
-**Plugin.** In the DAW plugin there is no AudioWorklet. `public/plugin-host.js` diffs `node.params` after page param edits (`copyParams`, around lines 201–232) and posts `param` events to the native engine. A gradient offset is not in `node.params`, so that diff would miss it. The plugin host's diff must read the **effective** params from the same provider function. That is a one-function change in `plugin-host.js` (a sandbox file, not MasterBot's).
+**Plugin.** In the DAW plugin there is no AudioWorklet. `public/plugin-host.js` diffs the **effective** params from the same provider list (not bare `node.params`) after page param edits and posts `param` events to the native engine, so a provider's offset reaches the native engine while `node.params` stays the base.
 
 **Gradient position is never automatable inside the circuit builder.** No cable into a gradient position, no builder-side automation lane. Host automation, if any, comes only from the later 50 generic plugin slots (§15).
 
