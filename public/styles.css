@@ -12546,46 +12546,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   overflow: visible;
 }
 
-.node-graph-origin-marker {
-  position: absolute;
-  display: none;
-  left: 0;
-  top: 0;
-  z-index: 0;
-  width: 15px;
-  height: 15px;
-  transform: translate(-50%, -50%);
-  pointer-events: auto;
-}
-
-.node-graph-workspace.origin-marker-visible .node-graph-origin-marker {
-  display: block;
-}
-
-.node-graph-origin-marker::before,
-.node-graph-origin-marker::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  border-radius: 999px;
-  background: #ff3333;
-  box-shadow:
-    0 0 4px rgba(255, 51, 51, 0.82),
-    0 0 10px rgba(255, 51, 51, 0.42);
-  transform: translate(-50%, -50%);
-}
-
-.node-graph-origin-marker::before {
-  width: 15px;
-  height: 3px;
-}
-
-.node-graph-origin-marker::after {
-  width: 3px;
-  height: 15px;
-}
-
 .node-camera-overlay-layer {
   position: absolute;
   inset: 0;
@@ -12647,47 +12607,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
 .node-camera-frame-handle[data-camera-handle="s"] { left: calc(50% - 6px); bottom: -7px; }
 .node-camera-frame-handle[data-camera-handle="sw"] { left: -7px; bottom: -7px; }
 .node-camera-frame-handle[data-camera-handle="w"] { left: -7px; top: calc(50% - 6px); }
-
-.node-patch-view-controls {
-  display: grid;
-  flex: 1.8 1 0;
-  grid-template-rows: minmax(10px, 0.34fr) minmax(0, 1.66fr);
-  align-items: stretch;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background: var(--node-toolbar-surface);
-}
-
-.node-patch-view-buttons {
-  display: grid;
-  grid-template-columns: minmax(52px, 1fr) minmax(64px, 1fr);
-  gap: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.node-patch-view-buttons button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  margin: 0;
-  padding: 0 4px;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent;
-  box-shadow: none;
-  font-size: clamp(0.72rem, 0.95vw, 0.95rem);
-  line-height: 1.1;
-  white-space: nowrap;
-}
 
 .node-patch-view-box {
   position: absolute;

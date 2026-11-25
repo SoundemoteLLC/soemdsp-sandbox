@@ -84,10 +84,6 @@ async function bindNodeGraphUiDevSettingsEvents() {
     document.getElementById(id)?.addEventListener("change", syncNodeUiDevSettingsHeaderControls);
   }
   document
-    .getElementById("nodeUiDevShowOriginMarker")
-    .addEventListener("change", syncNodeUiDevSettingsHeaderControls);
-
-  document
     .getElementById("nodeUiDevModuleGridInset")
     ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
   document

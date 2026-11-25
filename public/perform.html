@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>soemdsp perform</title>
   <link rel="icon" href="./public/favicon.svg?v=ico-1" type="image/svg+xml">
-  <link rel="stylesheet" href="./public/styles.css?v=mp-wave-midi-cc-4-sg-overhaul-1-sg-gl-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-vthick-1-vcur-1-cmcur-1-mp-face-gl-1-mp-scale-1-sg-fix-1-topbar-1-titlefit-1-chrome-1-cbstroke-1-layerui-1-tileblend-1-canvasbg-1-facebox-1-plugrow-5-cols-4p2nlntrd-clkui1-bg19-stg5-stg6-stg7-facesliders-1-modface4-hukeep1-stgsel1-modface8-modface9pvrgstns5gw16-xypbs-xyf-allb17-abc1-hk6-zf1-hk12-kbd-overlay-2-wheel-gl-1-gpe-1-nodotcur-1-revert-popin-1-view-3-live-view-5-del-pview1">
+  <link rel="stylesheet" href="./public/styles.css?v=mp-wave-midi-cc-4-sg-overhaul-1-sg-gl-1-dc-host-1-sg-face-gl-1-wire-defaults-1-fb1-vthick-1-vcur-1-cmcur-1-mp-face-gl-1-mp-scale-1-sg-fix-1-topbar-1-titlefit-1-chrome-1-cbstroke-1-layerui-1-tileblend-1-canvasbg-1-facebox-1-plugrow-5-cols-4p2nlntrd-clkui1-bg19-stg5-stg6-stg7-facesliders-1-modface4-hukeep1-stgsel1-modface8-modface9pvrgstns5gw16-xypbs-xyf-allb17-abc1-hk6-zf1-hk12-kbd-overlay-2-wheel-gl-1-gpe-1-nodotcur-1-revert-popin-1-view-3-live-view-5-del-pview1-pview2">
   <link rel="stylesheet" href="./public/modules/pitchModWheel/pitch-mod-wheel-face.css?v=wheel-gl-1">
   <link rel="stylesheet" href="./public/perform.css?v=perform-param-io-1">
   <link rel="stylesheet" href="./public/modules/portal/portal-ui.css?v=portal-thru-1">
@@ -328,13 +328,6 @@
               <button id="nodeSnapGridViewButton" type="button" aria-label="Snap modular view to grid" aria-pressed="false">#</button>
             </span>
           </span>
-          <span class="node-patch-view-controls" role="group" aria-label="Patch view">
-            <span class="node-zoom-label">patch view</span>
-            <span class="node-patch-view-buttons">
-              <button id="nodePatchViewToggleButton" type="button" aria-pressed="false" aria-label="Show Patch View">Show</button>
-              <button id="nodePatchViewRemoveButton" type="button" disabled aria-label="Remove Patch View">Remove</button>
-            </span>
-          </span>
         </div>
         <div class="node-history-controls" role="group" aria-label="Node graph history">
           <span id="nodeHistoryLastAction" class="node-history-last-action" aria-live="polite" aria-label="Last action"></span>
@@ -448,6 +441,8 @@
             <span>🪟 App Bars</span>
             <kbd>V</kbd>
           </button>
+          <button id="nodePatchViewToggleButton" type="button" role="menuitem" aria-pressed="false">⬛ Patch View</button>
+          <button id="nodePatchViewRemoveButton" type="button" role="menuitem" disabled>Remove Patch View</button>
           <button id="nodeGridToggleButton" type="button" role="menuitem" aria-pressed="false">⬛ Grid</button>
           <button id="nodeGridLightToggleButton" type="button" role="menuitem" aria-pressed="true">💡 Grid Light</button>
           <button id="nodeWireLengthsToggleButton" type="button" role="menuitem" aria-pressed="true">🧬 Wire Lengths</button>
@@ -777,12 +772,6 @@
         </div>
         <div id="nodeGraphZoomSurface" class="node-graph-zoom-surface">
           <div id="nodeGraphWorldLayer" class="node-graph-world-layer">
-            <div
-              id="nodeGraphOriginMarker"
-              class="node-graph-origin-marker"
-              aria-hidden="true"
-              data-tooltip-key="workspace.origin"
-              title="World origin: X 0, Y 0"></div>
             <div id="nodeGraphNodes" class="node-graph-nodes"></div>
             <div id="nodeCameraOverlayLayer" class="node-camera-overlay-layer" aria-hidden="true"></div>
             <div
@@ -1219,12 +1208,6 @@
             <output id="nodeUiDevWorkspaceBackgroundColorValue" for="nodeUiDevWorkspaceBackgroundColor">#19191a</output>
           </label>
           </div>
-          <label class="node-ui-dev-check">
-            <input
-              id="nodeUiDevShowOriginMarker"
-              type="checkbox">
-            <span>show world origin</span>
-          </label>
           <label class="node-ui-dev-control">
             <span>minimum tooltip text size</span>
             <div class="node-ui-dev-control-row">
@@ -3648,8 +3631,8 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-viewport-perf.js?v=vg-4-zp-hover-fb1-bootflush-2-modface1-popin-1-popin-2-fxstay-2-revert-popin-1-view-1-boxes-view-3-live-view-4-budget-k-view-5b-select-view-5c-slider-view-5-del-view-5d-qe-view-6-text-view-8-lazy-view-frame-rect"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-view-probe.js?v=view-0-probe-1-view-2-chrome-c-view-3-live-view-4-budget-k-view-5c-onset"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-zoom.js?v=all-sync-1-z-center-1-zoomrace-1-zf2-view-3-live"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-view.js?v=perf-20261015-zoomrace-1-revert-popin-1-view-3-live-pview1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-patch-view.js?v=pview1-view-frame-rect"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-view.js?v=perf-20261015-zoomrace-1-revert-popin-1-view-3-live-pview1-pview2"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-patch-view.js?v=pview1-view-frame-rect-pview2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-camera-view.js?v=snake-gl-1-fb1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-marquee-selection.js?v=mini-round2-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-node-dragging.js?v=kbd-gl-1"></script>
@@ -3882,12 +3865,12 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-tooltips.js?v=scope-sync-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-interaction-help.js?v=tooltip-min-12-canvas-name-wv1"></script>
   <script data-boot-defer type="text/plain" src="./public/presets/useruisettings.js?v=2026.11.11.49-wirepx-1-wiredotpx-1-mstk1-bg19-mstk2-grid1-gr1-gm1-cm1-gdr2-gg1-uc4-gl2-d2-gs1-hm1-hm1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=cell-slider-1-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-pre-1-hex12capvmhadkbncqdrsmlcorgspwdfst-wlit1-jlit2-wdot1-jin25-jnw1-mstk1-bg19-jin55-mstk2-toprnd1-toprnd22gfx10-crmg1-grid12-gr1-gm1-gt2-gk-cm1-gdr2-gg1-uc4-gl2-d2-gs1-hm1-hm1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=cell-slider-1-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-pre-1-hex12capvmhadkbncqdrsmlcorgspwdfst-wlit1-jlit2-wdot1-jin25-jnw1-mstk1-bg19-jin55-mstk2-toprnd1-toprnd22gfx10-crmg1-grid12-gr1-gm1-gt2-gk-cm1-gdr2-gg1-uc4-gl2-d2-gs1-hm1-hm1-pview2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-utils.js?v=slider-unit-color-1780307400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-user-ui-settings-controls.js?v=cell-slider-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-panels.js?v=uidev-page-1-cols-1org"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-persistence.js?v=cell-slider-1-round-1-jlit4-modface1-toprnd1-cm1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=tooltip-min-12-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-live-1-pre-1-hex12capxdvmsnhxadkcorbnckqdrsmp2mlgpuinlcspwdfst-wlit1-jlit4-wdot1-mstk1-bg19-mstk2-toprnd1-toprnd22-glowmix1sfgfx7-crmg1-gr1-gm1-gt2-gk-cm1-gdr2-gg1-uc4-gl2-d4-gs1-hm1-hm1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=tooltip-min-12-wire-defaults-1-wirepx-1-wiredotpx-1-round-1-live-1-pre-1-hex12capxdvmsnhxadkcorbnckqdrsmp2mlgpuinlcspwdfst-wlit1-jlit4-wdot1-mstk1-bg19-mstk2-toprnd1-toprnd22-glowmix1sfgfx7-crmg1-gr1-gm1-gt2-gk-cm1-gdr2-gg1-uc4-gl2-d4-gs1-hm1-hm1-pview2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-shortcuts.js?v=pt-preset-2-sg-fix-1-cam1-hk7"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-camera-keys.js?v=cam-3-vp-revert-popin-1-view-3-live"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-text.js?v=live-plan-preserve-20260634"></script>
@@ -4057,7 +4040,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-header-event-bindings.js?v=playhead-hbs-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-help-event-bindings.js?v=remove-workspace-view-0002"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-scene-menu-event-bindings.js?v=out-ch-5-cbz-1-budget"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-uidev-event-bindings.js?v=plugin-ui-persist-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-uidev-event-bindings.js?v=plugin-ui-persist-1-pview2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-settings-event-bindings.js?v=book-ui-script-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-slider-event-bindings.js?v=node-graph-slider-event-bindings-refactor-1780369200000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-event-bindings.js?v=perform-hotkeys-1"></script>

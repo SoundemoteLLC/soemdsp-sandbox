@@ -101,10 +101,12 @@ function syncNodeGraphPatchViewButtons() {
   const remove = document.getElementById("nodePatchViewRemoveButton");
   const box = nodeGraphPatchViewBox() || nodeGraphMvp?.patchViewDragging?.next;
   const visible = nodeGraphPatchViewIsVisible();
-  if (toggle) {
-    toggle.textContent = visible ? "Hide" : "Show";
+  if (typeof setNodeGraphVisibilityToggleLabel === "function") {
+    setNodeGraphVisibilityToggleLabel(toggle, visible, "Patch View");
+  } else if (toggle) {
+    toggle.textContent = visible ? "⬜ Patch View" : "⬛ Patch View";
     toggle.setAttribute("aria-pressed", visible ? "true" : "false");
-    toggle.setAttribute("aria-label", visible ? "Hide Patch View" : "Show Patch View");
+    toggle.setAttribute("aria-label", `Patch View, ${visible ? "visible" : "hidden"}`);
   }
   if (remove) {
     remove.disabled = !box;
@@ -113,11 +115,11 @@ function syncNodeGraphPatchViewButtons() {
 
 function syncNodeGraphPatchViewChrome() {
   const boxEl = document.getElementById("nodeGraphPatchViewBox");
-  const marker = document.getElementById("nodeGraphOriginMarker");
   const live = nodeGraphMvp?.patchViewDragging?.next || nodeGraphPatchViewBox();
   const visible = Boolean(live) && Boolean(nodeGraphMvp?.patchViewVisible);
   if (boxEl) {
     boxEl.hidden = !visible;
+    boxEl.setAttribute("aria-hidden", visible ? "false" : "true");
     if (live) {
       boxEl.style.left = `${live.x}px`;
       boxEl.style.top = `${live.y}px`;
@@ -125,13 +127,6 @@ function syncNodeGraphPatchViewChrome() {
       boxEl.style.height = `${live.h}px`;
       applyNodeGraphHtmlCameraToWorldEl(boxEl);
     }
-  }
-  if (marker) {
-    const cx = live ? live.x + live.w / 2 : 0;
-    const cy = live ? live.y + live.h / 2 : 0;
-    marker.style.left = `${cx}px`;
-    marker.style.top = `${cy}px`;
-    applyNodeGraphHtmlCameraToWorldEl(marker, "translate(-50%, -50%)");
   }
   syncNodeGraphPatchViewButtons();
 }

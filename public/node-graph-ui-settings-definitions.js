@@ -79,7 +79,6 @@ const nodeUiDevSettingControls = Object.freeze([
     min: 0,
     type: "number",
   },
-  { defaultValue: false, id: "nodeUiDevShowOriginMarker", key: "showOriginMarker", type: "boolean" },
   // Floor for fit-to-box tip text. The fitter never goes below this; longer tips clip.
   { defaultValue: 12, id: "nodeUiDevTooltipTextSize", key: "tooltipTextSize", max: 96, min: 12, type: "number" },
   { defaultValue: 25, id: "nodeUiDevModuleLightBrightness", key: "moduleLightBrightness", max: 300, min: 0, type: "number" },
@@ -250,7 +249,6 @@ const nodeUiDevSettingSections = Object.freeze([
     title: "workspace",
     ids: [
       "nodeUiDevWorkspaceBackgroundColor",
-      "nodeUiDevShowOriginMarker",
       "nodeUiDevTooltipTextSize",
       "nodeUiDevViewKeyboardDebug",
     ],

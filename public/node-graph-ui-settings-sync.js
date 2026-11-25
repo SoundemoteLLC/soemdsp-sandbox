@@ -1271,7 +1271,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   syncNodeUiDevModuleLightGridControls();
   const settingsView = document.getElementById("nodeSettingsView");
   const mouseLightEnabledInput = document.getElementById("nodeUiDevMouseLightEnabled");
-  const showOriginMarkerInput = document.getElementById("nodeUiDevShowOriginMarker");
   const tooltipTextSizeInput = document.getElementById("nodeUiDevTooltipTextSize");
   const tooltipTextSizeValue = document.getElementById("nodeUiDevTooltipTextSizeValue");
   const minimumGridBrightnessInput = document.getElementById("nodeUiDevMinimumGridBrightness");
@@ -1321,7 +1320,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (
     !settingsView ||
     !mouseLightEnabledInput ||
-    !showOriginMarkerInput ||
     !tooltipTextSizeInput ||
     !tooltipTextSizeValue ||
     !minimumGridBrightnessInput ||
@@ -1361,7 +1359,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   }
 
   const mouseLightEnabled = Boolean(mouseLightEnabledInput.checked);
-  const showOriginMarker = Boolean(showOriginMarkerInput.checked);
   // UIDEV minimum tip size. fitNodeInteractionHelpText uses this as the floor.
   const tooltipTextSizePx = Math.max(12, Math.min(96, nodeGraphFiniteNumber(tooltipTextSizeInput.value, 12)));
   const minimumGridBrightnessPercent = Math.max(
@@ -1405,9 +1402,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   document
     .getElementById("nodeGraphWorkspace")
     ?.style.setProperty("--node-mouse-light-amount", mouseLightEnabled ? "0.79" : "0");
-  document
-    .getElementById("nodeGraphWorkspace")
-    ?.classList.toggle("origin-marker-visible", showOriginMarker);
   document
     .getElementById("nodeGraphWorkspace")
     ?.style.setProperty("--node-mouse-light-spread", "0.05");

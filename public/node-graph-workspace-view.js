@@ -94,17 +94,9 @@ function syncNodeGraphWorkspaceResizeHandlePosition() {
   handle.style.visibility = "";
 }
 
+// Called from viewFrame's CSS path in viewport-perf.js. The origin + is gone;
+// this just keeps the Patch View box aligned with the camera.
 function syncNodeGraphOriginMarker() {
-  const marker = document.getElementById("nodeGraphOriginMarker");
-  if (!marker) {
-    return;
-  }
-  marker.classList.toggle("node-graph-origin-marker", true);
-  if (typeof nodeGraphApplyTooltip === "function") {
-    nodeGraphApplyTooltip(marker, "workspace.origin");
-  } else {
-    marker.title = "World origin: X 0, Y 0";
-  }
   if (typeof syncNodeGraphPatchViewChrome === "function") {
     syncNodeGraphPatchViewChrome();
   }
