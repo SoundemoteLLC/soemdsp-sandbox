@@ -23,7 +23,7 @@ Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M
 
 | ID | Title | Owner | Phase | Depends | Argi gate | Status | Handed to | Commits | Last event |
 |----|-------|-------|-------|---------|-----------|--------|-----------|---------|------------|
-| HP-00 | Housekeeping and unblockers | Badger (docs), Moth (cursors, push prep), Misty (Patch View) | A | — | D-C1 (decided 2026-11-25) | ready, serving | — | — | 2026-11-25: D-C1 decided (delete `cursor: move` at styles.css:12715; use the shared mouse-dot cursor) |
+| HP-00 | Housekeeping and unblockers | big AI | A | — | D-C1 (decided 2026-11-25) | ready, serving | — | — | 2026-11-25: trimmed to cursors + stale docs; Patch View Remove done in `afaee444`; `55a0a3aa` is on origin; `cursor: move` is at styles.css:12634 |
 | HP-01 | Stage 1 removal (broom circuit presets, Trigger Patch, Pages menu, orphan presets) | Moth | A | — | D-P1 (decided: keep bank/program in data and filename) | ready, serving | — | — | 2026-11-25: D-P1 decided (keep bank/program; bank = category in the filename; one flat folder) |
 | HP-02 | Stage A1, one param-offset provider list (+ plugin-host reads effective params) | Moth | A | — | — | ready, serving | — | — | 2026-11-25: index created; Phase A serving |
 | HP-03 | Stage A2, gradient data and engine effect (no UI) | Moth | B | HP-02 | — | planned | — | — | 2026-11-25: index created |
