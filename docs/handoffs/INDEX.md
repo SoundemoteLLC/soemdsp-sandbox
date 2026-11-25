@@ -1,0 +1,91 @@
+# Sandbox plan index
+
+Keeper: Badger. Source: the 2026-11-25 Sandbox roadmap (patch system, Mutator system, gradient system, plus side tracks). Plan bodies live next to this file; paste-ready versions (common repo-rules preamble plus body) live in `docs/handoffs/ready/`.
+
+## Steward rules
+
+- Update this index **on events only** (an agent reports, a commit lands, or Argi answers a decision). No timers, no polling. On Argi's request, run one pass over `git log` and the agents' latest reports.
+- Serve one plan at a time when Argi asks for the next one (Phase A is the exception: its five independent plans are served together). A card is: goal, why now, decisions he must make with the recommended default, size, owner, and the paste-ready handoff path.
+- **Never mark a plan `done`** without (a) the tests listed in that plan passing, (b) MasterBot's review where the plan requires one, and (c) Argi's retest for anything visual or audible. When a handoff returns, check its acceptance criteria line by line and record gaps, not just "done".
+- **Only Argi's own words answer a decision.** Approvals relayed by other agents do not count. Leave Status as Open and Argi's answer blank until then.
+- Keep stale docs honest (HP-00 item 3) and mark superseded plans so a fresh reader is not misled.
+- Do not push; MasterBot pushes. Coordination is through the other bots and MasterBot.
+
+**Status values** (roadmap section 6): `planned` → `ready` (dependencies and gates clear) → `handed-off (<who>, <date>)` → `in-progress` → `for-review (MasterBot)` → `for-retest (Argi, Ctrl+F5)` → `done (<commit hashes>)`; plus `blocked-on-decision (<D-id>)` and `parked`.
+
+Phase A rows (HP-00, HP-01, HP-02, HP-06, HP-09) start as `ready, serving`. Later-phase rows start as `planned` until their dependencies and gates are clear. Side tracks start as `parked` (they begin when Argi says go).
+
+Argi gates that unblock work (roadmap section 3): D-P1 before HP-06 / HP-07; D-M1 to D-M3 before HP-09 ships; D-M5, D-M6, D-M7 before HP-10; D-G1 after the HP-04 prototype; D-M4 before HP-13.
+
+---
+
+## Plans
+
+| ID | Title | Owner | Phase | Depends | Argi gate | Status | Handed to | Commits | Last event |
+|----|-------|-------|-------|---------|-----------|--------|-----------|---------|------------|
+| HP-00 | Housekeeping and unblockers | Badger (docs), Moth (cursors, push prep), Misty (Patch View) | A | — | D-C1 | ready, serving | — | — | 2026-11-25: index created; Phase A serving |
+| HP-01 | Stage 1 removal (broom circuit presets, Trigger Patch, Pages menu, orphan presets) | Moth | A | — | D-P1 (do not delete Bank/Program fields blindly) | ready, serving | — | — | 2026-11-25: index created; Phase A serving |
+| HP-02 | Stage A1, one param-offset provider list (+ plugin-host reads effective params) | Moth | A | — | — | ready, serving | — | — | 2026-11-25: index created; Phase A serving |
+| HP-03 | Stage A2, gradient data and engine effect (no UI) | Moth | B | HP-02 | — | planned | — | — | 2026-11-25: index created |
+| HP-04 | Stage A3, the Gradients page | Misty | C | HP-01, HP-03 | D-G1 (after the page prototype) | planned | — | — | 2026-11-25: index created |
+| HP-05 | Stage A4, slider ghost uses the effective value, 1 to 2 px outline, "Holds still" line | Misty | C | HP-03, HP-04 | — | planned | — | — | 2026-11-25: index created |
+| HP-06 | Stage B1, the variations store (server, catalog script, client wrapper) | Moth | A | D-P1 before naming is final | D-P1 | ready, serving | — | — | 2026-11-25: index created; Phase A serving |
+| HP-06b | Plugin mirror of the variations / rename / remove API | Moth (plugin repo) | B | HP-06 | — | planned | — | — | 2026-11-25: index created |
+| HP-07 | Stage B2, the Preset Explorer UI | Misty | B | HP-01, HP-06 | D-P1 | planned | — | — | 2026-11-25: index created |
+| HP-08 | Stage B3, first-iteration audition (▶) and lazy thumbnails | Misty | C | HP-07 | D-P3 | planned | — | — | 2026-11-25: index created |
+| HP-09 | Mutator first slice, model-independent fixes (the MAS-1 open decisions) | Misty | A | D-M1, D-M2, D-M3 (ship the recommended defaults unless Argi says otherwise) | D-M1, D-M2, D-M3 | ready, serving | — | — | 2026-11-25: index created; Phase A serving |
+| HP-10 | Stage A5, rebase the Pitch Mutator onto gradients | Misty | D | HP-03, HP-04, HP-09 | D-M5, D-M6, D-M7 | planned | — | — | 2026-11-25: index created |
+| HP-11 | Mutator native offset path and polyphony | Moth | D | HP-10, S-4 | — | planned | — | — | 2026-11-25: index created |
+| HP-12 | Mutator editing depth | Misty | D (parallel with HP-11) | HP-10 | — | planned | — | — | 2026-11-25: index created |
+| HP-13 | Velocity Mutator | Misty | E | HP-11, HP-12, Argi's go | D-M4, Argi go | planned | — | — | 2026-11-25: index created |
+| HP-14 | Stage A6, Gradient to Module | Misty | E | HP-04, and a `smooth_graph.cpp` check | D-G4 | planned | — | — | 2026-11-25: index created |
+| HP-15 | 50 generic plugin parameter slots | Moth (plugin repo + sandbox) | E | HP-04 / HP-10 (so there is something to assign) | — | planned | — | — | 2026-11-25: index created |
+| HP-16 | Robust audition, instrument modules on the MIDI module, peaks cache | Moth (engine/offline) + Misty (UI) | E | HP-08 | Argi go on instrument modules | planned | — | — | 2026-11-25: index created |
+| HP-17 | Gradient position curves; revisit hold-outside-end-stops | Misty | E | Argi using the strip for a while | Argi go (design round first) | planned | — | — | 2026-11-25: index created |
+| S-1 | Display In / Display Out (shader chain on module displays only) | Badger plans; MasterBot owns every edit to `node-graph-gl-graph.js` | Side | After MAS-3 settles | D-S1-1, D-S1-2, D-S1-3, D-S1-4 | parked | — | plan `docs/DISPLAYS_IN_OUT_PLAN.md` (`af9f3cae`, `f80ea4f4`) | 2026-11-25: plan for review; four defaults still open |
+| S-2 | Brightness/Contrast + Lens Distortion modules | Badger | Side | — | D-S2-1 through D-S2-8 | parked | — | plan `docs/SHADER_BRIGHTNESS_LENS_PLAN.md` (`3aa201ce`) | 2026-11-25: plan for review; eight questions still open |
+| S-3 | MAS-3 follow-ups: display-text scaling with zoom vs fixed screen size; controller-face first-paint hitch; Smooth/Step Graph line blur and single-step text resharpen | MasterBot | Side | — | D-S3 | parked | — | `4aa69345` landed "Graph Line blur, single text change per zoom, X/Y button frames the Patch View box." | 2026-11-25: line blur is on `origin/master`; text-scaling decision still open |
+| S-4 | B-058 (voice parameter modulation misses active and idle voices) plus a BUG_PLAN sweep | Moth | Side (can start any time; needed by HP-11) | — | Sweep may surface wontfix? calls | parked | — | — | 2026-11-25: index created |
+| S-5 | Wraparound controls re-verify (DSF Phase wraps to 0 then the drag sticks) | Moth | Side | — | D-S5 | parked | — | plan `docs/WRAPAROUND_CONTROLS_ESCALATION.md` | 2026-11-25: index created |
+| S-6 | Sandy backlog: Spectral Oscillator 3D display; dedicated perfect-shape module; Wing Thump Explorer; Fluvv; S-curve envelope; Euclidean Circles; snare/kick follow-ups | Sandy | Side | — | D-S6 | parked | — | `docs/EUCLIDEAN_CIRCLES_PLAN.md` among others | 2026-11-25: index created |
+
+---
+
+## Decision register
+
+All rows start Open. Recommended defaults are quoted from the 2026-11-25 roadmap or from the named plan; they are not answers.
+
+| ID | Question | Recommended default | Blocks | Status | Argi's answer (verbatim) | Date |
+|----|----------|---------------------|--------|--------|--------------------------|------|
+| D-P1 | What happens to bank/program slots? User patches today are saved as `bankNNN-programNNN-<title>.json` (`server.py:840`; the plugin mirror clamps 0 to 127 for both). The broom page holds the Bank / Bank Name / Program fields. The Presets plan never mentions bank/program, but it turns the broom page into the Gradients page and replaces the Pages list. | Keep bank/program as hidden metadata inside the patch `info` (no UI, no filename prefix) until Argi says the DAW needs program change; save new files as `<Name>.json`. Needs his OK because it changes the saved-file naming. | HP-06, HP-07; HP-01 must not delete the Bank/Program fields blindly | Open | — | — |
+| D-P2 | Does the Explorer need Save As / new-folder for user presets, or only flat user presets plus variations? | Flat only (as planned). User presets stay flat in the user folder; variations are the only subfolders. | HP-07 | Open | — | — |
+| D-P3 | When ▶ loads a different row with no confirm, it replaces the live patch (undo point recorded). OK even if the live patch has unsaved changes? | Keep as planned (undo point) and show one plain info line after load. | HP-08 | Open | — | — |
+| D-P4 | Server restart timing for B1 (new endpoints). The plan never restarts servers; Argi chooses. | Argi restarts once after B1 lands. | HP-06 (after it lands) | Open | — | — |
+| D-M1 | Second armed knob turn: (a) add a second lane, (b) ignore it, (c) replace the bound knob. Today, turning a second armed knob writes into lane 1 and corrupts it. | After the gradient merge, (a) is natural: the Mutator's gradient gains a param. Until then, (b) (ignore, leave the knob free) so lane 1 is never corrupted. | HP-09 | Open | — | — |
+| D-M2 | Does a wired Freq In drive the playhead (pin position and knob-lane lookup)? | Yes (already what Mutator plan section 4 says); unwired falls back to the audition key. | HP-09 | Open | — | — |
+| D-M3 | Empty Frequency lane passes the incoming frequency through? | Yes (native already does; make JS agree). | HP-09 | Open | — | — |
+| D-M4 | Velocity-height check: does the velocity lane read the Gate/Trigger height (no extra jack, per `GATES_TRIGGERS.md`) or the dedicated Velocity jack? | Gate/Trigger height is the contract; keep the Velocity jack as an optional thru. Only matters for HP-13. | HP-13 | Open | — | — |
+| D-M5 | Pitch to gradient-position map for the A5 merge: what 0..127 → 0..1 mapping is the default (linear over the visible C0 to C8 window? over full 0 to 127?), and is it editable with the Step Graph shapes? | Linear over full MIDI 0 to 127, shape-editable later; stored on the Mutator binding, not the gradient. | HP-10 | Open | — | — |
+| D-M6 | Pin semantics after the merge: today Pin Keyframe pins one knob at a time. A gradient Snapshot registers every slider that moved. Does Pin Keyframe on a Mutator-owned gradient (a) snapshot all moved sliders at the note's stop (gradient behavior) or (b) keep one-lane-at-a-time? | (a), with the overlay still highlighting the active param. Needs Argi's OK because it changes the play-tweak-pin feel he cares about most. | HP-10 | Open | — | — |
+| D-M7 | Mutator-owned gradients: hidden from the Gradients page, or listed there (Gradients plan section 5 says "shown on the Gradients page")? | Listed, flagged as owned by `<Mutator name>`. | HP-10 | Open | — | — |
+| D-G1 | Duplicate / delete a module that a gradient references (parked in the Gradients plan; "decide with a clickable prototype after A3"). | Prototype in HP-04; default to: delete drops that module's params from every gradient (one undo step with the delete), duplicate does not copy into gradients, no dangling refs saved. | HP-04 (decided after the prototype) | Open | — | — |
+| D-G2 | Hold outside the end stops vs extrapolate (plan: hold for v1, revisit after he plays with it). | Hold. | HP-03 (v1 behavior); HP-17 (revisit) | Open | — | — |
+| D-G3 | Pointer to the Mutator merge decisions D-M5, D-M6, and D-M7. | See D-M5, D-M6, D-M7. | HP-10 | Open | — | — |
+| D-G4 | Gradient to Module: cap on module count and confirm step for large gradients (plan: "A gradient with n params builds n+1 modules"). | Confirm above 8 params. | HP-14 | Open | — | — |
+| D-G5 | Is the plugin allowed to show the Gradients page? (The plan hides Gradient to Module in the plugin since topology is locked; the page itself is not addressed.) | Show the page (editing offsets is not a topology edit); hide only Gradient to Module. | HP-04 (plugin behavior) | Open | — | — |
+| D-S1-1 | When you hold R to peek, should Display Out be bypassed too (plain raw circuit), or should peek only unwrap Viewport Out and leave the display effects on? Perform would follow that choice. (`docs/DISPLAYS_IN_OUT_PLAN.md`, `f80ea4f4`) | Yes: R peeks both (raw circuit, recommended). | S-1 | Open | — | — |
+| D-S1-2 | Include picture modules default on, so shader faces feed themselves — is that what you want shipped, with the switch there to turn it off? (Self-feedback default.) | Yes: self-feedback / Include picture modules default on. | S-1 | Open | — | — |
+| D-S1-3 | Should display ink (frame and labels) stay unprocessed on top? | Yes: display ink stays unprocessed on top (recommended). | S-1 | Open | — | — |
+| D-S1-4 | Per Display default on for Screen Glass and the other spatial modules? (On also stops those shaders reading a neighbouring tile.) | Yes: Per Display default on. | S-1 | Open | — | — |
+| D-S2-1 | Is Brightness/Contrast a new module, or should Exposure, Contrast, and Pivot be added to Chroma Color, which already has Lightness and Contrast? (`docs/SHADER_BRIGHTNESS_LENS_PLAN.md`, `3aa201ce`) | A dedicated Brightness Contrast module, if it is the small physically meaningful tool (exposure in stops, contrast around a pivot, explicit colour-space choice) and not a repeat of Chroma Color's Lightness/Contrast knobs. | S-2 | Open | — | — |
+| D-S2-2 | Is Exposure in stops (±4 st) the right brightness control, or do you want an additive offset as well or instead? | Exposure in stops. An offset is not physically meaningful, and Lightness in Chroma Color already covers "mix toward white / scale toward black." | S-2 | Open | — | — |
+| D-S2-3 | Should Space default to Display (as-stored, matches Chroma Color) or Linear (honest for stops)? | Display, so a patch that already uses Chroma Color Contrast will feel familiar. Linear is worth having as a choice; not the default unless Argi prefers it. | S-2 | Open | — | — |
+| D-S2-4 | Confirm Lens Distortion as its own module, rather than adding these controls to Screen Glass? | Yes: build Lens Distortion as its own module (Option A). | S-2 | Open | — | — |
+| D-S2-5 | Once Lens Distortion exists, should Screen Glass keep its Width / Height CRT bow as a separate, anisotropic bend? | Yes: leave Screen Glass's Width / Height bow, squircle, vignette, glare, and shadow as they are. Do not change Screen Glass in this work unless Argi asks. | S-2 | Open | — | — |
+| D-S2-6 | Is Black the right default Fill (matches Place and Screen Glass), or would you rather default to Clamp? | Black (matches Place and Screen Glass). | S-2 | Open | — | — |
+| D-S2-7 | Include Fringe (lateral CA) in v1, or leave colour splits to Aberration? | The plan includes Fringe on the Lens Distortion face and leaves Aberration alone. If Fringe feels like a duplicate in practice, it can be dropped from v1. | S-2 | Open | — | — |
+| D-S2-8 | Are the names Brightness Contrast and Lens Distortion right, or would you rather Exposure Contrast / Barrel Distortion? | Working names: Brightness Contrast and Lens Distortion. | S-2 | Open | — | — |
+| D-S3 | Should display text scale with zoom, or stay a fixed screen size? (MAS-3 follow-up; MasterBot asked, no answer yet. The optional slider / pitch-wheel / controller-face first-paint hitch is in the same side track.) | None stated in the roadmap. | S-3 | Open | — | — |
+| D-S5 | Is wraparound still broken on current master? (DSF Phase wraps to 0 then the drag sticks.) If yes, Moth takes `docs/WRAPAROUND_CONTROLS_ESCALATION.md` sections 7 to 10 as the handoff. If fixed by incidental work, close the doc. | Needs a repro from Argi if it is still broken. | S-5 | Open | — | — |
+| D-S6 | Which Sandy backlog item to start next, and in what order? Spectral Oscillator 3D display and a dedicated perfect-shape module are both "waiting on your go"; also Wing Thump Explorer (locked 11-13), Fluvv, S-curve envelope, Euclidean Circles, snare/kick follow-ups. | None stated; Argi chooses order. | S-6 | Open | — | — |
+| D-C1 | Moth found `cursor: move` at `styles.css:12715` (from commit `cfbaa592`, Elan's) breaks the no-arrow-cursor lint (APP_POLICY §24). HP-00 already lists Patch View arrow cursors (`.node-patch-view-label` `cursor: move` and the resize handles) as Moth's to replace. | Delete it and use the shared mouse-dot cursor path per §24. | HP-00 | Open | — | — |
