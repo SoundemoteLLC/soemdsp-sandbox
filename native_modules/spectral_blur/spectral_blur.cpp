@@ -10,6 +10,8 @@
 namespace {
 constexpr int size = 16384, bins = size / 2 + 1, capacity = 64;
 constexpr double twoPi = 6.283185307179586;
+// Swarm depths at Swarm 1 / Drift 1 (open to listening): phase wobble +-pi, amplitude +-0.5, pitch wander up to a few Hz.
+constexpr double kPhaseDepth = 3.141592653589793, kAmpDepth = 0.5, kDriftMaxHz = 3.0;
 soemdsp::fft::Radix2<size> fft{};
 soemdsp::fft::Radix2<512> fft512{};
 soemdsp::fft::Radix2<1024> fft1024{};
@@ -33,7 +35,11 @@ struct Core {
   double prevR[2][bins], prevI[2][bins], velocityR[2][bins], velocityI[2][bins];
   double prefix[bins + 1], blurred[bins], offset[bins], smoothOffset[bins], magnitudeState[2][bins];
   double sideOffset[bins], smoothSideOffset[bins];
-  unsigned int rng, sideRng;
+  // Swarm: separate, mean-reverting per-bin modulators (hop rate, shared by both channels). They never touch the Diffusion walk above.
+  double swarmPhaseState[bins], swarmAmpState[bins], swarmDriftState[bins], swarmDriftPhase[bins];
+  double swarmSin[bins], swarmCos[bins], swarmGain[bins];
+  unsigned int rng, sideRng, swarmRng, swarmSeed;
+  double swarm, swarmRate, swarmDrift;
   int position, hop, windowSize;
   double right, lastRate, phaseSmoothMs, amplitudeSmoothMs, stereoSpread;
 
@@ -48,6 +54,7 @@ struct Core {
     for (int k = 0; k < bins; ++k) {
       offset[k] = smoothOffset[k] = 0;
       sideOffset[k] = smoothSideOffset[k] = 0;
+      swarmPhaseState[k] = swarmAmpState[k] = swarmDriftState[k] = swarmDriftPhase[k] = 0;
       for (int c = 0; c < 2; ++c) {
         power[c][k] = prevR[c][k] = prevI[c][k] = phaseI[c][k] = 0;
         magnitudeState[c][k] = 0;
@@ -59,6 +66,17 @@ struct Core {
       }
     }
     position = hop = 0; right = lastRate = 0; rng = 0x9e3779b9u; sideRng = 0xC2B2AE35u;
+    seedSwarm();
+  }
+  // The Swarm stream is its own: same Seed + same input + same params gives the same output after a reset.
+  void seedSwarm() {
+    swarmRng = swarmSeed * 2654435761u ^ 0x7F4A7C15u;
+    if (!swarmRng) swarmRng = 0x2545F491u;
+    for (int k = 0; k < bins; ++k) swarmPhaseState[k] = swarmAmpState[k] = swarmDriftState[k] = swarmDriftPhase[k] = 0;
+  }
+  double swarmRandom() {
+    swarmRng ^= swarmRng << 13; swarmRng ^= swarmRng >> 17; swarmRng ^= swarmRng << 5;
+    return (double)swarmRng * (2.0 / 4294967296.0) - 1.0;
   }
   double random() {
     rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
@@ -101,6 +119,30 @@ struct Core {
       sideOffset[k] += sideRandom() * jitter;
       smoothSideOffset[k] = sideOffset[k] + phasePole * (smoothSideOffset[k] - sideOffset[k]);
     }
+    const bool swarming = swarm > 0 || swarmDrift > 0;
+    if (swarming) {
+      // One-pole, hop-rate, mean-reverting noise: state = pole * state + sqrt(1 - pole^2) * noise. The sqrt keeps the depth the same at
+      // every Rate (only the speed changes); the state is clamped to +-1 and always comes back to 0, it never integrates like Diffusion.
+      const double swarmPole = soemdsp_maths::dsp_exp(-twoPi * (swarmRate > 0 ? swarmRate : 0) * hopSize / rate);
+      const double inject = __builtin_sqrt(1.0 - swarmPole * swarmPole) * 1.7320508075688772; // uniform [-1,1] has variance 1/3
+      const double driftStep = twoPi * kDriftMaxHz * hopSize / rate; // radians per hop at Drift 1 and a state of 1
+      for (int k = 1; k < bins - 1; ++k) {
+        double p = swarmPole * swarmPhaseState[k] + inject * swarmRandom();
+        double a = swarmPole * swarmAmpState[k] + inject * swarmRandom();
+        double d = swarmPole * swarmDriftState[k] + inject * swarmRandom();
+        swarmPhaseState[k] = p = p < -1 ? -1 : p > 1 ? 1 : p;
+        swarmAmpState[k] = a = a < -1 ? -1 : a > 1 ? 1 : a;
+        swarmDriftState[k] = d = d < -1 ? -1 : d > 1 ? 1 : d;
+        // Drift is a small pitch wander: an extra phase advance per hop (mean-reverting around 0), accumulated and wrapped.
+        double dp = swarmDriftPhase[k] + swarmDrift * d * driftStep;
+        dp -= twoPi * (double)(long long)(dp / twoPi);
+        swarmDriftPhase[k] = dp;
+        const double angle = swarm * p * kPhaseDepth + dp;
+        soemdsp_maths::dsp_sin_cos(angle, &swarmSin[k], &swarmCos[k]);
+        const double gain = 1 + swarm * a * kAmpDepth;
+        swarmGain[k] = gain < 0 ? 0 : gain > 2 ? 2 : gain;
+      }
+    }
     for (int c = 0; c < 2; ++c) {
       for (int i = 0; i < size; ++i) {
         re[c][i] = input[c][(position + 1 + i) % size] * window[i]; im[c][i] = 0;
@@ -133,11 +175,18 @@ struct Core {
         const bool edge = k == 0 || k == bins - 1;
         const double targetMagnitude = __builtin_sqrt((blurred[k] > 0 ? blurred[k] : 0) / (edge ? 1 : 2));
         magnitudeState[c][k] = targetMagnitude + amplitudePole * (magnitudeState[c][k] - targetMagnitude);
-        const double magnitude = magnitudeState[c][k];
+        double magnitude = magnitudeState[c][k];
         double sn = 0, cs = 1;
         if (!edge && diffusion > 0) {
           const double phase = smoothOffset[k] + (c == 0 ? -0.5 : 0.5) * stereoSpread * smoothSideOffset[k];
           soemdsp_maths::dsp_sin_cos(diffusion * phase, &sn, &cs);
+        }
+        if (swarming && !edge) {
+          // Swarm rotates the ANALYSIS phase and scales the sounding magnitude (after the Amplitude Smooth lag, so that lag cannot erase it).
+          const double sc = swarmCos[k], ss = swarmSin[k];
+          const double cs2 = cs * sc - sn * ss, sn2 = sn * sc + cs * ss;
+          cs = cs2; sn = sn2;
+          magnitude *= swarmGain[k];
         }
         const double pr = phaseR[c][k], pi = phaseI[c][k];
         re[c][k] = (float)(magnitude * (pr * cs - pi * sn));
@@ -184,7 +233,10 @@ struct State {
   }
   void initialize() {
     desired = 4096;
-    for (auto& core : cores) { core.phaseSmoothMs = 10; core.amplitudeSmoothMs = 0; core.stereoSpread = 1; }
+    for (auto& core : cores) {
+      core.phaseSmoothMs = 10; core.amplitudeSmoothMs = 0; core.stereoSpread = 1;
+      core.swarm = 0; core.swarmRate = 5; core.swarmDrift = 0; core.swarmSeed = 1;
+    }
     reset();
   }
   void beginChange() {
@@ -230,7 +282,11 @@ const char metadata[] = R"json({"module":"spectral_blur","targetType":"spectralB
 {"key":"stereoSpread","label":"Stereo Spread","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Opposite-channel phase diffusion spread. Zero links the phase motion; higher values give mono input a stereo wash. Does not crossfeed audio. Requires Diffusion above zero; mono summing can change tone through phase cancellation."},
 {"key":"phaseSmoothMs","label":"Phase Smooth","kind":"time","defaultValue":"10","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Time constant for smoothing the unwrapped phase-diffusion trajectory. Zero keeps raw phase motion. Does not smooth spectral magnitudes or reduce their contrast. Updates at the STFT hop rate."},
 {"key":"amplitudeSmoothMs","label":"Amplitude Smooth","kind":"time","defaultValue":"0","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Additional symmetric per-bin magnitude smoothing after frequency spreading. Zero preserves the sharp amplitude texture. Increase gently to soften chatter; this is not compression, saturation or limiting. Updates at the STFT hop rate."},
-{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion and Amplitude Smooth for neutral reconstruction."}]})json";
+{"key":"swarm","label":"Swarm","defaultValue":"0","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Fuzzy, buzzing wobble of each partial's phase and level that stays in place in time. Zero is off and leaves the sound unchanged. It is not a smear: with Time Smear, Frequency Blur and Diffusion at zero, transients keep their time (plus the FFT Size delay). Wobble updates at the STFT hop rate."},
+{"key":"swarmRate","label":"Rate","kind":"frequency","defaultValue":"5","min":"0.1","mid":"5","max":"40","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm and Drift are zero."},
+{"key":"swarmDrift","label":"Drift","defaultValue":"0","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"A tiny mean-reverting pitch wander of each partial around its own frequency, a few Hz at most. It is not Frequency Blur: no power moves to neighboring bins. Uses the Swarm Rate."},
+{"key":"swarmSeed","label":"Seed","kind":"seed","defaultValue":"1","min":"0","mid":"1","max":"16777215","step":"1","linearSmoothing":false,"smoothingType":"none","tooltip":"Seed for the Swarm and Drift noise. Same Seed, same input and same settings give the same sound. No effect while Swarm and Drift are zero."},
+{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion, Amplitude Smooth, Swarm and Drift for neutral reconstruction."}]})json";
 }
 extern "C" int soemdsp_spectral_blur_create() {
   for (int i = 0; i < capacity; ++i) if (!pool[i]) {
@@ -253,6 +309,18 @@ extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, doubl
     }
   }
 }
+// Swarm amount (0..1), Rate in Hz, Drift (0..1), Seed (integer). Cheap to call every sample; a changed Seed reseeds both cores.
+extern "C" void soemdsp_spectral_blur_set_swarm(int h, double amount, double rateHz, double drift, double seed) {
+  if (auto* s = get(h)) {
+    const unsigned int sd = __builtin_isfinite(seed) && seed > 0 ? (unsigned int)(seed > 16777215.0 ? 16777215.0 : seed) : 0u;
+    for (auto& core : s->cores) {
+      core.swarm = __builtin_isfinite(amount) ? unit(amount) : 0;
+      core.swarmDrift = __builtin_isfinite(drift) ? unit(drift) : 0;
+      core.swarmRate = __builtin_isfinite(rateHz) && rateHz > 0 ? rateHz : 0;
+      if (sd != core.swarmSeed) { core.swarmSeed = sd; core.seedSwarm(); }
+    }
+  }
+}
 extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount) {
   if (auto* s = get(h)) for (auto& core : s->cores) core.stereoSpread = __builtin_isfinite(amount) ? unit(amount) : 0;
 }
@@ -267,6 +335,6 @@ extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double
 extern "C" double soemdsp_spectral_blur_right(int h) { auto* s = get(h); return s ? s->right : 0; }
 extern "C" int soemdsp_spectral_blur_latency() { return 4096; }
 extern "C" int soemdsp_spectral_blur_latency_for_handle(int h) { return soemdsp_spectral_blur_fft_size(h); }
-extern "C" int soemdsp_spectral_blur_version() { return 4; }
+extern "C" int soemdsp_spectral_blur_version() { return 5; }
 extern "C" const char* soemdsp_spectral_blur_metadata_json() { return metadata; }
 extern "C" int soemdsp_spectral_blur_metadata_json_size() { return sizeof(metadata) - 1; }

@@ -1,7 +1,7 @@
 # Spectral Blur
 
 Native listening proof on `codex/convolution-resonator`, 2026-11-18.
-Module Browser: Space. Native type 272, `spectral_blur` version 4.
+Module Browser: Space. Native type 272, `spectral_blur` version 5 (adds Swarm, Rate, Drift and Seed; see below).
 
 ## Controls
 
@@ -29,7 +29,31 @@ Module Browser: Space. Native type 272, `spectral_blur` version 4.
 - Amplitude Smooth: default 0 ms (off), additional symmetric magnitude smoothing
   after frequency spreading. Try 5..20 ms to soften chatter without changing the
   Time Smear or Frequency Blur settings. It is not compression or a limiter.
+- Swarm: default 0 (off). A fuzzy, buzzing wobble of each partial's phase and level that
+  stays in place in time. Separate from Diffusion (whose Brownian walk is untouched) and not a
+  smear: with Time Smear, Frequency Blur, Diffusion and Amplitude Smooth at zero, transients keep
+  their time plus the FFT window delay. At 0 the output is bit-identical to version 4.
+- Rate: default 5 Hz (0.1..40). How fast the Swarm wobble moves. It updates at the STFT hop rate
+  (about 47 Hz at 4096 / 48 kHz), so it is not audio-rate modulation. No effect while Swarm and Drift are 0.
+- Drift: default 0. A tiny mean-reverting pitch wander of each partial around its own frequency
+  (a few Hz at most), not Frequency Blur: no power moves to neighboring bins. Uses Rate.
+- Seed: default 1 (0..16777215, discrete, never smoothed). Seeds the Swarm / Drift noise: same Seed,
+  same input, same settings, same sound. No effect while Swarm and Drift are 0.
 - Mix: dry/wet aligned to the selected FFT size, default fully wet. No limiter or saturation.
+
+## Swarm DSP
+
+Done in `Core::frame` after the analysis, with its own xorshift stream (Diffusion's streams are never
+drawn from) that is reseeded from Seed on a Seed change, on the module's local reset and on a
+sample-rate reset. When Swarm and Drift are both 0 nothing here runs, including the random draws.
+Per bin and hop (bins 1..N/2-1), one-pole mean-reverting noise for a phase wobble, an amplitude wobble
+and a drift: `state = pole * state + sqrt(1 - pole^2) * noise`, with `pole = exp(-2 pi Rate hop / sr)`
+and the state clamped to +-1 (the sqrt keeps the depth the same at every Rate; the state returns to 0, it
+never integrates). The wobble rotates the analysis phase by `Swarm * state * pi` radians and scales the
+sounding magnitude by `1 + Swarm * state * 0.5` (clamped 0..2) AFTER the Amplitude Smooth lag, so that lag
+cannot erase it. Drift adds `Drift * state * 2 pi 3 Hz * hop / sr` radians per hop to a wrapped accumulator,
+a pitch wander of up to 3 Hz. The modulators are linked across Left and Right (a mono input stays mono);
+Stereo Spread still affects Diffusion only. No FFT is added.
 
 ## DSP And State
 
@@ -72,6 +96,14 @@ or non-finite spectral state resets this module locally. Sample-rate change
 resets its spectral history. Destroy returns state to the pool. Shared WebGL
 1D Trace is the only display path; no JS DSP or Canvas2D fallback.
 
+## Swarm preset
+
+No per-module preset hook exists in this repo, so the values are documented here and a demo patch is
+in `patches/demo_patches/spectral_blur_swarm.json` (keyboard -> pulse train -> Spectral Blur -> Output).
+Swarm preset: Time Smear 0, Frequency Blur 0, Diffusion 0, Stereo Spread 0, Amplitude Smooth 0, Mix 1,
+Phase Smooth 10 ms (only Diffusion uses it), FFT Size 4096 (the module default; try 2048 for tighter
+transients), Swarm 0.8, Rate 5 Hz, Drift 0.2, Seed 1.
+
 ## Listening
 
 1. Music, voice, a pluck or percussion -> Spectral Blur -> Output.
@@ -95,7 +127,9 @@ display are not in v1. Do not mistake a long power decay for infinite sustain.
 
 ## Verification
 
-- `node scripts/test_spectral_blur.mjs`: 44.1/48/96 kHz, neutral reconstruction
+- `node scripts/test_spectral_blur.mjs`: Swarm section (off is bit-identical, Seed and Rate inert while off,
+  deterministic, reseeds on reset, in place for an impulse and a tone, linked stereo, finite and recovering,
+  CPU against Swarm off), plus 44.1/48/96 kHz, neutral reconstruction
   (max error about 4e-8), dry latency, silence, sustained tail, stereo scaling,
   channel isolation, mono-to-stereo spread, smoothing, retained steady level,
   rapid edits, finite recovery and no memory growth.
