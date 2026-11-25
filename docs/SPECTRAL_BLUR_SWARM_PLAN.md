@@ -4,11 +4,11 @@
 |-------|-------|
 | **Author** | Misty (for Argi) |
 | **Date** | 2026-11-25 |
-| **Status** | Design only. Do not start from this doc and change unrelated code. |
+| **Status** | Swarm **Warble** is built (93ba63c0 and follow-ups). **Cloud** is design only: do not change DSP in this doc revision. |
 | **Repo** | `C:\Users\argit\Documents\_PROGRAMMING\soemdsp-sandbox` |
 | **Related** | `docs/SPECTRAL_BLUR.md` (current module; do not replace it), `native_modules/spectral_blur/spectral_blur.cpp` |
 
-This is a handoff for an outside coding AI. Implement only the swarm work described here. Leave a separate cleanup item until asked. Do not change any other modules.
+This is a handoff for an outside coding AI. Sections 1-10 described the first Swarm slice; that slice is now in the tree and sounds **warbly**, which is useful but not the fuzzy/fluffy cloud Argi wanted. Section 11 designs **Cloud** mode. Implement only Cloud (keep Warble as-is). Leave the dead `stftBlur` cleanup until asked. Do not change any other modules.
 
 ---
 
@@ -161,14 +161,113 @@ Extend the existing Spectral Blur tests; do not invent a second harness if those
 
 ---
 
-## 10. Open questions
+## 10. Open questions (Warble slice — mostly settled)
 
-1. Exact depths: is ±π rad at Swarm 1 and ±0.5 amplitude depth the right "nice swarm," or should it be gentler?
-2. Rate as Hz (as planned) vs a time constant in ms like Phase Smooth?
-3. Drift depth (a few Hz equivalent vs cents) and whether Drift stays in the first slice or ships right after Swarm + Rate.
-4. Should Stereo Spread also decorrelate Swarm, or stay Diffusion-only (recommended)?
-5. Seed hidden on spawn, or visible next to Drift?
-6. Swarm preset FFT size: 4096 to match the module default, or 2048 for tighter transients?
-7. Order vs Amplitude Smooth: confirm Swarm modulates after that lag (recommended) so chatter smoothing does not erase the wobble.
+The Warble slice chose real units (Swarm in degrees, Level in dB, Drift in Hz, Rate in Hz, Seed visible). Stereo Spread still affects Diffusion only; Swarm L/R are linked. Amplitude Smooth runs first, then Swarm gain. Remaining questions live in §11.8.
 
-Listening acceptance by Argi is required before calling it done.
+---
+
+## 11. Cloud mode (fuzzy, not warbly)
+
+**Do not implement in a docs-only pass.** Next coding change: keep the current Swarm path as **Warble** and add **Cloud**.
+
+### 11.1 What was actually built (Warble)
+
+Shipped in `93ba63c0`, then `fe13859f`, `b6b7b66b`, `5dd1a1b1`. No further uncommitted Swarm DSP: `spectral_blur.cpp` is clean; dirty `graph_engine.cpp` / `node-graph-module-definitions.js` hunks are unrelated (Mutator, etc.) and must be left alone.
+
+In `Core::frame` (`native_modules/spectral_blur/spectral_blur.cpp`):
+
+- Dedicated `swarmRng` (xorshift, seeded from `swarmSeed`). Diffusion's `rng` / `sideRng` are untouched. RNG draws are skipped when Swarm, Level and Drift are all 0.
+- Each interior bin gets three independent Ornstein–Uhlenbeck states (phase, level, drift), hop-rate, mean-reverting, clamped to ±1:
+
+  `state = pole * state + sqrt(1 - pole^2) * sqrt(3) * U[-1,1]`
+
+  `pole = exp(-2π * Rate * hop / sr)` so depth stays constant when Rate changes. Default Rate is 5 Hz. Hop is still `windowSize / 4` (~47 Hz at 4096 / 48 kHz), so a 5 Hz walk is correlated for many hops (~200 ms) and is an audible LFO, not grain or fur.
+- **Phase:** the analysis unit phase is rotated by `Swarm° * state` (same peak angle on every bin). `kDegrees` is π/180. Mid 45°, max 180°.
+- **Level:** `magnitude *= exp(Level_dB * state * ln(10)/20)` after Amplitude Smooth. Same dB on every bin.
+- **Drift:** `swarmDriftPhase[k] += Drift_Hz * state * 2π * hop / sr`, wrapped. **The same peak Hz wander on every bin.**
+- One shared `swarmSin` / `swarmCos` / `swarmGain` is applied to both channels (linked). No extra unison layers. No energy moved to neighboring bins (that is still only Frequency Blur).
+- Face (after Phase Smooth / Amplitude Smooth): Swarm | Level, Rate | Drift, Seed, then Mix. Wiring: `process_stft_dynamics` → `soemdsp_spectral_blur_set_swarm(handle, shape, amplitude, lfoRate, lfoVariation, seed)` (`graph_engine.cpp` ~16394). Worklet map in `public/node-live-audio-worklet-native-graph.js` (~645 and ~6298). Defaults 0 / 0 / 5 / 0 / 1. Demo patch: `patches/demo_patches/spectral_blur_swarm.json`.
+
+Peak FM deviation from the phase walk is about `Swarm_radians * Rate` Hz (at 45° and 5 Hz, ~4 Hz; at 180°, ~16 Hz). Drift adds its Hz on top. That deviation is **constant in Hz**, not in cents.
+
+### 11.2 Why low input sounds cloudy and high input warbles
+
+Argi's listening clue: the **same** Swarm setting is cloudy on low-frequency input and warbly on high-frequency input. That matches this DSP.
+
+A slow, coherent phase/drift walk with a fixed Hz width produces FM sidebands whose bandwidth is roughly `2 * (Δf + Rate)` in Hz. Around an 80–150 Hz partial, ±4–16 Hz is a large fraction of the pitch (hundreds of cents at the low end) and fills the region — a soft cloud. Around a 2 kHz partial, the same ±4–16 Hz is only ~3–14 cents: one well-resolved line slowly vibrato-ing. Drift is explicitly constant-Hz, so it has the same bias. Rate is also constant in Hz, so high partials keep a tidy 5 Hz wag instead of breaking into fast grain. A high partial lives in one or two bins and, with no cents-wide spray, cannot become a band. Linked stereo and a single layer leave it as one voice. The 4× hop can add ~47 Hz chatter on bright material, which also reads as warble rather than fur.
+
+Warble is a good character. It is not "fluffy like fur." Cloud has to make **high partials as relatively wide as low ones already are**.
+
+### 11.3 Cloud design (plain words)
+
+Keep Warble math on a Character switch (default **Warble**). **Cloud** should stay in place in time (no Time Smear / Diffusion wash) but smear each partial into a soft band whose **width is constant in cents**, so a high note gets the same fuzz a low note already has.
+
+Do all of the following in the spectral frame; do not run extra analyses per layer.
+
+1. **Fuzz / Width in cents** (this is the important unit). Each bin's power is sprayed into a neighborhood of ±Width cents around that bin (a short Gaussian or triangle kernel on a log-frequency / cents axis, not a fixed Hz box like Frequency Blur). Optional tiny per-hop jitter of the kernel center, also in cents. Radius in bins grows with bin frequency: `f_k * (2^(Width/1200) - 1) / (sr / N)`. Cap the radius (see cost). This is what turns a high partial into a fluffy band instead of a moving tone.
+2. **Fast, white, per-hop phase / micro-pitch scatter**, decorrelated per bin, per hop, and per layer. No slow 5 Hz OU in Cloud. Convert Width (cents) to a per-hop frequency offset, not a fixed degree phase LFO. If Rate is kept in Cloud, scale it with bin frequency (`rate_k = min(Rate * f_k / f_ref, hop_Nyquist)`, with `f_ref` around 100 Hz) or treat Rate as a residual correlation that defaults to "already uncorrelated at hop rate."
+3. **2–4 decorrelated layers** (unison voices) from the Seed. Each layer gets its own scatter/phase instance. Sum the complex spectra and normalize (power-preserving, e.g. divide by `sqrt(layers)`). One analysis FFT and one IFFT per channel per hop, not N×L transforms.
+4. **Hop N/8 while Cloud is active** (overlap 8×) so the frame rate is high enough that the scatter is grain/fur, not a 47 Hz wag. Change the OLA compensation (today's `2/3` is for 4× Hann). Warm/crossfade the hop change like an FFT-size change; snap back to N/4 when Cloud is off. No extra user hop knob unless listening proves it is needed.
+5. **Amplitude micro-dither** that is fast (per hop, uncorrelated) and small (around ±0.2–1 dB), not the current slow Level LFO. Level may stay as a Warble-only depth.
+
+Old patches stay identical: Character defaults to Warble, Fuzz/Width defaults to 0, Voices can default to 3 (unused in Warble). Swarm / Level / Rate / Drift at 0 still bit-identical. Cloud with Width 0 and amount 0 is also a no-op.
+
+### 11.4 New / reused parameters
+
+Limits only in the parameter definitions (and matching metadata / `init_control`). Docked tips use definition `tooltip` text. No hover `title`s.
+
+| Key | Label | Default | Suggested range | Slot |
+|-----|-------|---------|-----------------|------|
+| `swarmCharacter` | Character | **0 Warble** | choices `Warble`, `Cloud` (discrete, no smoothing) | `node.mode` → `NATIVE_GRAPH_PARAM_MODE` (21) |
+| `swarmFuzz` | Fuzz | **0** | 0 / 50 / 200, unit `¢` (cents) | `node.center` → `NATIVE_GRAPH_PARAM_CENTER` (30) |
+| `swarmVoices` | Voices | 3 | 2 / 3 / 4, step 1, discrete; may be `hidden: true` on spawn | `node.oversample` → `NATIVE_GRAPH_PARAM_OVERSAMPLE` (32) |
+
+Existing Swarm, Level, Rate, Drift, Seed stay for Warble. In Cloud, **Fuzz** is the cloud bandwidth; prefer that Swarm (if > 0) scales how fully that width is applied and that Fuzz at 0 is always dry. Seed seeds every Cloud layer (`Seed + layer index`).
+
+Face: add a phone-friendly row Character | Fuzz, and Voices next to Seed or hidden until Show. Do not drop Warble rows.
+
+### 11.5 Where each change goes
+
+Coordinate: leave other agents' dirty files alone (current uncommitted Mutator / `index.html` / `perform.html` / `graph_engine.cpp` work is not yours unless a hunk is strictly the Cloud wiring and you can split it). Preserve line endings. No stash, rebase, reset, or force-push. Do not kill servers. Append `?v=` tags if those HTML files must change; never replace another agent's tag.
+
+1. `native_modules/spectral_blur/spectral_blur.cpp` — `Core::frame` Cloud branch (cents spray, white per-hop scatter, layers, micro-dither); `Core::tick` hop `N/8` + OLA gain while Cloud is active; setter (extend `soemdsp_spectral_blur_set_swarm` or add `set_cloud`); metadata JSON; version bump; reset/init. Do not alter the Warble OU path.
+2. `native_modules/graph_engine/graph_engine.cpp` — `extern "C"`; `process_stft_dynamics` (~16389) passes Character / Fuzz / Voices; `init_control` in the `kTypeSpectralBlur` block (~5115).
+3. `public/node-graph-module-definitions.js` — `spectralBlur` parameters + face rows. Ranges only here (plus metadata / `init_control`).
+4. `public/node-live-audio-worklet-native-graph.js` — id map (~637) and `push` block (~6290). Defaults must match the defs.
+5. `public/native-modules-catalog.json` if generated from metadata. Rebuild `spectral_blur.wasm` and the combined engine as this repo already does; no app restart, no server kills. Argi Ctrl+F5s himself.
+6. Extend `scripts/test_spectral_blur*.mjs`. Update `docs/SPECTRAL_BLUR.md` (do not rewrite it) and add a Cloud demo patch beside `patches/demo_patches/spectral_blur_swarm.json`.
+
+No dead code. No timers or polling; hop-rate work stays inside the existing STFT frame. Events only in any UI you touch. Parameter limits only from defs. Cost must be bounded and **independent of the input's pitch** (every frame already visits all bins). Cap spray radius (suggested max 32 bins, or a tight equivalent) so Nyquist bins cannot fan across the whole spectrum. Worst-case CPU is "Cloud on, 8× hop, 4 voices, max cap," not "how high the note is."
+
+### 11.6 Cloud preset
+
+Factory or demo patch **Cloud** (same hook as the Swarm demo):
+
+- Character Cloud, Fuzz ~50¢, Voices 3, Swarm amount up (or Fuzz alone if that is the amount), Seed 1
+- Time Smear 0, Frequency Blur 0, Diffusion 0, Stereo Spread 0, Amplitude Smooth 0, Mix 1
+- Level 0 or a very small micro-dither only; Drift unused in Cloud
+- FFT Size 4096 (or 2048 if 8× hop + 4096 is too heavy; say which and why)
+- Hop is automatic N/8 while Cloud is on
+
+### 11.7 A/B tests (cloudy vs warbly)
+
+Use the existing Spectral Blur tests plus listening / scripted sines. Do not kill servers.
+
+- **Bit-identical:** Character Warble, all Swarm amounts 0 (and Cloud Fuzz 0) matches today's baseline (~4e-8). Changing Fuzz / Voices / Character must not move this output while amounts are 0.
+- **Low vs high input, same settings:** a 100 Hz sine and a 2 kHz sine, Time Smear / Frequency Blur / Diffusion at 0. **Warble** (Swarm mid, Rate 5 Hz, Drift 0): 100 Hz should already sound relatively wide/cloudy; 2 kHz should warble (tight vibrato). **Cloud** at the same Fuzz in cents: 2 kHz should be similarly fuzzy/fluffy to 100 Hz, not a cleaner vibrato. A cents-wide band around 2 kHz (50¢ is about ±58 Hz) should be visible / audible; Warble at 2 kHz should stay a narrow line.
+- **In place:** a short impulse under Cloud does not grow a long smear tail (that is still Time Smear). Delay is the usual window (and the 8× hop must stay correctly compensated).
+- **Determinism:** fixed Seed, same input, same params → identical output. Different Seed changes the fur. Layers come from `Seed + layer`.
+- **Stereo:** mono in, Stereo Spread 0 → L/R match in both characters unless Cloud is explicitly documented as per-channel (default: still linked).
+- **No NaN / Inf,** size changes, hop 4×↔8× crossfade continuity, CPU no blow-up vs current at the same FFT size with Cloud's cap.
+
+### 11.8 Open questions (Cloud)
+
+1. Is Fuzz alone the Cloud amount (Swarm Warble-only), or does Swarm scale how fully Fuzz is applied? (Recommended: Fuzz is width, Swarm > 0 enables / scales it, Fuzz 0 is dry.)
+2. Fuzz range: is 0–200¢ with mid 50¢ enough fur, or too wide at the top?
+3. Voices 2–4 with default 3: hidden on spawn, or always visible?
+4. Should Cloud decorrelate L/R (a soft stereo fur) or stay linked like Warble (recommended default, maybe later follow Stereo Spread)?
+5. Automatic N/8 hop vs an explicit overlap control.
+6. Cloud FFT Size for the preset: 4096 or 2048.
+
+Listening acceptance by Argi is required before calling Cloud done. The test he already gave: high-frequency input should get the same cloudy/fuzzy/fluffy character low-frequency input already has, without turning the low end into reverb.
