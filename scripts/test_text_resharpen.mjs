@@ -1,8 +1,10 @@
-// Stage 6: event-driven GL text resharpen after zoom stops.
-// Mid-zoom must not rebake. About 150 ms after the last zoom change, the
-// atlas is raised to the on-screen size and Present remeshes text (it must
-// not ReplayMesh the old glyphs). No polling. Starts its own server.py on a
-// free port; never touches 8765 / 8766 / 8080.
+// Stage 6 / view-8-lazy: event-driven GL text resharpen after zoom stops.
+// Mid-zoom must not rebake. Once the camera has been idle ~150 ms (a rAF
+// settle loop that runs only while work is pending, no setTimeout), the
+// lazy sharpen job bakes the on-screen atlas sizes a few glyphs per frame and
+// re-records module groups nearest the centre first; the old atlases keep
+// drawing until each group swaps. Starts its own server.py on a free port;
+// never touches 8765 / 8766 / 8080.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -17,7 +19,9 @@ const srcGl = fs.readFileSync(path.join(ROOT, "public/node-graph-gl-graph.js"), 
 let bad = 0;
 const check = (ok, msg) => { if (!ok) bad += 1; console.log(`${ok ? "ok  " : "FAIL"} ${msg}`); };
 
-check(srcPerf.includes("scheduleNodeGraphViewTextQuality"), "viewport-perf has the 150 ms text-quality timer");
+check(srcPerf.includes("scheduleNodeGraphViewTextQuality"), "viewport-perf schedules the text-quality settle");
+check(!/nodeGraphViewTextQualityTimer\s*=\s*(window\.)?setTimeout/.test(srcPerf), "text-quality settle is not a setTimeout (rAF while pending)");
+check(srcGl.includes("function nodeGraphGlGraphSharpenTick"), "lazy incremental sharpen job exists");
 check(!/setInterval\s*\(/.test(srcPerf) || !srcPerf.includes("scheduleNodeGraphViewTextQuality") || !/setInterval\s*\([^)]*TextQuality/.test(srcPerf), "text quality is not a setInterval poll");
 check(srcGl.includes("resharpenText"), "Present can force a text remesh (resharpenText)");
 check(srcGl.includes("textBakeDirty"), "a bake-size change marks the mesh dirty for remesh");
@@ -95,8 +99,17 @@ try {
   const after = await page.evaluate(async () => {
     const startFull = nodeGraphGlGraphState?.presentCounts?.full || 0;
     const startReplay = nodeGraphGlGraphState?.presentCounts?.replay || 0;
-    await new Promise((r) => setTimeout(r, 250));
+    // Test-side wait (the app itself does not poll): until the sharpen job finishes.
+    const dev = window.devicePixelRatio || 1;
+    for (let i = 0; i < 60; i += 1) {
+      await new Promise((r) => setTimeout(r, 50));
+      const rs = nodeGraphGlGraphState?.textRecordScale || 0;
+      if (Math.abs(rs - nodeGraphZoom() * dev) < 1e-3) break;
+    }
     return {
+      recordScale: nodeGraphGlGraphState?.textRecordScale || 0,
+      sharpenDone: nodeGraphGlGraphState?.sharpen?.done || 0,
+      repaints: nodeGraphGlGraphState?.sharpen?.repaints || 0,
       zoom: typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 0,
       emojiPx: nodeGraphGlGraphState?.emojiPx || 0,
       last: nodeGraphGlGraphState?.lastTextBake || null,
@@ -108,10 +121,24 @@ try {
   });
 
   const wantPx = Math.max(16, Math.min(384, Math.round((before.bakePx || before.emojiPx || 64) * 2)));
-  check(after.settled === true, `text quality is settled after 250 ms (got ${after.settled})`);
+  check(after.settled === true, `text quality is settled (got ${after.settled})`);
   check(Boolean(after.last?.changed), `settle bake changed the atlas (last=${JSON.stringify(after.last)})`);
   check(after.emojiPx >= wantPx - 1, `settled bake px ${after.emojiPx} >= ~${wantPx} (zoom 2)`);
-  check(after.fullDelta >= 1, `quality pass remeshed text (fullDelta=${after.fullDelta}, path=${after.lastPresent})`);
+  check(Math.abs(after.recordScale - after.zoom) < 1e-3 && (after.fullDelta >= 1 || after.sharpenDone >= 1), `text remeshed at the settled scale (recordScale ${after.recordScale}, sharpen done ${after.sharpenDone}, group repaints ${after.repaints}, fullDelta ${after.fullDelta})`);
+  // Idle afterwards: the sharpen job and the settle rAF loop stop (no frame loop while nothing is queued).
+  const idle = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 800));
+    const a = { steps: nodeGraphGlGraphState?.sharpen?.steps || 0, done: nodeGraphGlGraphState?.sharpen?.done || 0 };
+    await new Promise((r) => setTimeout(r, 1000));
+    return {
+      stepsDelta: (nodeGraphGlGraphState?.sharpen?.steps || 0) - a.steps,
+      doneDelta: (nodeGraphGlGraphState?.sharpen?.done || 0) - a.done,
+      sharpenRaf: nodeGraphGlGraphState?.sharpen?.raf || 0,
+      want: Boolean(nodeGraphGlGraphState?.sharpen?.want),
+      settleRaf: typeof nodeGraphViewSettleRaf !== "undefined" ? nodeGraphViewSettleRaf : -1,
+    };
+  });
+  check(idle.stepsDelta === 0 && idle.doneDelta === 0 && !idle.sharpenRaf && !idle.want && !idle.settleRaf, `sharpen job and settle loop are stopped once idle (${JSON.stringify(idle)})`);
   check(pageErrors.length === 0, `no page errors (${pageErrors.slice(0, 3).join(" | ")})`);
   console.log(JSON.stringify({ before, mid, after }, null, 2));
 } finally {

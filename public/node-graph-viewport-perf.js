@@ -147,7 +147,9 @@ const nodeGraphViewCamera = {
 };
 
 let nodeGraphViewFrameRaf = 0;
-let nodeGraphViewTextQualityTimer = 0;
+// Settle loop: requestAnimationFrame only while a quality pass or the GL text
+// sharpen job is waiting for the camera to go still; it stops by itself.
+let nodeGraphViewSettleRaf = 0;
 const NODE_GRAPH_VIEW_TEXT_QUALITY_MS = 150;
 
 function viewCameraSnapshot() {
@@ -168,6 +170,13 @@ function viewCameraSet(options = {}) {
   if (Math.abs(next.zoom - (Number(prevZoom) || next.zoom)) > 1e-6) {
     nodeGraphViewCamera.lastZoomChangeT = now;
     nodeGraphViewCamera.zoomMoved = true;
+    nodeGraphViewCamera.qualityPending = true;
+  }
+  if (next.zoom !== prevZoom || next.x !== nodeGraphViewCamera.x || next.y !== nodeGraphViewCamera.y) {
+    nodeGraphViewCamera.lastChangeT = now;
+    // Camera input defers the lazy GL text sharpen (atlas bakes / module
+    // repaints); the settle loop resumes it once the camera is still.
+    if (typeof nodeGraphGlGraphSharpenPause === "function") nodeGraphGlGraphSharpenPause();
   }
   nodeGraphViewCamera.x = next.x;
   nodeGraphViewCamera.y = next.y;
@@ -192,6 +201,14 @@ function viewCameraSet(options = {}) {
     });
   }
   return nodeGraphViewCamera;
+}
+
+/** No camera change for NODE_GRAPH_VIEW_TEXT_QUALITY_MS (pan, zoom, wheel, keys, drag). */
+function nodeGraphViewCameraIdle() {
+  const last = Math.max(nodeGraphViewCamera.lastChangeT || 0, nodeGraphViewCamera.lastZoomChangeT || 0);
+  if (!last) return true;
+  const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  return (now - last) >= NODE_GRAPH_VIEW_TEXT_QUALITY_MS;
 }
 
 function nodeGraphViewTextQualitySettled() {
@@ -233,33 +250,47 @@ function scheduleNodeGraphViewZoomCss() {
   }, 32);
 }
 
+/**
+ * Text quality after the camera stops. There is no wheel-end event, so this
+ * is a requestAnimationFrame loop that runs only while a quality pass (zoom
+ * changed) or the GL text sharpen job is waiting, and stops by itself once
+ * the camera has been still for NODE_GRAPH_VIEW_TEXT_QUALITY_MS (no timers).
+ */
 function scheduleNodeGraphViewTextQuality() {
-  if (nodeGraphViewTextQualityTimer) {
-    window.clearTimeout(nodeGraphViewTextQualityTimer);
+  if (nodeGraphViewSettleRaf) return;
+  nodeGraphViewSettleRaf = window.requestAnimationFrame(nodeGraphViewSettleTick);
+}
+
+function nodeGraphViewSettleTick() {
+  nodeGraphViewSettleRaf = 0;
+  const zoomPending = nodeGraphViewCamera.qualityPending === true;
+  const sharpenWaiting = typeof nodeGraphGlGraphSharpenWanted === "function" && nodeGraphGlGraphSharpenWanted();
+  if (!zoomPending && !sharpenWaiting) return;
+  if (!nodeGraphViewTextQualitySettled() || !nodeGraphViewCameraIdle()) {
+    nodeGraphViewSettleRaf = window.requestAnimationFrame(nodeGraphViewSettleTick);
+    return;
   }
-  nodeGraphViewTextQualityTimer = window.setTimeout(() => {
-    nodeGraphViewTextQualityTimer = 0;
-    if (!nodeGraphViewTextQualitySettled()) return;
-    // Quality pass only: resharpen baked GL text. Never adds or removes plates or chrome.
+  if (zoomPending) {
+    nodeGraphViewCamera.qualityPending = false;
+    // Quality pass only. Never adds or removes plates or chrome.
     // Also start waking HTML that stayed asleep during zoom (GL already had
     // the records). Interaction needs the DOM after the camera settles.
     if (typeof scheduleNodeGraphViewportCullRefresh === "function") {
       scheduleNodeGraphViewportCullRefresh({ minIntervalMs: 0 });
     }
-    const bakeChanged = typeof nodeGraphGlGraphSettleTextBake === "function"
-      && nodeGraphGlGraphSettleTextBake() === true;
     // Snap leftover HTML to the settled zoom (deferred mid-gesture).
     if (typeof applyNodeGraphViewportCssLight === "function") {
       applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: true, skipSync: true, skipCull: true, skipHeatmap: true });
     } else if (typeof nodeGraphPositionGridHtml === "function") {
       nodeGraphPositionGridHtml();
     }
-    if (typeof nodeGraphGlGraphPresent === "function") {
-      // Replay would restamp glyphs from the old atlas. A quality pass that
-      // raised the bake must remesh text; otherwise a camera replay is enough.
-      nodeGraphGlGraphPresent(bakeChanged ? { resharpenText: true } : { cameraOnly: true });
-    }
-  }, NODE_GRAPH_VIEW_TEXT_QUALITY_MS);
+    // Raises the shared (tile) bake and asks the GL sharpen job for camera
+    // text at the settled zoom. Never a synchronous remesh: the job bakes and
+    // re-records a little per frame while the old mesh keeps drawing.
+    if (typeof nodeGraphGlGraphSettleTextBake === "function") nodeGraphGlGraphSettleTextBake();
+    if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent({ cameraOnly: true });
+  }
+  if (typeof nodeGraphGlGraphSharpenResume === "function") nodeGraphGlGraphSharpenResume();
 }
 
 /** Stage 3: the only per-frame camera apply. Same path for WASD, wheel, Q/E, and middle-drag. */
@@ -305,7 +336,8 @@ function viewFrame() {
   if (deferZoomLayout) {
     scheduleNodeGraphViewZoomCss();
   }
-  if (nodeGraphViewCamera.lastZoomChangeT && !nodeGraphViewTextQualitySettled()) {
+  if (nodeGraphViewCamera.qualityPending === true
+    || (typeof nodeGraphGlGraphSharpenWanted === "function" && nodeGraphGlGraphSharpenWanted())) {
     scheduleNodeGraphViewTextQuality();
   }
   } finally {

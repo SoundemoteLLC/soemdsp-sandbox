@@ -829,6 +829,11 @@ function nodeGraphGlGraphMergeChromeForIds(wantSet, byId) {
 // Plates closer than this (zoom-1 px) count as overlapping: jacks and the
 // stroke reach past the plate box.
 const NODE_GRAPH_STACK_OVERLAP_PAD = 12;
+// Cap on modules per draw group: a group is the unit the incremental paths
+// (value chrome, lazy text sharpen) re-record, so one huge group made a
+// "one module" repaint cost a whole-scene record (43 ms on 85 modules).
+// 6: repaint ~3 ms, camera replay +0.7 ms on that patch (85 modules: 1 -> 15 groups).
+const NODE_GRAPH_STACK_GROUP_MAX = 6;
 
 /**
  * The one ordered list (docs/DISPLAY_COMPOSITE_LAYERING_PLAN.md 4.2): layer,
@@ -861,6 +866,7 @@ function nodeGraphGlGraphStackGroups(plates, displays) {
     const entry = entries[i];
     const plate = entry.plate;
     if (!group || group.layer !== entry.layer || group.blend !== entry.blend
+      || group.plates.length >= NODE_GRAPH_STACK_GROUP_MAX
       || group.plates.some((other) => hits(plate, other))) {
       group = { layer: entry.layer, blend: entry.blend, plates: [], displays: [] };
       groups.push(group);
@@ -1528,8 +1534,16 @@ function nodeGraphGlGraphSettleTextBake() {
   // Camera text is baked per size at the on-screen size: a settled zoom that
   // differs from the scale the mesh was recorded at needs a text remesh.
   const recorded = nodeGraphGlGraphState.textRecordScale || 0;
-  if (recorded > 0 && Math.abs(recorded - screenScale) > 1e-4 * screenScale) changed = true;
-  if (changed) nodeGraphGlGraphState.textBakeDirty = true;
+  // -1: the last record drew fallback atlases (not sharp at any scale yet).
+  if (recorded !== 0 && Math.abs(recorded - screenScale) > 1e-4 * screenScale) changed = true;
+  if (changed) {
+    // Workspace: never a synchronous remesh here (that full record + atlas
+    // bakes blocked the first pan after a zoom). The sharpen job bakes the
+    // new sizes a little per frame and re-records module by module; the old
+    // mesh keeps drawing until each module is swapped. Tiles keep the remesh.
+    if (nodeGraphGlGraphState.view) nodeGraphGlGraphState.textBakeDirty = true;
+    else nodeGraphGlGraphSharpenRequest();
+  }
   const prev = nodeGraphGlGraphState.lastTextBake;
   // A no-op at the same size must not erase a just-successful change
   // (Present also calls this on a settled zoom during the remesh).
@@ -4390,7 +4404,200 @@ function nodeGraphGlGraphDrawStackGroup(batch, group, ctx) {
 }
 
 function nodeGraphGlGraphTextAtlasGen() {
-  return typeof nodeGraphGlLinesTextAtlasGen === "function" ? nodeGraphGlLinesTextAtlasGen() : 0;
+  if (typeof nodeGraphGlLinesTextAtlasGen !== "function") return 0;
+  // The workspace mesh only draws camera atlases (lazy, never deleted while
+  // referenced); tiles draw the shared atlases and follow every retirement.
+  return nodeGraphGlGraphState.view ? nodeGraphGlLinesTextAtlasGen() : nodeGraphGlLinesTextAtlasGen("cam");
+}
+
+// ---- lazy text sharpen (MAS-3) -------------------------------------------
+// After a zoom settles, camera text has to be re-recorded at the new
+// zoom x device scale with atlases baked at that size. Doing it in one go
+// (Stage 6 + view-7-sharp) cost a full record plus ~18 atlas bakes in one
+// task (170-200 ms on bass2) and froze a pan started right after the zoom.
+// Now: records never bake a missing size (lazyText: they draw with the
+// nearest live atlas and queue the size); this job, driven by
+// requestAnimationFrame only while it has work, bakes one queued atlas or
+// repaints one module stack at a time inside a small budget, nearest the view
+// centre first. Each module swaps in place (RepaintMeshedPlates), so the old
+// picture keeps drawing until its replacement is complete, and old atlas
+// textures are only deleted once nothing in the mesh points at them. Any
+// camera input pauses the job (viewCameraSet); the viewport settle loop
+// resumes it when the camera is idle again.
+const NODE_GRAPH_GL_SHARPEN_BUDGET_MS = 4;
+
+function nodeGraphGlGraphSharpenState() {
+  return nodeGraphGlGraphState.sharpen || (nodeGraphGlGraphState.sharpen = {
+    want: false, raf: 0, queue: null, tries: null, scale: 0, paused: false, done: 0, steps: 0, bakes: 0, repaints: 0,
+  });
+}
+
+/** zoom x device scale of the workspace canvas now (0 when unknown). */
+function nodeGraphGlGraphSharpenScale() {
+  const canvas = nodeGraphGlGraphState.canvas;
+  const host = document.getElementById("nodeGraphWorkspace");
+  if (!canvas || !host || !(host.clientWidth > 0)) return 0;
+  const dev = nodeGraphGlGraphDeviceScale(host.clientWidth, Math.max(1, host.clientHeight));
+  return nodeGraphGlGraphZoom() * dev;
+}
+
+/** The camera is still (no gesture, no camera change for a few frames). */
+function nodeGraphGlGraphSharpenIdle() {
+  if (typeof nodeGraphViewCameraIdle === "function") return nodeGraphViewCameraIdle();
+  return typeof nodeGraphViewTextQualitySettled !== "function" || nodeGraphViewTextQualitySettled();
+}
+
+/** Ask for sharp text at the current scale; starts (or keeps) the job when the camera is idle. */
+function nodeGraphGlGraphSharpenRequest() {
+  if (nodeGraphGlGraphState.view) return;
+  const sh = nodeGraphGlGraphSharpenState();
+  sh.want = true;
+  sh.queue = null;
+  nodeGraphGlGraphSharpenResume();
+}
+
+/** Camera input: stop baking / repainting now; the viewport settle loop resumes. */
+function nodeGraphGlGraphSharpenPause() {
+  const sh = nodeGraphGlGraphState.sharpen;
+  if (!sh || !sh.want) return;
+  if (sh.raf) { cancelAnimationFrame(sh.raf); sh.raf = 0; }
+  sh.queue = null;
+  sh.paused = true;
+}
+
+function nodeGraphGlGraphSharpenWanted() {
+  return Boolean(nodeGraphGlGraphState.sharpen?.want);
+}
+
+function nodeGraphGlGraphSharpenResume() {
+  const sh = nodeGraphGlGraphSharpenState();
+  if (!sh.want || sh.raf) return;
+  if (!nodeGraphGlGraphSharpenIdle()) { sh.paused = true; return; }
+  sh.paused = false;
+  sh.raf = requestAnimationFrame(nodeGraphGlGraphSharpenTick);
+}
+
+/** Text runs of a layer list (with nested layers). */
+function nodeGraphGlGraphEachTextRun(list, fn) {
+  for (let i = 0; i < list.length; i += 1) {
+    const b = list[i];
+    if (!b) continue;
+    for (const t of b.texts || []) fn(t, b);
+    if (b.layers) nodeGraphGlGraphEachTextRun(b.layers, fn);
+  }
+}
+
+/**
+ * Module stacks whose text is not 1:1 at scale, nearest the view centre
+ * first: [{ id, d }]. A run is stale when it was recorded at another scale or
+ * drew with a fallback atlas (snapScale 0 although the size can be baked).
+ */
+function nodeGraphGlGraphSharpenQueue(mesh, scale) {
+  const batch = mesh?.batches?.[0];
+  if (!batch?.layers || !Array.isArray(mesh.plateGroupLayers)) return [];
+  const cam = mesh.cam || nodeGraphGlGraphState.frameCamera || { x: 0, y: 0, zoom: 1 };
+  const host = document.getElementById("nodeGraphWorkspace");
+  const z = cam.zoom > 0 ? cam.zoom : 1;
+  const cx = (cam.x || 0) + (host?.clientWidth || 0) / z / 2;
+  const cy = (cam.y || 0) + (host?.clientHeight || 0) / z / 2;
+  const out = [];
+  for (const range of mesh.plateGroupLayers) {
+    if (!range?.ids?.length) continue;
+    let stale = false;
+    let px = NaN;
+    let py = NaN;
+    nodeGraphGlGraphEachTextRun(batch.layers.slice(range.layerStart, range.layerEnd), (t, b) => {
+      if (t.color || stale) return;
+      if (!(t.snapScale > 0) || Math.abs(t.snapScale - scale) > 1e-3 * scale) {
+        stale = true;
+        if (b.tdata && t.end > t.start) { px = b.tdata[t.start]; py = b.tdata[t.start + 1]; }
+      }
+    });
+    if (!stale) continue;
+    const d = Number.isFinite(px) ? Math.hypot(px - cx, py - cy) : 1e9;
+    out.push({ id: String(range.ids[0]), d });
+  }
+  out.sort((a, b) => a.d - b.d);
+  return out;
+}
+
+/** Textures every kept workspace batch still draws. */
+function nodeGraphGlGraphLiveTextTextures(mesh) {
+  const live = new Set();
+  nodeGraphGlGraphEachTextRun(mesh?.batches || [], (t) => { if (t.texture) live.add(t.texture); });
+  return live;
+}
+
+function nodeGraphGlGraphSharpenTick() {
+  const sh = nodeGraphGlGraphSharpenState();
+  sh.raf = 0;
+  const state = nodeGraphGlGraphState;
+  if (!sh.want || state.view) return;
+  // Moving again: defer everything left; the settle loop resumes the job.
+  if (!nodeGraphGlGraphSharpenIdle()) { sh.queue = null; sh.paused = true; return; }
+  const mesh = state.mesh;
+  // No valid mesh: the next full present records at the settled scale and asks again.
+  if (!mesh || mesh.gen !== state.gen || typeof nodeGraphGlLinesTextAtlasBakeNext !== "function") { sh.queue = null; return; }
+  const scale = nodeGraphGlGraphSharpenScale();
+  if (!(scale > 0)) return;
+  if (!sh.queue || Math.abs(sh.scale - scale) > 1e-4 * scale) {
+    sh.scale = scale;
+    sh.queue = nodeGraphGlGraphSharpenQueue(mesh, scale);
+    sh.tries = new Map();
+  }
+  const now = () => performance.now();
+  const t0 = now();
+  let repainted = false;
+  let steps = 0;
+  // At least one step per frame; then only while the budget lasts.
+  while (steps === 0 || now() - t0 < NODE_GRAPH_GL_SHARPEN_BUDGET_MS) {
+    steps += 1;
+    if (nodeGraphGlLinesTextAtlasPending(scale) > 0) {
+      // Chunked: a few glyphs per call within what is left of the budget.
+      nodeGraphGlLinesTextAtlasBakeNext(scale, Math.max(1, NODE_GRAPH_GL_SHARPEN_BUDGET_MS - (now() - t0)));
+      sh.bakes += 1;
+      continue;
+    }
+    const next = sh.queue.shift();
+    if (!next) break;
+    if (!nodeGraphGlGraphRepaintMeshedPlates([next.id])) {
+      // The mesh changed under us (records / capacity): a full present follows.
+      sh.queue = null;
+      break;
+    }
+    repainted = true;
+    sh.repaints += 1;
+    // The repaint found sizes still missing: bake them, then repaint this stack again.
+    if (nodeGraphGlLinesTextAtlasPending(scale) > 0) {
+      const n = (sh.tries.get(next.id) || 0) + 1;
+      sh.tries.set(next.id, n);
+      if (n < 3) sh.queue.unshift(next);
+    }
+  }
+  sh.steps += steps;
+  if (repainted) nodeGraphGlGraphReplayMesh("all");
+  if (sh.queue === null) return;
+  if (sh.queue.length || nodeGraphGlLinesTextAtlasPending(scale) > 0) {
+    sh.raf = requestAnimationFrame(nodeGraphGlGraphSharpenTick);
+    return;
+  }
+  // Done: every module stack is 1:1 at this scale. Retire atlases nothing draws.
+  sh.want = false;
+  sh.queue = null;
+  sh.done += 1;
+  state.textRecordScale = scale;
+  if (typeof nodeGraphGlLinesTextAtlasSweepUnreferenced === "function") {
+    nodeGraphGlLinesTextAtlasSweepUnreferenced(nodeGraphGlGraphLiveTextTextures(state.mesh));
+  }
+}
+
+/** A record drew with fallback atlases: sharpen once the camera is idle. */
+function nodeGraphGlGraphSharpenAfterRecord() {
+  if (nodeGraphGlGraphState.view || typeof nodeGraphGlLinesTextAtlasStats !== "function") return;
+  const fb = nodeGraphGlLinesTextAtlasStats().fallbacks;
+  if (fb === nodeGraphGlGraphState.sharpenFallbacks) return;
+  nodeGraphGlGraphState.sharpenFallbacks = fb;
+  nodeGraphGlGraphSharpenRequest();
 }
 
 /**
@@ -4405,6 +4612,8 @@ function nodeGraphGlGraphTextAtlasGen() {
 function nodeGraphGlGraphPresent(options = {}) {
   const atlasGen = nodeGraphGlGraphTextAtlasGen();
   const ok = nodeGraphGlGraphPresentOnce(options);
+  // Text drawn with a fallback atlas (lazy size): the sharpen job takes over.
+  nodeGraphGlGraphSharpenAfterRecord();
   if (nodeGraphGlGraphState.atlasRepresent || nodeGraphGlGraphTextAtlasGen() === atlasGen) return ok;
   nodeGraphGlGraphState.atlasRepresent = true;
   try {
@@ -4516,7 +4725,11 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   // Camera text atlases are per size and zoom: this full record asks for the
   // ones it needs, then retires the rest (see the sweep below).
   if (!view && typeof nodeGraphGlLinesTextAtlasEpoch === "function") nodeGraphGlLinesTextAtlasEpoch();
-  const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true };
+  const recordFallbacks0 = !view && typeof nodeGraphGlLinesTextAtlasStats === "function" ? nodeGraphGlLinesTextAtlasStats().fallbacks : 0;
+  // An explicit resharpen (options.resharpenText) bakes what it needs now;
+  // every other record draws missing sizes with the nearest atlas and lets
+  // the sharpen job bake them a few glyphs per frame.
+  const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true, lazyText: !view && options.resharpenText !== true };
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);
   // Free wire ends (drag cursor) as straight coverage, then "Show on top"
@@ -4854,8 +5067,10 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   if (trailBatch) trailBatch._blend = "max";
   const trailOk = !trailBatch || nodeGraphGlLinesEnd(trailBatch, "max") !== false;
   if (!view) {
-    nodeGraphGlGraphState.textRecordScale = frameCamera ? frameCamera.zoom * scale : 0;
-    // This record already used the settled atlas sizes: no second remesh.
+    // Fallback atlases drawn (a size not baked yet): not sharp at this scale.
+    const fallbacks = typeof nodeGraphGlLinesTextAtlasStats === "function" ? nodeGraphGlLinesTextAtlasStats().fallbacks : 0;
+    if (fallbacks === recordFallbacks0) nodeGraphGlGraphState.textRecordScale = frameCamera ? frameCamera.zoom * scale : 0;
+    else nodeGraphGlGraphState.textRecordScale = -1;
     nodeGraphGlGraphState.textBakeDirty = false;
     if (typeof nodeGraphGlLinesTextAtlasSweep === "function") nodeGraphGlLinesTextAtlasSweep();
     nodeGraphGlGraphState.mesh = {

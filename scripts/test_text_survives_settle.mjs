@@ -99,10 +99,17 @@ try {
     const r = await page.evaluate(async (zoom) => {
       setNodeGraphZoom(zoom);
       const out = [];
-      // Three settle cycles: the 150 ms quality pass runs once, then camera
-      // replays must keep the same glyphs (no wake/sleep in between).
+      // Three settle cycles: the quality pass runs once (view-8-lazy: the
+      // sharpen job then re-records module groups over a few frames; wait
+      // until it is done), then camera replays must keep the same glyphs
+      // (no wake/sleep in between). Test-side wait; the app does not poll.
       for (let i = 0; i < 3; i += 1) {
         await new Promise((res) => setTimeout(res, 350));
+        if (i === 0) {
+          for (let k = 0; k < 60 && (nodeGraphGlGraphState.sharpen?.want || (typeof nodeGraphViewSettleRaf !== "undefined" && nodeGraphViewSettleRaf)); k += 1) {
+            await new Promise((res) => setTimeout(res, 50));
+          }
+        }
         out.push(window.__textStats());
       }
       return out;

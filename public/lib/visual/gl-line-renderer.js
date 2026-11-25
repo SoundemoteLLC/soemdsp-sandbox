@@ -398,6 +398,27 @@ void main() {
   const TEXT_CAM_BAKE_MIN = 8;
   const TEXT_CAM_BAKE_MAX = 256;
   let textAtlasEpoch = 0;
+  // Bake cost counters (tests / diagnostics).
+  const textAtlasStats = { bakes: 0, ms: 0, measureMs: 0, drawMs: 0, uploadMs: 0, maxMs: 0, fallbacks: 0, queued: 0 };
+  // Lazy camera atlases (batches begun with lazyText, i.e. the workspace graph):
+  // a missing size is not baked inside the record. The record draws with the
+  // nearest live atlas of that font (resampled, not snapped) and the size is
+  // queued; the caller bakes the queue a little per frame and re-records.
+  // key -> { family, weight, camBake, chars, scale, prio }
+  const textAtlasQueue = new Map();
+  // Camera atlas textures replaced (grown) while a kept mesh may still point
+  // at them. Deleted only by a sweep that knows nothing references them.
+  const textAtlasRetiring = new Set();
+  // Bumped only when a camera atlas texture is deleted synchronously (the
+  // non-lazy growth path); the workspace mesh only holds camera atlases.
+  let textAtlasCamGen = 0;
+  // A lazy camera atlas being drawn a few glyphs per frame (BakeNext with a budget).
+  let textAtlasBaking = null;
+  // Per font: glyph advance / ascent measured once at TEXT_METRIC_PX and
+  // scaled to each camera bake size (measureText was ~80% of a bake).
+  const TEXT_METRIC_PX = 64;
+  const textMetricCache = new Map();
+  let textMetricCtx = null;
   // Colour emoji atlas.
   const EMOJI_SHEET = 1024;
   const EMOJI_PAD = 2;
@@ -1084,6 +1105,8 @@ void main() {
       camera: options?.camera || null,
       // Keep the vertex arrays so a later camera change can redraw without rebuilding them.
       keepMesh: options?.keepMesh === true,
+      // Camera text never bakes a missing atlas size inside the record (see textAtlasQueue).
+      lazyText: options?.lazyText === true,
       // Edge kind (APP_POLICY section 3): "chrome" = smootherstep for the
       // circuit builder's fixed-width edges; anything else = display Expo skirt.
       edge: options?.edge === "chrome" ? "chrome" : "display",
@@ -1117,6 +1140,7 @@ void main() {
       keep: batch.keep,
       camera: batch.camera,
       keepMesh: batch.keepMesh,
+      lazyText: batch.lazyText,
       edge: batch.edge,
       textPixelated: batch.textPixelated,
     };
@@ -2211,17 +2235,56 @@ void main() {
   }
 
   // ---- text atlas ---------------------------------------------------------
+  /** { adv, asc } of ch at TEXT_METRIC_PX for this font, measured once. */
+  function textMetric(family, weight, ch) {
+    const fk = `${weight}|${family}`;
+    let m = textMetricCache.get(fk);
+    if (!m) { m = new Map(); textMetricCache.set(fk, m); }
+    let g = m.get(ch);
+    if (g) return g;
+    if (!textMetricCtx) {
+      const cv = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(8, 8) : global.document?.createElement?.("canvas");
+      textMetricCtx = cv?.getContext?.("2d") || null;
+    }
+    if (!textMetricCtx) return null;
+    textMetricCtx.font = `${weight} ${TEXT_METRIC_PX}px ${family}`;
+    const mt = textMetricCtx.measureText(ch);
+    g = { adv: mt.width || TEXT_METRIC_PX * 0.6, asc: mt.actualBoundingBoxAscent || 0 };
+    m.set(ch, g);
+    return g;
+  }
+
   function atlasKey(family, weight, camBake) {
     return camBake > 0 ? `${weight}|${family}|${camBake}` : `${weight}|${family}`;
   }
 
   function bakeAtlas(s, family, weight, chars, camBake) {
+    const tBake0 = performance.now();
+    const out = bakeAtlasInner(s, family, weight, chars, camBake);
+    const d = performance.now() - tBake0;
+    textAtlasStats.bakes += 1; textAtlasStats.ms += d; textAtlasStats.maxMs = Math.max(textAtlasStats.maxMs, d);
+    return out;
+  }
+
+  function bakeAtlasInner(s, family, weight, chars, camBake) {
+    const job = bakeAtlasStart(s, family, weight, chars, camBake);
+    if (!job) return null;
+    bakeAtlasDraw(job, Infinity);
+    return bakeAtlasFinish(s, job);
+  }
+
+  /**
+   * Lay out an atlas (sizes from the metric cache for camera bakes) and set up
+   * its canvas: { cv, cx, list of [ch, glyph], i (next glyph to draw), ... }.
+   */
+  function bakeAtlasStart(s, family, weight, chars, camBake) {
     const doc = global.document;
     if (!doc?.createElement) return null;
     const cv = doc.createElement("canvas");
     const cx = cv.getContext?.("2d");
     if (!cx || typeof cx.measureText !== "function") return null;
     const list = [...new Set([...chars])];
+    const tMeasure0 = performance.now();
     const maxTex = s.gl.getParameter(s.gl.MAX_TEXTURE_SIZE) || 4096;
     const sheetW = Math.min(1024, maxTex);
     let bakePx = camBake > 0 ? camBake : glyphBakePx;
@@ -2237,14 +2300,19 @@ void main() {
       cx.font = fontTry;
       // Room above the em ascent for fonts whose glyphs rise higher (DSEG7 digits).
       head = 0;
-      for (const ch of list) head = Math.max(head, Math.ceil((cx.measureText(ch).actualBoundingBoxAscent || 0) - bakePx * TEXT_ASCENT));
+      const k = bakePx / TEXT_METRIC_PX;
+      const metric = camBake > 0 ? (ch) => textMetric(family, weight, ch) : null;
+      for (const ch of list) {
+        const asc = metric ? (metric(ch)?.asc || 0) * k : (cx.measureText(ch).actualBoundingBoxAscent || 0);
+        head = Math.max(head, Math.ceil(asc - bakePx * TEXT_ASCENT));
+      }
       cellH = Math.ceil(bakePx * 1.25) + head + TEXT_PAD * 2;
       glyphs = new Map();
       let x = 0;
       let y = 0;
       let fits = cellH <= maxTex;
       for (const ch of list) {
-        const adv = Math.max(1, cx.measureText(ch).width || bakePx * 0.6);
+        const adv = Math.max(1, (metric ? (metric(ch)?.adv || 0) * k : cx.measureText(ch).width) || bakePx * 0.6);
         const gw = Math.ceil(adv) + TEXT_PAD * 2;
         if (gw > sheetW || y + cellH > maxTex) { fits = false; break; }
         if (x + gw > sheetW) {
@@ -2260,6 +2328,7 @@ void main() {
       bakePx = camBake > 0 ? Math.floor(bakePx * 0.9 * 64) / 64 : Math.floor(bakePx * 0.9);
     }
     if (bakePx < minBake || glyphs.size !== list.length) return null;
+    textAtlasStats.measureMs += performance.now() - tMeasure0;
     // Baseline on a whole texel row: canvas text at a fractional y is
     // resampled vertically, which softens every glyph.
     const baseRow = TEXT_PAD + head + Math.round(bakePx * TEXT_ASCENT);
@@ -2271,31 +2340,61 @@ void main() {
     cx.textAlign = "left";
     cx.fillStyle = "#fff";
     cx.clearRect(0, 0, sheetW, sheetH);
-    for (const [ch, g] of glyphs) {
+    return { cv, cx, glyphs, todo: [...glyphs], i: 0, sheetW, sheetH, head, baseRow, bakePx, list, camBake, family, weight };
+  }
+
+  /** Draw glyphs until done or budgetMs is spent (at least a few). True when every glyph is drawn. */
+  function bakeAtlasDraw(job, budgetMs) {
+    const t0 = performance.now();
+    const { cx, todo, baseRow } = job;
+    let n = 0;
+    while (job.i < todo.length) {
+      const [ch, g] = todo[job.i];
       cx.fillText(ch, g.x + TEXT_PAD, g.y + baseRow);
+      job.i += 1;
+      n += 1;
+      if (n >= 4 && (n & 3) === 0 && performance.now() - t0 > budgetMs) break;
     }
+    textAtlasStats.drawMs += performance.now() - t0;
+    return job.i >= todo.length;
+  }
+
+  /** Upload a fully drawn atlas canvas: the atlas record. */
+  function bakeAtlasFinish(s, job) {
     const gl = s.gl;
+    const { cv, glyphs, sheetW, sheetH, head, baseRow, bakePx, list, camBake, family, weight } = job;
+    const tUp0 = performance.now();
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
     gl.generateMipmap(gl.TEXTURE_2D);
+    textAtlasStats.uploadMs += performance.now() - tUp0;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
-    return { texture, glyphs, sheetW, sheetH, head: head / bakePx, baseRow, bakePx, chars: list.join(""), cam: camBake > 0, usedEpoch: textAtlasEpoch };
+    return { texture, glyphs, sheetW, sheetH, head: head / bakePx, baseRow, bakePx, chars: list.join(""), cam: camBake > 0, usedEpoch: textAtlasEpoch, family, weight };
   }
 
   /** Shared glyph atlas for a font (grows when new characters show up). */
-  function nodeGraphGlLinesTextAtlas(family = TEXT_DEFAULT_FAMILY, weight = 600, text = "", camBake = 0) {
+  function nodeGraphGlLinesTextAtlas(family = TEXT_DEFAULT_FAMILY, weight = 600, text = "", camBake = 0, lazy = null) {
     const s = ensure();
     if (!s) return null;
     const key = atlasKey(family, weight, camBake);
     let atlas = s.atlases.get(key);
     const missing = [...String(text)].filter((ch) => !atlas?.glyphs.has(ch));
+    if ((!atlas || missing.length) && camBake > 0 && lazy) {
+      const fallback = textAtlasFallback(s, family, weight, text, camBake);
+      if (fallback) {
+        textAtlasEnqueue(key, family, weight, camBake, (atlas?.chars || textAtlasKnownChars.get(key) || TEXT_BASE_CHARS) + missing.join(""), lazy);
+        textAtlasStats.fallbacks += 1;
+        fallback.usedEpoch = textAtlasEpoch;
+        return fallback;
+      }
+    }
     if (!atlas || missing.length) {
       const next = bakeAtlas(s, family, weight, (atlas?.chars || textAtlasKnownChars.get(key) || TEXT_BASE_CHARS) + missing.join(""), camBake);
       if (!next) return null;
@@ -2303,15 +2402,143 @@ void main() {
       // This frame's text runs already stored the old texture. Delete it
       // after drawTexts, not while those runs are still queued.
       if (atlas?.texture) {
-        if (!s.deadTextures) s.deadTextures = [];
-        s.deadTextures.push(atlas.texture);
-        textAtlasGen += 1;
+        if (atlas.cam && lazy) {
+          // A kept mesh may still draw this texture: retire it, delete it later.
+          textAtlasRetiring.add(atlas.texture);
+        } else {
+          if (!s.deadTextures) s.deadTextures = [];
+          s.deadTextures.push(atlas.texture);
+          textAtlasGen += 1;
+          if (atlas.cam) textAtlasCamGen += 1;
+        }
       }
       atlas = next;
       s.atlases.set(key, atlas);
+      textAtlasQueue.delete(key);
+      if (textAtlasBaking?.pick.key === key) textAtlasBaking = null;
     }
     atlas.usedEpoch = textAtlasEpoch;
     return atlas;
+  }
+
+  /** Nearest live camera atlas of this font that has every character of text. */
+  function textAtlasFallback(s, family, weight, text, camBake) {
+    let best = null;
+    let bestScore = Infinity;
+    const chars = [...String(text)];
+    for (const a of s.atlases.values()) {
+      if (!a?.cam || a.family !== family || a.weight !== weight || !a.texture) continue;
+      let ok = true;
+      for (let i = 0; i < chars.length; i += 1) if (!a.glyphs.has(chars[i])) { ok = false; break; }
+      if (!ok) continue;
+      // Prefer a larger atlas (minified through mips) over a magnified one.
+      const r = a.bakePx / camBake;
+      const score = r >= 1 ? Math.log(r) : -Math.log(r) * 2;
+      if (score < bestScore) { bestScore = score; best = a; }
+    }
+    return best;
+  }
+
+  function textAtlasEnqueue(key, family, weight, camBake, chars, lazy) {
+    const scale = Number(lazy?.scale) || 0;
+    const prio = Number(lazy?.prio);
+    const known = textAtlasKnownChars.get(key) || "";
+    const all = [...new Set([...(known + chars)])].join("");
+    textAtlasKnownChars.set(key, all);
+    const prev = textAtlasQueue.get(key);
+    if (prev) {
+      prev.chars = all;
+      prev.scale = scale;
+      if (Number.isFinite(prio) && !(prev.prio <= prio)) prev.prio = prio;
+      return;
+    }
+    textAtlasStats.queued += 1;
+    textAtlasQueue.set(key, { key, family, weight, camBake, chars: all, scale, prio: Number.isFinite(prio) ? prio : 1e9 });
+  }
+
+  /**
+   * Lazy camera atlases waiting to be baked. With scale, only those asked for
+   * at that zoom x device scale (stale sizes from a gesture are dropped).
+   */
+  function nodeGraphGlLinesTextAtlasPending(scale = 0) {
+    const baking = textAtlasBaking && (!(scale > 0) || Math.abs(textAtlasBaking.pick.scale - scale) <= 1e-4 * scale) ? 1 : 0;
+    if (!(scale > 0)) return textAtlasQueue.size + baking;
+    let n = baking;
+    for (const e of textAtlasQueue.values()) if (Math.abs(e.scale - scale) <= 1e-4 * scale) n += 1;
+    return n;
+  }
+
+  /**
+   * Work on ONE queued camera atlas (nearest the screen centre first) for at
+   * most budgetMs: lay it out, draw a few glyphs per call, upload when every
+   * glyph is drawn. Returns how many atlases are left (the one in progress
+   * counts). Entries for another scale are dropped. The new atlas replaces an
+   * older one of the same key without deleting it (a kept mesh may still draw
+   * it); a sweep retires it once nothing points at it.
+   */
+  function nodeGraphGlLinesTextAtlasBakeNext(scale = 0, budgetMs = Infinity) {
+    const s = ensure();
+    if (!s) return 0;
+    const t0 = performance.now();
+    if (textAtlasBaking && scale > 0 && Math.abs(textAtlasBaking.pick.scale - scale) > 1e-4 * scale) textAtlasBaking = null;
+    if (!textAtlasBaking) {
+      let pick = null;
+      for (const [key, e] of [...textAtlasQueue]) {
+        if (scale > 0 && Math.abs(e.scale - scale) > 1e-4 * scale) { textAtlasQueue.delete(key); continue; }
+        if (!pick || e.prio < pick.prio) pick = e;
+      }
+      if (!pick) return 0;
+      textAtlasQueue.delete(pick.key);
+      const old = s.atlases.get(pick.key);
+      const job = bakeAtlasStart(s, pick.family, pick.weight, (old?.chars || "") + pick.chars, pick.camBake);
+      if (!job) return nodeGraphGlLinesTextAtlasPending(scale);
+      job.pick = pick;
+      job.t0 = t0;
+      job.ms = 0;
+      textAtlasBaking = job;
+    }
+    const job = textAtlasBaking;
+    const left = budgetMs - (performance.now() - t0);
+    const drawn = bakeAtlasDraw(job, Math.max(0.5, left));
+    job.ms += performance.now() - t0;
+    if (!drawn) return nodeGraphGlLinesTextAtlasPending(scale);
+    textAtlasBaking = null;
+    const tUp = performance.now();
+    const next = bakeAtlasFinish(s, job);
+    const d = job.ms + (performance.now() - tUp);
+    textAtlasStats.bakes += 1; textAtlasStats.ms += d; textAtlasStats.maxMs = Math.max(textAtlasStats.maxMs, d);
+    const old = s.atlases.get(job.pick.key);
+    textAtlasKnownChars.set(job.pick.key, next.chars);
+    if (old?.texture) textAtlasRetiring.add(old.texture);
+    next.usedEpoch = textAtlasEpoch;
+    s.atlases.set(job.pick.key, next);
+    return nodeGraphGlLinesTextAtlasPending(scale);
+  }
+
+  /**
+   * Retire camera atlases whose textures no kept mesh draws (live: Set of
+   * textures still referenced), plus retired growth textures. keepScale keeps
+   * atlases of that zoom x device scale (just baked, about to be used).
+   */
+  function nodeGraphGlLinesTextAtlasSweepUnreferenced(live, keepBakes = null) {
+    const s = state;
+    if (!s?.atlases || !live) return 0;
+    if (!s.deadTextures) s.deadTextures = [];
+    let n = 0;
+    for (const [key, atlas] of [...s.atlases]) {
+      if (!atlas?.cam || !atlas.texture || live.has(atlas.texture)) continue;
+      if (keepBakes && keepBakes.has(key)) continue;
+      s.deadTextures.push(atlas.texture);
+      s.atlases.delete(key);
+      n += 1;
+    }
+    for (const tex of [...textAtlasRetiring]) {
+      if (live.has(tex)) continue;
+      s.deadTextures.push(tex);
+      textAtlasRetiring.delete(tex);
+      n += 1;
+    }
+    return n;
   }
 
   /** Start of a full record of the camera mesh: atlases not asked for since are stale. */
@@ -2339,7 +2566,19 @@ void main() {
       s.atlases.delete(key);
       n += 1;
     }
+    // The whole camera mesh was just re-recorded: grown-away textures are unreferenced.
+    for (const tex of textAtlasRetiring) {
+      if (!s.deadTextures) s.deadTextures = [];
+      s.deadTextures.push(tex);
+      n += 1;
+    }
+    textAtlasRetiring.clear();
     return n;
+  }
+
+  /** Bake counters since load: { bakes, ms, measureMs, drawMs, uploadMs, maxMs } (tests / diagnostics). */
+  function nodeGraphGlLinesTextAtlasStats() {
+    return { ...textAtlasStats };
   }
 
   /** Live atlases: [{ weight, bakePx, cam }] (tests / diagnostics). */
@@ -2557,13 +2796,16 @@ void main() {
     let wantBake = cam
       ? Math.min(TEXT_CAM_BAKE_MAX, Math.max(TEXT_CAM_BAKE_MIN, Math.round(px * devScale * 64) / 64))
       : 0;
+    // Past the bake cap the atlas is magnified, not 1:1: no fit re-bake, no snap.
     // wantBake is clamped to TEXT_CAM_BAKE_MIN..MAX. Past the clamp the run is
     // magnified, not 1:1: it must not take the fitted re-bake below (that
     // divided by the clamped size, so a squeezed label stopped growing with
     // zoom and held one screen width: Chroma's Lightness / Saturation), and
     // it must not snap to device pixels.
     const capped = cam && Math.abs(px * devScale - wantBake) > 0.02;
-    let atlas = nodeGraphGlLinesTextAtlas(family, weight, str, wantBake);
+    // Lazy camera atlases: a missing size draws with the nearest live atlas and is queued.
+    const lazy = cam && batch.lazyText ? textLazyReq(batch, x, y, devScale) : null;
+    let atlas = nodeGraphGlLinesTextAtlas(family, weight, str, wantBake, lazy);
     if (!atlas) return;
     let g = px / atlas.bakePx;
     const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
@@ -2591,7 +2833,7 @@ void main() {
     if (cam && !capped && !hasEmoji && maxW > 0 && width > maxW && Math.abs(atlas.bakePx - wantBake) < 0.02) {
       const fitBake = Math.floor(wantBake * (maxW / width) * 2) / 2;
       if (fitBake >= TEXT_CAM_BAKE_MIN) {
-        const fitAtlas = nodeGraphGlLinesTextAtlas(family, weight, str, fitBake);
+        const fitAtlas = nodeGraphGlLinesTextAtlas(family, weight, str, fitBake, lazy);
         if (fitAtlas && Math.abs(fitAtlas.bakePx - fitBake) < 0.02) {
           atlas = fitAtlas;
           wantBake = fitBake;
@@ -2647,6 +2889,20 @@ void main() {
       pen += entry.adv * squeeze * emojiScale;
     }
   }
+
+  /** Lazy request info: the zoom x device scale and distance from the view centre (bake order). */
+  function textLazyReq(batch, x, y, devScale) {
+    const cam = batch.camera;
+    const z = cam.zoom > 0 ? cam.zoom : 1;
+    const sc = batch.scale > 0 ? batch.scale : 1;
+    const cx = (Number(cam.x) || 0) + (batch.w || 0) / sc / z / 2;
+    const cy = (Number(cam.y) || 0) + (batch.h || 0) / sc / z / 2;
+    const req = textLazyReqScratch;
+    req.scale = devScale;
+    req.prio = Math.hypot((Number(x) || 0) - cx, (Number(y) || 0) - cy);
+    return req;
+  }
+  const textLazyReqScratch = { scale: 0, prio: 0 };
 
   /** Current run for a texture (consecutive same-texture quads share one draw). */
   function textRun(batch, texture, color, snapScale = 0) {
@@ -4127,8 +4383,8 @@ void main() {
   }
 
   /** Generation of the glyph atlases; changes when any atlas texture is retired. */
-  function nodeGraphGlLinesTextAtlasGen() {
-    return textAtlasGen;
+  function nodeGraphGlLinesTextAtlasGen(kind = "") {
+    return kind === "cam" ? textAtlasCamGen : textAtlasGen;
   }
 
   // User fragment quad (emo script display {}). One program per source, an 8-frame
@@ -4463,6 +4719,10 @@ void main() {
     nodeGraphGlLinesTextAtlasEpoch,
     nodeGraphGlLinesTextAtlasSweep,
     nodeGraphGlLinesTextAtlasInfo,
+    nodeGraphGlLinesTextAtlasStats,
+    nodeGraphGlLinesTextAtlasPending,
+    nodeGraphGlLinesTextAtlasBakeNext,
+    nodeGraphGlLinesTextAtlasSweepUnreferenced,
     nodeGraphGlLinesTextSegments,
     nodeGraphGlLinesEmojiStats,
     nodeGraphGlLinesTextAspectStats,
