@@ -176,8 +176,12 @@ function ensureNodeGraphWorkspaceCssSizeObserver(container) {
 }
 
 function nodeGraphWorkspaceLayoutMetrics(container = document.getElementById("nodeGraphWorkspace")) {
-  const gesturing = typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive();
+  const gesturing = Boolean(
+    nodeGraphMvp?.workspacePanning
+    || nodeGraphMvp?.smoothZoomDragging
+    || nodeGraphMvp?.workspacePinchZooming
+    || (typeof nodeGraphViewTextQualitySettled === "function" && !nodeGraphViewTextQualitySettled())
+  );
   if (gesturing && nodeGraphMvp?._workspaceLayoutMetrics) {
     return nodeGraphMvp._workspaceLayoutMetrics;
   }
@@ -512,8 +516,7 @@ function nodeGraphClientToZoomSurfacePoint(clientX, clientY, surface = nodeGraph
   const host = document.getElementById("nodeGraphWorkspace");
   const scale = nodeGraphZoomSurfaceClientScale(surface);
   const scaled = Boolean(surface.style?.transform && surface.style.transform !== "none");
-  const gesturing = typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive();
+  const gesturing = false;
   let left = 0;
   let top = 0;
   if (scaled || gesturing) {
@@ -619,8 +622,7 @@ function nodeGraphGridVisualScaleCss(workspace) {
   // The scale is a setting, not a camera value: mid-gesture reuse the last read.
   if (
     nodeGraphGridVisualScaleLast > 0
-    && typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive()
+    && false
   ) {
     return nodeGraphGridVisualScaleLast;
   }
@@ -713,8 +715,7 @@ function updateNodeGraphGridHeatmap(options = {}) {
   const phaseY = nodeGraphGridBackgroundPhase(origin.y, cell.height);
   heatmap.style.setProperty("--node-grid-heatmap-grid-position", `${phaseX}px ${phaseY}px`);
 
-  const gesturing = typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive();
+  const gesturing = false;
   // Pause only the O(modules) light/mask rebuild. Grid position already updated.
   // camera:true is the once-a-frame gesture pass (ZP-4): the module glows are
   // screen-space gradients, so they must follow the camera or they stay at the
@@ -759,8 +760,7 @@ function updateNodeGraphGridHeatmap(options = {}) {
   const moduleBright = lightBright * moduleAmt;
   // Module world bounds cannot change during a pan/zoom gesture: reuse the
   // last measured box instead of forcing layout on every camera frame.
-  const heatmapGesturing = typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive();
+  const heatmapGesturing = false;
   for (const node of visibleNodes) {
     if (node.classList.contains("viewport-asleep")) {
       continue;
@@ -946,8 +946,7 @@ function nodeGraphHeatmapFloatProperty(workspace, property, fallback = 0) {
   // Tuning vars are settings, not camera state: a gesture reuses the last value.
   if (
     nodeGraphHeatmapFloatLast.has(property)
-    && typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive()
+    && false
   ) {
     return nodeGraphHeatmapFloatLast.get(property);
   }
@@ -978,8 +977,7 @@ function scheduleNodeGraphGridHeatmapUpdate() {
   }
   nodeGraphMvp.mouseLightFrame = window.requestAnimationFrame(() => {
     nodeGraphMvp.mouseLightFrame = 0;
-    const gesturing = typeof nodeGraphViewportGestureActive === "function"
-      && nodeGraphViewportGestureActive();
+    const gesturing = false;
     updateNodeGraphGridHeatmap({ lite: gesturing });
   });
 }
@@ -993,8 +991,7 @@ function updateNodeGraphMouseLight(event) {
   // event target for canvas moves; still need rect for origin. Cache for 1 frame.
   let rect = nodeGraphMvp._mouseLightWorkspaceRect;
   const now = performance.now?.() || Date.now();
-  const gesturing = typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive();
+  const gesturing = false;
   if (gesturing) {
     // Zoom/pan never moves the workspace box: reuse the last rect, or the
     // cached gesture layout metrics (same client left/top), never measure.
@@ -1008,7 +1005,7 @@ function updateNodeGraphMouseLight(event) {
     x: event.clientX - rect.left,
     y: event.clientY - rect.top,
   };
-  if (typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive()) {
+  if (false) {
     updateNodeGraphGridHeatmap({ lite: true });
     return;
   }

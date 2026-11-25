@@ -49,8 +49,6 @@ function nodeGraphEnsureTextWireLayers(host) {
 function nodeGraphPositionGridHtml() {
   const workspace = document.getElementById("nodeGraphWorkspace");
   if (!workspace) return;
-  // Frozen mid-gesture: the layer transform carries the modules (ZP-4).
-  if (nodeGraphViewportPerf.htmlFrozen) return;
   nodeGraphEnsureTextWireLayers(workspace);
   const zoom = Math.max(
     0.0001,
@@ -72,6 +70,10 @@ function nodeGraphPositionGridHtml() {
   for (let i = 0; i < nodes.length; i += 1) {
     const node = nodes[i];
     if (node.closest?.(".node-layout-canvas-tile, .node-screen-solo-stage")) continue;
+    // Stage 4: style writes only for mounted modules. Sleepers are drawn
+    // from the GL cache; writing zoom/transform on them every wheel tick
+    // was the remaining 200ms zoom-out cost once all 60 were awake.
+    if (node.classList.contains("viewport-asleep")) continue;
     const text = node.querySelector(":scope > .node-text-box-body");
     if (text && behind && front) {
       const layout = nodeGraphMvp?.patch?.nodes?.find?.((item) => item?.id === node.dataset.node)?.layout;
@@ -89,78 +91,8 @@ function nodeGraphPositionGridHtml() {
   }
 }
 
-// ZP-4 frozen module HTML. Mid-gesture no module style is written: each
-// module keeps the CSS zoom and translate it had when the gesture began, and
-// one transform per world/text layer carries the whole HTML picture from the
-// frozen camera to the live one (hit targets stay on the GPU plates). Settle
-// writes CSS zoom, --node-graph-zoom and the module transforms once.
-function nodeGraphHtmlFreezeLayers(workspace) {
-  const layers = [];
-  const world = workspace.getElementsByClassName("node-graph-world-layer");
-  for (let i = 0; i < world.length; i += 1) layers.push(world[i]);
-  const behind = document.getElementById("nodeGraphTextBehind");
-  const front = document.getElementById("nodeGraphTextFront");
-  if (behind) layers.push(behind);
-  if (front) layers.push(front);
-  return layers;
-}
-
-function nodeGraphHtmlFrozen() {
-  return Boolean(nodeGraphViewportPerf.htmlFrozen);
-}
-
-function nodeGraphFreezeHtmlCamera(workspace) {
-  if (nodeGraphViewportPerf.htmlFrozen || !workspace) return nodeGraphViewportPerf.htmlFrozen;
-  // Freeze at the camera the HTML was last written for, not the new sample.
-  const last = nodeGraphViewportPerf.htmlCamera;
-  if (!last) return null;
-  nodeGraphViewportPerf.htmlFrozen = { zoom: last.zoom, x: last.x, y: last.y };
-  return nodeGraphViewportPerf.htmlFrozen;
-}
-
-function nodeGraphApplyFrozenHtmlCamera(workspace, originX, originY) {
-  const frozen = nodeGraphViewportPerf.htmlFrozen;
-  if (!frozen) return;
-  const zoom = Math.max(
-    0.0001,
-    typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1),
-  );
-  // Screen p0 = w * z0 + o0 maps to p = w * z + o: p = p0 * s + (o - o0 * s).
-  const sc = zoom / Math.max(0.0001, frozen.zoom);
-  const tx = (Number(originX) || 0) - frozen.x * sc;
-  const ty = (Number(originY) || 0) - frozen.y * sc;
-  const transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
-  const layers = nodeGraphHtmlFreezeLayers(workspace);
-  for (let i = 0; i < layers.length; i += 1) {
-    const style = layers[i].style;
-    if (style.transformOrigin !== "0px 0px") style.transformOrigin = "0 0";
-    style.transform = transform;
-  }
-}
-
-function nodeGraphThawHtmlCamera(workspace) {
-  if (!nodeGraphViewportPerf.htmlFrozen) return;
-  nodeGraphViewportPerf.htmlFrozen = null;
-  const el = workspace || document.getElementById("nodeGraphWorkspace");
-  if (!el) return;
-  const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
-  const origin = typeof nodeGraphRenderedOriginOffset === "function"
-    ? nodeGraphRenderedOriginOffset(pan, el)
-    : pan;
-  // Layers back to identity; modules get the live zoom + translate once.
-  nodeGraphApplyPanVarsToWorldLayers(el, `${origin.x}px`, `${origin.y}px`);
-  const behind = document.getElementById("nodeGraphTextBehind");
-  const front = document.getElementById("nodeGraphTextFront");
-  if (behind) behind.style.transform = "";
-  if (front) front.style.transform = "";
-}
-
 function nodeGraphApplyPanVarsToWorldLayers(workspace, x, y) {
   if (!workspace) {
-    return;
-  }
-  if (nodeGraphViewportPerf.htmlFrozen) {
-    nodeGraphApplyFrozenHtmlCamera(workspace, Number.parseFloat(x), Number.parseFloat(y));
     return;
   }
   if (!nodeGraphWorldLayerCollection || nodeGraphWorldLayerCollection.owner !== workspace) {
@@ -178,39 +110,6 @@ function nodeGraphApplyPanVarsToWorldLayers(workspace, x, y) {
   nodeGraphPositionGridHtml();
 }
 
-// FIX C (trial, easy revert: set false or delete this block + its 2 calls).
-// will-change: transform on the world layers only while a pan/zoom gesture is
-// active: Chrome keeps the layer's raster scale instead of re-rastering every
-// step (stays soft/blocky mid-gesture). Dropped on settle -> crisp re-raster.
-const NODE_GRAPH_GESTURE_WILL_CHANGE = true;
-
-function nodeGraphSetWorldLayerWillChange(workspace, on) {
-  if (!NODE_GRAPH_GESTURE_WILL_CHANGE || !workspace?.getElementsByClassName) {
-    return;
-  }
-  const layers = workspace.getElementsByClassName("node-graph-world-layer");
-  for (let i = 0; i < layers.length; i += 1) {
-    if (on) {
-      layers[i].style.willChange = "transform";
-    } else {
-      layers[i].style.removeProperty("will-change");
-    }
-  }
-}
-
-// Gesture display hold. While a pan/zoom gesture is active, scope frames and
-// face pumps skip painting so the world layer moves as a cached GPU layer;
-// settle repaints everything. False keeps live displays animating mid-zoom.
-const NODE_GRAPH_GESTURE_HOLD_DISPLAYS = false;
-
-function nodeGraphViewportHoldsDisplays() {
-  return NODE_GRAPH_GESTURE_HOLD_DISPLAYS && nodeGraphViewportGestureActive();
-}
-
-/**
- * Inherited zoom var (module stroke compensate, grid size read it). Written
- * only outside gestures / on settle: one restyle per gesture, not per step.
- */
 function nodeGraphWriteInheritedZoomVar(workspace) {
   const el = workspace || document.getElementById("nodeGraphWorkspace");
   if (!el?.style) {
@@ -235,22 +134,122 @@ const nodeGraphViewportPerf = {
   wheelHoldMs: 160,
 };
 
-function nodeGraphViewportWheelActive() {
-  return (performance.now?.() || Date.now()) < (nodeGraphViewportPerf.wheelActiveUntil || 0);
+const nodeGraphViewCamera = {
+  x: 0,
+  y: 0,
+  zoom: 1,
+  epoch: 0,
+  dirty: false,
+  lastZoomChangeT: 0,
+};
+
+let nodeGraphViewFrameRaf = 0;
+let nodeGraphViewTextQualityTimer = 0;
+const NODE_GRAPH_VIEW_TEXT_QUALITY_MS = 150;
+
+function viewCameraSnapshot() {
+  const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
+  const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
+  return {
+    x: Number(pan.x) || 0,
+    y: Number(pan.y) || 0,
+    zoom: Number(zoom) || 1,
+  };
 }
 
-function nodeGraphViewportGestureActive() {
-  return Boolean(
-    nodeGraphMvp?.workspacePanning
-    || nodeGraphMvp?.smoothZoomDragging
-    || nodeGraphMvp?.workspacePinchZooming
-    || nodeGraphViewportWheelActive()
-    // A wheel gesture ends when its settle runs, not when the hold window
-    // lapses: one long frame (> wheelHoldMs) must not drop a mid-gesture
-    // present onto the full rebuild path (layout reads) before the settle.
-    || Boolean(nodeGraphViewportPerf.settleTimer),
-  );
+/** Stage 3: the only camera setter. Stores pan/zoom, bumps epoch, asks for one frame. No DOM work. */
+function viewCameraSet(options = {}) {
+  const next = viewCameraSnapshot();
+  const prevZoom = nodeGraphViewCamera.zoom;
+  const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  if (Math.abs(next.zoom - (Number(prevZoom) || next.zoom)) > 1e-6) {
+    nodeGraphViewCamera.lastZoomChangeT = now;
+  }
+  nodeGraphViewCamera.x = next.x;
+  nodeGraphViewCamera.y = next.y;
+  nodeGraphViewCamera.zoom = next.zoom;
+  nodeGraphViewCamera.epoch = (nodeGraphViewCamera.epoch || 0) + 1;
+  nodeGraphViewCamera.dirty = true;
+  if (options.persist !== false && typeof scheduleNodeGraphWorkspaceViewPersist === "function") {
+    scheduleNodeGraphWorkspaceViewPersist();
+  }
+  if (options.immediate) {
+    if (nodeGraphViewFrameRaf) {
+      window.cancelAnimationFrame(nodeGraphViewFrameRaf);
+      nodeGraphViewFrameRaf = 0;
+    }
+    viewFrame();
+    return nodeGraphViewCamera;
+  }
+  if (!nodeGraphViewFrameRaf) {
+    nodeGraphViewFrameRaf = window.requestAnimationFrame(() => {
+      nodeGraphViewFrameRaf = 0;
+      viewFrame();
+    });
+  }
+  return nodeGraphViewCamera;
 }
+
+function nodeGraphViewTextQualitySettled() {
+  const last = nodeGraphViewCamera.lastZoomChangeT || 0;
+  if (!last) return true;
+  const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  return (now - last) >= NODE_GRAPH_VIEW_TEXT_QUALITY_MS;
+}
+
+function scheduleNodeGraphViewTextQuality() {
+  if (nodeGraphViewTextQualityTimer) {
+    window.clearTimeout(nodeGraphViewTextQualityTimer);
+  }
+  nodeGraphViewTextQualityTimer = window.setTimeout(() => {
+    nodeGraphViewTextQualityTimer = 0;
+    if (!nodeGraphViewTextQualitySettled()) return;
+    // Quality pass only: resharpen baked GL text. Never adds or removes plates or chrome.
+    // Also start waking HTML that stayed asleep during zoom (GL already had
+    // the records). Interaction needs the DOM after the camera settles.
+    if (typeof scheduleNodeGraphViewportCullRefresh === "function") {
+      scheduleNodeGraphViewportCullRefresh({ minIntervalMs: 0 });
+    }
+    if (typeof nodeGraphGlGraphSettleTextBake === "function") {
+      nodeGraphGlGraphSettleTextBake();
+    }
+    if (typeof nodeGraphGlGraphPresent === "function") {
+      nodeGraphGlGraphPresent();
+    }
+  }, NODE_GRAPH_VIEW_TEXT_QUALITY_MS);
+}
+
+/** Stage 3: the only per-frame camera apply. Same path for WASD, wheel, Q/E, and middle-drag. */
+function viewFrame() {
+  if (nodeGraphViewFrameRaf) {
+    window.cancelAnimationFrame(nodeGraphViewFrameRaf);
+    nodeGraphViewFrameRaf = 0;
+  }
+  nodeGraphViewCamera.dirty = false;
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  if (!workspace) return;
+  if (typeof applyNodeGraphViewportCssLight === "function") {
+    applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: true, skipSync: true, skipCull: true, skipHeatmap: true });
+  }
+  // Same live cull as WASD: schedule a refresh, do not synchronously wake
+  // every newly visible module in this frame (that blew zoom-out past 20 ms).
+  // GL chrome comes from records, so drawing does not wait on the HTML wake.
+  if (typeof scheduleNodeGraphViewportCullRefresh === "function") {
+    scheduleNodeGraphViewportCullRefresh({ cacheSizesOnly: false, minIntervalMs: 0 });
+  }
+  if (typeof syncNodeGraphWireSvgViewBox === "function") {
+    syncNodeGraphWireSvgViewBox();
+  } else if (typeof nodeGraphGlGraphPresent === "function") {
+    nodeGraphGlGraphPresent();
+  }
+  if (typeof syncNodeGraphWorkspaceResizeHandlePosition === "function") {
+    syncNodeGraphWorkspaceResizeHandlePosition();
+  }
+  if (nodeGraphViewCamera.lastZoomChangeT && !nodeGraphViewTextQualitySettled()) {
+    scheduleNodeGraphViewTextQuality();
+  }
+}
+
 
 /** Zoom-ish gesture kinds: hide wires + port jacks while active (CSS). */
 function nodeGraphViewportGestureIsZoom(kind = "") {
@@ -267,48 +266,14 @@ function markNodeGraphViewportGesture(kind = "gesture") {
   if (!workspace) {
     return;
   }
-  const wasGesturing = workspace.classList.contains("viewport-gesturing");
   workspace.classList.add("viewport-gesturing");
-  if (!wasGesturing) {
-    nodeGraphSetWorldLayerWillChange(workspace, true);
-  }
-  // Gesture start: seed workspace layout metrics once (left/top/size) so wheel
-  // zoom anchors avoid getBoundingClientRect every tick. ResizeObserver + settle
-  // invalidate; mid-gesture samples reuse the cache.
-  if (!wasGesturing) {
-    if (typeof nodeGraphMvp === "object" && nodeGraphMvp && !nodeGraphMvp._workspaceLayoutMetrics) {
-      if (typeof nodeGraphWorkspaceLayoutMetrics === "function") {
-        nodeGraphWorkspaceLayoutMetrics(workspace);
-      }
-    }
-    // Cancel any pending mid-gesture heatmap phase; settle restores full chrome.
-    if (nodeGraphViewportPerf.gestureHeatmapRaf) {
-      window.cancelAnimationFrame(nodeGraphViewportPerf.gestureHeatmapRaf);
-      nodeGraphViewportPerf.gestureHeatmapRaf = 0;
+  if (typeof nodeGraphMvp === "object" && nodeGraphMvp && !nodeGraphMvp._workspaceLayoutMetrics) {
+    if (typeof nodeGraphWorkspaceLayoutMetrics === "function") {
+      nodeGraphWorkspaceLayoutMetrics(workspace);
     }
   }
-  // Hide wires + inlets/outlets + connection dots while zooming (not pan).
-  const zooming = nodeGraphViewportGestureIsZoom(kind)
-    || nodeGraphMvp?.smoothZoomDragging
-    || nodeGraphMvp?.workspacePinchZooming;
-  if (zooming) {
-    const wasZooming = workspace.classList.contains("viewport-zooming");
-    workspace.classList.add("viewport-zooming");
-    // Freeze stroke-zoom-compensate once per zoom gesture so outline widths
-    // do not cascade on every --node-graph-zoom tick (costly at 10–20×).
-    if (!wasZooming) {
-      freezeNodeGraphViewportStrokeCompensate(workspace);
-    }
-  }
-  // Pan / drag-zoom: lights + wires stay frozen until pointerup (no settle timer
-  // mid-drag). Wheel has no mouse-up, so only wheel schedules a settle.
-  // Kind "zoom" (programmatic / mis-tagged) must also settle — otherwise
-  // viewport-zooming sticks and jacks never come back.
-  if (kind === "wheel" || kind === "zoom") {
-    nodeGraphViewportPerf.wheelActiveUntil = (performance.now?.() || Date.now())
-      + nodeGraphViewportPerf.wheelHoldMs;
-    scheduleNodeGraphViewportSettle();
-  }
+  // Stage 3: rendering no longer switches modes mid-gesture. viewport-gesturing
+  // stays only as a cursor hint. Do not hide ports or arm a settle timer.
 }
 
 /** Snapshot 1/zoom into a frozen CSS var; viewport-zooming uses it mid-gesture. */
@@ -344,11 +309,6 @@ function flushNodeGraphViewportOnPointerUp(options = {}) {
     window.cancelAnimationFrame(nodeGraphViewportPerf.heavyRaf);
     nodeGraphViewportPerf.heavyRaf = 0;
   }
-  if (nodeGraphViewportPerf.settleTimer) {
-    window.clearTimeout(nodeGraphViewportPerf.settleTimer);
-    nodeGraphViewportPerf.settleTimer = 0;
-  }
-  nodeGraphViewportPerf.wheelActiveUntil = 0;
   clearNodeGraphViewportGestureClass();
   if (typeof applyNodeGraphViewportCssLight === "function") {
     applyNodeGraphViewportCssLight({
@@ -373,14 +333,8 @@ function clearNodeGraphViewportGestureClass() {
   if (!workspace) {
     return;
   }
-  // Settle: catch the inherited zoom var up once, then drop the frozen stroke.
   nodeGraphWriteInheritedZoomVar(workspace);
-  if (nodeGraphViewportPerf.htmlFrozen) {
-    nodeGraphThawHtmlCamera(workspace);
-    scheduleNodeGraphViewportCullRefresh();
-  }
   workspace.classList.remove("viewport-gesturing", "viewport-zooming");
-  nodeGraphSetWorldLayerWillChange(workspace, false);
   unfreezeNodeGraphViewportStrokeCompensate(workspace);
   if (typeof invalidateNodeGraphWorkspaceLayoutMetrics === "function") {
     invalidateNodeGraphWorkspaceLayoutMetrics();
@@ -390,15 +344,9 @@ function clearNodeGraphViewportGestureClass() {
 if (typeof window !== "undefined" && !window.__nodeGraphViewportStrokeRescue) {
   window.__nodeGraphViewportStrokeRescue = true;
   window.addEventListener("pageshow", () => {
-    if (typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive()) {
-      return;
-    }
     clearNodeGraphViewportGestureClass();
   });
   document.addEventListener("pointerdown", () => {
-    if (typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive()) {
-      return;
-    }
     const workspace = document.getElementById("nodeGraphWorkspace");
     if (workspace?.classList.contains("viewport-zooming")) {
       clearNodeGraphViewportGestureClass();
@@ -415,14 +363,9 @@ function applyNodeGraphViewportCssLight(options = {}) {
   if (!workspace) {
     return;
   }
-  const cameraGesturing = typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive();
   if (options.zoom !== false) {
     const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
-    // Mid-gesture: world-layer transform only (below). Settle writes the var.
-    if (!cameraGesturing) {
-      nodeGraphWriteInheritedZoomVar(workspace);
-    }
+    nodeGraphWriteInheritedZoomVar(workspace);
     workspace.dataset.zoom = Number(zoom).toFixed(2);
     workspace.classList.toggle("pixelated-canvas-zoom", zoom > 2.5);
   }
@@ -431,8 +374,6 @@ function applyNodeGraphViewportCssLight(options = {}) {
     const originOffset = typeof nodeGraphRenderedOriginOffset === "function"
       ? nodeGraphRenderedOriginOffset(pan, workspace)
       : pan;
-    if (cameraGesturing) nodeGraphFreezeHtmlCamera(workspace);
-    else nodeGraphThawHtmlCamera(workspace);
     nodeGraphApplyPanVarsToWorldLayers(workspace, `${originOffset.x}px`, `${originOffset.y}px`);
   }
   if (options.pan !== false) {
@@ -444,7 +385,6 @@ function applyNodeGraphViewportCssLight(options = {}) {
     workspace.style.setProperty("--node-graph-pan-y", `${originOffset.y}px`);
     workspace.dataset.panX = String(pan.x);
     workspace.dataset.panY = String(pan.y);
-    // Scope screen-items convert layout->screen from this (no gBCR on paint).
     if (typeof nodeGraphMvp === "object" && nodeGraphMvp) {
       nodeGraphMvp._cameraScreenOrigin = {
         x: nodeGraphFiniteNumber(originOffset.x),
@@ -452,30 +392,17 @@ function applyNodeGraphViewportCssLight(options = {}) {
       };
     }
   }
-  // Screen-space wires: cheap viewBox update keeps cables glued during pan
-  // without rebuilding paths (paths stay in world coords).
+  // viewFrame presents once after CSS + cull. Other callers still sync here.
   if (
-    (options.zoom !== false || options.pan !== false)
+    options.skipSync !== true
+    && (options.zoom !== false || options.pan !== false)
     && typeof syncNodeGraphWireSvgViewBox === "function"
   ) {
-    // Mid-gesture: once per animation frame. The sync also re-presents the GL
-    // cable/grid canvases (two full batches + a layout read); per pointermove
-    // that ran 8-16x a frame on high-rate mice. rAF runs before this frame's
-    // paint, so cables stay glued to the world-layer transform.
-    if (cameraGesturing) {
-      if (!nodeGraphViewportPerf.wireViewBoxRaf) {
-        nodeGraphViewportPerf.wireViewBoxRaf = window.requestAnimationFrame(() => {
-          nodeGraphViewportPerf.wireViewBoxRaf = 0;
-          syncNodeGraphWireSvgViewBox();
-        });
-      }
-    } else {
-      if (nodeGraphViewportPerf.wireViewBoxRaf) {
-        window.cancelAnimationFrame(nodeGraphViewportPerf.wireViewBoxRaf);
-        nodeGraphViewportPerf.wireViewBoxRaf = 0;
-      }
-      syncNodeGraphWireSvgViewBox();
+    if (nodeGraphViewportPerf.wireViewBoxRaf) {
+      window.cancelAnimationFrame(nodeGraphViewportPerf.wireViewBoxRaf);
+      nodeGraphViewportPerf.wireViewBoxRaf = 0;
     }
+    syncNodeGraphWireSvgViewBox();
   }
   if (options.zoomButtons !== false && options.zoom !== false) {
     const zoomOutButton = document.getElementById("nodeZoomOutButton");
@@ -496,11 +423,7 @@ function applyNodeGraphViewportCssLight(options = {}) {
       zoomResetButton.removeAttribute("title");
     }
   }
-  const gesturing = typeof nodeGraphViewportGestureActive === "function"
-    && nodeGraphViewportGestureActive();
-  // Mid-pan/zoom: CSS vars only. Readouts / heatmap / cull force layout and
-  // were dropping pan to ~1fps even with scopes frozen.
-  if (!gesturing && options.readouts !== false) {
+  if (options.readouts !== false) {
     if (typeof syncNodeGraphWorldPositionReadout === "function") {
       syncNodeGraphWorldPositionReadout();
     }
@@ -508,41 +431,16 @@ function applyNodeGraphViewportCssLight(options = {}) {
       syncNodeGraphOriginMarker();
     }
   }
-  if (
-    typeof scheduleNodeGraphRoomDimmerDraw === "function"
-    && !gesturing
-  ) {
+  if (options.skipHeatmap !== true && typeof scheduleNodeGraphRoomDimmerDraw === "function") {
     scheduleNodeGraphRoomDimmerDraw();
   }
-  if (!gesturing && typeof updateNodeGraphGridHeatmap === "function") {
+  if (options.skipHeatmap !== true && typeof updateNodeGraphGridHeatmap === "function") {
     updateNodeGraphGridHeatmap({ lite: true });
+  } else if (typeof scheduleNodeGraphViewportGestureHeatmapPhase === "function") {
+    scheduleNodeGraphViewportGestureHeatmapPhase();
   }
-  // Mid-gesture: grid cell, phase and module glows follow the camera once a
-  // frame from cached bounds (ZP-4: the stale glows were the light blobs).
-  if (gesturing && !nodeGraphViewportPerf.heatmapCameraRaf && typeof updateNodeGraphGridHeatmap === "function") {
-    nodeGraphViewportPerf.heatmapCameraRaf = window.requestAnimationFrame(() => {
-      nodeGraphViewportPerf.heatmapCameraRaf = 0;
-      if (nodeGraphViewportGestureActive()) updateNodeGraphGridHeatmap({ camera: true });
-    });
-  }
-  // Mid-gesture: skip heatmap phase updates (esp. costly at high zoom).
-  // Settle / pointer-up restores via flushNodeGraphViewportHeavyChrome.
-  // Cull must keep running while zoomed-in pan: otherwise modules that leave
-  // the view stay awake (display:block) and the composited layer keeps growing
-  // → "I'm zoomed in and pan is laggy for no reason." Use cached sizes only.
-  // Frozen HTML (ZP-4): waking or sleeping a module mid-gesture re-lays it
-  // out and fires its resize observers. The GPU plates are drawn for every
-  // module anyway; settle culls once.
-  if (!gesturing || !nodeGraphViewportPerf.htmlFrozen) {
-    scheduleNodeGraphViewportCullRefresh({
-      cacheSizesOnly: gesturing,
-      minIntervalMs: gesturing ? 48 : 0,
-    });
-  }
-  // pan-popin-1: modules scrolling into view mid-gesture still wake (budgeted,
-  // nearest first) instead of staying blank until pointer-up / settle.
-  if (gesturing) {
-    scheduleNodeGraphViewportGesturePopIn();
+  if (options.skipCull !== true && typeof scheduleNodeGraphViewportCullRefresh === "function") {
+    scheduleNodeGraphViewportCullRefresh({ cacheSizesOnly: false, minIntervalMs: 0 });
   }
 }
 
@@ -583,21 +481,14 @@ function invalidateNodeGraphViewportWirePlanCache() {
 
 /**
  * Heavy chrome: wires + module lights (heatmap).
- * During pan/zoom the surface is CSS-transformed — do not redraw lights or
- * wires mid-gesture. full:true only (pointer-up / wheel settle / immediate).
+ * Stage 3: always the live path. There is no mid-gesture skip.
  */
 function flushNodeGraphViewportHeavyChrome(options = {}) {
-  const gesturing = nodeGraphViewportGestureActive();
   if (typeof scheduleNodeGraphRoomDimmerDraw === "function") {
     scheduleNodeGraphRoomDimmerDraw();
   }
-  const full = options.full === true || !gesturing;
   if (typeof updateNodeGraphGridHeatmap === "function") {
-    updateNodeGraphGridHeatmap({ lite: !full });
-  }
-  if (!full) {
-    // Pause module lights / wires mid-gesture. Grid position already updated.
-    return;
+    updateNodeGraphGridHeatmap({ lite: false });
   }
   // B-101: reconcile sleep/wake for the final camera BEFORE the GL rebuild.
   // The cull used to be a queued rAF that ran after this pass, so the GL
@@ -632,32 +523,13 @@ function flushNodeGraphViewportHeavyChrome(options = {}) {
 }
 
 function scheduleNodeGraphViewportHeavyChrome() {
-  // Kept for call sites. Never rebuild lights/wires while a gesture is active.
   if (nodeGraphViewportPerf.heavyRaf) {
     return;
   }
   nodeGraphViewportPerf.heavyRaf = window.requestAnimationFrame(() => {
     nodeGraphViewportPerf.heavyRaf = 0;
-    if (nodeGraphViewportGestureActive()) {
-      return;
-    }
     flushNodeGraphViewportHeavyChrome({ full: true });
   });
-}
-
-function scheduleNodeGraphViewportSettle() {
-  if (nodeGraphViewportPerf.settleTimer) {
-    window.clearTimeout(nodeGraphViewportPerf.settleTimer);
-  }
-  nodeGraphViewportPerf.settleTimer = window.setTimeout(() => {
-    nodeGraphViewportPerf.settleTimer = 0;
-    nodeGraphViewportPerf.wheelActiveUntil = 0;
-    // Drops viewport-zooming + unfreezes stroke compensate; then full chrome.
-    clearNodeGraphViewportGestureClass();
-    flushNodeGraphViewportHeavyChrome({ full: true });
-    // Persist after settle so wheel doesn't thrash localStorage.
-    scheduleNodeGraphWorkspaceViewPersist();
-  }, nodeGraphViewportPerf.settleMs);
 }
 
 function scheduleNodeGraphWorkspaceViewPersist() {
@@ -918,6 +790,13 @@ function nodeGraphViewportCullWakePainters(element) {
         : (root.querySelector?.(".node-module-face, .node-module-scope-window, .node-keyboard-module, .node-arp-keys-face") || root));
     }
   }
+  // Mid-zoom, the GPU mesh already holds every recorded face. Forcing a
+  // scope redraw or cold-plate rebuild here is why wheel zoom-out still
+  // had 200ms tasks after Present itself started replaying (graph bezier,
+  // layout, a full present when the mesh was dropped).
+  const zooming = typeof nodeGraphViewTextQualitySettled === "function"
+    && !nodeGraphViewTextQualitySettled();
+  if (zooming) return;
   if (nodeId && typeof requestNodeGraphModuleScopeRepaint === "function") {
     requestNodeGraphModuleScopeRepaint(nodeId);
   }
@@ -1049,6 +928,31 @@ function nodeGraphViewportCullForEachNode(surface, selector, visit) {
   }
 }
 
+/** Measure every module's chrome at load or commit, with no timer.
+ *  Wake, force layout, publish geometry, rebuild plates, present once,
+ *  then let the budgeted cull put offscreen HTML back to sleep. GL already
+ *  has the records, so later camera frames can replay from the cache. */
+function nodeGraphViewportCaptureChromeNow() {
+  const surface = typeof nodeGraphZoomSurface === "function"
+    ? nodeGraphZoomSurface()
+    : document.getElementById("nodeGraphWorldLayer") || document.getElementById("nodeGraphZoomSurface");
+  if (!surface) return;
+  nodeGraphViewportCullWakeAll(surface);
+  void surface.offsetHeight;
+  const nodes = surface.querySelectorAll(".dsp-node:not(.removed)");
+  for (let i = 0; i < nodes.length; i += 1) void nodes[i].offsetHeight;
+  if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
+    nodeGraphModuleGeometryPublishVisible();
+  }
+  if (typeof nodeGraphGlGraphRebuildPlates === "function") {
+    nodeGraphGlGraphRebuildPlates();
+  }
+  if (typeof nodeGraphGlGraphPresent === "function") {
+    nodeGraphGlGraphPresent();
+  }
+  scheduleNodeGraphViewportCullRefresh({ minIntervalMs: 0 });
+}
+
 function nodeGraphViewportCullWakeAll(surface) {
   nodeGraphViewportCullForEachNode(
     surface,
@@ -1088,38 +992,145 @@ function nodeGraphViewportCullRefresh(options = {}) {
     nodeGraphViewportCullWakeAll(surface);
     return;
   }
-  const margin = 96;
-  const worldLeft = (0 - margin - (nodeGraphFiniteNumber(origin.x))) / zoom;
-  const worldTop = (0 - margin - (nodeGraphFiniteNumber(origin.y))) / zoom;
-  const worldRight = (boxW + margin - (nodeGraphFiniteNumber(origin.x))) / zoom;
-  const worldBottom = (boxH + margin - (nodeGraphFiniteNumber(origin.y))) / zoom;
+  // Stage 4: overscan is a quarter of the screen so modules are in the
+  // records before they cross the edge. Exit uses a slightly larger band so
+  // they do not thrash at the margin. DOM wake is budgeted (~4ms/frame);
+  // GL keeps drawing every recorded plate from the chrome cache, so nothing
+  // visible depends on the HTML being awake in this frame.
+  const enterMx = boxW * 0.25;
+  const enterMy = boxH * 0.25;
+  const exitMx = boxW * 0.35;
+  const exitMy = boxH * 0.35;
+  const ox = nodeGraphFiniteNumber(origin.x);
+  const oy = nodeGraphFiniteNumber(origin.y);
+  const enterLeft = (0 - enterMx - ox) / zoom;
+  const enterTop = (0 - enterMy - oy) / zoom;
+  const enterRight = (boxW + enterMx - ox) / zoom;
+  const enterBottom = (boxH + enterMy - oy) / zoom;
+  const exitLeft = (0 - exitMx - ox) / zoom;
+  const exitTop = (0 - exitMy - oy) / zoom;
+  const exitRight = (boxW + exitMx - ox) / zoom;
+  const exitBottom = (boxH + exitMy - oy) / zoom;
+  const viewCx = ((boxW * 0.5) - ox) / zoom;
+  const viewCy = ((boxH * 0.5) - oy) / zoom;
   const selected = typeof nodeGraphSelectedNodeIds === "function"
     ? nodeGraphSelectedNodeIds()
     : new Set();
   const cacheSizesOnly = Boolean(options.cacheSizesOnly);
+  const zooming = typeof nodeGraphViewTextQualitySettled === "function"
+    && !nodeGraphViewTextQualitySettled();
+  // Mid-zoom: 4ms of HTML wake per frame. After the camera settles, finish
+  // waking visible modules in this pass so they are interactive.
+  const wakeBudgetMs = zooming ? 4 : 1e9;
+  const toWake = [];
+  const toSleep = [];
   nodeGraphViewportCullForEachNode(surface, ".dsp-node:not(.removed)", (element) => {
     const id = String(element.dataset?.node || "");
-    let width = 0;
-    let height = 0;
-    if (!cacheSizesOnly) {
-      width = nodeGraphFiniteNumber(element.offsetWidth);
-      height = nodeGraphFiniteNumber(element.offsetHeight);
+    const box = nodeGraphViewportModuleWorldBox(element, { measure: !cacheSizesOnly });
+    const inEnter = box.x < enterRight
+      && (box.x + box.w) > enterLeft
+      && box.y < enterBottom
+      && (box.y + box.h) > enterTop;
+    const inExit = box.x < exitRight
+      && (box.x + box.w) > exitLeft
+      && box.y < exitBottom
+      && (box.y + box.h) > exitTop;
+    const pinned = (id && selected.has(id))
+      || (typeof nodeGraphViewportCullMustStayAwake === "function"
+        && nodeGraphViewportCullMustStayAwake(element));
+    const asleep = element.classList.contains("viewport-asleep");
+    if (pinned || inEnter) {
+      if (asleep) {
+        // While zooming, leave meshed modules asleep. GL already has their
+        // plates and chrome; waking the DOM is what made zoom-out write
+        // style.zoom on every module and blow the frame budget.
+        const zooming = typeof nodeGraphViewTextQualitySettled === "function"
+          && !nodeGraphViewTextQualitySettled();
+        if (!pinned && zooming && nodeGraphViewportModuleAlreadyMeshed(id)) {
+          return;
+        }
+        const dx = (box.x + box.w * 0.5) - viewCx;
+        const dy = (box.y + box.h * 0.5) - viewCy;
+        toWake.push({ element, pinned, d: dx * dx + dy * dy });
+      } else {
+        nodeGraphViewportCullApply(element, true);
+      }
+    } else if (!inExit && !asleep) {
+      toSleep.push(element);
     }
-    if (width > 1 && height > 1) {
-      element._viewportCullW = width;
-      element._viewportCullH = height;
-    } else {
-      width = nodeGraphFiniteNumber(element._viewportCullW, 220);
-      height = nodeGraphFiniteNumber(element._viewportCullH, 140);
-    }
-    const x = Number.parseFloat(element.style.getPropertyValue("--node-x")) || 0;
-    const y = Number.parseFloat(element.style.getPropertyValue("--node-y")) || 0;
-    const intersecting = x < worldRight
-      && (x + width) > worldLeft
-      && y < worldBottom
-      && (y + height) > worldTop;
-    nodeGraphViewportCullApply(element, intersecting || (id && selected.has(id)));
   });
+  toWake.sort((a, b) => (a.pinned === b.pinned ? a.d - b.d : (a.pinned ? -1 : 1)));
+  const t0 = performance.now();
+  let deferred = 0;
+  for (const item of toWake) {
+    const over = (performance.now() - t0) > wakeBudgetMs;
+    if (over && !item.pinned) {
+      deferred += 1;
+      continue;
+    }
+    nodeGraphViewportCullApply(item.element, true);
+  }
+  for (const element of toSleep) nodeGraphViewportCullApply(element, false);
+  if (deferred > 0) {
+    scheduleNodeGraphViewportCullRefresh({ minIntervalMs: 0 });
+  }
+}
+
+// view-1 (Stage 1 of docs/MODULE_DISPLAY_REWRITE_PLAN.md): module boxes in
+// WORLD units -- zoom-1 layout px, the space of --node-x / --node-y and of the
+// GL plates. The cull and the mid-gesture pop-in pass both read this, so they
+// agree. Sizes are kept per module id (they used to be expandos on the
+// element: a re-rendered module element started over at a 220x140 guess, so
+// a bigger module at the edge of the view stayed culled until settle).
+// offsetWidth / offsetHeight ignore the module's own CSS zoom and transform
+// (checked in Chrome 157: zoom 2.5, width 100px -> offsetWidth 100), so a
+// measurement is world units at any camera zoom.
+const NODE_GRAPH_VIEWPORT_GUESS_W = 220;
+const NODE_GRAPH_VIEWPORT_GUESS_H = 140;
+const nodeGraphViewportModuleSizes = new Map();
+
+function nodeGraphViewportRememberModuleSize(nodeId, width, height) {
+  const id = String(nodeId || "");
+  const w = nodeGraphFiniteNumber(width);
+  const h = nodeGraphFiniteNumber(height);
+  if (!id || !(w > 1) || !(h > 1)) return;
+  const prev = nodeGraphViewportModuleSizes.get(id);
+  if (prev && prev.w === w && prev.h === h) return;
+  nodeGraphViewportModuleSizes.set(id, { w, h });
+}
+
+/** World box { x, y, w, h, guessed } of a .dsp-node. options.measure: read
+ *  offsetWidth/Height if the module is awake (layout read; not mid-gesture). */
+function nodeGraphViewportModuleWorldBox(element, options = {}) {
+  const id = String(element?.dataset?.node || "");
+  const x = Number.parseFloat(element?.style?.getPropertyValue("--node-x")) || 0;
+  const y = Number.parseFloat(element?.style?.getPropertyValue("--node-y")) || 0;
+  if (
+    options.measure
+    && element
+    && !element.hidden
+    && !element.classList.contains("viewport-asleep")
+  ) {
+    nodeGraphViewportRememberModuleSize(id, element.offsetWidth, element.offsetHeight);
+  }
+  let size = id ? nodeGraphViewportModuleSizes.get(id) : null;
+  if (!size && id && typeof nodeGraphModuleGeometryGet === "function") {
+    // The GL plate's box (published from layout, world units).
+    const geo = nodeGraphModuleGeometryGet(id)?.box;
+    if (geo && geo.w > 1 && geo.h > 1) {
+      size = { w: geo.w, h: geo.h };
+      nodeGraphViewportModuleSizes.set(id, size);
+    }
+  }
+  if (!size) {
+    return { x, y, w: NODE_GRAPH_VIEWPORT_GUESS_W, h: NODE_GRAPH_VIEWPORT_GUESS_H, guessed: true };
+  }
+  // Older readers (fit-to-content in workspace-zoom.js) still use these.
+  if (element) {
+    element._viewportCullW = size.w;
+    element._viewportCullH = size.h;
+  }
+  return { x, y, w: size.w, h: size.h, guessed: false };
 }
 
 function scheduleNodeGraphViewportGestureHeatmapPhase() {
@@ -1159,24 +1170,47 @@ function nodeGraphViewportCullFlushNow() {
 // the last rebuild skipped it while it was display:none. One rAF, coalesced.
 let nodeGraphViewportCullFlushing = false;
 let nodeGraphViewportWakeRebuildRaf = 0;
+const nodeGraphViewportJustWokeIds = new Set();
 function scheduleNodeGraphViewportWakeRebuild() {
   if (nodeGraphViewportCullFlushing || nodeGraphViewportWakeRebuildRaf) return;
   if (typeof nodeGraphGlGraphRebuildPlates !== "function") return;
   nodeGraphViewportWakeRebuildRaf = window.requestAnimationFrame(() => {
     nodeGraphViewportWakeRebuildRaf = 0;
-    // Mid-gesture: the pop-in pass rebuilds once for every module woken this
-    // frame (the settle pass still rebuilds everything once at the end).
-    if (nodeGraphViewportGestureActive()) {
-      nodeGraphViewportPopIn.rebuild = true;
-      scheduleNodeGraphViewportGesturePopIn();
-      return;
-    }
+    const ids = [...nodeGraphViewportJustWokeIds];
+    nodeGraphViewportJustWokeIds.clear();
+    // HTML waking is for live sliders / faces. If the module is already in
+    // the GPU mesh (captured at load), a rebuild would invalidate that mesh
+    // and cost a 200ms+ present on zoom-out. Skip those. Only rebuild the
+    // ones that actually have no record yet.
+    const need = ids.filter((id) => !nodeGraphViewportModuleAlreadyMeshed(id));
+    if (!need.length) return;
     if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
       nodeGraphModuleGeometryPublishVisible();
     }
-    nodeGraphGlGraphRebuildPlates();
+    // Never fall back to a full plates rebuild here: that drops the mesh
+    // and the next present costs 200-300ms. Incremental patch or skip.
+    if (typeof nodeGraphGlGraphRebuildPlatesIncremental === "function") {
+      if (!nodeGraphGlGraphRebuildPlatesIncremental(need)) return;
+    } else {
+      nodeGraphGlGraphRebuildPlates({ ids: need });
+    }
     if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
   });
+}
+
+function nodeGraphViewportModuleAlreadyMeshed(id) {
+  if (!id || typeof nodeGraphGlGraphState !== "object" || !nodeGraphGlGraphState) return false;
+  const state = nodeGraphGlGraphState;
+  const mesh = state.mesh;
+  if (!mesh || mesh.gen !== state.gen) return false;
+  const want = String(id);
+  if (!(state.plates || []).some((p) => String(p.id) === want)) return false;
+  const layers = mesh.plateGroupLayers || [];
+  if (!layers.length) return true;
+  for (let i = 0; i < layers.length; i += 1) {
+    if ((layers[i]?.ids || []).some((x) => String(x) === want)) return true;
+  }
+  return false;
 }
 
 // pan-popin-1 (Argi): a module that scrolls into view while a pan, touch
@@ -1223,7 +1257,7 @@ function nodeGraphViewportPopInSettleFull() {
   // drawNodeGraphWires (full) normally did it already: a full GL rebuild bumps gen.
   if (state && (state.gen || 0) !== nodeGraphViewportPopIn.partialGen) return;
   if (typeof nodeGraphGlGraphRebuildPlates !== "function") return;
-  if (typeof nodeGraphGlGraphInvalidateMesh === "function") nodeGraphGlGraphInvalidateMesh();
+  if (typeof nodeGraphGlGraphInvalidateMesh === "function") nodeGraphGlGraphInvalidateMesh("popin-settle-full");
   nodeGraphGlGraphRebuildPlates();
   if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
 }
@@ -1277,10 +1311,8 @@ function nodeGraphViewportPopInCandidates() {
   const out = [];
   nodeGraphViewportCullForEachNode(null, ".dsp-node.viewport-asleep:not(.removed)", (element) => {
     if (element.hidden) return;
-    const width = nodeGraphFiniteNumber(element._viewportCullW, 220);
-    const height = nodeGraphFiniteNumber(element._viewportCullH, 140);
-    const x = Number.parseFloat(element.style.getPropertyValue("--node-x")) || 0;
-    const y = Number.parseFloat(element.style.getPropertyValue("--node-y")) || 0;
+    // view-1: same world-unit box as the cull (no layout reads mid-gesture).
+    const { x, y, w: width, h: height } = nodeGraphViewportModuleWorldBox(element);
     if (!(x < right && (x + width) > left && y < bottom && (y + height) > top)) return;
     out.push({ element, d: Math.hypot(x + width / 2 - cx, y + height / 2 - cy) });
   });
@@ -1289,61 +1321,7 @@ function nodeGraphViewportPopInCandidates() {
 }
 
 function nodeGraphViewportGesturePopIn() {
-  if (!nodeGraphViewportGestureActive() || nodeGraphViewportCullBootOrLayoutUnsafe()) {
-    nodeGraphViewportPopIn.rebuild = false;
-    return;
-  }
-  const t0 = performance.now?.() || Date.now();
-  const candidates = nodeGraphViewportPopInCandidates();
-  const woke = [];
-  // Wake without each wake queueing its own rebuild; one rebuild below.
-  nodeGraphViewportCullFlushing = true;
-  try {
-    for (let i = 0; i < candidates.length; i += 1) {
-      if (woke.length >= NODE_GRAPH_VIEWPORT_POPIN_MAX) break;
-      if (woke.length && ((performance.now?.() || Date.now()) - t0) > NODE_GRAPH_VIEWPORT_POPIN_BUDGET_MS) break;
-      const element = candidates[i].element;
-      nodeGraphViewportCullApply(element, true);
-      if (element.classList.contains("viewport-asleep")) continue;
-      woke.push(element);
-      const id = String(element.dataset?.node || "");
-      if (id && typeof nodeGraphModuleGeometryPublishFromDom === "function") nodeGraphModuleGeometryPublishFromDom(id);
-    }
-  } finally {
-    nodeGraphViewportCullFlushing = false;
-  }
-  const wakeRebuild = nodeGraphViewportPopIn.rebuild;
-  nodeGraphViewportPopIn.rebuild = false;
-  if ((woke.length > 0 || wakeRebuild) && typeof nodeGraphGlGraphRebuildPlates === "function") {
-    nodeGraphViewportPopIn.lastAt = t0;
-    // pan-popin-2: rebuild only the woken modules' plates (MasterBot's
-    // incremental path patches the cached mesh without bumping gen, so the
-    // present below is a ~2.5 ms ReplayMesh, not a full redraw). Older
-    // gl-graph builds ignore the argument and rebuild everything.
-    let ids = woke.map((element) => String(element.dataset?.node || "")).filter(Boolean);
-    if (wakeRebuild) {
-      const plateless = nodeGraphViewportPopInPlatelessIds();
-      ids = plateless ? Array.from(new Set(ids.concat(plateless))) : null;
-    }
-    const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
-    const genBefore = state ? (state.gen || 0) : 0;
-    if (ids && ids.length && typeof nodeGraphGlGraphAddPlates === "function") {
-      nodeGraphGlGraphRebuildPlates({ ids });
-      nodeGraphViewportPopIn.lastMode = "ids";
-      if (!nodeGraphViewportPopIn.partial) {
-        nodeGraphViewportPopIn.partial = true;
-        nodeGraphViewportPopIn.partialGen = genBefore;
-      }
-    } else if (!ids || ids.length) {
-      nodeGraphGlGraphRebuildPlates();
-      nodeGraphViewportPopIn.lastMode = "full";
-    }
-    if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
-  }
-  nodeGraphViewportPopIn.lastWoke = woke.length;
-  nodeGraphViewportPopIn.lastMs = (performance.now?.() || Date.now()) - t0;
-  // More on screen than this frame's budget: the rest next frame.
-  if (candidates.length > woke.length && woke.length > 0) scheduleNodeGraphViewportGesturePopIn();
+  // Obsolete HTML-renderer mid-gesture wake. viewFrame runs live cull + present.
 }
 
 function scheduleNodeGraphViewportCullRefresh(options = {}) {
@@ -1405,6 +1383,18 @@ function nodeGraphViewportCullMustStayAwake(elementOrNodeId) {
   ).trim();
   if (!nodeId) {
     return false;
+  }
+  // Viewport In / Out and anything feeding the live screen-fx / video graph
+  // must stay awake: putting them display:none (off-screen cull) drops the
+  // shader pass for a frame, so the whole circuit view flickers even when the
+  // pan is far from those modules.
+  const stayNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  const stayType = String(stayNode?.type || "");
+  if (stayType === "viewOut" || stayType === "screenOut") {
+    return true;
+  }
+  if (typeof nodeGraphVideoGraphShouldSleep === "function" && !nodeGraphVideoGraphShouldSleep(nodeId)) {
+    return true;
   }
   if (typeof nodeGraphMiniPerformPresentsNode === "function" && nodeGraphMiniPerformPresentsNode(nodeId)) {
     return true; // Mini Performance View is showing it.
@@ -1499,6 +1489,7 @@ function nodeGraphViewportCullApply(element, intersecting) {
     return;
   }
   if (awake) {
+    if (nodeId) nodeGraphViewportJustWokeIds.add(nodeId);
     nodeGraphViewportCullWakePainters(element);
     scheduleNodeGraphViewportWakeRebuild();
   } else {
@@ -1524,11 +1515,6 @@ function ensureNodeGraphViewportModuleCull() {
           nodeGraphViewportCullApply(node, true);
         }
       }
-      return;
-    }
-    // Frozen HTML mid-gesture (ZP-4): a sleep/wake is a module re-layout plus
-    // its resize observers. The thaw runs one geometric cull for every module.
-    if (nodeGraphViewportPerf.htmlFrozen) {
       return;
     }
     // B-101: the observer may only WAKE. Its entries arrive async and can
@@ -1597,11 +1583,6 @@ function flushNodeGraphViewportImmediate(options = {}) {
     window.cancelAnimationFrame(nodeGraphViewportPerf.heavyRaf);
     nodeGraphViewportPerf.heavyRaf = 0;
   }
-  if (nodeGraphViewportPerf.settleTimer) {
-    window.clearTimeout(nodeGraphViewportPerf.settleTimer);
-    nodeGraphViewportPerf.settleTimer = 0;
-  }
-  nodeGraphViewportPerf.wheelActiveUntil = 0;
   clearNodeGraphViewportGestureClass();
   applyNodeGraphViewportCssLight({
     zoom: options.zoom !== false,

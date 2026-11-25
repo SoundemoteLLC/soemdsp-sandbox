@@ -2072,13 +2072,62 @@ function nodeGraphTypeNeedsLiveCircuit(type) {
 // full viewport pass (cull, geometry publish, complete wire redraw): about six
 // per patch load. During a commit those requests are held
 // (flushNodeGraphViewportImmediate) and one pass runs when the commit is done.
+// Code that derives state from the patch (Code boxes, Graph Code in/out)
+// listens here instead of polling on a timer. Listeners run once per outer
+// commit, after it is done, in a microtask (so a listener may commit again
+// without re-entering applyNodeGraphPatchToDom).
+const nodeGraphPatchCommitListeners = new Set();
+let nodeGraphPatchCommitNotifyQueued = null;
+
+function addNodeGraphPatchCommitListener(listener) {
+  if (typeof listener !== "function") {
+    return () => {};
+  }
+  nodeGraphPatchCommitListeners.add(listener);
+  return () => nodeGraphPatchCommitListeners.delete(listener);
+}
+
+// Scripts that load before this one queue their listeners here
+// (globalThis.__nodeGraphPatchCommitPending), like scope snapshot listeners.
+if (Array.isArray(globalThis.__nodeGraphPatchCommitPending)) {
+  for (const pending of globalThis.__nodeGraphPatchCommitPending) {
+    addNodeGraphPatchCommitListener(pending);
+  }
+  globalThis.__nodeGraphPatchCommitPending.length = 0;
+}
+
+function queueNodeGraphPatchCommitNotify(options) {
+  if (!nodeGraphPatchCommitListeners.size) {
+    return;
+  }
+  const layoutOnly = Boolean(options?.layoutEdit);
+  if (nodeGraphPatchCommitNotifyQueued) {
+    nodeGraphPatchCommitNotifyQueued.layoutOnly = nodeGraphPatchCommitNotifyQueued.layoutOnly && layoutOnly;
+    return;
+  }
+  nodeGraphPatchCommitNotifyQueued = { layoutOnly };
+  queueMicrotask(() => {
+    const info = nodeGraphPatchCommitNotifyQueued;
+    nodeGraphPatchCommitNotifyQueued = null;
+    for (const listener of nodeGraphPatchCommitListeners) {
+      try {
+        listener(info);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  });
+}
+
 function commitNodeGraphPatch(patch, options = {}) {
   const perf = typeof nodeGraphViewportPerf === "object" ? nodeGraphViewportPerf : null;
   if (perf) {
     perf.holdHeavyDepth = (perf.holdHeavyDepth || 0) + 1;
   }
   try {
-    return commitNodeGraphPatchBody(patch, options);
+    const result = commitNodeGraphPatchBody(patch, options);
+    queueNodeGraphPatchCommitNotify(options);
+    return result;
   } finally {
     if (perf) {
       perf.holdHeavyDepth -= 1;

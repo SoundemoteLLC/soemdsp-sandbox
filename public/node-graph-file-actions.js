@@ -177,8 +177,13 @@ if (typeof window !== "undefined" && !window.__nodeGraphWorkingPatchUnloadBound)
   window.addEventListener("beforeunload", flushNodeGraphWorkingPatchToUserSettingsOnUnload);
 }
 
+// no-poll-1: no 5-minute clock. The first edit after a save arms one
+// 5-minute timeout (patch commit listener); nothing runs while nothing changes.
 if (typeof window !== "undefined" && !window.__nodeGraphSessionAutosaveClock) {
-  window.__nodeGraphSessionAutosaveClock = window.setInterval(() => {
+  window.__nodeGraphSessionAutosaveClock = { timer: 0 };
+  const clock = window.__nodeGraphSessionAutosaveClock;
+  const autosave = () => {
+    clock.timer = 0;
     if (nodeGraphAutosaveSuppressed()) return;
     if (nodeGraphMvp?.patchDirtyState !== "edited") return;
     if (typeof setNodeGraphScriptStatus === "function") {
@@ -187,7 +192,17 @@ if (typeof window !== "undefined" && !window.__nodeGraphSessionAutosaveClock) {
     if (typeof saveNodeGraphWorkingPatchToUserSettings === "function") {
       saveNodeGraphWorkingPatchToUserSettings();
     }
-  }, 5 * 60 * 1000);
+  };
+  const arm = () => {
+    if (clock.timer || nodeGraphMvp?.patchDirtyState !== "edited") return;
+    clock.timer = window.setTimeout(autosave, 5 * 60 * 1000);
+  };
+  // patch-core loads after this file: queue the listener for it.
+  if (typeof addNodeGraphPatchCommitListener === "function") {
+    addNodeGraphPatchCommitListener(arm);
+  } else {
+    (globalThis.__nodeGraphPatchCommitPending ||= []).push(arm);
+  }
 }
 
 function clearNodeGraphWorkingPatchFromUserSettings() {

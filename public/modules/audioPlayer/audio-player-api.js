@@ -109,16 +109,99 @@
       volume: Number(node?.params?.amplitude ?? 1),
       display: displaySettings(id),
       needsGesture: !running(),
+      // no-poll-2: clock fields so the host moves the playhead itself.
+      loop: transport === 3 || transport === 5,
+      rate: [3, 4, 5].includes(transport) && running() && Boolean(node?.sample?.id)
+        ? Math.round(((Number.isFinite(Number(node?.params?.speed)) ? Number(node.params.speed) : 1)
+          + (Number.isFinite(Number(node?.params?.direction)) ? Number(node.params.direction) : 0)) * 1000) / 1000
+        : 0,
+      at: Date.now(),
     };
   }
 
+  // no-poll-2: no state clock. A state event goes out when something changes
+  // (transport, track, seek/scrub, volume, speed, display, AudioContext state,
+  // patch commit, input in the player) and carries { position, rate, at }:
+  // the host computes position + (Date.now() - at) / 1000 * rate itself.
+  // A position that is off the host's prediction by > 0.25 s (seek, scrub,
+  // loop wrap seen on a check) also sends.
+  let lastSent = null;
   function tick() {
-    if (!ready || !targetOrigin()) return;
+    if (!ready || !parentWindow() || !targetOrigin()) return;
     const s = state();
-    const key = JSON.stringify({ ...s, position: s.playing ? s.position : Math.round(s.position) });
-    if (key !== lastKey) {
+    const key = JSON.stringify({ ...s, position: 0, at: 0 });
+    const predicted = lastSent ? lastSent.position + ((s.at - lastSent.at) / 1000) * lastSent.rate : NaN;
+    const jumped = !(Math.abs(s.position - predicted) <= 0.25);
+    if (key !== lastKey || jumped) {
       lastKey = key;
+      lastSent = { position: s.position, at: s.at, rate: s.rate };
       emit("state", s);
+    }
+  }
+  let notifyQueued = false;
+  let notifyLater = 0;
+  function notifyStateChanged() {
+    if (!ready || !parentWindow()) return;
+    if (!notifyQueued) {
+      notifyQueued = true;
+      queueMicrotask(() => {
+        notifyQueued = false;
+        tick();
+      });
+    }
+    // Transport and track changes land in the engine a moment later: one
+    // follow-up check, not a clock.
+    if (notifyLater) window.clearTimeout(notifyLater);
+    notifyLater = window.setTimeout(() => {
+      notifyLater = 0;
+      tick();
+    }, 150);
+  }
+  function hookPlayerFunctions() {
+    const names = [
+      "nodeGraphAudioPlayerWriteTransport",
+      "nodeGraphAudioPlayerPlaylistSyncTransport",
+      "nodeGraphAudioPlayerPlaylistPlayNext",
+      "nodeGraphAudioPlayerPlaylistPlayPrev",
+      "nodeGraphAudioPlayerPlaylistPlayIndex",
+      "nodeGraphAudioPlayerLibraryPlayIndex",
+      "nodeGraphAudioPlayerPlaylistSeekAbsolute",
+      "nodeGraphAudioPlayerPlaylistApplyScrub",
+      "nodeGraphAudioPlayerPlaylistStop",
+      "nodeGraphAudioPlayerPlaylistTogglePlayPause",
+    ];
+    for (const name of names) {
+      const fn = window[name];
+      if (typeof fn !== "function" || fn._soemdspPlayerApiHook) continue;
+      const hooked = function soemdspPlayerApiHook(...args) {
+        const result = fn.apply(this, args);
+        notifyStateChanged();
+        if (result && typeof result.then === "function") result.then(notifyStateChanged, notifyStateChanged);
+        return result;
+      };
+      hooked._soemdspPlayerApiHook = true;
+      window[name] = hooked;
+    }
+    let hookedContext = null;
+    const hookContext = () => {
+      const ctx = nodeGraphMvp?.live?.context;
+      if (!ctx || ctx === hookedContext || typeof ctx.addEventListener !== "function") return;
+      hookedContext = ctx;
+      ctx.addEventListener("statechange", notifyStateChanged);
+    };
+    hookContext();
+    window.addEventListener("nodegraph:livenode", () => {
+      hookContext();
+      notifyStateChanged();
+    });
+    if (typeof addNodeGraphPatchCommitListener === "function") {
+      addNodeGraphPatchCommitListener(() => {
+        hookContext();
+        notifyStateChanged();
+      });
+    }
+    for (const type of ["pointerup", "keyup", "change", "input"]) {
+      window.addEventListener(type, notifyStateChanged, { capture: true, passive: true });
     }
   }
 
@@ -450,7 +533,7 @@
       case "get-state": emit("state", state(), origin); return;
       default: return error("unknown-type", `unknown message ${msg.type}`);
     }
-    window.setTimeout(tick, 50);
+    notifyStateChanged();
   }
 
   window.addEventListener("message", (event) => {
@@ -467,7 +550,11 @@
     ready = true;
     emit("ready", { patch: String(nodeGraphMvp?.loadedPatchSlug || ""), nodeId: nodeId() });
     while (queue.length) queue.shift()();
-    window.setInterval(tick, 250);
+    // no-poll-2: event-driven state (see tick); embedded pages only.
+    if (parentWindow()) {
+      hookPlayerFunctions();
+      notifyStateChanged();
+    }
   }
   if (document.documentElement.dataset.nodeSandboxInterfaceReady === "true") onReady();
   else window.addEventListener("nodeSandboxInterfaceReady", onReady, { once: true });
@@ -487,7 +574,7 @@
     const id = nodeId();
     if (id && typeof nodeGraphAudioPlayerPlaylistTogglePlayPause === "function") {
       nodeGraphAudioPlayerPlaylistTogglePlayPause(id);
-      window.setTimeout(tick, 50);
+      notifyStateChanged();
     }
   });
 })();

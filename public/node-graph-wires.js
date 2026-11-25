@@ -1463,7 +1463,6 @@
       // workspace style recalc right after the camera moved (40-55 ms/move).
       if (
         state.sliderDragging
-        || (typeof nodeGraphViewportGestureActive === 'function' && nodeGraphViewportGestureActive())
       ) {
         setHoveredPatchPoint(null);
         return;

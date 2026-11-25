@@ -763,6 +763,13 @@ The only limits a user should ever meet are the node count (128) and total memor
 - Delays and reverbs allocate for the parameter maximum (no glitches over saving memory).
 - Memory budget: default 3 GiB, `soemdsp_memory_set_budget_mb`. Running out is a loud error (overflow bit 256, compile refused), never a silent fallback.
 
+## 24. No arrow cursors (Argi, 2026-11-24)
+
+**Arrow cursors are not allowed anywhere in the app.** That means no left-right (`ew-resize` / `col-resize` / `e-resize` / `w-resize`), no up-down (`ns-resize` / `row-resize` / `n-resize` / `s-resize`), no diagonal (`nwse-resize` / `nesw-resize`), and no all-direction (`move` / `all-scroll`) cursor. This applies everywhere: resize handles, sliders, knobs, drag and adjust surfaces, Display Settings, and every panel or window.
+
+- Adjusting and dragging always show the app's own custom mouse-dot cursor, set through the shared cursor code. Never set a `cursor` value per module or in a one-off CSS rule.
+- A smoke test fails if an arrow cursor comes back. Delete any you find (§10b).
+
 ## Public links (Argi, 2026-10-17)
 
 - The soundemote GitHub org is banned: code, docs and plugin metadata must never link to `github.com/soundemote`. Public links go to `github.com/elanhickler`.

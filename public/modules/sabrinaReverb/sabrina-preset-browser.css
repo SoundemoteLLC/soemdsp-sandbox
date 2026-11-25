@@ -345,7 +345,7 @@
   font: inherit;
   font-size: 10px;
   line-height: 12px;
-  cursor: grab;
+  cursor: var(--node-adjust-cursor);
 }
 
 .sabrina-preset-stop.is-sel {

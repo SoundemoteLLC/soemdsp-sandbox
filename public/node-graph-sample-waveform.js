@@ -2044,7 +2044,7 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
       return;
     }
     section._sampleWaveHudHover = key;
-    section.style.cursor = key === "zoom" ? "ew-resize" : (key === "playlist" ? "pointer" : "");
+    section.style.cursor = key === "zoom" ? nodeGraphAdjustCursor() : (key === "playlist" ? "pointer" : "");
     if (typeof drawNodeGraphSampleWaveformDisplay === "function") {
       drawNodeGraphSampleWaveformDisplay(section);
     }
@@ -2137,7 +2137,7 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
       const hud = onPlate(event) ? nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY) : null;
       const handle = onPlate(event) ? nodeGraphSampleWaveformRegionHandleHit(section, canvas, event.clientX) : null;
       section.style.cursor = handle || hud === "zoom"
-        ? "ew-resize"
+        ? nodeGraphAdjustCursor()
         : (hud === "playlist" ? "pointer" : "");
       return;
     }

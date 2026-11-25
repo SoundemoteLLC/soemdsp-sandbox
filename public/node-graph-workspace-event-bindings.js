@@ -214,6 +214,7 @@ function syncNodeGraphConstraintOverlayToggles(options = {}) {
   if (options.persist && typeof persistNodeGraphDebugChromePreference === "function") {
     persistNodeGraphDebugChromePreference();
   }
+  syncNodeGraphConstraintResourceMetricsClock();
   syncNodeGraphConstraintResourceMetrics();
   if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
@@ -341,6 +342,18 @@ function syncNodeGraphConstraintResourceMetrics() {
   }
 }
 
+// no-poll-1: the FPS / main-thread-lag meter only runs while a CPU, RAM or GPU
+// overlay is switched on (it measures frames, so it needs the frame loop and
+// a 1 s tick then). All overlays off: no rAF loop and no timer.
+function nodeGraphConstraintResourceMetricsWanted() {
+  const body = document.body;
+  return Boolean(body && (
+    body.classList.contains("node-constraint-cpu-active")
+    || body.classList.contains("node-constraint-ram-active")
+    || body.classList.contains("node-constraint-gpu-active")
+  ));
+}
+
 function startNodeGraphConstraintResourceMetrics() {
   if (nodeGraphMvp.constraintResourceMetricsStarted) {
     return;
@@ -355,7 +368,39 @@ function startNodeGraphConstraintResourceMetrics() {
     tickExpectedAt: performance.now() + 1000,
   };
   nodeGraphMvp.constraintResourceMetrics = metrics;
+  syncNodeGraphConstraintResourceMetricsClock();
+}
+
+function syncNodeGraphConstraintResourceMetricsClock() {
+  const metrics = nodeGraphMvp?.constraintResourceMetrics;
+  if (!metrics || !nodeGraphMvp.constraintResourceMetricsStarted) {
+    return;
+  }
+  const clock = metrics.clock || (metrics.clock = { raf: 0, timer: 0 });
+  const wanted = nodeGraphConstraintResourceMetricsWanted();
+  if (!wanted) {
+    if (clock.raf) window.cancelAnimationFrame(clock.raf);
+    if (clock.timer) window.clearInterval(clock.timer);
+    clock.raf = 0;
+    clock.timer = 0;
+    metrics.mainFrameRate = 0;
+    metrics.mainThreadLagMs = 0;
+    return;
+  }
+  if (clock.raf || clock.timer) {
+    return;
+  }
+  const start = performance.now();
+  metrics.frameCount = 0;
+  metrics.lastFrameAt = start;
+  metrics.lastFpsAt = start;
+  metrics.tickExpectedAt = start + 1000;
   const frame = (now) => {
+    clock.raf = 0;
+    if (!nodeGraphConstraintResourceMetricsWanted()) {
+      syncNodeGraphConstraintResourceMetricsClock();
+      return;
+    }
     metrics.frameCount += 1;
     if (now - metrics.lastFpsAt >= 1000) {
       metrics.mainFrameRate = (metrics.frameCount * 1000) / Math.max(1, now - metrics.lastFpsAt);
@@ -364,10 +409,10 @@ function startNodeGraphConstraintResourceMetrics() {
       syncNodeGraphConstraintResourceMetrics();
     }
     metrics.lastFrameAt = now;
-    requestAnimationFrame(frame);
+    clock.raf = requestAnimationFrame(frame);
   };
-  requestAnimationFrame(frame);
-  window.setInterval(() => {
+  clock.raf = requestAnimationFrame(frame);
+  clock.timer = window.setInterval(() => {
     const now = performance.now();
     metrics.mainThreadLagMs = Math.max(0, now - metrics.tickExpectedAt);
     metrics.tickExpectedAt = now + 1000;

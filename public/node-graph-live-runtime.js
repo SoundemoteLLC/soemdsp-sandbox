@@ -1504,6 +1504,7 @@ function nodeGraphStopGpuAdditiveProducer() {
   }
   state.nodes = new Map();
   state.timer = 0;
+  state.kick = null;
 }
 
 function nodeGraphGpuAdditiveNodeParam(node, key, fallback) {
@@ -1863,8 +1864,14 @@ function nodeGraphStartGpuAdditiveProducer(plan, audio) {
     }
   };
 
+  // no-poll-2: no 8 ms timer. Refill runs now, after every finished chunk
+  // (the setTimeout(produce, 0) above), and on each worklet queue-level
+  // message (gpuAdditiveStatus, every 50 ms of audio) via producer.kick.
+  // The target is 6 x 2048 frames (~280 ms) of audio queued, so a 50 ms
+  // cadence keeps ample headroom.
+  producer.timer = 0;
+  producer.kick = produce;
   produce();
-  producer.timer = setInterval(produce, 8);
 }
 
 function queueNodeGraphLivePatchCommand(command, nodeId = "") {
@@ -2411,6 +2418,8 @@ function handleNodeGraphLiveWorkletMessage(event) {
     if (enhancedQueues.some((queue) => Number(queue.samples) > 0 || Number(queue.chunks) > 0)) {
       nodeGraphFinishGpuAdditivePrime("ready");
     }
+    // no-poll-2: the queue level is the refill trigger.
+    producer?.kick?.();
   } else if (message.type === "paramsApplied") {
     if (
       message.sessionId !== nodeGraphMvp.live.sessionId ||
@@ -4024,6 +4033,8 @@ async function startNodeGraphLiveAudio(outputSerial = nodeGraphMvp.live.outputTo
     nodeGraphMvp.live.context = context;
     nodeGraphMvp.live.meterGain = null;
     nodeGraphMvp.live.node = liveNode;
+    // no-poll-1: listeners (debug console smoothing watch) re-hook the port.
+    try { window.dispatchEvent(new Event("nodegraph:livenode")); } catch (_error) { /* no listeners */ }
     nodeGraphMvp.live.outputGain = outputGain;
     nodeGraphMvp.live.usesWorklet = usesWorklet;
     liveNode.connect(outputGain);

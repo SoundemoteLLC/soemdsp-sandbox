@@ -481,10 +481,15 @@
     if (smoothingWatch) {
       lastSummaryKey = "";
       installPortHook();
-      if (!watchTimer) watchTimer = window.setInterval(installPortHook, 1000); // re-hook if the engine restarts
+      // no-poll-1: re-hook when the engine restarts (live-runtime announces a
+      // new live node) instead of checking every second.
+      if (!watchTimer) {
+        watchTimer = 1;
+        window.addEventListener("nodegraph:livenode", installPortHook);
+      }
       SE.INFO("smoothing watch ON — fine-tune a slider; a line prints when the sent smoothing changes.");
     } else {
-      if (watchTimer) { window.clearInterval(watchTimer); watchTimer = 0; }
+      if (watchTimer) { window.removeEventListener("nodegraph:livenode", installPortHook); watchTimer = 0; }
       uninstallPortHook();
       SE.INFO("smoothing watch OFF");
     }
@@ -512,7 +517,7 @@
         box-shadow:0 10px 40px rgba(0,0,0,.55);overflow:hidden;/* custom SE grip — not CSS resize (that scrolls the log) */
         font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;}
       #seDebugPanel.se-open{display:flex;}
-      #seDebugPanel .se-head{display:flex;align-items:center;gap:6px;padding:6px 8px;background:#171b22;border-bottom:1px solid #2a2f3a;cursor:move;user-select:none;flex:0 0 auto;}
+      #seDebugPanel .se-head{display:flex;align-items:center;gap:6px;padding:6px 8px;background:#171b22;border-bottom:1px solid #2a2f3a;cursor:var(--node-adjust-cursor);user-select:none;flex:0 0 auto;}
       #seDebugPanel .se-title{font-weight:700;color:#fff;margin-right:auto;font-size:17px;}
       #seDebugPanel button.se-bug{background:none;border:1px solid #c0392b;border-radius:7px;cursor: var(--node-dot-cursor);
         font-size:24px;line-height:1.15;padding:1px 5px;}
@@ -535,7 +540,7 @@
       #seDebugPanel .se-log{flex:1 1 auto;min-height:0;overflow:auto;padding:6px 10px;cursor:text;
         background:#0a0c0e;font-size:11px;line-height:1.45;overscroll-behavior:contain;}
       #seDebugPanel.se-resizing .se-log{overflow:hidden;pointer-events:none;}
-      #seDebugPanel .se-resize-grip{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;z-index:3;
+      #seDebugPanel .se-resize-grip{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:var(--node-adjust-cursor);z-index:3;
         background:linear-gradient(135deg,transparent 0 48%,#3a4558 48% 52%,transparent 52% 68%,#3a4558 68% 72%,transparent 72%);
         touch-action:none;opacity:0;}
       #seDebugPanel:hover > .se-resize-grip,

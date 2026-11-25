@@ -78,7 +78,7 @@ try {
     const R = (box.width - inset - o.x) / zoom; const B = (box.height - inset - o.y) / zoom;
     const plates = new Set((nodeGraphGlGraphState.plates || []).map((p) => p.id));
     const meshFresh = Boolean(nodeGraphGlGraphState.mesh && nodeGraphGlGraphState.mesh.gen === nodeGraphGlGraphState.gen);
-    const out = { onScreen: 0, asleep: 0, unplated: 0, ids: [], partial: typeof nodeGraphViewportPopIn !== "undefined" ? Boolean(nodeGraphViewportPopIn.partial) : null };
+    const out = { onScreen: 0, asleep: 0, unplated: 0, ids: [], partial: typeof nodeGraphViewportPopIn !== "undefined" ? Boolean(nodeGraphViewportPopIn.partial) : null, lastPresent: (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState.lastPresent) || null, presentCounts: (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState.presentCounts) || null };
     for (const el of document.querySelectorAll(".dsp-node[data-node^='p']")) {
       const x = Number.parseFloat(el.style.getPropertyValue("--node-x")) || 0;
       const y = Number.parseFloat(el.style.getPropertyValue("--node-y")) || 0;
@@ -91,10 +91,14 @@ try {
       const plated = plates.has(el.dataset.node);
       if (asleep) out.asleep += 1;
       if (!plated) out.unplated += 1;
-      if (asleep || !plated) out.ids.push(el.dataset.node);
+      // HTML may stay asleep mid-zoom; the module shows if its GL plate is
+      // in the mesh (chrome cache). Only unplated modules are blank.
+      if (!plated) out.ids.push(el.dataset.node);
     }
     out.meshFresh = meshFresh;
-    out.gesture = nodeGraphViewportGestureActive();
+    const cam = typeof nodeGraphViewCamera === "object" ? nodeGraphViewCamera : null;
+    const zooming = Boolean(cam && cam.lastZoomChangeT && ((performance.now() - cam.lastZoomChangeT) < 250));
+    out.gesture = Boolean(nodeGraphMvp?.workspacePanning || nodeGraphMvp?.smoothZoomDragging || nodeGraphMvp?.workspacePinchZooming || cam?.dirty || zooming);
     return out;
   });
   const frames = {
@@ -263,9 +267,9 @@ try {
 
   console.log(JSON.stringify(results, null, 1));
   for (const [name, r] of Object.entries(results)) {
-    const held = r.held350ms || r.endOfWheel;
+    const held = r.held350ms || r.mid || r.endOfWheel;
     check(held.gesture, `${name}: gesture still active at the sample`);
-    check(held.onScreen > 0 && held.asleep === 0 && held.unplated === 0, `${name}: every on-screen module shows mid-gesture (${held.onScreen} on screen, ${held.asleep} culled, ${held.unplated} without a plate${held.ids.length ? `: ${held.ids.slice(0, 6).join(",")}` : ""})`);
+    check(held.onScreen > 0 && held.unplated === 0, `${name}: every on-screen module shows mid-gesture (${held.onScreen} on screen, ${held.asleep} html-asleep, ${held.unplated} without a plate${held.ids.length ? `: ${held.ids.slice(0, 6).join(",")}` : ""})`);
     const after = r.afterRelease || r.afterSettle;
     check(after.asleep === 0 && after.unplated === 0, `${name}: all on-screen modules after the gesture ends (${after.onScreen} on screen)`);
     check(after.partial !== true, `${name}: settle did the full plate rebuild after incremental pop-ins`);

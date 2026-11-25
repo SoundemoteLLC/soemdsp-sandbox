@@ -6,6 +6,16 @@ function applyNodeGraphPan(options = {}) {
   if (!nodeGraphMvp?.workspaceCameraBox && typeof rememberNodeGraphWorkspaceCameraBox === "function") {
     rememberNodeGraphWorkspaceCameraBox(workspace);
   }
+  if (typeof viewCameraSet === "function") {
+    viewCameraSet({
+      immediate: options.immediate === true || options.gesture !== true,
+      persist: options.persist !== false,
+    });
+    if (typeof syncNodeGraphWorkspaceResizeHandlePosition === "function") {
+      syncNodeGraphWorkspaceResizeHandlePosition();
+    }
+    return;
+  }
   // Light CSS pan every sample; heavy chrome coalesced during gestures.
   // skipCss: caller already wrote pan/zoom vars (e.g. setNodeGraphZoom merge).
   if (options.skipCss) {
@@ -213,6 +223,7 @@ function setNodeGraphPan(x, y, options = {}) {
     gesture: isGesture,
     immediate: options.immediate === true || !isGesture,
     skipHeavy: options.skipHeavy === true,
+    persist: options.persist !== false,
   });
   if (options.persist !== false) {
     if (typeof scheduleNodeGraphWorkspaceViewPersist === "function") {

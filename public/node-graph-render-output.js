@@ -194,16 +194,15 @@ async function renderNodeGraphAudio() {
       };
       const cleanup = () => {
         try { workletNode.port.removeEventListener("message", onMsg); } catch (_e) { /* */ }
-        window.clearInterval(poll);
+        window.clearTimeout(timeout);
       };
       workletNode.port.addEventListener("message", onMsg);
-      const poll = window.setInterval(() => {
-        if (performance.now() - t0 > timeoutMs) {
-          cleanup();
-          // Fall through: startRendering may still have audio if setPlan applied.
-          resolve();
-        }
-      }, 50);
+      // no-poll-1: one timeout instead of a 50 ms poll of the clock.
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        // Fall through: startRendering may still have audio if setPlan applied.
+        resolve();
+      }, Math.max(0, timeoutMs - (performance.now() - t0)));
     });
     // Worklet boots paused (speedMultiplier=0) and would render silence.
     // Play the simulation for the offline bounce (same as Live Play).

@@ -589,7 +589,7 @@ function createNodeGraphSequencerBody(node) {
         rowH: hit.rowH,
         moved: false,
       };
-      canvas.style.cursor = "ns-resize";
+      canvas.style.cursor = nodeGraphAdjustCursor();
       canvas.setPointerCapture(event.pointerId);
       return;
     }
@@ -628,7 +628,7 @@ function createNodeGraphSequencerBody(node) {
         originLength: n.length,
         moved: false,
       };
-      canvas.style.cursor = resize ? "ew-resize" : "grabbing";
+      canvas.style.cursor = nodeGraphAdjustCursor();
       canvas.setPointerCapture(event.pointerId);
       if (!resize) sequencerAuditionMidi(n.midi);
       draw();
@@ -652,7 +652,7 @@ function createNodeGraphSequencerBody(node) {
       originLength: placed?.length ?? clip.snap,
       moved: false,
     };
-    canvas.style.cursor = "ew-resize";
+    canvas.style.cursor = nodeGraphAdjustCursor();
     canvas.setPointerCapture(event.pointerId);
     sequencerAuditionMidi(placed?.midi ?? hit.midi);
     draw();
@@ -783,7 +783,7 @@ function createNodeGraphSequencerBody(node) {
     if (drag) return;
     const hit = eventToTickMidi(event);
     if (!hit || hit.inGutter) {
-      canvas.style.cursor = hit?.inGutter ? "ns-resize" : "var(--node-dot-cursor)";
+      canvas.style.cursor = hit?.inGutter ? nodeGraphAdjustCursor() : "var(--node-dot-cursor)";
       return;
     }
     const clip = nodeGraphSequencerEnsureClip(nodeId);
@@ -797,7 +797,7 @@ function createNodeGraphSequencerBody(node) {
     const nw = r ? r.w : n.length * hit.tickW;
     const noteRight = r ? r.x + r.w : hit.gutter + (n.start + n.length) * hit.tickW;
     const handle = nw < 16 ? 0 : Math.min(8, nw * 0.2);
-    canvas.style.cursor = handle > 0 && hit.x >= noteRight - handle ? "ew-resize" : "grab";
+    canvas.style.cursor = handle > 0 && hit.x >= noteRight - handle ? nodeGraphAdjustCursor() : "var(--node-dot-cursor)";
   }, { passive: true });
 
   function endDrag(event) {

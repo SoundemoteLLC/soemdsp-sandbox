@@ -515,7 +515,7 @@
         touch-action: none;
       }
       .sge-stop-cell[data-locked="false"] .sge-stop-pos {
-        cursor: ew-resize;
+        cursor: var(--node-adjust-cursor);
       }
 
       /* Presets Ã¢â‚¬â€ flush 2-col tiles, black title on gradient */

@@ -723,25 +723,59 @@ function refreshNodeGraphModuleFacePage(options = {}) {
   }
 }
 
-function stopNodeGraphModuleFacePageWatch() {
-  if (nodeGraphModuleFacePageTimer) {
-    window.clearInterval(nodeGraphModuleFacePageTimer);
-    nodeGraphModuleFacePageTimer = 0;
-  }
-}
+// no-poll-1: no 100 ms timer. While the page is open it re-checks (the cheap
+// signature compare in refreshNodeGraphModuleFacePage) after a patch commit
+// and after input that can change the selection or a module (pointer up,
+// click, key up), once per frame at most.
+let nodeGraphModuleFacePageWatchRaf = 0;
+let nodeGraphModuleFacePageWatchOff = null;
 
-function startNodeGraphModuleFacePageWatch() {
-  if (nodeGraphModuleFacePageTimer) {
+function scheduleNodeGraphModuleFacePageRefresh() {
+  if (nodeGraphModuleFacePageWatchRaf) {
     return;
   }
-  nodeGraphModuleFacePageTimer = window.setInterval(() => {
+  nodeGraphModuleFacePageWatchRaf = window.requestAnimationFrame(() => {
+    nodeGraphModuleFacePageWatchRaf = 0;
     const panel = document.getElementById("nodeModuleFacePage");
     if (!panel || panel.hidden) {
       stopNodeGraphModuleFacePageWatch();
       return;
     }
     refreshNodeGraphModuleFacePage();
-  }, NODE_GRAPH_MODULE_FACE_PAGE_POLL_MS);
+  });
+}
+
+function stopNodeGraphModuleFacePageWatch() {
+  if (nodeGraphModuleFacePageWatchRaf) {
+    window.cancelAnimationFrame(nodeGraphModuleFacePageWatchRaf);
+    nodeGraphModuleFacePageWatchRaf = 0;
+  }
+  if (nodeGraphModuleFacePageWatchOff) {
+    nodeGraphModuleFacePageWatchOff();
+    nodeGraphModuleFacePageWatchOff = null;
+  }
+  nodeGraphModuleFacePageTimer = 0;
+}
+
+function startNodeGraphModuleFacePageWatch() {
+  if (nodeGraphModuleFacePageWatchOff) {
+    return;
+  }
+  const onInput = () => scheduleNodeGraphModuleFacePageRefresh();
+  const types = ["pointerup", "click", "keyup"];
+  for (const type of types) {
+    window.addEventListener(type, onInput, { capture: true, passive: true });
+  }
+  const offCommit = typeof addNodeGraphPatchCommitListener === "function"
+    ? addNodeGraphPatchCommitListener(onInput)
+    : () => {};
+  nodeGraphModuleFacePageTimer = 1;
+  nodeGraphModuleFacePageWatchOff = () => {
+    for (const type of types) {
+      window.removeEventListener(type, onInput, { capture: true });
+    }
+    offCommit();
+  };
 }
 
 function setNodeGraphModuleFacePageOpen(open) {

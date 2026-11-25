@@ -24,6 +24,9 @@ const nodeGraphScreenFxState = {
   raf: 0,
   // Peek (hold P): the screen shows the plain circuit while Viewport Out's chain keeps running.
   peek: false,
+  // Last composited screen (texture + size). Reused when this frame has no
+  // source face textures yet, so a mid-pan plate rebuild cannot blank the view.
+  lastFinal: null,
 };
 
 const NODE_GRAPH_SCREEN_FX_VS = `#version 300 es
@@ -285,8 +288,16 @@ function nodeGraphScreenFxSetActive(host, on) {
     else delete canvas.dataset.screenFxSource;
   }
   if (!on) {
-    const overlay = document.getElementById("nodeScreenFxCanvas");
-    overlay?.getContext("2d")?.clearRect(0, 0, overlay.width, overlay.height);
+    // Only clear when the patch no longer has Viewport In/Out. A one-frame
+    // drop of gl-graph-on / source canvases used to wipe the overlay and look
+    // like the viewport shaders vanished, then came back.
+    const nodes = typeof nodeGraphScreenFxNodes === "function" ? nodeGraphScreenFxNodes() : null;
+    const stillWanted = Boolean(nodes && (nodes.viewOuts.length || nodes.screenOuts.length));
+    if (!stillWanted) {
+      const overlay = document.getElementById("nodeScreenFxCanvas");
+      overlay?.getContext("2d")?.clearRect(0, 0, overlay.width, overlay.height);
+      st.lastFinal = null;
+    }
   }
   // Sources switch between 2D bitmaps and face textures: repaint them once.
   if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
@@ -405,11 +416,28 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
     gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
     gl.useProgram(kit.layer);
     gl.uniform1i(kit.layerTex, 0);
+    let sourceTextures = 0;
     for (const canvas of sources) {
       const face = typeof nodeGraphSharedGlFaceTexture === "function" ? nodeGraphSharedGlFaceTexture(canvas) : null;
-      if (face?.texture) nodeGraphScreenFxDraw(kit, st.scene, kit.layer, [face.texture]);
+      if (face?.texture) {
+        sourceTextures += 1;
+        nodeGraphScreenFxDraw(kit, st.scene, kit.layer, [face.texture]);
+      }
     }
     gl.disable(gl.BLEND);
+    // Mid-rebuild the graph canvases can exist without a face texture for a
+    // frame (resize or a present still in flight). Compositing that empty
+    // scene would flash the raw/blank view through the overlay.
+    if (!sourceTextures && st.lastFinal?.texture) {
+      for (let i = 0; i < 5; i += 1) {
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.activeTexture(prevActive);
+      gl.useProgram(prevProgram);
+      return st.lastFinal;
+    }
     // 3. Screen: Viewport Out's picture, else the plain scene.
     let screen = null;
     for (const id of (st.peek ? [] : nodes.screenOuts)) {
@@ -449,6 +477,7 @@ function nodeGraphScreenFxRender(host, nodes, onScreen) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.activeTexture(prevActive);
   gl.useProgram(prevProgram);
+  if (final?.texture) st.lastFinal = final;
   return final;
 }
 

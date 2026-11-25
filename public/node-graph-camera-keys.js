@@ -100,6 +100,9 @@
         const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
         setNodeGraphPan(pan.x + cam.vx * dt, pan.y + cam.vy * dt, { gesture: true, persist: false });
       }
+      if (typeof viewFrame === "function" && nodeGraphViewCamera?.dirty) {
+        viewFrame();
+      }
     }
     if (pressed.size || moving) {
       cam.raf = window.requestAnimationFrame(tick);

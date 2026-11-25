@@ -643,8 +643,13 @@ function nodeGraphJackElementVisibility(element) {
   const display = cs?.display || "";
   const visibility = cs?.visibility || "";
   const opacity = cs ? Number(cs.opacity) : 1;
-  const width = nodeGraphFiniteNumber(rect.width);
-  const height = nodeGraphFiniteNumber(rect.height);
+  // offsetWidth/Height are layout (zoom-1) px and ignore CSS zoom. Screen
+  // rects shrink with camera zoom, so a 7x14 jack at 0.5x is 1.7x3.4 and
+  // used to FAIL a 2x2 screen-pixel check even though it was laid out.
+  const layoutW = nodeGraphFiniteNumber(element.offsetWidth);
+  const layoutH = nodeGraphFiniteNumber(element.offsetHeight);
+  const screenW = nodeGraphFiniteNumber(rect.width);
+  const screenH = nodeGraphFiniteNumber(rect.height);
   const hiddenHost = Boolean(element.hidden || element.closest?.("[hidden]"));
   const ioHidden = Boolean(element.closest?.(".io-hidden"));
   const unusedHost = Boolean(element.closest?.(".unused-hidden"));
@@ -652,14 +657,14 @@ function nodeGraphJackElementVisibility(element) {
   const painted = display !== "none"
     && visibility !== "hidden"
     && !(Number.isFinite(opacity) && opacity <= 0.02)
-    && width >= 2
-    && height >= 2
+    && layoutW >= 2
+    && layoutH >= 2
     && !hiddenHost;
   const reasons = [];
   if (display === "none") reasons.push("display-none");
   if (visibility === "hidden") reasons.push("visibility-hidden");
   if (Number.isFinite(opacity) && opacity <= 0.02) reasons.push("opacity");
-  if (width < 2 || height < 2) reasons.push(`size-${width.toFixed(1)}x${height.toFixed(1)}`);
+  if (layoutW < 2 || layoutH < 2) reasons.push(`size-${layoutW.toFixed(1)}x${layoutH.toFixed(1)}`);
   if (hiddenHost) reasons.push("hidden-attr");
   if (ioHidden) reasons.push("io-hidden");
   if (unusedHost && !connected) reasons.push("unused-hidden");
@@ -670,8 +675,12 @@ function nodeGraphJackElementVisibility(element) {
     channel: element.dataset?.jackChannel
       || element.closest?.(".node-io-row")?.dataset?.jackChannel
       || "",
-    width,
-    height,
+    width: layoutW,
+    height: layoutH,
+    layoutW,
+    layoutH,
+    screenW,
+    screenH,
     display,
     visibility,
     opacity: Number.isFinite(opacity) ? opacity : 1,

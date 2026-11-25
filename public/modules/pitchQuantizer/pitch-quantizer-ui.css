@@ -10,12 +10,12 @@
   overflow: hidden;
   box-sizing: border-box;
   background: #07090b;
-  cursor: var(--node-dot-cursor, grab);
+  cursor: var(--node-dot-cursor);
   touch-action: none;
 }
 
 .node-pitch-quantizer-face.scale-jacked {
-  cursor: var(--node-dot-cursor, grab);
+  cursor: var(--node-dot-cursor);
 }
 
 .node-pitch-quantizer-face > .node-display-face,

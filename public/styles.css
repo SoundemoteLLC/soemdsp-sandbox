@@ -97,12 +97,16 @@
   --node-constraint-gpu: #c083ff;
   /*
    * App-wide default cursor: tiny white + (hotspot center).
-   * Never use hand / finger (`pointer`) or grab-hand. Resize / text / module-move
-   * arrow may still be set explicitly.
+   * Adjust, drag, and resize use the mouse-dot (--node-adjust-cursor).
+   * Never use left-right, up-down, diagonal, or all-direction arrow cursors.
+   * Never use hand / finger (`pointer`) or grab-hand.
+   * Exception: `text` for typing, and the OS arrow for module move
+   * (`--node-module-move-cursor`).
    */
   --node-dot-cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 13 13'%3E%3Cpath d='M2.5 6.5h8M6.5 2.5v8' fill='none' stroke='%23ffffff' stroke-width='1' stroke-linecap='square'/%3E%3C/svg%3E") 6 6, crosshair;
   --node-default-cursor: var(--node-dot-cursor);
   --node-slider-dot-cursor: url("./cursors/slider-drag-dot.svg") 8 8, crosshair;
+  --node-adjust-cursor: var(--node-slider-dot-cursor);
   --node-module-roundness-ratio: 0.11;
   --node-module-corner-shape: squircle;
   --node-module-frame-radius: calc(var(--node-grid-size, 28px) * 2 * var(--node-module-roundness-ratio, 0.11));
@@ -152,7 +156,11 @@ input[type="color"] {
 }
 
 input[type="range"] {
-  cursor: var(--node-slider-dot-cursor);
+  cursor: var(--node-adjust-cursor);
+}
+
+.node-adjust-cursor {
+  cursor: var(--node-adjust-cursor);
 }
 
 :is(input, textarea, select, [contenteditable="true"], .node-text-selectable),
@@ -1653,7 +1661,7 @@ button.scw-label:hover,
   min-height: 0;
   border-top: 1px solid hsla(140, 40%, 40%, 0.25);
   overflow: hidden;
-  cursor: ew-resize;
+  cursor: var(--node-adjust-cursor);
 }
 .node-wavetable-morph-preview-canvas {
   display: block;
@@ -1755,7 +1763,7 @@ button.scw-label:hover,
   height: auto;
   font: var(--sample-waveform-hud-font-sm);
   color: var(--sample-waveform-hud-color);
-  cursor: ew-resize;
+  cursor: var(--node-adjust-cursor);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -2591,7 +2599,7 @@ input[type="range"],
   border: 0;
   border-radius: 0;
   background: transparent;
-  cursor: ew-resize;
+  cursor: var(--node-adjust-cursor);
   touch-action: none;
 }
 
@@ -2627,7 +2635,7 @@ body.is-resizing-command-center-dock .node-command-center-dock-split::before {
 }
 
 body.is-resizing-command-center-dock {
-  cursor: ew-resize;
+  cursor: var(--node-adjust-cursor);
   user-select: none;
 }
 
@@ -3417,9 +3425,9 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-keyboard-surface,
 }
 
 /* The number between -/+ is drag-scrubbable (bindNodeGraphKeyboardScrubControl
-   in node-graph-view-controls.js) -- advertise it with the resize cursor. */
+   in node-graph-view-controls.js) -- advertise it with the app mouse-dot cursor. */
 .node-keyboard-octave-control strong.scrubbable {
-  cursor: ew-resize;
+  cursor: var(--node-adjust-cursor);
   user-select: none;
 }
 
@@ -4540,7 +4548,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   line-height: 1;
   overflow: hidden;
   touch-action: none;
-  cursor: ns-resize;
+  cursor: var(--node-adjust-cursor);
   isolation: isolate;
 }
 
@@ -7457,7 +7465,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   --node-port-hover-fill: #f3f1ec;
   --node-port-hover-stroke: #f3f1ec;
   /* --node-dot-cursor / --node-default-cursor live on :root (app-wide SSOT). */
-  --node-move-cursor: move;
+  --node-move-cursor: var(--node-adjust-cursor);
   --node-hover-glow-size-ratio: 0.5;
   --node-hover-glow-size: calc(var(--node-port-diameter) * var(--node-hover-glow-size-ratio));
   --node-hover-glow-spread: calc(var(--node-hover-glow-size) * 0.42);
@@ -7671,13 +7679,8 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   --node-module-stroke-zoom-compensate: var(--node-module-stroke-zoom-compensate-frozen, 1);
 }
 
-/* Hide cables, jack inlets/outlets, and connection dots while zooming.
-   Modules stay. visibility so settle unhides (class drop). */
-.node-graph-workspace.viewport-zooming .node-port,
-.node-graph-workspace.viewport-zooming .node-param-port {
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
+/* Stage 3: do not hide ports while zooming. The old HTML-renderer
+   deferral hid jacks until settle; GL draws them live from records. */
 
 .node-graph-workspace.panning {
 }
@@ -10286,7 +10289,7 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   touch-action: none;
   user-select: none;
   pointer-events: auto;
-  cursor: se-resize;
+  cursor: var(--node-adjust-cursor);
   opacity: 0;
 }
 
@@ -13074,10 +13077,10 @@ body .gl-face-host.node-screen-solo-face > canvas.node-gl-face-host-canvas {
   pointer-events: auto;
 }
 
-.node-layout-canvas-grip-nw { left: -2px; top: -2px; cursor: nwse-resize; }
-.node-layout-canvas-grip-ne { right: -2px; top: -2px; cursor: nesw-resize; }
-.node-layout-canvas-grip-sw { left: -2px; bottom: -2px; cursor: nesw-resize; }
-.node-layout-canvas-grip-se { right: -2px; bottom: -2px; cursor: nwse-resize; }
+.node-layout-canvas-grip-nw { left: -2px; top: -2px; cursor: var(--node-adjust-cursor); }
+.node-layout-canvas-grip-ne { right: -2px; top: -2px; cursor: var(--node-adjust-cursor); }
+.node-layout-canvas-grip-sw { left: -2px; bottom: -2px; cursor: var(--node-adjust-cursor); }
+.node-layout-canvas-grip-se { right: -2px; bottom: -2px; cursor: var(--node-adjust-cursor); }
 
 body.node-layout-canvas-active.node-layout-canvas-edit .node-layout-canvas-frame,
 body.node-layout-canvas-active .node-layout-canvas-stage.node-layout-canvas-edit .node-layout-canvas-frame,
@@ -13829,7 +13832,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   display: flex;
   align-items: center;
   padding: 0.12rem 0.4rem;
-  cursor: ew-resize;
+  cursor: var(--node-adjust-cursor);
   user-select: none;
   touch-action: none;
 }
@@ -16392,7 +16395,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 .node-header-timing-field[data-header-number-drag="true"]:not(.node-header-render-range-field),
 .node-header-smoothing-field,
 .node-header-speed-placeholder {
-  /* Same app + cursor as Command Center scrub numbers -- no L/R / ew-resize icon. */
+  /* Same app cursor as Command Center scrub numbers -- no left-right arrow icon. */
   cursor: var(--node-dot-cursor);
   user-select: none;
 }
@@ -16620,7 +16623,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   --node-header-height: 0px;
   --node-module-bottom-gap-track: 0px;
   pointer-events: auto;
-  cursor: var(--node-dot-cursor, grab);
+  cursor: var(--node-dot-cursor);
 }
 
 .dsp-node.module-collapsed > * {
@@ -19516,7 +19519,7 @@ input[data-global-scope-number-drag="true"]:not([readonly]):focus,
 .title-stepper input[data-sge-pos][readonly],
 .title-stepper input[data-sge-hue][readonly],
 .title-stepper input[data-unit-stepper-drag][readonly] {
-  cursor: var(--node-dot-cursor, ew-resize);
+  cursor: var(--node-adjust-cursor);
   user-select: none;
   caret-color: transparent;
 }
@@ -22175,7 +22178,7 @@ button#nodeScenePasteModuleSettings.settings-paste-mismatch {
   border-top: 1px solid rgba(226, 168, 109, 0.24);
 }
 
-/* Command Center: keep the app plus cursor on scrubbable timing rows (not ew-resize). */
+/* Command Center: keep the app cursor on scrubbable timing rows (no arrow cursor). */
 .scene-context-timing-controls .node-header-timing-field[data-header-number-drag="true"],
 .scene-context-timing-controls .node-header-smoothing-field,
 .scene-context-timing-controls .node-header-speed-placeholder,
@@ -25703,12 +25706,12 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   display: flex;
   justify-content: center;
   align-items: center;
-  cursor: ns-resize;
+  cursor: var(--node-adjust-cursor);
 }
 .node-seed-control > .node-slider-readout:not([data-control="number"]),
 .node-seed-control > .node-slider-readout:not([data-control="number"]):hover,
 .node-seed-control > .node-slider-readout.value-dragging {
-  cursor: ns-resize !important;
+  cursor: var(--node-adjust-cursor) !important;
 }
 .node-seed-control > .node-slider-readout::before,
 .node-seed-control > .node-slider-readout::after,

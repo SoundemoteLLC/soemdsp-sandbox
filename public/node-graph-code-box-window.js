@@ -275,10 +275,20 @@ function syncNodeGraphCodeBoxWindow() {
     source.value = codeBox.code;
   }
   updateNodeGraphCodeBoxWindowEditorChrome();
+  // code-edit-2: errors describe the text in the box, not a stale stored build.
+  const shown = source && source.value !== codeBox.code
+    ? kind.compileStatus(nodeGraphCodeBoxDraftFromWindow(node))
+    : compile;
+  // code-edit-1: the status line only speaks up for errors; the box itself is
+  // marked invalid (no hover text). A failed compile keeps the typed code.
   if (status) {
-    status.textContent = compile.ok ? "code ok" : `compile error: ${compile.message}`;
-    status.className = compile.ok ? "ok" : "error";
+    status.textContent = shown.ok ? "" : `compile error: ${shown.message}`;
+    status.className = shown.ok ? "ok" : "error";
   }
+  if (source && typeof setNodeGraphCodeEditInvalid === "function") {
+    setNodeGraphCodeEditInvalid(source, !shown.ok, shown.ok ? "" : shown.message);
+  }
+  source?._nodeGraphCodeEdit?.refresh();
 }
 
 function setNodeGraphCodeBoxWindowVisible(visible, nodeId = "", point = null) {
@@ -403,7 +413,20 @@ function scheduleNodeGraphCodeBoxWindowPortsApply() {
   }, 350);
 }
 
+// Apply (button click, bound in node-graph-scene-menu-event-bindings.js) goes
+// through the shared code-edit helper: it always re-checks the code, and an
+// unchanged box records nothing (code-edit-2).
+let nodeGraphCodeBoxWindowCommitting = false;
 function applyNodeGraphCodeBoxWindowCode() {
+  const handle = document.getElementById("nodeCodeBoxSource")?._nodeGraphCodeEdit;
+  if (handle && !nodeGraphCodeBoxWindowCommitting) {
+    applyNodeGraphCodeBoxWindowTitle({ sync: false });
+    return handle.commit("apply");
+  }
+  return commitNodeGraphCodeBoxWindowCode();
+}
+
+function commitNodeGraphCodeBoxWindowCode() {
   applyNodeGraphCodeBoxWindowTitle({ sync: false });
   const sourceNode = nodeGraphCodeBoxWindowNode();
   if (!sourceNode) {
@@ -434,8 +457,59 @@ function updateNodeGraphCodeBoxWindowStatus() {
   const kind = nodeGraphCodeScreenKindForNode(node);
   const draft = nodeGraphCodeBoxDraftFromWindow(node);
   const compile = kind.compileStatus(draft);
-  status.textContent = compile.ok ? "draft ok" : `compile error: ${compile.message}`;
+  status.textContent = compile.ok ? "" : `compile error: ${compile.message}`;
   status.className = compile.ok ? "changed" : "error";
+}
+
+// code-edit-1: the Script code commits as soon as focus leaves the box (same
+// shared helper as the Code module face). Apply's click stays bound in
+// node-graph-scene-menu-event-bindings.js.
+function nodeGraphCodeBoxWindowStoredCode() {
+  const node = nodeGraphCodeBoxWindowNode();
+  if (!node) {
+    return null;
+  }
+  const kind = nodeGraphCodeScreenKindForNode(node);
+  return { node, kind, code: kind.normalize(node[kind.property], node).code };
+}
+
+function bindNodeGraphCodeBoxWindowCommitOnLeave() {
+  const source = document.getElementById("nodeCodeBoxSource");
+  if (!source || typeof bindNodeGraphCodeEditCommit !== "function") {
+    return;
+  }
+  bindNodeGraphCodeEditCommit(source, {
+    applyButton: document.getElementById("nodeCodeBoxApplyCode"),
+    applyClick: false,
+    isDirty: () => {
+      const stored = nodeGraphCodeBoxWindowStoredCode();
+      return Boolean(stored) && source.value !== stored.code;
+    },
+    commitInvalid: true,
+    validate: () => {
+      const node = nodeGraphCodeBoxWindowNode();
+      if (!node) {
+        return { ok: false, message: "No Script selected." };
+      }
+      const kind = nodeGraphCodeScreenKindForNode(node);
+      return kind.compileStatus(nodeGraphCodeBoxDraftFromWindow(node));
+    },
+    onValidate: () => updateNodeGraphCodeBoxWindowStatus(),
+    commit: () => {
+      nodeGraphCodeBoxWindowCommitting = true;
+      try {
+        commitNodeGraphCodeBoxWindowCode();
+      } finally {
+        nodeGraphCodeBoxWindowCommitting = false;
+      }
+      const stored = nodeGraphCodeBoxWindowStoredCode();
+      if (!stored) {
+        return { ok: false, message: "No Script selected." };
+      }
+      const compile = stored.kind.compileStatus(stored.kind.normalize(stored.node[stored.kind.property], stored.node));
+      return { ok: compile.ok, message: compile.message };
+    },
+  });
 }
 
 function openNodeGraphCodeBoxWindowFullScreen() {
@@ -482,6 +556,10 @@ function beginNodeGraphCodeBoxWindowResize(event) {
 
 function dragNodeGraphCodeBoxWindowResize(event) {
   dragNodeGraphFloatingWindowResize(event, "codeBoxWindowResizing", applyNodeGraphCodeBoxWindowSize);
+}
+
+if (typeof document !== "undefined") {
+  bindNodeGraphCodeBoxWindowCommitOnLeave();
 }
 
 function endNodeGraphCodeBoxWindowResize(event) {

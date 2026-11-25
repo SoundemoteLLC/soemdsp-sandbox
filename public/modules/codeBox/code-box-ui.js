@@ -202,7 +202,6 @@ function syncNodeGraphCodeBoxFace(face, nodeId) {
     return;
   }
   const area = face.querySelector(".node-code-box-source");
-  const applyBtn = face.querySelector(".node-code-box-apply");
   const hint = face.querySelector(".node-code-box-hint");
   if (!area) {
     return;
@@ -215,22 +214,34 @@ function syncNodeGraphCodeBoxFace(face, nodeId) {
   const patchLocked = typeof nodeGraphPatchIsLocked === "function" && nodeGraphPatchIsLocked();
   const effective = nodeGraphCodeBoxEffectiveText(patchNode);
   area.readOnly = driven || patchLocked;
-  if (applyBtn) {
-    applyBtn.disabled = driven || patchLocked;
-  }
-  if (hint && !hint.dataset.stickyError) {
-    hint.textContent = driven
-      ? "Code in connected — display follows cable; disconnect restores saved document."
-      : "JSON graph document ({ cursorX, nodes:[{x,y,c,shape}] }). Apply validates, then publishes Code out.";
-  }
+  // code-edit-1: no caption — a dashed border shows a cable-driven box; an
+  // error line appears only after a failed commit.
   // Don't fight the caret while the user is typing local text.
   if (!driven && document.activeElement === area) {
+    area._nodeGraphCodeEdit?.refresh();
     publishNodeGraphCodeBoxOutput(nodeId);
     return;
   }
-  if (area.value !== effective) {
-    area.value = effective;
+  // Invalid text stays in the box until the stored document changes (undo,
+  // cable, another edit) — then the box follows the patch again. code-edit-2:
+  // only while the text really is invalid, so a stale error never survives.
+  const keepDraft = !driven
+    && area.classList.contains("is-invalid")
+    && area.dataset.codeEditBase === effective
+    && area.value !== effective
+    && !nodeGraphParseCodeGraphDocument(area.value).ok;
+  if (!keepDraft) {
+    if (area.classList.contains("is-invalid") && typeof setNodeGraphCodeEditInvalid === "function") {
+      setNodeGraphCodeEditInvalid(area, false);
+    }
+    if (hint && hint.textContent) {
+      hint.textContent = "";
+    }
+    if (area.value !== effective) {
+      area.value = effective;
+    }
   }
+  area._nodeGraphCodeEdit?.refresh();
   publishNodeGraphCodeBoxOutput(nodeId);
 }
 
@@ -244,19 +255,18 @@ function createNodeGraphCodeBoxFace(nodeId) {
   face.dataset.nodeType = "codeBox";
   face.setAttribute("aria-label", "Code box");
 
-  const toolbar = document.createElement("div");
-  toolbar.className = "node-code-box-toolbar";
+  // code-edit-1: the box fills the face; a compact Apply sits in its corner.
+  // A <label> wrapper: the app's pointerdown blur-outside rule keeps the caret
+  // when Apply (inside the same label) is pressed.
+  const editor = document.createElement("label");
+  editor.className = "node-code-box-editor-wrap node-code-edit";
 
-  const label = document.createElement("div");
-  label.className = "node-code-box-label";
-  label.textContent = "Code";
-
-  const applyBtn = document.createElement("button");
+  // An <input type=button>: the GL graph hit layer passes form fields through
+  // as live HTML, so the chip clicks instead of grabbing the module.
+  const applyBtn = document.createElement("input");
   applyBtn.type = "button";
-  applyBtn.className = "node-code-box-apply";
-  applyBtn.textContent = "Apply";
-
-  toolbar.append(label, applyBtn);
+  applyBtn.className = "node-code-box-apply node-code-edit-apply";
+  applyBtn.value = "Apply";
 
   const area = document.createElement("textarea");
   area.className = "node-code-box-source";
@@ -268,43 +278,53 @@ function createNodeGraphCodeBoxFace(nodeId) {
   const hint = document.createElement("div");
   hint.className = "node-code-box-hint";
 
-  const apply = () => {
-    if (area.readOnly) {
+  const storedText = () => nodeGraphCodeBoxEffectiveText(
+    typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null,
+  );
+  const commit = (reason) => commitNodeGraphCodeBoxLocalText(
+    nodeId,
+    area.value,
+    reason === "leave" ? "Code edit" : "Code Apply",
+  );
+  // code-edit-2: the error line always describes the text in the box.
+  const onValidate = (result) => {
+    if (result && result.ok === false) {
+      // Remember which stored document this draft failed against.
+      area.dataset.codeEditBase = storedText();
+      hint.textContent = result.message || "Not applied.";
       return;
     }
-    const result = commitNodeGraphCodeBoxLocalText(nodeId, area.value, "Code Apply");
-    if (hint) {
-      if (result?.ok) {
-        delete hint.dataset.stickyError;
-        hint.textContent = "Applied — Code out updated.";
-      } else {
-        hint.dataset.stickyError = "1";
-        hint.textContent = result?.message || "Apply failed.";
-      }
+    hint.textContent = "";
+  };
+  const onResult = (result) => {
+    if (result && result.ok === false) {
+      onValidate(result);
+      return;
     }
+    hint.textContent = "";
     syncNodeGraphCodeBoxFace(face, nodeId);
   };
-
-  applyBtn.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    apply();
-  });
+  if (typeof bindNodeGraphCodeEditCommit === "function") {
+    bindNodeGraphCodeEditCommit(area, {
+      commit,
+      validate: (text) => nodeGraphParseCodeGraphDocument(text),
+      isDirty: () => area.value !== storedText(),
+      applyButton: applyBtn,
+      onValidate,
+      onResult,
+    });
+  } else {
+    applyBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!area.readOnly) onResult(commit("apply"));
+    });
+  }
   area.addEventListener("pointerdown", (e) => e.stopPropagation());
-  area.addEventListener("input", () => {
-    if (hint?.dataset.stickyError) {
-      delete hint.dataset.stickyError;
-    }
-  });
-  area.addEventListener("keydown", (e) => {
-    e.stopPropagation();
-    if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "enter") {
-      e.preventDefault();
-      apply();
-    }
-  });
+  area.addEventListener("keydown", (e) => e.stopPropagation());
 
-  face.append(toolbar, area, hint);
+  editor.append(area, applyBtn);
+  face.append(editor, hint);
   face.addEventListener("pointerdown", (event) => {
     if (event.target.closest("textarea, button")) {
       event.stopPropagation();
@@ -326,6 +346,9 @@ function syncAllNodeGraphCodeBoxFaces() {
   });
 }
 
+// Graph id -> Code-in text last applied to it (code-sync-1).
+const nodeGraphCodeGraphApplied = new Map();
+
 function syncNodeGraphGraphCodeInputs() {
   if (typeof nodeGraphPatchNode !== "function" || typeof nodeGraphMvp === "undefined") return;
   const patchNodes = nodeGraphMvp.patch?.nodes || [];
@@ -337,10 +360,20 @@ function syncNodeGraphGraphCodeInputs() {
     const incoming = nodeGraphCodeBoxIncomingText(patchNode.id);
     if (incoming === undefined) continue;
     const text = String(incoming ?? "");
+    // code-sync-1: the stored fingerprint does not survive commit (ui is
+    // normalized), so this used to commit the whole patch on every 250 ms
+    // tick (~200 ms each). Remember what was applied here, and skip when the
+    // graph already says the same thing.
+    if (nodeGraphCodeGraphApplied.get(patchNode.id) === text) continue;
     if (patchNode.ui?.codeDrivenFingerprint === text) continue;
     const parsed = nodeGraphParseCodeGraphDocument(text);
     if (!parsed.ok) continue;
+    if (serializeNodeGraphCurveToCodeText(parsed.graph) === serializeNodeGraphCurveToCodeText(patchNode.graph)) {
+      nodeGraphCodeGraphApplied.set(patchNode.id, text);
+      continue;
+    }
     if (typeof cloneNodeGraphPatch !== "function" || typeof commitNodeGraphPatch !== "function") continue;
+    nodeGraphCodeGraphApplied.set(patchNode.id, text);
     const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
     const node = patch.nodes.find((n) => n.id === patchNode.id);
     if (!node) continue;
@@ -372,20 +405,36 @@ function syncAllNodeGraphCodeSurfaces() {
   publishNodeGraphGraphCodeOutputs();
 }
 
+// code-sync-1: event-driven, no timer. Everything here derives from the
+// patch (Code box text, Graph curves, the Code cables, patch lock), and only
+// Code boxes write "Code" outputs, so a patch commit is the one trigger.
+// Typing in a box is handled by its own input/commit listeners; a new face
+// syncs itself when it is created.
 function nodeGraphCodeBoxStartSurfaceSync() {
   if (nodeGraphCodeBoxStartSurfaceSync.started) {
     return;
   }
   nodeGraphCodeBoxStartSurfaceSync.started = true;
-  if (typeof addNodeGraphModuleScopeSnapshotListener === "function") {
-    addNodeGraphModuleScopeSnapshotListener(syncAllNodeGraphCodeSurfaces);
+  const run = (info) => {
+    if (info?.layoutOnly) return;
+    syncAllNodeGraphCodeSurfaces();
+  };
+  if (typeof addNodeGraphPatchCommitListener === "function") {
+    addNodeGraphPatchCommitListener(run);
+  } else if (typeof window !== "undefined") {
+    // patch-core loads first; if it ever does not, hook up once it has.
+    window.addEventListener("nodeSandboxInterfaceReady", () => {
+      if (typeof addNodeGraphPatchCommitListener === "function") addNodeGraphPatchCommitListener(run);
+    }, { once: true });
   }
-  setInterval(syncAllNodeGraphCodeSurfaces, 250);
+  if (typeof window !== "undefined") {
+    window.addEventListener("nodeSandboxInterfaceReady", () => run(), { once: true });
+  }
   // Prime bus + faces once scripts are up.
   try {
     syncAllNodeGraphCodeSurfaces();
   } catch (_error) {
-    // First tick is best-effort.
+    // First run is best-effort.
   }
 }
 

@@ -149,14 +149,34 @@ function nodeGraphGlGraphPlateIdList(options) {
   return s ? [s] : [];
 }
 
+function nodeGraphGlGraphFallbackPlateBox(id, geo) {
+  const box = geo?.box;
+  if (box && box.w > 1 && box.h > 1) return box;
+  const plates = nodeGraphGlGraphState.plates || [];
+  for (let i = 0; i < plates.length; i += 1) {
+    if (plates[i].id === id && plates[i].w > 1 && plates[i].h > 1) {
+      return { x: plates[i].x, y: plates[i].y, w: plates[i].w, h: plates[i].h };
+    }
+  }
+  const cache = typeof nodeGraphGlGraphChromeCache !== "undefined" ? nodeGraphGlGraphChromeCache.get(id) : null;
+  const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
+  const x = Number(cache?.ox);
+  const y = Number(cache?.oy);
+  const w = Number(el?._viewportCullW);
+  const h = Number(el?._viewportCullH);
+  if (Number.isFinite(x) && Number.isFinite(y) && w > 1 && h > 1) return { x, y, w, h };
+  return null;
+}
+
 function nodeGraphGlGraphCollectPlateAndDisplays(node) {
   const id = String(node?.id || "");
   if (!id) return null;
   const geo = nodeGraphGlGraphGeometry(id);
-  const box = geo?.box;
+  const box = nodeGraphGlGraphFallbackPlateBox(id, geo);
   if (!box || !(box.w > 1) || !(box.h > 1)) return null;
   const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
-  if (!el || !el.isConnected || el.hidden || el.classList.contains("removed")) return null;
+  // hidden / viewport-asleep (display:none) still has a cached box; keep the plate.
+  if (!el || !el.isConnected || el.classList.contains("removed")) return null;
   if (el.getAttribute("data-hide-module-frame") === "1") return null;
   const textBody = el.querySelector(":scope > .node-text-box-body");
   const style = getComputedStyle(el);
@@ -232,6 +252,10 @@ function nodeGraphGlGraphRebuildPlates(options) {
   if (ids) {
     if (!ids.length) return;
     if (nodeGraphGlGraphRebuildPlatesIncremental(ids)) return;
+    // Incremental failed. A full rebuild invalidates the cached GPU mesh
+    // (~200-300ms present). Callers that really need a complete recapture
+    // pass no ids, or forceFull: true (load / commit capture).
+    if (!options || options.forceFull !== true) return;
   }
   nodeGraphGlGraphRebuildPlatesFull();
 }
@@ -254,10 +278,136 @@ function nodeGraphGlGraphRebuildPlatesFull() {
   nodeGraphGlGraphState.displays = displays;
   nodeGraphGlGraphState.stack = nodeGraphGlGraphStackGroups(plates, displays);
   nodeGraphGlGraphRebuildChrome();
+  // Records changed; the cached GPU mesh is stale. Camera-only Present
+  // replays only when gen matches, so drop it here and rebuild once.
+  nodeGraphGlGraphInvalidateMesh("rebuild-plates-full");
 }
 
-function nodeGraphGlGraphInvalidateMesh() {
-  nodeGraphGlGraphState.mesh = null;
+function nodeGraphGlGraphMeshPlateIds() {
+  const ids = new Set();
+  const layers = nodeGraphGlGraphState.mesh?.plateGroupLayers || [];
+  for (let i = 0; i < layers.length; i += 1) {
+    const list = layers[i]?.ids || [];
+    for (let j = 0; j < list.length; j += 1) ids.add(list[j]);
+  }
+  return ids;
+}
+
+function nodeGraphGlGraphEnsureRecordedPlatesInMesh() {
+  const state = nodeGraphGlGraphState;
+  const nodes = nodeGraphModuleStackNodes(nodeGraphMvp?.patch);
+  const plated = new Set((state.plates || []).map((p) => p.id));
+  const missingIds = [];
+  for (let i = 0; i < nodes.length; i += 1) {
+    const id = String(nodes[i]?.id || "");
+    if (!id || plated.has(id)) continue;
+    const geo = nodeGraphGlGraphGeometry(id);
+    const box = nodeGraphGlGraphFallbackPlateBox(id, geo);
+    // Patch nodes with no box cannot be plated; do not take that as a reason
+    // to RebuildPlatesFull, which invalidates the mesh and forces a full
+    // present on every camera frame (the 200-300ms wheel zoom-out cost).
+    if (box && box.w > 1 && box.h > 1) missingIds.push(id);
+  }
+  if ((!Array.isArray(state.plates) || !state.plates.length) && nodes.length) {
+    nodeGraphGlGraphRebuildPlatesFull();
+    return false;
+  }
+  if (missingIds.length) {
+    if (!nodeGraphGlGraphRebuildPlatesIncremental(missingIds)) {
+      // Keep a valid mesh so the camera path can still replay it.
+      return Boolean(state.mesh && state.mesh.gen === state.gen);
+    }
+  }
+  const mesh = state.mesh;
+  if (!mesh || mesh.gen !== state.gen) return false;
+  const meshed = nodeGraphGlGraphMeshPlateIds();
+  const unmeshedIds = [];
+  for (let i = 0; i < (state.plates || []).length; i += 1) {
+    const id = state.plates[i].id;
+    if (id && !meshed.has(String(id))) unmeshedIds.push(id);
+  }
+  if (!unmeshedIds.length) return true;
+  if (!nodeGraphGlGraphRebuildPlatesIncremental(unmeshedIds)) {
+    return Boolean(state.mesh && state.mesh.gen === state.gen);
+  }
+  return true;
+}
+
+function nodeGraphGlGraphNotePresent(path, extra = {}) {
+  const state = nodeGraphGlGraphState;
+  const mesh = state.mesh;
+  let meshIds = 0;
+  const layers = mesh?.plateGroupLayers || [];
+  for (let i = 0; i < layers.length; i += 1) meshIds += (layers[i]?.ids || []).length;
+  let fail = "";
+  if (path === "replay" && extra.ok === false) {
+    if (!mesh) fail = "no-mesh";
+    else if (mesh.gen !== state.gen) fail = "gen-mismatch";
+    else if (state.view) fail = "view-pass";
+    else if (!state.canvas) fail = "no-canvas";
+    else if (mesh.w !== state.canvas.width || mesh.h !== state.canvas.height) fail = "canvas-size";
+    else fail = "replay-false";
+  }
+  const counts = state.presentCounts || (state.presentCounts = {
+    replay: 0, replayFail: 0, full: 0, fails: {}, replayFailDuringCamera: 0, fullDuringCamera: 0,
+  });
+  const cam = typeof nodeGraphViewCamera === "object" ? nodeGraphViewCamera : null;
+  const duringCamera = Boolean(
+    (typeof nodeGraphViewTextQualitySettled === "function" && !nodeGraphViewTextQualitySettled())
+    || (typeof nodeGraphMvp === "object" && (nodeGraphMvp?.workspacePanning
+      || nodeGraphMvp?.smoothZoomDragging
+      || nodeGraphMvp?.workspacePinchZooming))
+    || cam?.dirty
+  );
+  if (path === "replay" && extra.ok !== false) counts.replay += 1;
+  else if (path === "replay") {
+    counts.replayFail += 1;
+    counts.fails[fail || "replay-false"] = (counts.fails[fail || "replay-false"] || 0) + 1;
+    if (duringCamera) counts.replayFailDuringCamera += 1;
+  } else {
+    counts.full += 1;
+    if (duringCamera) counts.fullDuringCamera += 1;
+  }
+  state.lastPresent = {
+    t: (typeof performance !== "undefined" && performance.now) ? +performance.now().toFixed(1) : Date.now(),
+    path,
+    ok: extra.ok !== false,
+    fail,
+    counts,
+    gesturing: Boolean(extra.gesturing),
+    canvasW: extra.canvasW || state.canvas?.width || 0,
+    canvasH: extra.canvasH || state.canvas?.height || 0,
+    meshW: mesh?.w || 0,
+    meshH: mesh?.h || 0,
+    meshGen: mesh?.gen || 0,
+    gen: state.gen || 0,
+    plates: (state.plates || []).length,
+    meshIds,
+  };
+}
+
+function nodeGraphGlGraphInvalidateMesh(reason) {
+  const state = nodeGraphGlGraphState;
+  const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  const cam = typeof nodeGraphViewCamera === "object" ? nodeGraphViewCamera : null;
+  const duringCamera = Boolean(
+    (typeof nodeGraphViewTextQualitySettled === "function" && !nodeGraphViewTextQualitySettled())
+    || (typeof nodeGraphMvp === "object" && (nodeGraphMvp?.workspacePanning
+      || nodeGraphMvp?.smoothZoomDragging
+      || nodeGraphMvp?.workspacePinchZooming))
+    || cam?.dirty
+  );
+  const why = String(reason || "unspecified");
+  const rec = { t: +now.toFixed(1), reason: why, duringCamera };
+  state.lastInvalidate = rec;
+  const log = state.invalidateLog || (state.invalidateLog = []);
+  log.push(rec);
+  if (log.length > 120) log.shift();
+  const counts = state.invalidateCounts || (state.invalidateCounts = {});
+  counts[why] = (counts[why] || 0) + 1;
+  if (duringCamera) counts.duringCamera = (counts.duringCamera || 0) + 1;
+  else counts.duringIdle = (counts.duringIdle || 0) + 1;
+  state.mesh = null;
 }
 
 function nodeGraphGlGraphMeshOverCapacity(batch) {
@@ -334,11 +484,11 @@ function nodeGraphGlGraphRebuildPlatesIncremental(ids) {
   state.displays = displays;
   state.stack = stack;
   if (!canPatch) {
-    nodeGraphGlGraphInvalidateMesh();
+    nodeGraphGlGraphInvalidateMesh("incremental-cannot-patch");
     return false;
   }
   if (!nodeGraphGlGraphPatchPlateMesh(stack.groups, wantSet)) {
-    nodeGraphGlGraphInvalidateMesh();
+    nodeGraphGlGraphInvalidateMesh("incremental-patch-failed");
     return false;
   }
   return true;
@@ -475,12 +625,17 @@ function nodeGraphGlGraphIncrementalDrawCtx(mesh) {
     shapesById: nodeGraphGlGraphElementsById(document, ".node-round-shape-display"),
     ambientDark,
     pixelated: zoom > 2.5,
-    gesturing: typeof nodeGraphViewportHoldsDisplays === "function" && nodeGraphViewportHoldsDisplays(),
+    gesturing: false,
     frameCamera: mesh.cam || nodeGraphGlGraphState.frameCamera,
     inks: mesh.inks || new Map(),
     pictures: mesh.pictures ? mesh.pictures.slice() : [],
-    endsByNode: new Map(),
-    dotBake: null,
+    // no-poll-2 / stage-2: dots stay with the module record. Incremental
+    // presents used to pass an empty map, so a module that entered the
+    // mesh mid-session lost its jack dots until the next full present.
+    endsByNode: nodeGraphGlGraphState.endsByNode instanceof Map
+      ? nodeGraphGlGraphState.endsByNode
+      : new Map(),
+    dotBake: nodeGraphGlGraphState.dotBake || null,
     wireFeather: 2,
   };
 }
@@ -503,8 +658,7 @@ function nodeGraphGlGraphMergeChromeForIds(wantSet, byId) {
   }
   for (const id of wantSet) {
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
-    if (!el || !el.isConnected || el.hidden) continue;
-    nodeGraphGlGraphCollectChromeForNode(id, el, byId.get(id), buckets, radius);
+    nodeGraphGlGraphFillChromeForNode(id, el, byId.get(id), buckets, radius);
   }
   chrome.bakePx = nodeGraphGlGraphChromeBakePx(chrome);
   chrome.byId = nodeGraphGlGraphChromeById(chrome);
@@ -926,8 +1080,7 @@ function nodeGraphGlGraphRebuildChrome() {
     const id = String(nodes[i]?.id || "");
     if (nodeGraphGlGraphState.view && !nodeGraphGlGraphState.view.ids.has(id)) continue;
     const el = id && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
-    if (!el || !el.isConnected || el.hidden) continue;
-    nodeGraphGlGraphCollectChromeForNode(id, el, nodes[i], buckets, radius);
+    nodeGraphGlGraphFillChromeForNode(id, el, nodes[i], buckets, radius);
   }
   const root = document.documentElement;
   const ghostHost = host || root;
@@ -950,6 +1103,166 @@ function nodeGraphGlGraphRebuildChrome() {
 const NODE_GRAPH_CHROME_LISTS = [
   "titles", "labels", "jacks", "sliders", "seeds", "keys", "keypads", "keyboards", "graphs", "headerButtons", "pills",
 ];
+
+// Stage 2: per-module chrome in world units, captured when the module is
+// laid out and replayed when it is display:none / viewport-asleep. The
+// GL picture must not depend on a live HTML measurement (WorldBox of a
+// culled module is null). Updated on layout, move, patch commit (the
+// rebuild that already follows those events) — never on a timer.
+const nodeGraphGlGraphChromeCache = new Map();
+
+function nodeGraphGlGraphChromeModuleOrigin(id, el) {
+  if (el && typeof nodeGraphModuleLayoutBox === "function" && !el.classList.contains("viewport-asleep") && !el.hidden) {
+    const laid = nodeGraphModuleLayoutBox(el);
+    if (laid && laid.w > 1 && laid.h > 1) return laid;
+  }
+  const box = typeof nodeGraphGlGraphGeometry === "function" ? nodeGraphGlGraphGeometry(id)?.box : null;
+  return box && box.w > 1 && box.h > 1 ? box : null;
+}
+
+function nodeGraphGlGraphChromeModuleLaidOut(el) {
+  if (!el || !el.isConnected || el.hidden) return false;
+  if (el.classList.contains("viewport-asleep") || el.classList.contains("removed")) return false;
+  if (typeof nodeGraphModuleLayoutBox !== "function") return false;
+  const laid = nodeGraphModuleLayoutBox(el);
+  return Boolean(laid && laid.w > 1 && laid.h > 1);
+}
+
+function nodeGraphGlGraphChromeShiftBox(box, dx, dy) {
+  if (!box) return box;
+  return { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h };
+}
+
+function nodeGraphGlGraphChromeShiftItem(item, dx, dy) {
+  if (!item) return item;
+  const out = { ...item };
+  if (Number.isFinite(out.x)) out.x += dx;
+  if (Number.isFinite(out.y)) out.y += dy;
+  if (Number.isFinite(out.hitX)) out.hitX += dx;
+  if (Number.isFinite(out.hitY)) out.hitY += dy;
+  if (item.box) out.box = nodeGraphGlGraphChromeShiftBox(item.box, dx, dy);
+  if (item.valueBox) out.valueBox = nodeGraphGlGraphChromeShiftBox(item.valueBox, dx, dy);
+  if (item.labelBox) out.labelBox = nodeGraphGlGraphChromeShiftBox(item.labelBox, dx, dy);
+  if (item.unitBox) out.unitBox = nodeGraphGlGraphChromeShiftBox(item.unitBox, dx, dy);
+  if (item.readoutBox) out.readoutBox = nodeGraphGlGraphChromeShiftBox(item.readoutBox, dx, dy);
+  if (item.diceBox) out.diceBox = nodeGraphGlGraphChromeShiftBox(item.diceBox, dx, dy);
+  if (item.plusBox) out.plusBox = nodeGraphGlGraphChromeShiftBox(item.plusBox, dx, dy);
+  if (item.minusBox) out.minusBox = nodeGraphGlGraphChromeShiftBox(item.minusBox, dx, dy);
+  if (item.valueAnchor) out.valueAnchor = { ...item.valueAnchor, x: item.valueAnchor.x + dx };
+  if (item.labelAnchor) out.labelAnchor = { ...item.labelAnchor, x: item.labelAnchor.x + dx };
+  if (item.unitAnchor) out.unitAnchor = { ...item.unitAnchor, x: item.unitAnchor.x + dx };
+  if (Array.isArray(item.rgba)) out.rgba = item.rgba.slice();
+  return out;
+}
+
+function nodeGraphGlGraphChromeCacheStore(id, buckets, from, origin) {
+  if (!origin) return;
+  const prev = nodeGraphGlGraphChromeCache.get(id);
+  const lists = {};
+  let keptPrev = false;
+  for (const name of NODE_GRAPH_CHROME_LISTS) {
+    const list = buckets[name] || [];
+    const start = from[name] || 0;
+    const items = [];
+    for (let i = start; i < list.length; i += 1) items.push(nodeGraphGlGraphChromeShiftItem(list[i], 0, 0));
+    const old = prev?.lists?.[name] || [];
+    // An incomplete layout pass (module just woken, face sliders still
+    // display:none, ports not published yet) must not replace a richer record.
+    // That was wiping labels and jacks on clock / combResonator / stepGraph /
+    // pluckEnvelope between commit and the first cull, so they popped in ~700ms
+    // later when HTML woke and remesured.
+    if (items.length < old.length) {
+      lists[name] = old;
+      keptPrev = true;
+    } else {
+      lists[name] = items;
+    }
+  }
+  const ox = keptPrev && prev && Number.isFinite(prev.ox) ? prev.ox : origin.x;
+  const oy = keptPrev && prev && Number.isFinite(prev.oy) ? prev.oy : origin.y;
+  nodeGraphGlGraphChromeCache.set(id, { ox, oy, lists });
+}
+
+function nodeGraphGlGraphReplayChromeCache(id, buckets) {
+  const rec = nodeGraphGlGraphChromeCache.get(id);
+  if (!rec) return false;
+  const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
+  const origin = nodeGraphGlGraphChromeModuleOrigin(id, el);
+  const dx = origin ? origin.x - rec.ox : 0;
+  const dy = origin ? origin.y - rec.oy : 0;
+  for (const name of NODE_GRAPH_CHROME_LISTS) {
+    const list = rec.lists[name] || [];
+    for (let i = 0; i < list.length; i += 1) {
+      buckets[name].push(nodeGraphGlGraphChromeShiftItem(list[i], dx, dy));
+    }
+  }
+  return true;
+}
+
+// Measure when the HTML is laid out; otherwise replay the last world-unit
+// description. Tiles use a different surface and are not stored.
+function nodeGraphGlGraphFillChromeForNode(id, el, node, buckets, radius) {
+  if (!id) return;
+  if (nodeGraphGlGraphState.view) {
+    if (!el || !el.isConnected || el.hidden) return;
+    nodeGraphGlGraphCollectChromeForNode(id, el, node, buckets, radius);
+    return;
+  }
+  if (nodeGraphGlGraphChromeModuleLaidOut(el)) {
+    const from = {};
+    for (const name of NODE_GRAPH_CHROME_LISTS) from[name] = (buckets[name] || []).length;
+    nodeGraphGlGraphCollectChromeForNode(id, el, node, buckets, radius);
+    const origin = nodeGraphGlGraphChromeModuleOrigin(id, el);
+    nodeGraphGlGraphChromeCacheStore(id, buckets, from, origin);
+    return;
+  }
+  nodeGraphGlGraphReplayChromeCache(id, buckets);
+}
+
+function nodeGraphGlGraphChromeCacheTranslate(nodeId, dx, dy) {
+  const id = String(nodeId || "");
+  if (!id || !Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) return;
+  const rec = nodeGraphGlGraphChromeCache.get(id);
+  if (rec) {
+    rec.ox += dx;
+    rec.oy += dy;
+    for (const name of NODE_GRAPH_CHROME_LISTS) {
+      const list = rec.lists[name] || [];
+      for (let i = 0; i < list.length; i += 1) rec.lists[name][i] = nodeGraphGlGraphChromeShiftItem(list[i], dx, dy);
+    }
+  }
+  const chrome = nodeGraphGlGraphState.chrome;
+  if (chrome) {
+    for (const name of NODE_GRAPH_CHROME_LISTS) {
+      const list = chrome[name] || [];
+      for (let i = 0; i < list.length; i += 1) {
+        if (String(list[i]?.id || "") === id) {
+          const shifted = nodeGraphGlGraphChromeShiftItem(list[i], dx, dy);
+          const keep = list[i];
+          for (const key of Object.keys(shifted)) keep[key] = shifted[key];
+        }
+      }
+    }
+  }
+  const ends = nodeGraphGlGraphState.endsByNode;
+  const own = ends instanceof Map ? ends.get(id) : null;
+  if (own) {
+    for (let i = 0; i < own.length; i += 1) {
+      if (Number.isFinite(own[i].x)) own[i].x += dx;
+      if (Number.isFinite(own[i].y)) own[i].y += dy;
+    }
+  }
+}
+
+function nodeGraphGlGraphChromeCacheInvalidate(nodeId) {
+  const id = String(nodeId || "");
+  if (!id) {
+    nodeGraphGlGraphChromeCache.clear();
+    return;
+  }
+  nodeGraphGlGraphChromeCache.delete(id);
+}
+
 
 function nodeGraphGlGraphChromePart(chrome) {
   const part = { seedLine: chrome.seedLine, ghostFill: chrome.ghostFill, bakePx: chrome.bakePx, constraints: [] };
@@ -3005,8 +3318,8 @@ function nodeGraphGlGraphWireBakeMix(h, v) {
 function nodeGraphGlGraphWireBakeUpdate(p) {
   const st = nodeGraphGlGraphState;
   const prev = st.wireBake;
-  // Mid-gesture: keep the picture we have; the settle present re-bakes.
-  if (p.gesturing && prev?.canvas) return prev;
+  // Stage 3: always bake the live cable picture. The old mid-gesture hold
+  // deferred new wires and ends until pointer-up.
   const selected = typeof nodeGraphSelectedWireEntries === "function" ? nodeGraphSelectedWireEntries() : [];
   const list = [];
   let x0 = Infinity;
@@ -3244,8 +3557,7 @@ function nodeGraphGlGraphDotBakeDrop() {
 function nodeGraphGlGraphDotBakeUpdate(p) {
   const st = nodeGraphGlGraphState;
   const prev = st.dotBake;
-  // Mid-gesture: keep the pictures we have; the settle present re-bakes.
-  if (p.gesturing && prev) return prev;
+  // Stage 3: always bake live jack dots. The old mid-gesture hold deferred them.
   const selected = typeof nodeGraphSelectedWireEntries === "function" ? nodeGraphSelectedWireEntries() : [];
   const selectedRgba = [0.95, 0.86, 0.45, 1];
   const perNode = new Map();
@@ -3429,12 +3741,7 @@ function nodeGraphGlGraphDrawConstraintBadges(batch, toX, toY, zoom, cssW, cssH)
 }
 
 function nodeGraphGlConstraintGuidePresent() {
-  // A screen HUD, not camera content. It reads its own layout, so never
-  // mid-gesture: mark it and redraw on the settle rebuild (ZP-6).
-  if (typeof nodeGraphHtmlFrozen === "function" && nodeGraphHtmlFrozen()) {
-    nodeGraphGlGraphState.guideDirty = true;
-    return;
-  }
+  // A screen HUD, not camera content. Drawn on the same live path as the graph.
   nodeGraphGlGraphState.guideDirty = false;
   const guide = document.querySelector(".node-constraint-color-guide");
   if (!guide || typeof nodeGraphGlLinesBegin !== "function") return;
@@ -3908,11 +4215,35 @@ function nodeGraphGlGraphPresent(options = {}) {
   else if (typeof nodeGraphWireCameraViewBox === "function") cam = nodeGraphWireCameraViewBox(host);
   const frameCamera = view ? null : { x: cam.x, y: cam.y, zoom };
   nodeGraphGlGraphState.frameCamera = frameCamera;
-  const gesturingEarly = typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive();
-  // Gesture: camera uniform only. The cached mesh replays and its face quads
-  // sample the live face textures, so displays keep running while zooming
-  // without a rebuild (display hold stays off).
-  if (!view && frameCamera && gesturingEarly && nodeGraphGlGraphReplayMesh("all")) return true;
+  // Camera-only frames (WASD, wheel, Q/E, middle-drag, programmatic): replay
+  // the cached mesh with the new camera uniform. Full rebuilds run when the
+  // mesh is missing, the canvas resized, records changed, or live selection
+  // state changed (lasso / selected set / stroke highlight / hover / drag).
+  // Stage 4 wrongly took this path for every Present(), so a snake that
+  // called renderNodeGraphSelection -> Present() stamped a stale mesh and
+  // froze the trail and highlights.
+  const liveKey = nodeGraphGlGraphLiveKey();
+  const cameraOnly = options.cameraOnly === true;
+  const meshSel = nodeGraphGlGraphState.mesh?.selKey;
+  const liveUnchanged = Boolean(nodeGraphGlGraphState.mesh && meshSel === liveKey);
+  if (!view && frameCamera && liveUnchanged) {
+    nodeGraphGlGraphEnsureRecordedPlatesInMesh();
+    const replayed = nodeGraphGlGraphReplayMesh("all");
+    nodeGraphGlGraphNotePresent("replay", {
+      ok: replayed,
+      cameraOnly,
+      canvasW: canvas.width,
+      canvasH: canvas.height,
+    });
+    if (replayed) {
+      // Replay would restamp the trail batch from the last full present.
+      // Redraw the live snake (and only that canvas) so a camera move mid-
+      // lasso keeps the path growing.
+      nodeGraphGlGraphPresentTrail({ skipReplayOthers: true, fromReplay: true });
+      nodeGraphGlGraphNoteLiveDraw({ path: "replay", trailOnly: true });
+      return true;
+    }
+  }
   const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true };
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);
@@ -3928,9 +4259,9 @@ function nodeGraphGlGraphPresent(options = {}) {
     if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(canvas, "GL graph begin");
     return false;
   }
-  const gesturing = typeof nodeGraphViewportHoldsDisplays === "function"
-    && nodeGraphViewportHoldsDisplays();
-  if (!gesturing) nodeGraphGlGraphSettleTextBake();
+  const zoomSettled = typeof nodeGraphViewTextQualitySettled !== "function"
+    || nodeGraphViewTextQualitySettled();
+  if (zoomSettled) nodeGraphGlGraphSettleTextBake();
   let thick = nodeGraphGlGraphState.thick;
   let dotSize = nodeGraphGlGraphState.dotSize;
   if (nodeGraphGlGraphState.thickGen !== nodeGraphGlGraphState.gen || !(thick > 0)) {
@@ -3977,7 +4308,6 @@ function nodeGraphGlGraphPresent(options = {}) {
   const wireBake = nodeGraphGlGraphWireBakeWanted(view, frameCamera, wireCanvas)
     ? nodeGraphGlGraphWireBakeUpdate({
       cam, zoom, cssW, cssH, halfWorld, traceHalf, paramHalf, feather: wireFeather, railEnds, railEnd,
-      gesturing: gesturingEarly || gesturing,
     })
     : null;
   if (!wireBake && !view && nodeGraphGlGraphState.wireBake) nodeGraphGlGraphWireBakeDrop();
@@ -3997,7 +4327,6 @@ function nodeGraphGlGraphPresent(options = {}) {
   const dotBake = nodeGraphGlGraphDotBakeWanted(view, frameCamera)
     ? nodeGraphGlGraphDotBakeUpdate({
       stackedIds, railEnds, railEnd, dotWorld, paramDotWorld, feather: wireFeather,
-      gesturing: gesturingEarly || gesturing,
     })
     : null;
   if (!dotBake && !view && nodeGraphGlGraphState.dotBake) nodeGraphGlGraphDotBakeDrop();
@@ -4119,6 +4448,7 @@ function nodeGraphGlGraphPresent(options = {}) {
       }
     }
   }
+  if (!view) nodeGraphGlGraphState.endsByNode = endsByNode;
   // Plate stroke vars: read once per rebuild generation, not per present.
   if (nodeGraphGlGraphState.plateStyleGen !== nodeGraphGlGraphState.gen || !nodeGraphGlGraphState.plateStyle) {
     const cs = getComputedStyle(host);
@@ -4204,7 +4534,7 @@ function nodeGraphGlGraphPresent(options = {}) {
       captionsById, shapesById,
       chromeAll, chromeById,
       ambientDark, endsByNode, dotBake, wireFeather,
-      frameCamera, gesturing,
+      frameCamera, gesturing: false,
     };
     for (let g = 0; g < groups.length; g += 1) {
       const group = groups[g];
@@ -4266,6 +4596,7 @@ function nodeGraphGlGraphPresent(options = {}) {
       plateGroupLayers,
       hasLights,
       keepable: true,
+      selKey: liveKey,
     };
   }
   if (view?.hold) {
@@ -4279,7 +4610,17 @@ function nodeGraphGlGraphPresent(options = {}) {
     nodeGraphGlGraphState.guideGen = nodeGraphGlGraphState.gen;
     nodeGraphGlConstraintGuidePresent();
   }
-  return platesOk && wiresOk && contactOk && veilOk && trailOk;
+  const fullOk = platesOk && wiresOk && contactOk && veilOk && trailOk;
+  if (!view) {
+    nodeGraphGlGraphNotePresent("full", {
+      ok: fullOk,
+      gesturing: false,
+      canvasW: canvas.width,
+      canvasH: canvas.height,
+    });
+    nodeGraphGlGraphNoteLiveDraw({ path: "full", trailDrawn: Boolean(trailBatch) });
+  }
+  return fullOk;
 }
 
 /**
@@ -4776,14 +5117,87 @@ function nodeGraphGlGraphDrawTrail(trailBatch) {
  * Redraw only the trail. Reuses the held mesh for everything else (same path
  * the pan/zoom gesture takes), so a drag does not rebuild plates and wires.
  */
-function nodeGraphGlGraphPresentTrail() {
+function nodeGraphGlGraphTrailBatchIndex(mesh) {
+  const batches = mesh?.batches || [];
+  const canvas = nodeGraphGlGraphState.snakeCanvas;
+  for (let i = 0; i < batches.length; i += 1) {
+    const b = batches[i];
+    if (!b?.canvas) continue;
+    if (canvas && b.canvas === canvas) return i;
+    if (b.canvas.id === "nodeGlGraphSnake") return i;
+  }
+  // Historical layouts: [plates, wires, contacts, dots, veil, trail] used 5;
+  // after the dots batch was folded in, trail is at 4.
+  if (batches.length >= 6 && batches[5]?.canvas) return 5;
+  if (batches.length >= 5 && batches[4]?.canvas) return 4;
+  return -1;
+}
+
+function nodeGraphGlGraphLiveKey() {
+  const nodes = typeof nodeGraphSelectedNodeIds === "function"
+    ? [...nodeGraphSelectedNodeIds()].map(String).sort().join(",")
+    : "";
+  const wires = typeof nodeGraphSelectedWireEntries === "function"
+    ? nodeGraphSelectedWireEntries().map((e) => `${e.kind}:${e.index}`).sort().join(",")
+    : "";
+  const raised = typeof nodeGraphModuleRaisedId === "string" ? nodeGraphModuleRaisedId : "";
+  const dragging = Boolean(nodeGraphMvp?.nodeDragging?.moved);
+  return `n=${nodes}|w=${wires}|r=${raised}|d=${dragging ? 1 : 0}`;
+}
+
+function nodeGraphGlGraphNoteLiveDraw(extra = {}) {
+  const strokes = typeof nodeGraphHitTrailAllStrokes === "function" ? nodeGraphHitTrailAllStrokes() : [];
+  let trailPts = 0;
+  for (let i = 0; i < strokes.length; i += 1) {
+    const pts = strokes[i]?.points;
+    trailPts += Array.isArray(pts) ? pts.length / 2 : 0;
+  }
+  const selectedNodes = typeof nodeGraphSelectedNodeIds === "function"
+    ? [...nodeGraphSelectedNodeIds()].map(String)
+    : [];
+  const selectedWires = typeof nodeGraphSelectedWireEntries === "function"
+    ? nodeGraphSelectedWireEntries().map((e) => `${e.kind}:${e.index}`)
+    : [];
+  const selectedDrawn = extra.path === "full"
+    ? selectedNodes.slice()
+    : (extra.selectedDrawn || (nodeGraphGlGraphState.mesh?.selKey
+      ? nodeGraphGlGraphState.lastLiveDraw?.selectedDrawn || []
+      : []));
+  const rec = {
+    t: (typeof performance !== "undefined" && performance.now) ? +performance.now().toFixed(1) : Date.now(),
+    path: extra.path || "",
+    trailStrokes: strokes.length,
+    trailPts,
+    trailDrawn: extra.path === "full" || extra.trailDrawn === true || extra.trailOnly === true,
+    selectedNodes,
+    selectedWires,
+    selectedDrawn: extra.path === "full" ? selectedNodes.slice() : selectedDrawn,
+    wiresDrawn: extra.path === "full" ? selectedWires.slice() : (extra.wiresDrawn || nodeGraphGlGraphState.lastLiveDraw?.wiresDrawn || []),
+    liveKey: nodeGraphGlGraphLiveKey(),
+    meshSel: nodeGraphGlGraphState.mesh?.selKey || "",
+  };
+  nodeGraphGlGraphState.lastLiveDraw = rec;
+  const log = nodeGraphGlGraphState.liveDrawLog || (nodeGraphGlGraphState.liveDrawLog = []);
+  log.push(rec);
+  if (log.length > 240) log.shift();
+}
+
+/**
+ * Redraw only the trail. Reuses the held mesh for everything else, so a drag
+ * does not rebuild plates and wires. Looks up the snake canvas by id, not a
+ * hard-coded batch index (the old [5] slot went stale when the dots batch
+ * was removed, so this always fell through to Present, which Stage 4 then
+ * satisfied with a stale ReplayMesh).
+ */
+function nodeGraphGlGraphPresentTrail(options = {}) {
   const state = nodeGraphGlGraphState;
   const mesh = state.mesh;
-  const held = mesh?.batches?.[5];
-  const camera = held?.camera;
+  const idx = nodeGraphGlGraphTrailBatchIndex(mesh);
+  const held = idx >= 0 ? mesh.batches[idx] : null;
+  const camera = held?.camera || state.frameCamera || mesh?.cam;
   if (state.view || !mesh || !held || !camera || mesh.gen !== state.gen
     || mesh.w !== held.canvas.width || mesh.h !== held.canvas.height) {
-    nodeGraphGlGraphPresentSoon();
+    if (!options.fromReplay) nodeGraphGlGraphPresentSoon();
     return;
   }
   const trailBatch = nodeGraphGlLinesBegin(held.canvas, [0, 0, 0, 0], {
@@ -4796,20 +5210,17 @@ function nodeGraphGlGraphPresentTrail() {
   }
   nodeGraphGlGraphDrawTrail(trailBatch);
   trailBatch._blend = "max";
-  mesh.batches[5] = trailBatch;
-  for (let i = 0; i < mesh.batches.length; i += 1) {
-    const b = mesh.batches[i];
-    if (b) nodeGraphGlLinesEnd(b, b._blend || "alpha");
-  }
-  const wireHeld = mesh.batches[1];
-  if (mesh.wireBake && wireHeld?.camera) {
-    nodeGraphGlGraphWireBakeDraw(wireHeld.canvas, wireHeld.camera, wireHeld.camera.zoom, mesh.wireScale);
-  }
+  mesh.batches[idx] = trailBatch;
+  const trailOk = nodeGraphGlLinesEnd(trailBatch, "max") !== false;
+  // Do not restamp plates/wires here: that would flash a stale mesh over a
+  // just-drawn trail if a leftover index ever missed again.
+  if (!options.fromReplay) nodeGraphGlGraphNoteLiveDraw({ path: "trail", trailDrawn: trailOk });
 }
+
 
 function nodeGraphGlGraphPresentCamera() {
   if (!nodeGraphGlGraphState.canvas && !nodeGraphGlGraphState.wires.length) return;
-  nodeGraphGlGraphPresent();
+  nodeGraphGlGraphPresent({ cameraOnly: true });
 }
 
 function nodeGraphGlHitIsLiveHtml(target) {

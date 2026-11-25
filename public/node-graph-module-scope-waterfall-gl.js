@@ -275,6 +275,8 @@ function nodeGraphWaterfallGlEnsure(canvas, plateCss) {
   };
   canvas._wfGlSession = s;
   nodeGraphWaterfallGlClearRead(s);
+  // no-poll-1: a new face has no status text yet; MIDI CC readouts refill it.
+  if (typeof updateNodeGraphMidiCcReadoutsSoon === "function") updateNodeGraphMidiCcReadoutsSoon();
   return s;
 }
 

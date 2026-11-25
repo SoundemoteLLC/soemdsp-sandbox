@@ -93,7 +93,29 @@ Commands (host -> iframe):
 | `soemdsp:player:display` | `settings: { key: value }` | Set the Music Player's display settings (the same values its Display Settings panel edits; `state.display` has them all). Playhead: `scrollLineWidth` (CSS px, 0 hides), `playheadAlpha` (0..1), `playheadHue` (deg) / `playheadBrightness` / `playheadSaturation` (0..1). Background: `backgroundHue` / `backgroundBrightness` / `backgroundSaturation`. Foreground: `hue` / `lineBrightness` / `lineSaturation`. Brightness is HBS: 0 black, 0.5 full hue, 1 white. Unknown keys are ignored. Not saved into the patch. |
 | `soemdsp:player:get-state` | - | Replies with a `state` event. |
 
-Events (iframe -> host): `need-track { index, requestId, title }` (lazy mode: send that one track with a `track` reply), `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture, display }` (4 Hz while changing, and on demand), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. `state.needsGesture` is true while the AudioContext is not running.
+Events (iframe -> host): `need-track { index, requestId, title }` (lazy mode: send that one track with a `track` reply), `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture, display, loop, rate, at }` (sent when something changes, and on demand; see "Playhead clock"), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. `state.needsGesture` is true while the AudioContext is not running.
+
+### Playhead clock
+
+There is no periodic state stream. The player sends `state` when something changes: play, pause, stop, next/prev, track select or end-of-track advance, seek or scrub, volume, Speed / direction, display settings, the AudioContext starting or stopping, a patch change, input inside the player, and replies to `get-state`. A position more than 0.25 s away from where the last event said it would be also sends one.
+
+Each `state` carries the clock: `position` (seconds) at time `at` (`Date.now()` in the iframe, epoch ms, same clock as the host's `Date.now()`), and `rate` (seconds of audio per second: `speed + direction` while playing, `0` while paused or stopped). The host moves its playhead itself:
+
+```js
+let clock = null;
+addEventListener("message", (e) => {
+  if (e.origin === sandboxOrigin && e.data?.type === "soemdsp:player:state") clock = e.data;
+});
+function playheadSeconds() {
+  if (!clock) return 0;
+  let p = clock.position + ((Date.now() - clock.at) / 1000) * clock.rate;
+  if (clock.duration > 0) p = clock.loop ? ((p % clock.duration) + clock.duration) % clock.duration : Math.min(Math.max(p, 0), clock.duration);
+  return p;
+}
+// requestAnimationFrame(() => draw(playheadSeconds())) ...
+```
+
+`loop` is true in Loop and Loop All modes (wrap at `duration`). Speed modulated from inside the patch is not announced; send `get-state` to resync if that matters.
 
 ### Loading modes
 

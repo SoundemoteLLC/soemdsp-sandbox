@@ -23,16 +23,30 @@ function nodeGraphModuleGeometryKey(nodeId, port, io) {
 function nodeGraphModuleGeometryInvalidate(nodeId) {
   const id = String(nodeId || "");
   if (!id) {
-    nodeGraphModuleGeometryById.clear();
+    // A nameless invalidate used to wipe every box and the Stage 2 chrome
+    // cache. Off-screen (display:none) modules cannot be remeasured, so the
+    // next plate rebuild dropped them from the GL mesh and they popped in
+    // during wheel / Q/E replay. Keep last-known boxes; bump the epoch only.
     nodeGraphModuleGeometryEpoch += 1;
     return;
   }
   nodeGraphModuleGeometryById.delete(id);
   nodeGraphModuleGeometryEpoch += 1;
+  if (typeof nodeGraphGlGraphChromeCacheInvalidate === "function") {
+    nodeGraphGlGraphChromeCacheInvalidate(id);
+  }
 }
 
 function nodeGraphModuleGeometryInvalidateAll() {
-  nodeGraphModuleGeometryById.clear();
+  // Rails / IO-view need fresh attach points on modules that can still be
+  // measured. Sleepers have no layout box, so clearing the map (and the
+  // chrome cache) left their plates and jacks out of the mid-gesture mesh.
+  // Keep each box; drop only ports / param jacks. Do not touch chrome.
+  nodeGraphModuleGeometryById.forEach((geo) => {
+    if (!geo) return;
+    geo.ports = [];
+    geo.paramJacks = [];
+  });
   nodeGraphModuleGeometryEpoch += 1;
 }
 
@@ -54,6 +68,9 @@ function nodeGraphModuleGeometryTranslate(nodeId, dx, dy) {
   geo.epoch = nodeGraphModuleGeometryEpoch;
   if (typeof nodeGraphMvp === "object" && nodeGraphMvp?._portCenterFrameCache?.clear) {
     nodeGraphMvp._portCenterFrameCache.clear();
+  }
+  if (typeof nodeGraphGlGraphChromeCacheTranslate === "function") {
+    nodeGraphGlGraphChromeCacheTranslate(nodeId, dx, dy);
   }
 }
 
@@ -169,6 +186,9 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
   const el = nodeGraphNodeElement(id);
   if (!el || !el.isConnected) {
     nodeGraphModuleGeometryById.delete(id);
+    if (typeof nodeGraphGlGraphChromeCacheInvalidate === "function") {
+      nodeGraphGlGraphChromeCacheInvalidate(id);
+    }
     return null;
   }
   // display:none (zoomed offscreen) has no rect. Keep the last real attaches

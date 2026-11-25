@@ -721,6 +721,13 @@ function nodeGraphDragDotEnd(surface) {
   document.body.classList.remove("node-slider-dragging");
 }
 
+// Shared adjust / drag / resize cursor: the app mouse-dot
+// (`--node-adjust-cursor` in styles.css). Use this instead of
+// left-right, up-down, diagonal, or all-direction arrow cursors.
+function nodeGraphAdjustCursor() {
+  return "var(--node-adjust-cursor)";
+}
+
 // Safety net: nodeGraphMvp.sliderDragging (with nodeGraphSliderDrags, one
 // drag per pointer) gates beginNodeSliderDrag and is
 // ONLY ever cleared by endNodeSliderDrag, which only runs from a

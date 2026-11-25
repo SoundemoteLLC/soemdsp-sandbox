@@ -370,9 +370,8 @@ function syncNodeGraphModuleScopeFaceCanvasTape(canvas, screenElement, pixelRati
 }
 
 function nodeGraphGlGraphNoteFaceCanvasSized() {
-  if (typeof nodeGraphGlGraphRebuildPlates === "function") {
-    nodeGraphGlGraphRebuildPlates();
-  }
+  // Face textures are sampled by the existing mesh. Rebuilding every plate
+  // here dropped the mesh and forced a 200-300ms present on zoom-out.
   if (typeof nodeGraphGlGraphPresentSoon === "function") {
     nodeGraphGlGraphPresentSoon();
   }

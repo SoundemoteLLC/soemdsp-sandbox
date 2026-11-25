@@ -704,7 +704,7 @@ function nodeGraphModuleFaceHoverControl(event) {
   const article = face.closest(".dsp-node");
   const spec = nodeGraphModuleFaceSpecForElement(article);
   if (!spec) return null;
-  const gesturing = typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive();
+  const gesturing = false;
   let p;
   let faceWidth;
   if (gesturing) {
@@ -732,7 +732,7 @@ function nodeGraphModuleFaceHoverControlAtWorld(moduleEl, worldX, worldY) {
   const face = moduleEl?.querySelector(":scope > .dsp-node-body > .node-face");
   const spec = face ? nodeGraphModuleFaceSpecForElement(moduleEl) : null;
   if (!spec) return null;
-  const gesturing = typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive();
+  const gesturing = false;
   const laid = nodeGraphModuleFaceHoverLayoutFor(face, gesturing);
   if (!laid) return null;
   const box = laid.box;

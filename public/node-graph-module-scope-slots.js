@@ -139,17 +139,22 @@ function nodeGraphPlateFacesAfterPatchLoad() {
         }
       }
     }
-    if (typeof nodeGraphViewportCullFlushNow === "function") {
-      nodeGraphViewportCullFlushNow();
-    }
-    if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
-      nodeGraphModuleGeometryPublishVisible();
-    }
-    if (typeof nodeGraphGlGraphRebuildPlates === "function") {
-      nodeGraphGlGraphRebuildPlates();
-    }
-    if (typeof nodeGraphGlGraphPresent === "function") {
-      nodeGraphGlGraphPresent();
+    // Stage 4: measure chrome while every module is awake, then cull.
+    // Flushing the cull first was sleeping modules before their records
+    // were filled, so clock / combResonator / stepGraph / pluckEnvelope
+    // entered the view with a plate and late titles/jacks.
+    if (typeof nodeGraphViewportCaptureChromeNow === "function") {
+      nodeGraphViewportCaptureChromeNow();
+    } else {
+      if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
+        nodeGraphModuleGeometryPublishVisible();
+      }
+      if (typeof nodeGraphGlGraphRebuildPlates === "function") {
+        nodeGraphGlGraphRebuildPlates();
+      }
+      if (typeof nodeGraphGlGraphPresent === "function") {
+        nodeGraphGlGraphPresent();
+      }
     }
     if (typeof scheduleNodeGraphModuleScopeDraw === "function") {
       scheduleNodeGraphModuleScopeDraw();

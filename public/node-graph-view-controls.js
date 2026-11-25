@@ -4084,8 +4084,24 @@ function updateNodeGraphMidiCcReadouts() {
     }
   }
 }
-// Faces rebuild on layout changes; keep the readout present between messages.
-if (typeof window !== "undefined") setInterval(updateNodeGraphMidiCcReadouts, 500);
+// no-poll-1: no 500 ms timer. A MIDI message updates the readout directly; a
+// rebuilt or resized waterfall face asks for it again
+// (nodeGraphWaterfallGlSession), and so does every patch commit.
+let nodeGraphMidiCcReadoutsQueued = false;
+function updateNodeGraphMidiCcReadoutsSoon() {
+  if (nodeGraphMidiCcReadoutsQueued) return;
+  if (!(nodeGraphMvp?.patch?.nodes || []).some((n) => n && (n.type === "midiCc" || n.type === "midiLag"))) return;
+  nodeGraphMidiCcReadoutsQueued = true;
+  queueMicrotask(() => {
+    nodeGraphMidiCcReadoutsQueued = false;
+    updateNodeGraphMidiCcReadouts();
+  });
+}
+if (typeof addNodeGraphPatchCommitListener === "function") {
+  addNodeGraphPatchCommitListener(updateNodeGraphMidiCcReadoutsSoon);
+} else {
+  (globalThis.__nodeGraphPatchCommitPending ||= []).push(updateNodeGraphMidiCcReadoutsSoon);
+}
 
 function routeNodeGraphMidiCcBytes(status, data1, data2) {
   const api = typeof SoemdspMidiCc !== "undefined"

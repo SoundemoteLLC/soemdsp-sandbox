@@ -177,11 +177,6 @@ function nodeGraphArmDrawingFaceLoop(host, options = {}) {
     if (host.isConnected === false) {
       return;
     }
-    // Mid pan/zoom: hold the face (cheap re-arm, no paint) until settle.
-    if (typeof nodeGraphViewportHoldsDisplays === "function" && nodeGraphViewportHoldsDisplays()) {
-      host[rafKey] = schedule(tick);
-      return;
-    }
     const force = Boolean(host[forceKey]);
     if (!stillAnimate()) {
       if (force) {
@@ -822,7 +817,9 @@ function scopePaintEnsureColdPlate(slot, options = {}) {
   }
   if (done && typeof nodeGraphGlGraphRebuildPlates === "function") {
     try {
-      nodeGraphGlGraphRebuildPlates();
+      // Patch this module only. A no-id rebuild invalidates the whole GPU
+      // mesh and costs 200-300ms on the next present (wheel zoom-out).
+      if (nodeId) nodeGraphGlGraphRebuildPlates({ ids: [nodeId] });
     } catch (_error) {
       // Best-effort.
     }

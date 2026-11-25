@@ -21,7 +21,10 @@
   var PROTOCOL_V = 1;
   var API_FUNCTION = "soemdspApi";
   var BODY_CLASS = "soemdsp-plugin-host";
-  var PARAM_POLL_MS = 33;
+  // no-poll-2: param and display-watch sync run on events, not timers.
+  // Bursts (a slider drag) coalesce to one diff per PARAM_COALESCE_MS.
+  var PARAM_COALESCE_MS = 16;
+  var WATCH_COALESCE_MS = 50;
 
   function hostFlag() {
     try {
@@ -235,6 +238,35 @@
     }
   }
 
+  var paramCheckTimer = 0;
+  var watchCheckTimer = 0;
+
+  // One-shot: diff page params against the last sent values soon.
+  function queueParamCheck() {
+    if (paramCheckTimer) return;
+    paramCheckTimer = global.setTimeout(function () {
+      paramCheckTimer = 0;
+      try {
+        emitDirtyParams();
+      } catch (error) {
+        console.warn("soemdspPluginHost: param sync failed", error);
+      }
+    }, PARAM_COALESCE_MS);
+  }
+
+  // One-shot: rebuild the display watch list soon (sent only if it changed).
+  function queueWatchCheck() {
+    if (watchCheckTimer) return;
+    watchCheckTimer = global.setTimeout(function () {
+      watchCheckTimer = 0;
+      try {
+        syncDisplayWatch();
+      } catch (error) {
+        console.warn("soemdspPluginHost: display watch failed", error);
+      }
+    }, WATCH_COALESCE_MS);
+  }
+
   function serializedPatchJson(patch) {
     try {
       var payload = typeof global.serializeNodeGraphPatch === "function"
@@ -323,7 +355,6 @@
   // plugin, a host node stands in once the first batch arrives. Its port only
   // forwards scopeAck (flow control) to the plugin.
 
-  var WATCH_POLL_MS = 750;
   var lastWatchJson = "";
 
   function nodeTypeMap() {
@@ -459,6 +490,8 @@
     if (heldSync) {
       global.syncNodeGraphMidiHeldNotesFromHost(msg.held, msg.lastKey, msg.lastVelocity);
     }
+    // MIDI-learned controls on the page may have moved a param.
+    queueParamCheck();
     return true;
   }
 
@@ -642,6 +675,39 @@
         return result;
       };
     });
+    // Every page param edit that reaches audio goes through these; in the
+    // plugin they also trigger the native param diff (was a 33 ms poll).
+    wrapOnce("scheduleNodeGraphLiveParameterSync", function (original) {
+      return function () {
+        var result = original.apply(this, arguments);
+        queueParamCheck();
+        return result;
+      };
+    });
+    wrapOnce("sendNodeGraphLiveParameterUpdate", function (original) {
+      return function () {
+        var result = original.apply(this, arguments);
+        queueParamCheck();
+        return result;
+      };
+    });
+    // Plan changes (e.g. "Show displays") and display fps change the watch
+    // list without a commit (was a 750 ms poll).
+    wrapOnce("scheduleNodeGraphLivePlanSync", function (original) {
+      return function () {
+        var result = original.apply(this, arguments);
+        queueParamCheck();
+        queueWatchCheck();
+        return result;
+      };
+    });
+    wrapOnce("sendNodeGraphLiveDisplayFps", function (original) {
+      return function () {
+        var result = original.apply(this, arguments);
+        queueWatchCheck();
+        return result;
+      };
+    });
     wrapOnce("commitNodeGraphPatch", function (original) {
       return function (patch, options) {
         var result = original.apply(this, arguments);
@@ -706,11 +772,18 @@
     installWrappers();
     document.body.classList.add(BODY_CLASS);
     afterCommit({ status: "boot" });
-    global.setInterval(emitDirtyParams, PARAM_POLL_MS);
-    // Face show/hide changes the watch list without a commit.
-    global.setInterval(function () {
-      try { syncDisplayWatch(); } catch (_e) { /* next poll */ }
-    }, WATCH_POLL_MS);
+    // Backstop for edits that skip the wrapped sync functions: check after
+    // the user's own input events (no timers; see queueParamCheck).
+    var opts = { capture: true, passive: true };
+    document.addEventListener("input", queueParamCheck, opts);
+    document.addEventListener("change", function () { queueParamCheck(); queueWatchCheck(); }, opts);
+    document.addEventListener("pointermove", function (event) {
+      if (event.buttons) queueParamCheck();
+    }, opts);
+    document.addEventListener("pointerup", function () { queueParamCheck(); queueWatchCheck(); }, opts);
+    document.addEventListener("pointercancel", queueParamCheck, opts);
+    document.addEventListener("wheel", queueParamCheck, opts);
+    document.addEventListener("keyup", function () { queueParamCheck(); queueWatchCheck(); }, opts);
     postToHost({ event: "ready" });
   }
 

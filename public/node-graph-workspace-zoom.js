@@ -40,13 +40,12 @@ function applyNodeGraphZoom(options = {}) {
   if (options.skipHeavy) {
     return;
   }
-  // Only a real gesture (wheel / pinch / explicit gestureKind) hides jacks.
-  // Bare applyNodeGraphZoom() on load/persist used to mark "zoom" and never
-  // settle, so inlets/outlets stayed visibility:hidden.
   const inGesture = options.gesture === true || Boolean(options.gestureKind);
-  if (inGesture && typeof markNodeGraphViewportGesture === "function") {
-    markNodeGraphViewportGesture(options.gestureKind || "zoom");
-  } else if (typeof clearNodeGraphViewportGestureClass === "function") {
+  if (inGesture && typeof viewCameraSet === "function") {
+    viewCameraSet({ persist: options.persist !== false });
+    return;
+  }
+  if (typeof clearNodeGraphViewportGestureClass === "function") {
     clearNodeGraphViewportGestureClass();
     if (typeof flushNodeGraphViewportImmediate === "function") {
       flushNodeGraphViewportImmediate({ zoom: true, pan: true, persist: options.persist !== false });
@@ -57,6 +56,7 @@ function applyNodeGraphZoom(options = {}) {
         scheduleNodeGraphModuleScopeDraw();
       }
     }
+  } else if (typeof flushNodeGraphViewportImmediate === "function") {
   } else if (typeof flushNodeGraphViewportImmediate === "function") {
     flushNodeGraphViewportImmediate({ zoom: true, pan: true, persist: options.persist !== false });
   } else {
@@ -122,39 +122,11 @@ function setNodeGraphZoom(nextZoom, anchor = null) {
     x: nodeGraphFiniteNumber(nextPan.x),
     y: nodeGraphFiniteNumber(nextPan.y),
   };
-  // Mark gesture first so metrics cache + mid-gesture skips engage, then one
-  // CSS var write for zoom+pan (avoid applyZoom+applyPan duplicate light path).
-  if (typeof markNodeGraphViewportGesture === "function") {
-    markNodeGraphViewportGesture("wheel");
+  if (typeof viewCameraSet === "function") {
+    viewCameraSet();
+  } else if (typeof applyNodeGraphViewportCssLight === "function") {
+    applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: true });
   }
-  if (typeof applyNodeGraphViewportCssLight === "function") {
-    applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: false });
-  } else {
-    // Legacy: no shared light helper — separate writes (still skip heavy).
-    applyNodeGraphZoom({ gestureKind: "wheel", layout: false, skipHeavy: true, skipCss: true });
-    applyNodeGraphPan({ gesture: true, skipHeavy: true, skipCss: true });
-    if (workspace) {
-      const z = nodeGraphZoom();
-      workspace.style.setProperty("--node-graph-zoom", String(z));
-      workspace.dataset.zoom = z.toFixed(2);
-      workspace.classList.toggle("pixelated-canvas-zoom", z > 2.5);
-      const pan = nodeGraphMvp.pan || { x: 0, y: 0 };
-      const originOffset = typeof nodeGraphRenderedOriginOffset === "function"
-        ? nodeGraphRenderedOriginOffset(pan, workspace)
-        : pan;
-      workspace.style.setProperty("--node-graph-pan-x", `${originOffset.x}px`);
-      workspace.style.setProperty("--node-graph-pan-y", `${originOffset.y}px`);
-      if (typeof nodeGraphApplyPanVarsToWorldLayers === "function") {
-        nodeGraphApplyPanVarsToWorldLayers(workspace, `${originOffset.x}px`, `${originOffset.y}px`);
-      }
-      workspace.dataset.panX = String(pan.x);
-      workspace.dataset.panY = String(pan.y);
-    }
-  }
-  if (typeof syncNodeGraphWorkspaceResizeHandlePosition === "function") {
-    syncNodeGraphWorkspaceResizeHandlePosition();
-  }
-  // Persist + heavy chrome on viewport settle (not every wheel tick).
 }
 
 function clampNodeGraphZoom(value) {

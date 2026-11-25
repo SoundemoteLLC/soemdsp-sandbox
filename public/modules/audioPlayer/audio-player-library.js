@@ -1908,16 +1908,25 @@ async function nodeGraphAudioPlayerRestoreFromCache() {
     nodeGraphAudioPlayerRestoreDone.add(String(node.id));
   }
 }
+// no-poll-1: restore when a patch is committed (boot, load, undo) instead of
+// polling every 2 s; the restore window still closes after 62 s.
 if (typeof window !== "undefined") {
-  let tries = 0;
-  const timer = setInterval(() => {
-    tries += 1;
+  const tryRestore = () => {
+    if (!nodeGraphAudioPlayerRestoreWindowOpen) return;
     if (typeof nodeGraphMvp === "object" && nodeGraphMvp?.patch?.nodes?.length) {
       nodeGraphAudioPlayerRestoreFromCache().catch(() => {});
     }
-    if (tries > 30) {
-      clearInterval(timer);
-      nodeGraphAudioPlayerRestoreWindowOpen = false;
-    }
-  }, 2000);
+  };
+  // patch-core loads later: queue the listener for it (it stays, and does
+  // nothing once the window has closed).
+  if (typeof addNodeGraphPatchCommitListener === "function") {
+    addNodeGraphPatchCommitListener(tryRestore);
+  } else {
+    (globalThis.__nodeGraphPatchCommitPending ||= []).push(tryRestore);
+  }
+  window.addEventListener("nodeSandboxInterfaceReady", tryRestore, { once: true });
+  window.setTimeout(tryRestore, 0);
+  window.setTimeout(() => {
+    nodeGraphAudioPlayerRestoreWindowOpen = false;
+  }, 62000);
 }
