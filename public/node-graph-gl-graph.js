@@ -546,6 +546,7 @@ function nodeGraphGlGraphPatchPlateMesh(newGroups, wantSet) {
   }
   const newIdSet = new Set(newIds);
   const drawn = [];
+  const atlasGen = nodeGraphGlGraphTextAtlasGen();
   try {
     ctx.pictures = (mesh.pictures || []).slice();
     batch.textPixelated = ctx.pixelated;
@@ -563,6 +564,8 @@ function nodeGraphGlGraphPatchPlateMesh(newGroups, wantSet) {
       });
     }
     batch.layers.length = startLen;
+    // Same as RepaintMeshedPlates: the rest of the mesh would keep dead text.
+    if (nodeGraphGlGraphTextAtlasGen() !== atlasGen) throw new Error("glyph atlas retired");
     const prefixStart = mesh.plateGroupLayers.length ? mesh.plateGroupLayers[0].layerStart : 0;
     const suffixEnd = mesh.plateGroupLayers.length
       ? mesh.plateGroupLayers[mesh.plateGroupLayers.length - 1].layerEnd
@@ -695,6 +698,7 @@ function nodeGraphGlGraphRepaintMeshedPlates(ids) {
   const suffix = batch.layers.slice(suffixEnd);
   const nextRanges = [];
   const mid = [];
+  const atlasGen = nodeGraphGlGraphTextAtlasGen();
   try {
     ctx.pictures = (mesh.pictures || []).slice();
     batch.textPixelated = ctx.pixelated;
@@ -726,6 +730,9 @@ function nodeGraphGlGraphRepaintMeshedPlates(ids) {
         layerEnd: prefix.length + mid.length,
       });
     }
+    // A retired atlas leaves the kept ranges pointing at a deleted texture:
+    // let the caller fall through to a full present.
+    if (nodeGraphGlGraphTextAtlasGen() !== atlasGen) throw new Error("glyph atlas retired");
     batch.layers = prefix.concat(mid, suffix);
     mesh.plateGroupLayers = nextRanges;
     mesh.pictures = ctx.pictures;
@@ -4343,7 +4350,34 @@ function nodeGraphGlGraphDrawStackGroup(batch, group, ctx) {
   nodeGraphGlGraphDrawIoExpanded(batch, toX, toY, layoutZoom, group.plates);
 }
 
+function nodeGraphGlGraphTextAtlasGen() {
+  return typeof nodeGraphGlLinesTextAtlasGen === "function" ? nodeGraphGlLinesTextAtlasGen() : 0;
+}
+
+/**
+ * Present, then re-record once if a glyph atlas was retired meanwhile.
+ * Text runs in the kept mesh point at the atlas texture they were recorded
+ * with. A rebake at a new size (settled zoom) or growth for a new character
+ * deletes the old texture after this frame's draw, and every later camera
+ * replay skips those runs: module text flashed once and vanished until a cull
+ * wake re-recorded that module. One synchronous full re-record against the
+ * finished atlas fixes the mesh in the same task (no timer, no extra frame).
+ */
 function nodeGraphGlGraphPresent(options = {}) {
+  const atlasGen = nodeGraphGlGraphTextAtlasGen();
+  const ok = nodeGraphGlGraphPresentOnce(options);
+  if (nodeGraphGlGraphState.atlasRepresent || nodeGraphGlGraphTextAtlasGen() === atlasGen) return ok;
+  nodeGraphGlGraphState.atlasRepresent = true;
+  try {
+    const counts = nodeGraphGlGraphState.presentCounts;
+    if (counts) counts.atlasRepresent = (counts.atlasRepresent || 0) + 1;
+    return nodeGraphGlGraphPresentOnce({ resharpenText: true });
+  } finally {
+    nodeGraphGlGraphState.atlasRepresent = false;
+  }
+}
+
+function nodeGraphGlGraphPresentOnce(options = {}) {
   // Scope frames must not rebuild cables. A failed stamp leaves the last
   // picture; falling through read the whole workspace and pinned Play at a few fps.
   if (options?.displaysOnly) {

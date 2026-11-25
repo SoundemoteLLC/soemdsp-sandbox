@@ -376,6 +376,14 @@ void main() {
   // Raised when the caller wants glyphs baked closer to the size they are drawn.
   // Capped so one cell still fits the sheet. Unset callers keep 64.
   let glyphBakePx = TEXT_BAKE_PX;
+  // Bumped whenever a glyph atlas texture is retired (rebake at a new size or
+  // growth for new characters). Kept meshes hold text runs that point at the
+  // atlas texture they were recorded with; once it is deleted drawTexts skips
+  // those runs, so a mesh recorded across a bump must be re-recorded.
+  let textAtlasGen = 0;
+  // Every character each font atlas has needed, so a rebake at a new size
+  // starts complete and does not grow (and retire itself) mid-remesh.
+  const textAtlasKnownChars = new Map();
   const TEXT_WHITE = Object.freeze([1, 1, 1, 1]);
   const TEXT_PAD = 6;
   // Empty texels between atlas cells: 64 px bake at 1/8 draw (mip 3) still
@@ -2239,7 +2247,6 @@ void main() {
       bakePx = Math.floor(bakePx * 0.9);
     }
     if (bakePx < 16 || glyphs.size !== list.length) return null;
-    if (bakePx !== glyphBakePx) glyphBakePx = bakePx;
     const font = `${weight} ${bakePx}px ${family}`;
     cv.width = sheetW;
     cv.height = sheetH;
@@ -2263,7 +2270,7 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
-    return { texture, glyphs, sheetW, sheetH, head: head / bakePx, chars: list.join("") };
+    return { texture, glyphs, sheetW, sheetH, head: head / bakePx, bakePx, chars: list.join("") };
   }
 
   /** Shared glyph atlas for a font (grows when new characters show up). */
@@ -2274,13 +2281,15 @@ void main() {
     let atlas = s.atlases.get(key);
     const missing = [...String(text)].filter((ch) => !atlas?.glyphs.has(ch));
     if (!atlas || missing.length) {
-      const next = bakeAtlas(s, family, weight, (atlas?.chars || TEXT_BASE_CHARS) + missing.join(""));
+      const next = bakeAtlas(s, family, weight, (atlas?.chars || textAtlasKnownChars.get(key) || TEXT_BASE_CHARS) + missing.join(""));
       if (!next) return null;
+      textAtlasKnownChars.set(key, next.chars);
       // This frame's text runs already stored the old texture. Delete it
       // after drawTexts, not while those runs are still queued.
       if (atlas?.texture) {
         if (!s.deadTextures) s.deadTextures = [];
         s.deadTextures.push(atlas.texture);
+        textAtlasGen += 1;
       }
       atlas = next;
       s.atlases.set(key, atlas);
@@ -2443,7 +2452,7 @@ void main() {
     const str = String(text ?? "");
     const atlas = nodeGraphGlLinesTextAtlas(family, weight, str);
     if (!atlas) return str.length * px * 0.6;
-    const g = px / glyphBakePx;
+    const g = px / atlas.bakePx;
     if (!EMOJI_HINT.test(str)) {
       let adv = 0;
       for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
@@ -2491,7 +2500,7 @@ void main() {
     if (!atlas) return;
     const k = batch.camera ? 1 : (batch.scale || 1) * (batch.textInk || 1);
     const px = Math.max(1, Math.round((Number(options.px) || 12) * k));
-    const g = px / glyphBakePx;
+    const g = px / atlas.bakePx;
     const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
     let hasEmoji = false;
     if (segs) for (let i = 0; i < segs.length; i += 1) if (segs[i].emoji) { hasEmoji = true; break; }
@@ -2578,7 +2587,7 @@ void main() {
       const gl = atlas.glyphs.get(ch);
       if (!gl) continue;
       const x0 = Math.round(pen - TEXT_PAD * sx);
-      const y0 = Math.round(baseline - (TEXT_PAD + glyphBakePx * ((atlas.head || 0) + TEXT_ASCENT)) * g);
+      const y0 = Math.round(baseline - (TEXT_PAD + atlas.bakePx * ((atlas.head || 0) + TEXT_ASCENT)) * g);
       const x1 = Math.round(x0 + gl.w * sx);
       const y1 = Math.round(y0 + gl.h * g);
       const u0 = gl.x / atlas.sheetW; const u1 = (gl.x + gl.w) / atlas.sheetW;
@@ -3981,9 +3990,15 @@ void main() {
       for (const atlas of s.atlases.values()) {
         if (atlas?.texture) s.deadTextures.push(atlas.texture);
       }
+      if (s.atlases.size) textAtlasGen += 1;
       s.atlases.clear();
     }
     return true;
+  }
+
+  /** Generation of the glyph atlases; changes when any atlas texture is retired. */
+  function nodeGraphGlLinesTextAtlasGen() {
+    return textAtlasGen;
   }
 
   // User fragment quad (emo script display {}). One program per source, an 8-frame
@@ -4314,6 +4329,7 @@ void main() {
     nodeGraphGlLinesMeasureText,
     nodeGraphGlLinesMeasureInk,
     nodeGraphGlLinesTextAtlas,
+    nodeGraphGlLinesTextAtlasGen,
     nodeGraphGlLinesTextSegments,
     nodeGraphGlLinesEmojiStats,
     nodeGraphGlLinesTextAspectStats,
