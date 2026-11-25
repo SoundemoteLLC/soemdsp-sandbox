@@ -74,6 +74,9 @@ function nodeGraphPositionGridHtml() {
     // from the GL cache; writing zoom/transform on them every wheel tick
     // was the remaining 200ms zoom-out cost once all 60 were awake.
     if (node.classList.contains("viewport-asleep")) continue;
+    // Mid-zoom: do not write style.zoom / transform (layout). GL already
+    // has the camera; a trailing pass applies HTML zoom after the gesture.
+    if (nodeGraphViewZoomLayoutDeferred()) continue;
     const text = node.querySelector(":scope > .node-text-box-body");
     if (text && behind && front) {
       const layout = nodeGraphMvp?.patch?.nodes?.find?.((item) => item?.id === node.dataset.node)?.layout;
@@ -115,6 +118,9 @@ function nodeGraphWriteInheritedZoomVar(workspace) {
   if (!el?.style) {
     return;
   }
+  if (nodeGraphViewZoomLayoutDeferred()) {
+    return;
+  }
   const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
   const value = String(zoom);
   if (el.style.getPropertyValue("--node-graph-zoom") !== value) {
@@ -137,6 +143,7 @@ const nodeGraphViewCamera = {
   epoch: 0,
   dirty: false,
   lastZoomChangeT: 0,
+  zoomMoved: false,
 };
 
 let nodeGraphViewFrameRaf = 0;
@@ -160,6 +167,7 @@ function viewCameraSet(options = {}) {
   const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
   if (Math.abs(next.zoom - (Number(prevZoom) || next.zoom)) > 1e-6) {
     nodeGraphViewCamera.lastZoomChangeT = now;
+    nodeGraphViewCamera.zoomMoved = true;
   }
   nodeGraphViewCamera.x = next.x;
   nodeGraphViewCamera.y = next.y;
@@ -193,6 +201,38 @@ function nodeGraphViewTextQualitySettled() {
   return (now - last) >= NODE_GRAPH_VIEW_TEXT_QUALITY_MS;
 }
 
+let nodeGraphViewZoomCssTimer = 0;
+
+function nodeGraphViewZoomLayoutDeferred() {
+  return nodeGraphViewportPerf.deferZoomLayout === true;
+}
+
+/** After the last zoom frame: write layout-affecting zoom CSS once, not mid-gesture. */
+function scheduleNodeGraphViewZoomCss() {
+  if (nodeGraphViewZoomCssTimer) {
+    window.clearTimeout(nodeGraphViewZoomCssTimer);
+  }
+  nodeGraphViewZoomCssTimer = window.setTimeout(() => {
+    nodeGraphViewZoomCssTimer = 0;
+    if (nodeGraphViewCamera.zoomMoved) {
+      scheduleNodeGraphViewZoomCss();
+      return;
+    }
+    const workspace = document.getElementById("nodeGraphWorkspace");
+    if (!workspace) return;
+    nodeGraphViewportPerf.deferZoomLayout = false;
+    if (typeof nodeGraphWriteInheritedZoomVar === "function") {
+      nodeGraphWriteInheritedZoomVar(workspace);
+    }
+    const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
+    workspace.dataset.zoom = Number(zoom).toFixed(2);
+    workspace.classList.toggle("pixelated-canvas-zoom", zoom > 2.5);
+    if (typeof nodeGraphPositionGridHtml === "function") {
+      nodeGraphPositionGridHtml();
+    }
+  }, 32);
+}
+
 function scheduleNodeGraphViewTextQuality() {
   if (nodeGraphViewTextQualityTimer) {
     window.clearTimeout(nodeGraphViewTextQualityTimer);
@@ -209,6 +249,12 @@ function scheduleNodeGraphViewTextQuality() {
     if (typeof nodeGraphGlGraphSettleTextBake === "function") {
       nodeGraphGlGraphSettleTextBake();
     }
+    // Snap leftover HTML to the settled zoom (deferred mid-gesture).
+    if (typeof applyNodeGraphViewportCssLight === "function") {
+      applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: true, skipSync: true, skipCull: true, skipHeatmap: true });
+    } else if (typeof nodeGraphPositionGridHtml === "function") {
+      nodeGraphPositionGridHtml();
+    }
     if (typeof nodeGraphGlGraphPresent === "function") {
       nodeGraphGlGraphPresent();
     }
@@ -224,6 +270,15 @@ function viewFrame() {
   nodeGraphViewCamera.dirty = false;
   const workspace = document.getElementById("nodeGraphWorkspace");
   if (!workspace) return;
+  // Mid-zoom, skip layout-affecting CSS zoom (inherited var + per-node
+  // style.zoom). Writing those and then reading clientWidth in Present was
+  // the Q/E and TILE=4 wheel cost (p95 33-50 ms). The GL camera uniform
+  // already shows the new zoom; HTML zoom catches up one frame after the
+  // last zoom change.
+  const deferZoomLayout = nodeGraphViewCamera.zoomMoved === true;
+  nodeGraphViewCamera.zoomMoved = false;
+  nodeGraphViewportPerf.deferZoomLayout = deferZoomLayout;
+  try {
   if (typeof applyNodeGraphViewportCssLight === "function") {
     applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: true, skipSync: true, skipCull: true, skipHeatmap: true });
   }
@@ -246,8 +301,14 @@ function viewFrame() {
   if (typeof syncNodeGraphWorkspaceResizeHandlePosition === "function") {
     syncNodeGraphWorkspaceResizeHandlePosition();
   }
+  if (deferZoomLayout) {
+    scheduleNodeGraphViewZoomCss();
+  }
   if (nodeGraphViewCamera.lastZoomChangeT && !nodeGraphViewTextQualitySettled()) {
     scheduleNodeGraphViewTextQuality();
+  }
+  } finally {
+    nodeGraphViewportPerf.deferZoomLayout = false;
   }
 }
 
@@ -336,8 +397,10 @@ function applyNodeGraphViewportCssLight(options = {}) {
   if (options.zoom !== false) {
     const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
     nodeGraphWriteInheritedZoomVar(workspace);
-    workspace.dataset.zoom = Number(zoom).toFixed(2);
-    workspace.classList.toggle("pixelated-canvas-zoom", zoom > 2.5);
+    if (!nodeGraphViewZoomLayoutDeferred()) {
+      workspace.dataset.zoom = Number(zoom).toFixed(2);
+      workspace.classList.toggle("pixelated-canvas-zoom", zoom > 2.5);
+    }
   }
   if (options.zoom !== false || options.pan !== false) {
     const pan = nodeGraphMvp.pan || { x: 0, y: 0 };
