@@ -73,7 +73,6 @@ function spectrogramSettingsForNode(node) {
         Math.min(SPECTROGRAM_MAX_HISTORY_SECONDS, nodeGraphFiniteNumber(source.historySeconds, 2)),
       ),
       fftSize: Math.max(128, Math.min(16384, Math.round(nodeGraphFiniteNumber(source.fftSize, 1024)))),
-      freqScale: Math.max(0, Math.min(2, Math.round(nodeGraphFiniteNumber(source.freqScale)))),
       minFreq: 20,
       maxFreq: 20000,
       window: Math.max(0, Math.min(4, Math.round(nodeGraphFiniteNumber(source.window, 1)))),
@@ -244,19 +243,6 @@ function spectrogramHopMeta(settings, node) {
   return { hopSize, sampleRate, fftSize, hopSerial, batchColumns, windowSum };
 }
 
-function spectrogramHzToMel(hz) {
-  return 2595 * Math.log10(1 + Math.max(0, hz) / 700);
-}
-function spectrogramMelToHz(mel) {
-  return 700 * (Math.pow(10, mel / 2595) - 1);
-}
-function spectrogramHzToBark(hz) {
-  return 6 * Math.asinh(Math.max(0, hz) / 600);
-}
-function spectrogramBarkToHz(bark) {
-  return 600 * Math.sinh(bark / 6);
-}
-
 /**
  * Resolve vertical view band in Hz, clamped to [1, Nyquist] with min < max.
  * Defaults match classic spectrogram (20 Hz … Nyquist).
@@ -277,47 +263,6 @@ function spectrogramResolveViewBand(minFreqHz, maxFreqHz, sampleRate) {
   return { minFreq: lo, maxFreq: hi, nyquist };
 }
 
-/**
- * Row t=0 (top of face) → high freq; t=1 (bottom) → low freq.
- * Maps the chosen Min/Max band through Linear / Mel / Bark.
- */
-function nodeGraphFrequencyCurveHz(t, curve, lo, hi) {
-  const u = Math.max(0, Math.min(1, t));
-  const amount = Math.max(0, Math.min(1, nodeGraphFiniteNumber(curve, 1)));
-  const low = Math.max(1e-3, lo);
-  const linearHz = lo + u * (hi - lo);
-  const logHz = low * Math.exp(u * Math.log(Math.max(hi, low * 1.000001) / low));
-  return linearHz + amount * (logHz - linearHz);
-}
-
-function spectrogramRowTToHz(t, freqScaleIdx, sampleRate, minFreqHz, maxFreqHz) {
-  const band = spectrogramResolveViewBand(minFreqHz, maxFreqHz, sampleRate);
-  const scale = Math.max(0, Math.min(2, Math.round(nodeGraphFiniteNumber(freqScaleIdx))));
-  // Face y grows downward; invert so top of face = Max freq.
-  const u = Math.max(0, Math.min(1, 1 - t));
-  if (scale === 1) {
-    const melMin = spectrogramHzToMel(band.minFreq);
-    const melMax = spectrogramHzToMel(band.maxFreq);
-    return spectrogramMelToHz(melMin + u * (melMax - melMin));
-  }
-  if (scale === 2) {
-    const barkMin = spectrogramHzToBark(band.minFreq);
-    const barkMax = spectrogramHzToBark(band.maxFreq);
-    return spectrogramBarkToHz(barkMin + u * (barkMax - barkMin));
-  }
-  return band.minFreq + u * (band.maxFreq - band.minFreq);
-}
-
-/** Absolute Hz → linear FFT bin index (spectrum covers 0…Nyquist). */
-function spectrogramHzToLinearBin(hz, linearBins, sampleRate) {
-  const sr = Math.max(1, nodeGraphFiniteNumber(sampleRate, 44100));
-  const nyquist = sr / 2;
-  const lb = Math.max(1, linearBins | 0);
-  // Bin 0 ≈ DC, last bin ≈ Nyquist (matches worklet magnitude packing).
-  const t = Math.max(0, nodeGraphFiniteNumber(hz)) / Math.max(1e-9, nyquist);
-  return Math.max(0, Math.min(lb - 1, t * (lb - 1)));
-}
-
 function spectrogramCreateState(faceW, faceH) {
   const w = Math.max(1, faceW | 0);
   const h = Math.max(1, faceH | 0);
@@ -329,7 +274,6 @@ function spectrogramCreateState(faceW, faceH) {
     lastHop: -1,
     lastHistorySerial: -1,
     // View settings frozen into already-painted pixels; only new ink uses new settings.
-    paintFreqScale: 0,
     paintSampleRate: 44100,
     historyHz: 4,
     historyCycles: 4,
@@ -362,7 +306,6 @@ function spectrogramResizePreserve(st, faceW, faceH) {
   next.lastHop = st.lastHop;
   next.lastHistorySerial = st.lastHistorySerial;
   next.lastAbs = st.lastAbs;
-  next.paintFreqScale = st.paintFreqScale;
   next.paintSampleRate = st.paintSampleRate;
   next.paintMinFreq = st.paintMinFreq;
   next.paintMaxFreq = st.paintMaxFreq;
@@ -460,7 +403,6 @@ function spectrogramIngestHop(
   spectrumBins,
   hopSize,
   sampleRate,
-  frequencyCurve,
   lutRgb,
   ceilingDb,
   minFreqHz,
@@ -494,12 +436,12 @@ function spectrogramIngestHop(
   if (whole >= 1) {
     whole = Math.min(bufW, whole);
     if (st.ring && typeof spectrogramGlRingWrite === "function") {
-      // Settings frozen per column (permanent ink), resolved like spectrogramRowTToHz.
+      // Level, band and colour are frozen per column (permanent ink). The
+      // frequency curve is not: it is a live uniform (ring.frequencyCurve).
       const band = spectrogramResolveViewBand(minFreqHz, maxFreqHz, sampleRate);
       spectrogramGlRingWrite(st.ring, whole, {
         floorDb,
         ceilingDb,
-        frequencyCurve,
         minFreq: band.minFreq,
         maxFreq: band.maxFreq,
         nyquist: band.nyquist,
@@ -538,7 +480,8 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   const ceilingDb = Number.isFinite(ceilingRaw) ? ceilingRaw : 0;
   const floorRaw = Number(node?.params?.floorDb);
   const floorDb = Number.isFinite(floorRaw) ? floorRaw : -80;
-  const frequencyCurve = Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings.frequencyCurve, 1)));
+  // Curve is a module parameter, applied live to the whole history.
+  const frequencyCurve = Math.max(0, Math.min(1, nodeGraphFiniteNumber(node?.params?.frequencyCurve, 1)));
   const minFreqHz = Number(settings.minFreq);
   const maxFreqHz = Number(settings.maxFreq);
   const lutStops = typeof nodeGraphApplyGradientHueRotation === "function"
@@ -578,8 +521,8 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
     && spectrogramGlUsable(st.ring, st.faceW, st.faceH);
   st.inkMode = st.useGl ? "gl" : "none";
 
-  // Ink uses settings at paint time; already-drawn pixels stay as-is.
-  st.paintFreqScale = frequencyCurve;
+  if (st.ring) st.ring.frequencyCurve = frequencyCurve;
+  // Ink uses Level / band at paint time; already-drawn pixels keep theirs.
   st.paintSampleRate = sampleRate;
   st.paintMinFreq = minFreqHz;
   st.paintMaxFreq = maxFreqHz;
@@ -641,7 +584,6 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
             bins,
             hopSize,
             sampleRate,
-            frequencyCurve,
             lutRgb,
             ceilingDb,
             minFreqHz,
@@ -657,7 +599,6 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
           spectrumBins,
           hopSize,
           sampleRate,
-          frequencyCurve,
           lutRgb,
           ceilingDb,
           minFreqHz,

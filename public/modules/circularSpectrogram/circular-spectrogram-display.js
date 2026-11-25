@@ -172,7 +172,8 @@ function drawNodeGraphCircularSpectrogramItem(_renderer, item, pixelRatio) {
   // Rotate is in turns (0…1 wraps), like the other phase knobs.
   const rotate = circularSpectrogramNumber(p.rotate, 0) * 2 * Math.PI;
   const inner = Math.max(0, Math.min(0.9, circularSpectrogramNumber(p.innerRadius, 0.12)));
-  const frequencyCurve = Math.max(0, Math.min(1, circularSpectrogramNumber(settings.frequencyCurve, 1)));
+  // Curve is a module parameter, applied live to the whole history.
+  const frequencyCurve = Math.max(0, Math.min(1, circularSpectrogramNumber(p.frequencyCurve, 1)));
   const lutStops = typeof nodeGraphApplyGradientHueRotation === "function"
     ? nodeGraphApplyGradientHueRotation(settings.gradientStops, settings)
     : settings.gradientStops;
@@ -195,6 +196,7 @@ function drawNodeGraphCircularSpectrogramItem(_renderer, item, pixelRatio) {
   const st = circularSpectrogramEnsureState(nodeId, buf.w, buf.h, mirror, historySeconds);
   st.spinHz = spinHz;
   if (!st.ring) st.ring = spectrogramGlRingCreate(st.columns, lutRgb);
+  st.ring.frequencyCurve = frequencyCurve;
 
   const frozen = typeof nodeGraphModuleScopePhosphorFrozen === "function"
     && nodeGraphModuleScopePhosphorFrozen();
@@ -233,7 +235,7 @@ function drawNodeGraphCircularSpectrogramItem(_renderer, item, pixelRatio) {
   if (!(spinHz > 0)) circularSpectrogramAdvance(st, null, 0, 0, null);
   if (seconds > 0) {
     const band = spectrogramResolveViewBand(settings.minFreq, settings.maxFreq, sampleRate);
-    const ink = { floorDb, ceilingDb, frequencyCurve,
+    const ink = { floorDb, ceilingDb,
       minFreq: band.minFreq, maxFreq: band.maxFreq, nyquist: band.nyquist, lutRgb };
     if (hasBatch && hopSerial !== st.lastHop) {
       // Distribute this frame's elapsed time across the available spectra;

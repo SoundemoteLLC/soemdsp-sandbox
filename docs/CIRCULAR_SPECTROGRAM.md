@@ -18,10 +18,13 @@ with Spectrogram. It has its own polar presentation and sweep retention.
 
 ## Frequency Curve
 
-Frequency curve is shared by Circular Spectrogram, Spectrogram, and 1D Spectrum:
-0 is linear, 1 is logarithmic (default), with a continuous blend between them.
-It works with Reverse Frequency and applies to new ink without clearing history.
-Spectrograms keep each column's mapping with its ink; 1D Spectrum remaps immediately.
+Curve is a module parameter (face cell beside the Freq band), the same on
+Spectrogram, Circular Spectrogram, 1D Spectrum and Spectrum Circle: 0 is linear
+Hz, 1 is logarithmic (default), with a continuous blend between them. All four
+map through one helper, `nodeGraphFrequencyCurveHz` in
+`public/lib/spectral-analysis.js` (the spectrogram shader has the same formula
+as `hzForCurve`). Curve is a live shader uniform, so turning it remaps the whole
+history at once. It works with Reverse Frequency. Mel / Bark are gone.
 
 ## Sweep Retention (Both Head Modes)
 

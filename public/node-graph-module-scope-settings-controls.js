@@ -364,8 +364,6 @@ const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
   backgroundHue: { min: 0, max: 360, taper: "linear", step: 1, wrap: true },
   rotationDegrees: { min: 0, max: 1440, taper: "linear", step: 1 },
   scale: { min: 0.1, max: 100, taper: "log", step: 0.025 },
-  minFreq: { min: 1, max: 24000, taper: "log", step: 0.025 },
-  maxFreq: { min: 1, max: 24000, taper: "log", step: 0.025 },
   // Formant Filter face sizes: ink px at a 96px face, 0 = not drawn.
   dotSize: { min: 0, max: 32, taper: "linear", step: 0.5 },
   formantCurveThickness: { min: 0, max: 16, taper: "linear", step: 0.5 },
@@ -575,7 +573,6 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   ghost: nodeGraphTraceDisplayClampUnit,
   circularAfterglow: nodeGraphTraceDisplayClampUnit,
   circularSweepFade: nodeGraphTraceDisplayClampUnit,
-  frequencyCurve: nodeGraphTraceDisplayClampUnit,
   spectrumSmoothMs: (value) => Math.max(0, Math.min(5000, nodeGraphFiniteNumber(value))),
   spectrumPeakDecay: (value) => Math.max(0.1, Math.min(1000, nodeGraphFiniteNumber(value, 12))),
   spectrumBarCount: (value) => Math.max(1, Math.min(512, Math.round(nodeGraphFiniteNumber(value, 64)))),
@@ -678,16 +675,6 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   fftSize: (value) => (typeof nodeGraphSpectrogramSnapFftSize === "function"
     ? nodeGraphSpectrogramSnapFftSize(value)
     : 1024),
-  minFreq: (value) => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return 20;
-    return clampNodeSliderValue(n, 1, 24000);
-  },
-  maxFreq: (value) => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return 20000;
-    return clampNodeSliderValue(n, 1, 24000);
-  },
   zoomSeconds: nodeGraphTraceDisplayClampHistorySeconds,
   zoomMin: (value) => {
     const n = Number(value);
@@ -759,16 +746,6 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
       // 0 is not meaningful (was silently treated as ~0.05 s).
       if (n <= 0) return 0.1;
       return clampNodeSliderValue(n, 0.1, 30);
-    },
-    minFreq: (value) => {
-      const n = Number(value);
-      if (!Number.isFinite(n)) return 20;
-      return clampNodeSliderValue(n, 1, 24000);
-    },
-    maxFreq: (value) => {
-      const n = Number(value);
-      if (!Number.isFinite(n)) return 20000;
-      return clampNodeSliderValue(n, 1, 24000);
     },
   }),
   // Phosphor Dot: same blur continuum as 2D Phosphor stamps.

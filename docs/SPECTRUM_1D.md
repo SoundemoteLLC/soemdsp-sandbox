@@ -1,7 +1,9 @@
 # 1D Spectrum Display
 
-Frequency curve shares the linear-to-log mapping with both spectrograms.
-It remaps the current spectrum immediately; it does not alter audio or FFT analysis.
+Curve (face cell beside the Freq band, 0 = linear Hz, 1 = log Hz) is the same
+module parameter as on Spectrogram, Circular Spectrogram and Spectrum Circle,
+mapped by the shared `nodeGraphFrequencyCurveHz`. It remaps the current
+spectrum immediately; it does not alter audio or FFT analysis.
 
 ## Analysis
 

@@ -12,6 +12,14 @@ the same scale. Retained ink rotates by the change in orientation, not by a
 separate frame-dependent Twist velocity. Crossing the wrap seam does not clear
 the plate or reverse an unrelated trail-spin effect.
 
+## Frequency
+
+Min Freq, Max Freq and Curve are module parameters (default 30 Hz, 16 kHz,
+Curve 1). Curve is the same 0 = linear Hz … 1 = log Hz axis as Spectrogram,
+Circular Spectrogram and 1D Spectrum (`nodeGraphFrequencyCurveHz`); the old
+Freq axis choice (Log / Linear / Mel / Bark) and the Display Settings Min / Max
+freq fields are gone.
+
 ## Settings
 
 - Inner sets where rays start, as a fraction of Size. Their magnitude fills

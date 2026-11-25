@@ -24042,6 +24042,7 @@ const nodeGraphModuleDefinitions = (
     // Hand-written face (node-graph-module-face.js): Freq band, Floor | Ceiling | History.
     face: [
       { kind: "band", lo: "minFreq", hi: "maxFreq", label: "Freq", h: 34 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
       { kind: "band", lo: "floorDb", hi: "ceilingDb", label: "Level", h: 34 },
       { kind: "cells", params: [["historySeconds", "History"]], h: 40 },
     ],
@@ -24065,6 +24066,17 @@ const nodeGraphModuleDefinitions = (
     // Face knobs: dB-window grade + view band + scroll window.
     // Analysis look (FFT / window / overlap / freq scale / gradient) stays in Display Settings.
     parameters: [
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Frequency spacing: 0 = linear Hz, 1 = logarithmic. Higher gives bass more room, lower gives treble more room. Changes redraw the whole display at once."
+      },
       {
         key: "floorDb",
         label: "Floor",
@@ -24142,6 +24154,7 @@ const nodeGraphModuleDefinitions = (
     // Hand-written face (node-graph-module-face.js): Freq band, Level band.
     face: [
       { kind: "band", lo: "minFreq", hi: "maxFreq", label: "Freq", h: 34 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
       { kind: "band", lo: "floorDb", hi: "ceilingDb", label: "Level", h: 34 },
     ],
     planRole: "monitor",
@@ -24155,6 +24168,17 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Thru", "rgba"],
     outputLabels: { Thru: "←", rgba: "📺" },
     parameters: [
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Frequency spacing: 0 = linear Hz, 1 = logarithmic. Higher gives bass more room, lower gives treble more room. Changes redraw the whole display at once."
+      },
       {
         key: "minFreq",
         kind: "frequency",
@@ -24219,6 +24243,7 @@ const nodeGraphModuleDefinitions = (
     // Hand-written face: frequency and level ranges, Spin, Inner / Rotate, Mirror, Direction.
     face: [
       { kind: "band", lo: "minFreq", hi: "maxFreq", label: "Freq", h: 34 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
       { kind: "band", lo: "floorDb", hi: "ceilingDb", label: "Level", h: 34 },
       { kind: "cells", params: [["spinHz", "Spin"]], h: 40 },
       { kind: "cells", params: [["innerRadius", "Inner"], ["rotate", "Rotate"]], h: 40 },
@@ -24239,6 +24264,17 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Thru", "rgba"],
     outputLabels: { Thru: "←", rgba: "📺" },
     parameters: [
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Frequency spacing: 0 = linear Hz, 1 = logarithmic. Higher gives bass more room, lower gives treble more room. Changes redraw the whole display at once."
+      },
       {
         key: "floorDb",
         label: "Floor",
@@ -24333,23 +24369,6 @@ const nodeGraphModuleDefinitions = (
         key: "direction",
         kind: "choice",
         label: "Direction",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1"
-      },
-      {
-        choices: ["Log", "Freq Scale"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "radialScale",
-        hidden: true,
-        modulation: false,
-        parameterOutput: false,
-        kind: "choice",
-        label: "Radius Map",
         linearSmoothing: false,
         max: "1",
         mid: "0",

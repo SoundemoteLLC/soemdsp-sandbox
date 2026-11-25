@@ -12,8 +12,6 @@ class NodeLiveAudioProcessor {}
 var sampleRate = 48000;
 `, ctx);
 vm.runInContext(read('public/lib/spectral-analysis.js'), ctx);
-const curveSrc = read('public/modules/spectrogram/spectrogram-display.js').match(/function nodeGraphFrequencyCurveHz[\s\S]*?\n}\n/)[0];
-vm.runInContext(curveSrc, ctx);
 vm.runInContext(read('public/modules/spectrogram/spectrogram-worklet-evaluator.js'), ctx);
 vm.runInContext(read('public/modules/spectrum1d/spectrum1d-display.js'), ctx);
 const G = (name) => vm.runInContext(name, ctx);
@@ -114,6 +112,30 @@ const xForHz = (hz, s, W) => {
   ok('Floor / Ceiling are continuous (0 dB sits half way in -40..40)', Math.abs(half[peak] - 0.5) < 0.002, half[peak].toFixed(4));
   const linear = columns(a, settings({ spectrumDbMode: 'linear' }));
   ok('Linear scale: full-scale sine at the top', Math.abs(linear[argmax(linear)] - 1) < 0.01, linear[argmax(linear)].toFixed(4));
+}
+
+{
+  // Frequency Curve: one shared 0..1 axis (0 linear Hz, 1 log Hz).
+  const curve = G('nodeGraphFrequencyCurveHz');
+  ok('Curve 0 is linear Hz', Math.abs(curve(0.5, 0, 20, 20000) - 10010) < 1e-9);
+  ok('Curve 1 is log Hz', Math.abs(curve(0.5, 1, 20, 20000) - Math.sqrt(20 * 20000)) < 1e-9);
+  ok('Curve 0.5 is half way between them', Math.abs(curve(0.5, 0.5, 20, 20000) - (10010 + Math.sqrt(20 * 20000)) / 2) < 1e-9);
+  ok('Curve keeps the band ends', curve(0, 0.3, 20, 20000) === 20 && Math.abs(curve(1, 0.3, 20, 20000) - 20000) < 1e-9);
+  const hz = 43 * SR / 2048;
+  const a = makeAnalyser('spectrum1d', params1d());
+  a.run(1, sine(hz));
+  for (const c of [0, 0.5, 1]) {
+    const s = settings({ frequencyCurve: c });
+    const cols = columns(a, s);
+    // Invert the curve by bisection: where does hz sit on the axis?
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (curve(m, c, s.minFreq, s.maxFreq) < hz) lo = m; else hi = m; }
+    const want = lo * 799;
+    ok(`Curve ${c} puts the sine at the right x`, Math.abs(argmax(cols) - want) <= 1, `x ${argmax(cols)} vs ${want.toFixed(1)}`);
+  }
+  const glsl = read('public/modules/spectrogram/spectrogram-gl.js');
+  ok('Spectrogram shader maps Hz only through the live Curve uniform',
+    /float hzForCurve\(/.test(glsl) && !/hzForU|melToHz|barkToHz/.test(glsl) && /uniform float uFrequencyCurve/.test(glsl));
 }
 
 {

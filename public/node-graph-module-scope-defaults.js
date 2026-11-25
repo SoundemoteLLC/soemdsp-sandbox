@@ -541,7 +541,6 @@ const nodeGraphSpectrogramSettingsDefaults = Object.freeze({
   // Frequency overlap = zero-pad factor on the analysis window (denser Hz grid).
   // 0→1× (no pad), 1→2×, 2→4×. FFT length = min(window×factor, 32768).
   freqOverlap: 0,
-  freqScale: 1, // Mel
   // Vertical face maps this Hz band (bottom→top). Zooming the range uses more
   // face pixels on the band of interest (better detail than full Nyquist).
   minFreq: 20,

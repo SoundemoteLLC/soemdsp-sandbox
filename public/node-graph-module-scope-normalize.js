@@ -371,11 +371,6 @@ function normalizeNodeGraphSpectrogramSettings(settings = {}, node = null) {
     2,
     defaults.freqOverlap,
   );
-  const freqScale = snapChoice(
-    source.freqScale ?? node?.params?.freqScale ?? (node?.type === "circularSpectrogram" && Number(node?.params?.radialScale ?? 0) === 0 ? 3 : defaults.freqScale),
-    node?.type === "circularSpectrogram" ? 3 : 2,
-    defaults.freqScale,
-  );
   // View band (Hz). Hard range 1…24000; min always strictly below max.
   const clampHz = (raw, fallback) => {
     const n = Number(raw);
@@ -412,12 +407,10 @@ function normalizeNodeGraphSpectrogramSettings(settings = {}, node = null) {
     window,
     overlap,
     freqOverlap,
-    freqScale,
     reverseFrequency: source.reverseFrequency == null ? Number(node?.params?.reverseFrequency) === 1 : source.reverseFrequency === true,
     circularHeadMode: source.circularHeadMode === "moving" ? "moving" : "fixed",
     circularAfterglow: normalizeNodeGraphTraceDisplayNumber(source.circularAfterglow, 0.2, 0, 1),
     circularSweepFade: normalizeNodeGraphTraceDisplayNumber(source.circularSweepFade, 0, 0, 1),
-    frequencyCurve: normalizeNodeGraphTraceDisplayNumber(source.frequencyCurve ?? source.circularFrequencyCurve, 1, 0, 1),
     circularHangTurns: normalizeNodeGraphTraceDisplayNumber(source.circularHangTurns, 1, 0, 30),
     minFreq,
     maxFreq,
@@ -449,7 +442,6 @@ const nodeGraphSpectrumLineSettingsDefaults = Object.freeze({
   window: 1, // Hann
   overlap: 2, // 4× hop
   freqOverlap: 0,
-  frequencyCurve: 1,
   spectrumDbMode: "exactDb",
   spectrumBassDetail: "on",
   spectrumDrawStyle: "filled",
@@ -484,9 +476,6 @@ function normalizeNodeGraphSpectrumLineSettings(settings = {}, node = null) {
     window: analysis.window,
     overlap: analysis.overlap,
     freqOverlap: analysis.freqOverlap,
-    // Worklet ignores freqScale; kept so shared param injection stays well-formed.
-    freqScale: 0,
-    frequencyCurve: normalizeNodeGraphTraceDisplayNumber(source.frequencyCurve, source.spectrumAxis === "linear" ? 0 : 1, 0, 1),
     spectrumDbMode: pick(source.spectrumDbMode, ["exactDb", "linear"], d.spectrumDbMode),
     spectrumBassDetail: pick(source.spectrumBassDetail, ["on", "off"], d.spectrumBassDetail),
     spectrumDrawStyle: pick(source.spectrumDrawStyle, ["filled", "line", "bars"], d.spectrumDrawStyle),
@@ -519,7 +508,6 @@ function syncNodeGraphSpectrogramDisplaySettingsToParams(node, settings) {
   node.params.window = safe.window;
   node.params.overlap = safe.overlap; // time hop factor index
   node.params.freqOverlap = safe.freqOverlap; // zero-pad factor index
-  node.params.freqScale = safe.freqScale;
   // History / Min·Max Freq are module face sliders — do not clobber from display.
   // Seed once if missing (legacy patches that only had display settings).
   if (!Number.isFinite(Number(node.params.historySeconds))) {

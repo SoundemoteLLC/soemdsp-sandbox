@@ -239,9 +239,6 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Curve thickness";
     title = "Analytic curve stroke 0…1 of the face min side. Scales with the canvas.";
   }
-  if ((key === "minFreq" || key === "maxFreq") && formType === "videoFeedbackFace") {
-    title = "";
-  }
   if ((key === "zoomMin" || key === "zoomMax") && formType === "graphFace") {
     label = key === "zoomMin" ? "Zoom Min" : "Zoom Max";
     title = "";
@@ -702,8 +699,6 @@ function nodeGraphDisplaySettingsBuildChoiceRowHtml(key) {
   }
   const idAttr = meta.id ? ` id="${nodeGraphDisplaySettingsEscapeHtml(meta.id)}"` : "";
   const options = (meta.options || [])
-    .filter(option => key !== "freqScale" || option.value !== "3"
-      || (typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function" && nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type === "circularSpectrogram"))
     .map((option) => (
       `<option value="${nodeGraphDisplaySettingsEscapeHtml(option.value)}">${nodeGraphDisplaySettingsEscapeHtml(option.label)}</option>`
     ))

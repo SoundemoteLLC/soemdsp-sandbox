@@ -6,8 +6,8 @@
 //   SpectrumLowRaw   Bass detail: |X[k]| from a 4x longer window
 //   SpectrumLowMeta  [fftLen, window sum] for SpectrumLowRaw
 //   FftSize          hop meta (fftLen, halfN, bins, hop, sampleRate, hopSerial, …)
-// Floor / Ceiling and Min / Max Freq are module parameters (face Level / Freq
-// bands). Display only. No DSP here.
+// Floor / Ceiling, Min / Max Freq and Curve are module parameters (face Level /
+// Freq bands, Curve cell). Display only. No DSP here.
 
 const nodeGraphSpectrumLineStates = new Map();
 const NODE_GRAPH_SPECTRUM_LINE_PEAK_HOLD_SECONDS = 0.5;
@@ -162,9 +162,10 @@ function nodeGraphSpectrumLineSettingsForNode(node) {
     : {};
   const p = node?.params && typeof node.params === "object" ? node.params : {};
   const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
-  // Freq and Level bands are module parameters (limits from the definition).
+  // Freq / Level bands and Curve are module parameters (limits from the definition).
   return {
     ...base,
+    frequencyCurve: Math.max(0, Math.min(1, num(p.frequencyCurve, 1))),
     minFreq: num(p.minFreq, 20),
     maxFreq: num(p.maxFreq, 20000),
     spectrumDbFloor: num(p.floorDb, -96),

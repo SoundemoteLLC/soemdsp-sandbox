@@ -94,11 +94,26 @@ function nodeGraphSpectralWindow(n, kind = 1) {
   return w;
 }
 
+/**
+ * The one frequency axis for every spectral display. t 0..1 across the axis
+ * (0 = lo, 1 = hi); curve 0 = linear Hz, 1 = log Hz, blended in between.
+ * The Spectrogram shader has the same formula in GLSL (hzForCurve).
+ */
+function nodeGraphFrequencyCurveHz(t, curve, lo, hi) {
+  const u = Math.max(0, Math.min(1, t));
+  const c = Number(curve);
+  const amount = Math.max(0, Math.min(1, Number.isFinite(c) ? c : 1));
+  const low = Math.max(1e-3, lo);
+  const linearHz = lo + u * (hi - lo);
+  const logHz = low * Math.exp(u * Math.log(Math.max(hi, low * 1.000001) / low));
+  return linearHz + amount * (logHz - linearHz);
+}
+
 /** Magnitude → dBFS for a window's full scale (1e-12 floor, never -Infinity). */
 function nodeGraphSpectralMagToDb(mag, fullScale) {
   return 20 * Math.log10(Math.max(1e-12, Math.max(0, mag) / Math.max(1e-12, fullScale)));
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { nodeGraphSpectralFftInPlace, nodeGraphSpectralFftTables, nodeGraphSpectralWindow, nodeGraphSpectralMagToDb };
+  module.exports = { nodeGraphFrequencyCurveHz, nodeGraphSpectralFftInPlace, nodeGraphSpectralFftTables, nodeGraphSpectralWindow, nodeGraphSpectralMagToDb };
 }

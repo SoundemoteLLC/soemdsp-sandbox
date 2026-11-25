@@ -238,7 +238,6 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "circularAfterglow",
     "circularSweepFade",
     "circularHangTurns",
-    "frequencyCurve",
     "spectrumSmoothMs",
     "spectrumBarCount",
     "spectrumBarWidth",
@@ -301,9 +300,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "window",
     "overlap",
     "freqOverlap",
-    "freqScale",
     "cornerShape",
-    "spectrumAxis",
     "spectrumDbMode",
     "spectrumBassDetail",
     "spectrumDrawStyle",
@@ -763,13 +760,12 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze([]),
   }),
   videoFeedbackFace: Object.freeze({
-    fields: Object.freeze(["minFreq", "maxFreq", "spectrumDbFloor", "spectrumCircleRayWidth"]),
+    fields: Object.freeze(["spectrumDbFloor", "spectrumCircleRayWidth"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([
       "fftSize",
       "window",
-      "spectrumAxis",
       "spectrumCircleBands",
       "spectrumCircleSymmetric",
       "spectrumCircleReverse",
@@ -867,10 +863,10 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze(["buildUp"]),
     choices: Object.freeze(["drawMode"]),
   }),
-  // Spectrogram: FFT + analysis choices. History / Min·Max Freq are module sliders.
+  // Spectrogram: FFT + analysis choices. History / Min·Max Freq / Curve are module params.
   // Gradient separate. Pause on silence matches Instant Waterfall (default off).
   spectrogramBurn: Object.freeze({
-    fields: Object.freeze(["frequencyCurve"]),
+    fields: Object.freeze([]),
     colors: Object.freeze([]),
     toggles: Object.freeze(["pauseOnSilence"]),
     choices: Object.freeze(["fftSize", "window", "overlap", "freqOverlap"]),
@@ -878,7 +874,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   // 1D Spectrum: same FFT analysis choices as Spectrogram (shared keys) + its
   // own axis / dB / draw / peak choices. Colors on the shared color row.
   spectrumLine: Object.freeze({
-    fields: Object.freeze(["frequencyCurve", "spectrumSmoothMs", "spectrumPeakDecay", "spectrumBarCount", "spectrumBarWidth", "spectrumMinBarPx", "spectrumMinGapPx"]),
+    fields: Object.freeze(["spectrumSmoothMs", "spectrumPeakDecay", "spectrumBarCount", "spectrumBarWidth", "spectrumMinBarPx", "spectrumMinGapPx"]),
     colors: Object.freeze(["dot1Color", "backgroundColor"]),
     toggles: Object.freeze([]),
     choices: Object.freeze([
@@ -1297,7 +1293,6 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "spectrumSmoothMs",
       "spectrumBarCount",
       "spectrumBarWidth",
-      "frequencyCurve",
       "circularSweepFade",
       "circularAfterglow",
       "circularHangTurns",
@@ -1331,8 +1326,6 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "edgeSpacing",
       "cornerRadius",
       "fftSize",
-      "minFreq",
-      "maxFreq",
       "hue",
       "rounding",
       "lineBrightness",
@@ -1379,7 +1372,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "rotate90",
       "squareRatio",
       "pauseOnSilence",, "buildUp"]),
-    // window/overlap/freqOverlap/freqScale = spectrogram; syncChannel/stereoBlend = Output.
+    // window/overlap/freqOverlap = spectrogram; syncChannel/stereoBlend = Output.
     // cornerShape = LED / Raster RGB / Matrix Waterfall (square|squircle).
     choices: Object.freeze([
       "outerPlate",
@@ -1389,12 +1382,10 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "window",
       "overlap",
       "freqOverlap",
-      "freqScale",
       "syncChannel",
       "windowMode",
       "plotDraw",
       "barInk",
-      "spectrumAxis",
       "spectrumDbMode",
       "spectrumBassDetail",
       "spectrumDrawStyle",
@@ -1604,11 +1595,6 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     inputmode: "decimal",
     title: "Fraction of a revolution that fades down before it retires. 0 = original hard boundary, no dark fade. 0.2 = soften the final fifth; 1 = fade across the whole turn. Independent of Afterglow strength. Works with both head modes.",
   }),
-  frequencyCurve: Object.freeze({
-    label: "Frequency curve",
-    inputmode: "decimal",
-    title: "Continuous frequency spacing: 0 = linear, 1 = logarithmic. Higher values give bass more room; lower values give treble more room. Spectrograms apply changes to new ink; 1D Spectrum updates immediately.",
-  }),
   spectrumSmoothMs: Object.freeze({
     label: "Smooth (ms)", inputmode: "decimal",
     title: "Time constant for live spectrum height smoothing, independent of peak hold. 0 = off. Applies to Filled, Line, and Bars. Display only; does not smooth the audio.",
@@ -1756,18 +1742,6 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     inputmode: "numeric",
     id: "nodeTraceDisplayFftSize",
     title: "Analysis window length (samples). Steps 128…16384. Time hop = N / time-overlap. Freq overlap zero-pads the FFT.",
-  }),
-  minFreq: Object.freeze({
-    label: "Min freq (Hz)",
-    inputmode: "decimal",
-    id: "nodeTraceDisplayMinFreq",
-    title: "Lowest frequency drawn at the bottom of the face (1–24000 Hz). Raise this with Max freq to zoom into a band — more vertical pixels on the range you care about.",
-  }),
-  maxFreq: Object.freeze({
-    label: "Max freq (Hz)",
-    inputmode: "decimal",
-    id: "nodeTraceDisplayMaxFreq",
-    title: "Highest frequency drawn at the top of the face (1–24000 Hz, must stay above Min). Lower this to crop ultrasonic / empty highs and spend face height on mid/low detail.",
   }),
   scale: Object.freeze({
     label: "Scale",
@@ -3056,28 +3030,6 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
       Object.freeze({ value: "0", label: "1× (none)" }),
       Object.freeze({ value: "1", label: "2× pad" }),
       Object.freeze({ value: "2", label: "4× pad" }),
-    ]),
-  }),
-  freqScale: Object.freeze({
-    label: "Freq scale",
-    aria: "Frequency scale",
-    id: "nodeTraceDisplayFreqScale",
-    options: Object.freeze([
-      Object.freeze({ value: "3", label: "Log" }),
-      Object.freeze({ value: "0", label: "Linear" }),
-      Object.freeze({ value: "1", label: "Mel" }),
-      Object.freeze({ value: "2", label: "Bark" }),
-    ]),
-  }),
-  spectrumAxis: Object.freeze({
-    label: "Freq axis",
-    aria: "1D Spectrum frequency axis",
-    id: "nodeTraceDisplaySpectrumAxis",
-    options: Object.freeze([
-      Object.freeze({ value: "log", label: "Log" }),
-      Object.freeze({ value: "linear", label: "Linear" }),
-      Object.freeze({ value: "mel", label: "Mel" }),
-      Object.freeze({ value: "bark", label: "Bark" }),
     ]),
   }),
   spectrumDbMode: Object.freeze({

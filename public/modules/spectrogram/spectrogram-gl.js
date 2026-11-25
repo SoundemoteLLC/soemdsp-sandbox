@@ -5,13 +5,13 @@
 //     spectrum bins (4 bins per RGBA float texel). Each emitted pixel column
 //     writes one row; uHead says which row is the oldest, so nothing scrolls.
 //   • Per-column settings ("permanent ink"): a small meta texture keeps the
-//     floorDb, ceilingDb, freq scale, band, Nyquist, bin count and colour
-//     row that were live when the column was painted. Changing a knob only
-//     affects new columns.
+//     floorDb, ceilingDb, band, Nyquist, bin count and colour row that were
+//     live when the column was painted. Changing those knobs only affects new
+//     columns. The frequency Curve is a live uniform: it remaps all history.
 //   • Colour: 256-wide LUT rows (one per gradient that still has ink on face).
 //   • Circular Spectrogram reuses the ring, meta and LUT with a second
 //     fragment shader (FS_POLAR): angle → column age, radius → frequency.
-//   • Shader per pixel: ring lookup → Linear / Mel / Bark row→Hz → bilinear
+//   • Shader per pixel: ring lookup → Curve row→Hz → bilinear
 //     bin lerp → undo log10(1+mag·100) → dBFS → soft floor/ceiling → interpolated LUT.
 //   • Moving-head circular ink has a clean current revolution and a separate
 //     older-sweep layer whose afterglow lifetime is measured in turns.
@@ -50,6 +50,7 @@ uniform vec3 uPlate;       // darkest LUT color (right sliver while uSub > 0)
 uniform float uRingTexW;   // texels per ring row
 uniform float uLutRows;
 uniform float uFullMag;    // windowSum/2: 1.0 in dBFS is a full-scale sine
+uniform float uFrequencyCurve; // 0 linear Hz .. 1 log Hz (module param, live)
 
 const float LN10 = 2.302585092994046;
 
@@ -59,17 +60,6 @@ float binAt(float rowV, float b) {
   vec4 v = texture2D(uRing, vec2((texel + 0.5) / uRingTexW, rowV));
   vec4 pick = step(abs(vec4(lane) - vec4(0.0, 1.0, 2.0, 3.0)), vec4(0.5));
   return dot(v, pick);
-}
-
-float hzToMel(float hz) { return 2595.0 * (log(1.0 + max(0.0, hz) / 700.0) / LN10); }
-float melToHz(float mel) { return 700.0 * (exp((mel / 2595.0) * LN10) - 1.0); }
-float hzToBark(float hz) {
-  float x = max(0.0, hz) / 600.0;
-  return 6.0 * log(x + sqrt(x * x + 1.0));
-}
-float barkToHz(float bark) {
-  float x = bark / 6.0;
-  return 600.0 * 0.5 * (exp(x) - exp(-x));
 }
 
 float powPos(float x, float e) { return x <= 0.0 ? 0.0 : pow(x, e); }
@@ -97,28 +87,12 @@ vec3 spectrogramGradient(float level, float row) {
   return mix(a, b, index - lo);
 }
 
-float hzForU(float u, float scale, float lo, float hi) {
-  if (scale >= 3.5) {
-    float l = max(lo, 1e-3);
-    float linearHz = mix(lo, hi, u);
-    float logHz = l * exp(u * log(max(hi, l * 1.000001) / l));
-    return mix(linearHz, logHz, clamp(scale - 4.0, 0.0, 1.0));
-  }
-  if (scale > 2.5) {
-    float l = max(lo, 1e-3);
-    return l * exp(u * log(max(hi, l * 1.000001) / l));
-  }
-  if (scale > 0.5 && scale < 1.5) {
-    float a = hzToMel(lo);
-    float b = hzToMel(hi);
-    return melToHz(a + u * (b - a));
-  }
-  if (scale >= 1.5) {
-    float a = hzToBark(lo);
-    float b = hzToBark(hi);
-    return barkToHz(a + u * (b - a));
-  }
-  return lo + u * (hi - lo);
+// Same formula as nodeGraphFrequencyCurveHz (public/lib/spectral-analysis.js).
+float hzForCurve(float u, float curve, float lo, float hi) {
+  float l = max(lo, 1e-3);
+  float linearHz = mix(lo, hi, u);
+  float logHz = l * exp(u * log(max(hi, l * 1.000001) / l));
+  return mix(linearHz, logHz, clamp(curve, 0.0, 1.0));
 }
 
 float grade01(float x, float floorDb, float ceilingDb) {
@@ -147,7 +121,6 @@ void main() {
   vec4 m1 = texture2D(uMeta, vec2(0.75, rowV));
   float floorDb = m0.x;
   float ceilingDb = m0.y;
-  float scale = m0.z;
   float bins = m0.w;
   float lo = m1.x;
   float hi = m1.y;
@@ -156,11 +129,11 @@ void main() {
 
   float mag = 0.0;
   if (bins >= 1.0) {
-    // spectrogramRowTToHz: t=0 top → Max freq.
+    // t=0 top → Max freq.
     float t = yTop / max(1.0, uSize.y - 1.0);
     float u = clamp(1.0 - t, 0.0, 1.0);
-    float hz = hzForU(u, scale, lo, hi);
-    // spectrogramHzToLinearBin + bilinear bin blend.
+    float hz = hzForCurve(u, uFrequencyCurve, lo, hi);
+    // Hz → linear bin + bilinear bin blend.
     float lb = max(1.0, bins);
     float binF = clamp(max(0.0, hz) / max(1e-9, nyq) * (lb - 1.0), 0.0, lb - 1.0);
     float b0 = clamp(floor(binF), 0.0, lb - 1.0);
@@ -180,7 +153,7 @@ void main() {
   // Head (newest) at 12 o'clock for Down, 6 o'clock for Up, turned by z.
   // Mirror: age = |angle from head| / pi on both halves. Else one sweep:
   // clockwise from the head for Down, anticlockwise for Up. Radius → Hz with
-  // bass at the inner radius; meta scale 3 is log Hz.
+  // bass at the inner radius; Hz follows the live Curve uniform.
   const POLAR_AGE_GLSL = `
 float polarAge(vec2 xy) {
   vec2 p = xy - 0.5 * uSize;
@@ -236,7 +209,7 @@ void main() {
   if (bins >= 1.0) {
     float u = clamp((r - inner) / max(1e-6, 1.0 - inner), 0.0, 1.0);
     if (uReverseFrequency > 0.5) u = 1.0 - u;
-    float hz = hzForU(u, m0.z, m1.x, m1.y);
+    float hz = hzForCurve(u, uFrequencyCurve, m1.x, m1.y);
     float lb = max(1.0, bins);
     float binF = clamp(max(0.0, hz) / max(1e-9, nyq) * (lb - 1.0), 0.0, lb - 1.0);
     float b0 = clamp(floor(binF), 0.0, lb - 1.0);
@@ -338,6 +311,7 @@ void main() {
       uRingTexW: gl.getUniformLocation(program, "uRingTexW"),
       uLutRows: gl.getUniformLocation(program, "uLutRows"),
       uFullMag: gl.getUniformLocation(program, "uFullMag"),
+      uFrequencyCurve: gl.getUniformLocation(program, "uFrequencyCurve"),
     };
     for (const name of extraUniforms || []) {
       entry.u[name] = gl.getUniformLocation(program, name);
@@ -491,7 +465,7 @@ void main() {
 
   /**
    * Emit n identical columns from the pending pool (same as the Canvas2D
-   * scroll-and-paint). params: floorDb, ceilingDb, freqScale, minFreq,
+   * scroll-and-paint). params: floorDb, ceilingDb, minFreq,
    * maxFreq (already band-resolved), nyquist, lutRgb.
    */
   function spectrogramGlRingWrite(ring, nPixels, params) {
@@ -505,11 +479,6 @@ void main() {
     // Missing / NaN only. Explicit 0 stays 0.
     const floorDb = Number.isFinite(floorRaw) ? floorRaw : -80;
     const ceilingDb = Number.isFinite(ceilingRaw) ? ceilingRaw : 0;
-    // 0 Linear, 1 Mel, 2 Bark; 3 log Hz (Circular Spectrogram only).
-    // 0..3 retain legacy named scales; 4..5 encode the continuous polar curve.
-    const scale = p.frequencyCurve == null
-      ? SoemMath.clamp(Math.round(nodeGraphFiniteNumber(p.freqScale)), 0, 3)
-      : 4 + SoemMath.clamp(nodeGraphFiniteNumber(p.frequencyCurve, 1), 0, 1);
     const lo = nodeGraphFiniteNumber(p.minFreq, 20);
     const hi = nodeGraphFiniteNumber(p.maxFreq, 20000);
     const nyq = nodeGraphFiniteNumber(p.nyquist, 22050);
@@ -521,7 +490,7 @@ void main() {
       const m = r * META_FLOATS;
       ring.meta[m] = floorDb;
       ring.meta[m + 1] = ceilingDb;
-      ring.meta[m + 2] = scale;
+      ring.meta[m + 2] = 0; // unused (Curve is the live uFrequencyCurve uniform)
       ring.meta[m + 3] = ring.pendingBins;
       ring.meta[m + 4] = lo;
       ring.meta[m + 5] = hi;
@@ -719,6 +688,8 @@ void main() {
     gl.uniform1f(entry.u.uLutRows, LUT_ROWS);
     const magRef = nodeGraphFiniteNumber(fullMag);
     gl.uniform1f(entry.u.uFullMag, magRef > 0 ? magRef : 1e-9);
+    const curve = Number(ring.frequencyCurve);
+    gl.uniform1f(entry.u.uFrequencyCurve, Number.isFinite(curve) ? Math.max(0, Math.min(1, curve)) : 1);
     if (extra) extra(gl, entry.u);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disable(gl.BLEND);

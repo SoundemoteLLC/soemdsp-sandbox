@@ -118,7 +118,7 @@ function nodeGraphBuildLivePlanForPatch(patch) {
 
 /**
  * Spectrogram: analysis knobs from display settings; view knobs from module params.
- * Inject into worklet (fftSize, window, overlap, freqOverlap, freqScale) +
+ * Inject into worklet (fftSize, window, overlap, freqOverlap) +
  * historySeconds / minFreq / maxFreq for any main-thread consumers.
  */
 function nodeGraphInjectSpectrogramWorkletParams(node, params) {
@@ -139,7 +139,6 @@ function nodeGraphInjectSpectrogramWorkletParams(node, params) {
     params.window = safe.window;
     params.overlap = safe.overlap;
     params.freqOverlap = safe.freqOverlap;
-    params.freqScale = safe.freqScale;
     if (node.type === "spectrum1d") params.bassDetail = safe.spectrumBassDetail === "on" ? 1 : 0;
     // Face view: module sliders win; fall back to legacy display settings.
     const hist = Number(p.historySeconds ?? safe.historySeconds);
@@ -155,7 +154,6 @@ function nodeGraphInjectSpectrogramWorkletParams(node, params) {
   params.window = nodeGraphFiniteNumber(node.traceDisplaySettings?.window ?? p.window ?? 1, 1);
   params.overlap = nodeGraphFiniteNumber(node.traceDisplaySettings?.overlap ?? p.overlap ?? 2, 2);
   params.freqOverlap = nodeGraphFiniteNumber(node.traceDisplaySettings?.freqOverlap ?? p.freqOverlap ?? 0);
-  params.freqScale = nodeGraphFiniteNumber(node.traceDisplaySettings?.freqScale ?? p.freqScale ?? 1, 1);
   params.historySeconds = nodeGraphFiniteNumber(p.historySeconds ?? node.traceDisplaySettings?.historySeconds ?? 2, 2);
   params.minFreq = nodeGraphFiniteNumber(p.minFreq ?? 20, 20);
   params.maxFreq = nodeGraphFiniteNumber(p.maxFreq ?? 20000, 20000);
