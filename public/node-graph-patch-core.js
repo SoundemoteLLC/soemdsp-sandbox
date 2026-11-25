@@ -1219,6 +1219,11 @@ function validateNodeGraphPatch(patch) {
       ? { patchView: normalizeNodeGraphPatchViewBox(patch.patchView) }
       : {}),
   };
+  // Gradients (docs/MODULE_GRADIENTS_AND_PRESETS_PLAN.md 4.1): omitted when there are none, so a patch without gradients is unchanged.
+  if (typeof nodeGraphNormalizeGradients === "function") {
+    const gradients = nodeGraphNormalizeGradients(patch.gradients);
+    if (gradients.length) normalized.gradients = gradients;
+  }
   normalized.circuitPatches = patch.circuitPatches;
   normalized.activeCircuitPatch = patch.activeCircuitPatch;
   normalized.defaultCircuitPatch = patch.defaultCircuitPatch;

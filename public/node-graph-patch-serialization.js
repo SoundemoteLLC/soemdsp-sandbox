@@ -116,6 +116,10 @@ function serializeNodeGraphPatch(patch = nodeGraphMvp.patch, options = {}) {
     circuitPatches: patch.circuitPatches,
     activeCircuitPatch: patch.activeCircuitPatch,
     defaultCircuitPatch: patch.defaultCircuitPatch,
+    // Omitted when empty (patches without gradients serialize as before) and when asked to (the fingerprint, below).
+    ...(!options.omitGradients && typeof nodeGraphNormalizeGradients === "function" && nodeGraphNormalizeGradients(patch.gradients).length
+      ? { gradients: nodeGraphNormalizeGradients(patch.gradients) }
+      : {}),
   };
   return options.pretty === false
     ? JSON.stringify(payload)
@@ -202,7 +206,9 @@ function nodeGraphShareLinkForPatch(patch = nodeGraphMvp.patch) {
 }
 
 function nodeGraphPatchFingerprint(patch = nodeGraphMvp.patch) {
-  const text = typeof patch === "string" ? patch : serializeNodeGraphPatch(patch);
+  // Gradients are left out (docs/MODULE_GRADIENTS_AND_PRESETS_PLAN.md 11.6): moving a gradient position or stop is a parameter update, never a
+  // reason to rebuild the plan.
+  const text = typeof patch === "string" ? patch : serializeNodeGraphPatch(patch, { omitGradients: true });
   let hash = 0x811c9dc5;
   for (let index = 0; index < text.length; index += 1) {
     hash ^= text.charCodeAt(index);
