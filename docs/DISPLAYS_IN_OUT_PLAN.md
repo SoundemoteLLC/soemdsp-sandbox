@@ -8,17 +8,28 @@ running Screen Glass and Chroma Color on every display would be heavy.
 
 Written by Badger from a read of the current `master` tree:
 `public/node-graph-screen-fx.js`, `public/node-graph-video-graph.js`,
-`public/node-graph-gl-graph.js` (stack groups and display quads),
-`public/lib/visual/picture-device.js`, `public/lib/visual/display-canvas.js`,
-`public/node-graph-camera-keys.js`, `docs/VIDEO_GRAPH_PLAN.md`,
+`public/node-graph-gl-graph.js` (stack groups, display quads, Perform
+tiles and face hosts), `public/lib/visual/picture-device.js`,
+`public/lib/visual/display-canvas.js`, `public/node-graph-camera-keys.js`,
+`public/node-graph-layout-canvas.js` (Performance view, F),
+`public/node-graph-gl-mini-perform.js`, `public/node-graph-module-actions.js`
+(`uniqueInPatch`), `docs/VIDEO_GRAPH_PLAN.md`,
 `docs/SHADER_MODULATION_PLAN.md`, `docs/DISPLAY_COMPOSITE_LAYERING_PLAN.md`,
 and the relevant rules in `docs/APP_POLICY.md`.
 
 Related: `docs/VIDEO_GRAPH_PLAN.md` (scheduler, cycles, pull-based culling),
 `docs/SHADER_MODULATION_PLAN.md` (picture params),
 `docs/SHADER_BRIGHTNESS_LENS_PLAN.md` (Screen Glass ranges),
+`docs/MINI_PERFORM_VIEW_PLAN.md` (Performance view and its Mini copy),
 `docs/ADDING_HARDCODED_SANDBOX_MODULE.md` (these are picture I/O modules,
 not C++ DSP).
+
+Decisions from Argi, 2026-11-24: the names are Display In / Display Out;
+mask clips each tile to itself (no neighbour spill); only one Display In,
+one Display Out, one Viewport In, and one Viewport Out per patch until
+there are features for multiples; Performance view must show the same
+processed picture as the circuit, whether the tile is a whole module or
+just its display.
 
 ## What this is
 
@@ -28,17 +39,53 @@ the circuit composite. Plates, cables, cable-end dots, and the room
 background stay untouched. Wire Display In through picture effects into
 Display Out; a straight In-to-Out cable should change nothing.
 
-They sit in the rgba category next to Viewport In / Viewport Out. Suggested
-type ids: `displayIn` and `displayOut` (clearer than the historical
-`viewOut` / `screenOut` names). They are not `uniqueInPatch`. More than one
-of each works but is not controllable yet: every Display In publishes the
-same layer, and the first Display Out (patch order) whose chain is fed is
-the one used. Say so once in the debug error log, the same way Viewport
-does today.
+They sit in the rgba category next to Viewport In / Viewport Out. Type
+ids: `displayIn` and `displayOut` (clearer than the historical `viewOut` /
+`screenOut` names). Catalog names **Display In** and **Display Out** are
+confirmed.
 
 This is about **display tiles** (`.node-display-face`: scopes, plots,
 shader previews, and every other module screen). It is not about parameter
 faces (knobs, sliders, choice rows drawn as GL ink on the plate).
+
+## Only one of each
+
+A patch may have at most one Display In, one Display Out, one Viewport
+In, and one Viewport Out. That stays until there are real features for
+multiples (mixing, a choice of which Out is shown). Today Viewport
+tolerates several of each: every Viewport In publishes the same view, and
+the first Viewport Out whose chain is fed is the one shown, with a one-time
+debug log. That tolerance goes away for all four types.
+
+### How "only one" is enforced
+
+Use `uniqueInPatch: true` on `displayIn`, `displayOut`, `viewOut`, and
+`screenOut`, but do **not** copy two behaviours that flag already has for
+Output / Input / MIDI Keyboard / Patch:
+
+- Adding a second Output **teleports** the existing module to the cursor.
+  That is surprising for these picture I/O modules. Do not move them.
+- Loading a patch with two unique-type modules **silently drops** the
+  extras in `normalizeNodeGraphPatch`. That is a quiet repair, and
+  APP_POLICY §1 says no legacy helpers: patches may break, Argi repairs
+  them.
+
+For these four types:
+
+- **Shop.** They stay listed (so after a delete you can find them again).
+  Choosing one when it already exists does not place a second, and does
+  not move the first. Select the existing module (pan to it if it is off
+  screen) and set the interaction-help line, for example "Only one
+  Display In in a patch." That line is not a hover and not a pop-up
+  (APP_POLICY §12).
+- **Duplicate, copy, and paste** are blocked the same way, with the same
+  message.
+- They are **deletable** like any module. A patch without one loads
+  as-is. Nothing auto-spawns them (unlike Output / Input, which the
+  lower-bar buttons can bring back).
+- **Load.** A saved patch that already has two of the same type fails
+  normalize with a clear error naming the type. The extras are not
+  dropped. Argi fixes the file.
 
 ## What I found: faces are not their own canvas
 
@@ -163,26 +210,61 @@ always in the layer.
   output. Use this when the hall of mirrors gets in the way.
 
 Default is **on**, because he said he wants to see the self-feedback.
-The switch is there so it is not a one-way door.
+The switch is there so it is not a one-way door. Confirm before
+shipping (still an open question).
 
-## Mask to tiles
+## Mask to tiles: clip each tile to itself
 
 **Mask to tiles** is a switch on Display Out, **default on**. When on,
-the processed picture is only painted inside display rectangles, so a
-warp, shake, or kaleidoscope cannot smear display content onto plates,
-cables, or empty workspace.
+each display is clipped to **its own rectangle**. A warp must not smear
+onto plates, cables, empty workspace, **or a neighbouring display**.
+The earlier idea of clipping to the union of all tiles (so content could
+jump from one screen into the next) is out.
 
-Recommended clip: the **union of all display rectangles that were in
-the capture**. Content may jump from one tile into a neighbour if the
-warp carries it there. Pixels that leave every tile are discarded.
-(Whether to clip each tile to itself only, with no neighbour spill, is
-an open question.)
+It can feel as if a well-behaved effect should never spill. On a single
+full-frame Viewport chain that is mostly true: Place, Shake, Kaleidoscope
+and Screen Glass move pixels inside one picture, and anything that leaves
+the frame is already empty or clamped. The faces layer is different. It
+is one texture with many small pictures sitting next to each other, often
+with only a plate margin between them. A shader that samples the whole
+layer can read a neighbour, or write one tile's pixels into another
+tile's rect:
+
+- **Place** zoom-out or offset slides or shrinks a display so that its
+  pixels land in a neighbour's rectangle, or so that empty area inside
+  its own rect would be filled by whatever sits next to it.
+- **Screen Shake** jitters the whole layer; adjacent displays slide into
+  each other's rectangles.
+- **Kaleidoscope** folds the layer around a centre, so one tile's pixels
+  can be reflected into another.
+- **Screen Glass** bows more toward the edges. A sample near the rim of
+  tile A can read from tile B, or the bow can push A's pixels into the
+  gap or into B.
+
+Two clamps together stop that, and they are cheap (the same one
+screen-sized pass, no per-display chain):
+
+1. **Per Display sampling** (the switch on spatial shaders, below). When
+   on, each fragment looks up its tile and clamps reads to that tile's
+   own rect. Out-of-rect samples are empty, or follow the module's usual
+   out-of-frame behaviour (Place and Screen Glass already fade or go
+   black off-frame). The shader never sees a neighbour.
+2. **Per-tile write clip** (Mask to tiles, on). When the processed
+   picture is drawn back, each display quad shows only the processed
+   pixels inside that same rect. Nothing is painted into a neighbour or
+   into the gap.
+
+Together, a display never shows a neighbour's pixels. If Per Display is
+off, a global shake or kaleidoscope can still put neighbour pixels
+inside a tile's rect, and the write clip cannot undo that — it only
+stops painting outside the rect. That is a reason to default Per
+Display on (still an open question).
 
 When the mask is off, the processed faces layer can spill around the
-tiles. Stack-group order should still let an overlapping module's plate
-cover a lower display, including any spill that would have landed on
-that plate. Spill into empty workspace is visible. This mode is for
-the effect; the default stays clipped.
+tiles onto plates and empty workspace. Stack-group order should still
+let an overlapping module's plate cover a lower display, including any
+spill that would have landed on that plate. This mode is for the
+effect; the default stays clipped to each tile.
 
 Hit testing does not follow the warp. A click still hits the original
 display rectangle.
@@ -204,8 +286,9 @@ curvature, vignette and glare are based on the frame's edges. Place,
 Kaleidoscope, Screen Shake, Aberration, and CRT Raster also treat the
 incoming picture as one frame. Run once over the layer with no help,
 and you get one big curved glass (or one kaleidoscope, one shake)
-across all the displays. To give each display its own local frame in
-that same pass, the shader needs a map of the tiles.
+across all the displays, and the neighbour-spill cases above. To give
+each display its own local frame in that same pass, the shader needs a
+map of the tiles.
 
 ### Tile map
 
@@ -225,15 +308,16 @@ rebuilds), not on every scope paint.
 
 Picture modules in a Display chain opt in with a **Per Display**
 switch. When on, the shader uses the tile map: local UV inside the
-tile, out-of-tile samples empty (or the module's usual out-of-frame
-behaviour). When off, the whole faces layer is one frame, which is
-also what these modules do on a Viewport chain (the map is a single
-full-frame tile, so the switch is a no-op there).
+tile, reads clamped to that rect, out-of-tile samples empty (or the
+module's usual out-of-frame behaviour). When off, the whole faces
+layer is one frame, which is also what these modules do on a Viewport
+chain (the map is a single full-frame tile, so the switch is a no-op
+there).
 
 Recommend adding the switch in v1 at least to Screen Glass, Place,
 Kaleidoscope, Screen Shake, Aberration, and CRT Raster. Default **on**
-so a Display chain looks like "each screen has its own glass," which is
-what Argi was reaching for. Confirm that default before building.
+so a Display chain looks like "each screen has its own glass," and so
+reads never pick up a neighbour. Confirm that default before building.
 
 ### Budget, on top of today's present
 
@@ -249,33 +333,30 @@ All of these are **one screen-sized cost**, not one cost per display:
 
 Never a chain per display. If both a Display chain and a Viewport chain
 are running, their effect passes add, because they are different module
-instances.
+instances. Performance view must not add a second chain either: it
+samples this same faces texture.
 
 Resolution matches the workspace canvases: device pixels at
 `devicePixelRatio`, capped at 2× and 4096 a side
 (`nodeGraphGlGraphDeviceScale`), the same cap screen-fx already uses.
 Display In publishes that size; effects run at that size.
 
-## Sleeping, Canvas, Perform, and peek
+## Sleeping, Performance view, and peek
 
 **Sleep / culling.** Offscreen modules are `viewport-asleep`, but their
 plates keep a cached box. Display drawing already skips tiles that are
 fully off the workspace (except during a camera-backed present). The
-faces layer should include tiles that are on screen (or in the current
-mesh), not every asleep display in the patch. When a display scrolls
-into view it joins the layer. Display Out is always a visible video-graph
-sink, like Viewport Out, so the chain keeps running even if the Display
-Out module itself is off screen. Upstream picture modules already use
-`nodeGraphVideoGraphShouldSleep` and will stay awake while a visible
-sink (or Display Out) needs them.
-
-**Canvas view, Perform, and screen solo.** Viewport In / Out only run on
-`#nodeGraphWorkspace` while `gl-graph-on` is set. Canvas tiles, Perform,
-and screen-solo face hosts are separate present paths
-(`PresentTiles`, `PresentFaceHost`) and already have their own layering
-and blend rules. v1 is **circuit workspace only**, same as Viewport.
-Whether tiles in Canvas / Perform should get this later is an open
-question.
+faces layer includes tiles that are on the circuit workspace, **and**
+any display (or whole-module tile that contains a display) currently
+shown in Performance view or Mini Perform, even if that module is
+scrolled off the circuit. Those Perform-visible displays are video-graph
+visible sinks, so the Display chain keeps running for them. Other asleep
+displays stay out of the layer until they scroll in or are pinned.
+Display Out is always a visible sink, like Viewport Out, so the chain
+keeps running even if the Display Out module itself is off screen.
+Upstream picture modules already use `nodeGraphVideoGraphShouldSleep`
+and will stay awake while a visible sink (Display Out or a Perform tile)
+needs them.
 
 **Peek (hold R).** Today it bypasses Viewport Out only: the plain scene
 shows, and the Viewport chain keeps running. Options for Display Out
@@ -283,6 +364,43 @@ are in the questions below. Recommendation: R peeks **both** (raw
 displays in a plain circuit) while both chains keep running, because
 that is what "plain circuit view" means today. If we later want to peek
 only the room and keep display effects, that can be a second gesture.
+Performance view should follow the same peek choice, so a peeked
+circuit and a peeked Perform tile stay in agreement.
+
+## Performance view samples the same processed picture
+
+Performance view (`node-graph-layout-canvas.js`, F / Show performance
+view) pins either a **whole module** or **just its display**. Mini
+Perform is a live scaled copy of that same layout inside the workspace.
+Today both paths draw the raw face texture: display-only tiles through
+`nodeGraphGlGraphPresentFaceHost` and `nodeGraphGlMiniPerformPresent`
+(`nodeGraphGlLinesImage` of `d.canvas`), whole-module tiles through
+`nodeGraphGlGraphPresentTile` / `nodeGraphGlMiniPerformPresentModule`
+(an isolated GL-graph present of that one module).
+
+They must show the **same processed (Display Out) picture** as the
+circuit, not a second render of the effect chain and not the raw face.
+Re-running Screen Glass at the tile's size would be the per-display
+chain this plan forbids, and it would not match the circuit.
+
+Hook the existing present paths. Do not add a Perform-only compositor.
+
+- **Display-only tiles** (Perform face hosts, Mini Perform display
+  slots, and screen solo, which already shares `PresentFaceHost`): when
+  Display Out's chain is fed, draw a **crop** of the processed faces
+  texture, using that display's rectangle in the tile map (the same
+  workspace-space rect the circuit quad uses). Contain-fit that crop
+  into the slot as today (uniform scale, centred, never stretched). If
+  the chain is not fed, keep sampling the raw face texture.
+- **Whole-module tiles:** plate, chrome, and knobs stay on the isolated
+  module present. The display quads inside that present sample the
+  same crop, so the screen on a whole module in Perform matches the
+  screen on that module in the circuit.
+- Ink (frame and labels) is still drawn after the picture, unprocessed,
+  at the tile's size, matching the circuit (pending the ink question
+  below).
+- No extra Display-chain passes. The only added work is sampling a
+  texture that already exists.
 
 ## Ink, holes, and what stays unprocessed
 
@@ -299,10 +417,10 @@ the faces layer.
 
 - Category rgba. Layout like Viewport In / Out (small jack module).
   Display In parameters: **Include picture modules** (choice, default
-  on). Display Out parameters: **Mask to tiles** (choice, default on).
-  Fill definition tooltips; no hover pop-ups (`title` / mouse
-  followers), APP_POLICY §12. No arrow cursors, §24; adjusting uses the
-  shared mouse-dot cursor.
+  on). Display Out parameters: **Mask to tiles** (choice, default on,
+  per-tile self clip). Fill definition tooltips; no hover pop-ups
+  (`title` / mouse followers), APP_POLICY §12. No arrow cursors, §24;
+  adjusting uses the shared mouse-dot cursor.
 - Parameter definitions are the only source of limits. No legacy
   helpers, dual keys, or silent remaps (§1).
 - Displays are WebGL2 through the shared picture device and
@@ -312,6 +430,9 @@ the faces layer.
   unless a control changes; this feature must not make a scope rescale
   or jump just because the faces layer is being processed.
 - `visualSink: true`. Display Out is a video-graph visible sink.
+- `uniqueInPatch: true` on Display In, Display Out, Viewport In, and
+  Viewport Out, with the enforcement above (block and tell, do not
+  teleport, do not silently drop extras on load).
 
 ## Phases
 
@@ -324,57 +445,69 @@ table on mesh / camera changes. Prove, without any effect chain, that
 drawing stack groups from this texture (identity) matches today's
 displays, including overlapping modules, jack holes, and ink on top.
 
-### Phase 1 — Display In / Display Out, identity and Viewport order
+### Phase 1 — Display In / Display Out, identity, and one-each
 
 Add the two modules. Display In publishes the raw faces layer, one
 frame behind. Display Out, when its chain is fed, is the texture the
 display quads sample. Unfed Out leaves the raw faces in place. Hook
 this in before the scene composite so Viewport In sees processed
-displays. Display Out is a visible sink. Duplicates log like Viewport.
-Circuit workspace only. A straight In → Out cable is a visual no-op.
+displays. Display Out is a visible sink. A straight In → Out cable is
+a visual no-op.
+
+Mark Display In, Display Out, Viewport In, and Viewport Out
+`uniqueInPatch`. Block a second add, duplicate, copy, and paste with
+the interaction-help message; do not teleport. Fail load when a patch
+already has two of one of these types. Keep them deletable, with no
+auto-spawn.
 
 ### Phase 2 — Include, mask, and self-feedback
 
 Ship the two switches with the defaults above. Confirm: Include on
 gives the one-frame hall of mirrors and never freezes; Include off
-leaves picture-module faces honest; mask on clips warps to the tiles;
-mask off can spill without breaking overlap z-order; offscreen tiles
-join and leave the layer cleanly.
+leaves picture-module faces honest; mask on clips each tile to itself
+(no neighbour, no plate smear); mask off can spill onto plates without
+breaking overlap z-order; offscreen tiles join and leave the layer
+cleanly.
 
 ### Phase 3 — Per Display on spatial picture modules
 
 Tile map available to shaders in a Display chain. Per Display switch
 on Screen Glass, Place, Kaleidoscope, Screen Shake, Aberration, and
-CRT Raster. One pass over the layer, local UV per tile. Measure the
-budget on ArchIV (the VG plan's usual machine): added passes stay in
-the table above, and a patch with many displays must not cost a chain
-per tile.
+CRT Raster. One pass over the layer, local UV per tile, reads clamped
+to that tile. Measure the budget on ArchIV (the VG plan's usual
+machine): added passes stay in the table above, and a patch with many
+displays must not cost a chain per tile.
 
-### Phase 4 — Tests and peek polish
+### Phase 4 — Performance view
+
+Hook Perform face hosts, whole-module tiles, Mini Perform, and screen
+solo (shared `PresentFaceHost`) so they crop the same Display Out
+texture. Perform-visible displays stay in the faces layer and keep the
+chain awake. Prove a display tile and a whole-module tile in Perform
+match the circuit, including a module that is scrolled off the
+workspace.
+
+### Phase 5 — Tests and peek polish
 
 Smokes / probes for: In → Out identity; self-feedback does not freeze;
-mask clips; Include off; Viewport In includes processed displays;
-duplicates log; sleep / scroll-in; overlap z-order; device-pixel size
-and the 4096 cap; peek behaviour once Argi picks it. Fix the stale
-"hold P" comment in `node-graph-screen-fx.js` while touching that file.
+per-tile mask (a Place offset or Screen Shake does not show a
+neighbour); Include off; Viewport In includes processed displays;
+one-each shop / paste / load-error; sleep / scroll-in; overlap
+z-order; device-pixel size and the 4096 cap; Perform match; peek
+behaviour once Argi picks it. Fix the stale "hold P" comment in
+`node-graph-screen-fx.js` while touching that file.
 
 ## Open questions for Argi
 
-1. Are the names **Display In** and **Display Out** right, or do you
-   prefer Displays In / Out or Faces In / Out?
-2. When you hold **R** to peek, should Display Out be bypassed too
+1. When you hold **R** to peek, should Display Out be bypassed too
    (plain raw circuit, recommended), or should peek only unwrap Viewport
-   Out and leave the display effects on?
-3. **Include picture modules** default on, so shader faces feed
+   Out and leave the display effects on? Perform would follow that
+   choice.
+2. **Include picture modules** default on, so shader faces feed
    themselves — is that what you want shipped, with the switch there
    to turn it off?
-4. With **Mask to tiles** on, may a warp spill from one display into a
-   neighbouring display, or should each tile be clipped to itself only?
-5. Should display ink (frame and labels) stay unprocessed on top
+3. Should display ink (frame and labels) stay unprocessed on top
    (recommended)?
-6. v1 is circuit workspace only, like Viewport. Do Canvas view,
-   Perform, or screen solo need this later?
-7. **Per Display** default on for Screen Glass and the other spatial
-   modules — yes?
-8. Is "first fed Display Out wins, plus a debug log" fine for
-   duplicates, matching Viewport, or should these be unique in a patch?
+4. **Per Display** default on for Screen Glass and the other spatial
+   modules — yes? (On also stops those shaders reading a neighbouring
+   tile.)
