@@ -886,16 +886,23 @@ extern "C" double soemdsp_spectral_freeze_right(int h);
 extern "C" double soemdsp_spectral_freeze_held(int h);
 extern "C" int soemdsp_spectral_freeze_configure(int h, int length, double blendMs, double refreshHz, double recaptureCount);
 extern "C" void soemdsp_spectral_blur_destroy(int h);
-extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double seconds,
-  double hz, double diffusion, double mix, double rate);
+extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double mix, double rate);
 extern "C" double soemdsp_spectral_blur_right(int h);
-extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, double amplitudeMs);
-extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount);
-extern "C" void soemdsp_spectral_blur_set_swarm(int h, double phaseDegrees, double levelDb, double rateHz, double driftHz, double seed);
-extern "C" void soemdsp_spectral_blur_set_cloud(int h, double character, double fuzzCents, double voices);
-extern "C" void soemdsp_spectral_blur_set_blur_cents(int h, double cents);
-extern "C" void soemdsp_spectral_blur_set_cloud_wander(int h, double hz);
+extern "C" void soemdsp_spectral_blur_set_cloud(int h, double fuzzCents, double wanderHz, double seed);
 extern "C" int soemdsp_spectral_blur_set_fft_size(int h, int length);
+extern "C" int soemdsp_spectral_warble_create();
+extern "C" void soemdsp_spectral_warble_destroy(int h);
+extern "C" double soemdsp_spectral_warble_sample(int h, double l, double r, double mix, double rate);
+extern "C" double soemdsp_spectral_warble_right(int h);
+extern "C" void soemdsp_spectral_warble_set_warble(int h, double phaseDegrees, double rateHz, double seed);
+extern "C" int soemdsp_spectral_warble_set_fft_size(int h, int length);
+extern "C" int soemdsp_spectral_smear_create();
+extern "C" void soemdsp_spectral_smear_destroy(int h);
+extern "C" double soemdsp_spectral_smear_sample(int h, double l, double r, double seconds, double diffusion, double mix, double rate);
+extern "C" double soemdsp_spectral_smear_right(int h);
+extern "C" void soemdsp_spectral_smear_set_amplitude_smooth(int h, double ms);
+extern "C" void soemdsp_spectral_smear_set_blur_cents(int h, double cents);
+extern "C" int soemdsp_spectral_smear_set_fft_size(int h, int length);
 extern "C" int soemdsp_stft_contrast_create();
 extern "C" void soemdsp_stft_contrast_destroy(int handle);
 extern "C" double soemdsp_stft_contrast_sample(int h, double l, double r, double contrast,
@@ -2664,7 +2671,9 @@ static const int kTypeCombPluck = 266; // Comb Pluck: strict Trigger + built-in 
 static const int kTypeNoiseConvReverb = 267; // Noise Convolution Reverb: shaped noise IR, zero-latency partitioned convolution
 static const int kTypeConvolutionResonator = 268;
 static const int kTypeVocoder = 269;
-static const int kTypeSpectralBlur = 272;
+static const int kTypeSpectralBlur = 272; // Spectral Blur: the Cloud engine (Fuzz, Wander, Seed)
+static const int kTypeSpectralWarble = 281; // Spectral Warble: phase wobble (Swarm, Rate, Seed)
+static const int kTypeSpectralSmear = 282; // Spectral Smear: Time Smear, Blur (cents), Diffusion, Amplitude Smooth
 static const int kTypeSpectralCrossSynthesis = 278;
 static const int kTypeSpectralWarp = 279;
 static const int kTypePitchMutator = 280; // Pitch Mutator: log2(Hz) LUT -> Freq Out
@@ -3371,6 +3380,10 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_vocoder_destroy(handle);
   } else if (kind == kTypeSpectralBlur) {
     soemdsp_spectral_blur_destroy(handle);
+  } else if (kind == kTypeSpectralWarble) {
+    soemdsp_spectral_warble_destroy(handle);
+  } else if (kind == kTypeSpectralSmear) {
+    soemdsp_spectral_smear_destroy(handle);
   } else if (kind == kTypeSpectralFreeze) {
     soemdsp_spectral_freeze_destroy(handle);
   } else if (kind == kTypeSpectralDelay) {
@@ -5108,23 +5121,25 @@ static void init_node_defaults(Node& n, int typeId) {
   }
   if (typeId == kTypeSpectralBlur) {
     init_control(n.stages, 4096, true);
-    init_control(n.pan, 1, false);
-    init_control(n.timeNumerator, 2, false);
-    init_control(n.width, 100, false);
-    init_control(n.frequency, 0, false);    // pitch blur (cents)
-    init_control(n.lfoBaseSpeed, 0.5, false); // cloud wander (Hz)
-    init_control(n.diffusionAmount, 1, false);
+    init_control(n.center, 50, false);        // fuzz (cents)
+    init_control(n.lfoBaseSpeed, 0.5, false); // wander (Hz)
+    init_control(n.seed, 1, true);            // seed (discrete)
     init_control(n.mix, 1, false);
-    init_control(n.offsetMs, 10, false);
-    init_control(n.diffusionSize, 0, false);
-    init_control(n.shape, 0, false);        // swarm: phase wobble (degrees)
-    init_control(n.amplitude, 0, false);    // swarm level wobble (dB)
-    init_control(n.lfoRate, 5, false);      // swarm rate (Hz)
-    init_control(n.lfoVariation, 0, false); // swarm drift (Hz)
-    init_control(n.seed, 1, true);          // swarm seed (discrete)
-    init_control(n.mode, 0, true);          // character: 0 Warble, 1 Cloud (discrete)
-    init_control(n.center, 0, false);       // cloud fuzz (cents)
-    init_control(n.oversample, 3, true);    // cloud voices (discrete)
+  }
+  if (typeId == kTypeSpectralWarble) {
+    init_control(n.stages, 4096, true);
+    init_control(n.shape, 0, false);          // swarm: phase wobble (degrees)
+    init_control(n.lfoRate, 5, false);        // rate (Hz)
+    init_control(n.seed, 1, true);            // seed (discrete)
+    init_control(n.mix, 1, false);
+  }
+  if (typeId == kTypeSpectralSmear) {
+    init_control(n.stages, 4096, true);
+    init_control(n.timeNumerator, 2, false);  // time smear (s)
+    init_control(n.frequency, 0, false);      // blur (cents)
+    init_control(n.diffusionAmount, 1, false);
+    init_control(n.diffusionSize, 0, false);  // amplitude smooth (ms)
+    init_control(n.mix, 1, false);
   }
   if (typeId == kTypeSpectralFreeze) {
     init_control(n.stages, 4096, true); init_control(n.offsetMs, 20, false);
@@ -5992,6 +6007,8 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeSpectralCrossSynthesis) return soemdsp_spectral_cross_synthesis_create();
   if (typeId == kTypeSpectralWarp) return soemdsp_spectral_warp_create();
   if (typeId == kTypeSpectralBlur) return soemdsp_spectral_blur_create();
+  if (typeId == kTypeSpectralWarble) return soemdsp_spectral_warble_create();
+  if (typeId == kTypeSpectralSmear) return soemdsp_spectral_smear_create();
   if (typeId == kTypeSpectralFreeze) return soemdsp_spectral_freeze_create();
   if (typeId == kTypeEarlyReflectionConvolution) return soemdsp_early_reflection_convolution_create();
   if (typeId == kTypeSpectralDelay) return soemdsp_spectral_delay_create();
@@ -16396,19 +16413,23 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
     double y, yr;
     if (node.typeId == kTypeSpectralBlur) {
       soemdsp_spectral_blur_set_fft_size(node.nativeHandle, (int)control_audio(g, node.stages, f));
-      soemdsp_spectral_blur_set_stereo_spread(node.nativeHandle, control_audio(g, node.pan, f));
-      soemdsp_spectral_blur_set_smoothing(node.nativeHandle,
-        control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionSize, f));
-      soemdsp_spectral_blur_set_swarm(node.nativeHandle, control_audio(g, node.shape, f), control_audio(g, node.amplitude, f),
-        control_audio(g, node.lfoRate, f), control_audio(g, node.lfoVariation, f), control_audio(g, node.seed, f));
-      soemdsp_spectral_blur_set_blur_cents(node.nativeHandle, control_audio(g, node.frequency, f));
-      soemdsp_spectral_blur_set_cloud_wander(node.nativeHandle, control_audio(g, node.lfoBaseSpeed, f));
-      soemdsp_spectral_blur_set_cloud(node.nativeHandle, control_audio(g, node.mode, f), control_audio(g, node.center, f),
-        control_audio(g, node.oversample, f));
-      y = soemdsp_spectral_blur_sample(node.nativeHandle, left, right,
-        control_audio(g, node.timeNumerator, f), control_audio(g, node.width, f),
-        control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);
+      soemdsp_spectral_blur_set_cloud(node.nativeHandle, control_audio(g, node.center, f), control_audio(g, node.lfoBaseSpeed, f),
+        control_audio(g, node.seed, f));
+      y = soemdsp_spectral_blur_sample(node.nativeHandle, left, right, control_audio(g, node.mix, f), g.sampleRate);
       yr = soemdsp_spectral_blur_right(node.nativeHandle);
+    } else if (node.typeId == kTypeSpectralWarble) {
+      soemdsp_spectral_warble_set_fft_size(node.nativeHandle, (int)control_audio(g, node.stages, f));
+      soemdsp_spectral_warble_set_warble(node.nativeHandle, control_audio(g, node.shape, f), control_audio(g, node.lfoRate, f),
+        control_audio(g, node.seed, f));
+      y = soemdsp_spectral_warble_sample(node.nativeHandle, left, right, control_audio(g, node.mix, f), g.sampleRate);
+      yr = soemdsp_spectral_warble_right(node.nativeHandle);
+    } else if (node.typeId == kTypeSpectralSmear) {
+      soemdsp_spectral_smear_set_fft_size(node.nativeHandle, (int)control_audio(g, node.stages, f));
+      soemdsp_spectral_smear_set_amplitude_smooth(node.nativeHandle, control_audio(g, node.diffusionSize, f));
+      soemdsp_spectral_smear_set_blur_cents(node.nativeHandle, control_audio(g, node.frequency, f));
+      y = soemdsp_spectral_smear_sample(node.nativeHandle, left, right, control_audio(g, node.timeNumerator, f),
+        control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);
+      yr = soemdsp_spectral_smear_right(node.nativeHandle);
     } else if (gate) {
       soemdsp_stft_gate_set_knee(node.nativeHandle, control_audio(g, node.resonance, f));
       soemdsp_stft_gate_set_hold(node.nativeHandle, control_audio(g, node.diffusionSize, f));
@@ -17997,7 +18018,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeSpectralDelay
     || typeId == kTypeMaterialResonator
     || typeId == kTypeDispersion
-    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralFreeze
+    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralWarble || typeId == kTypeSpectralSmear || typeId == kTypeSpectralFreeze
     || typeId == kTypeSampleHold
     || typeId == kTypeMinMax
     || typeId == kTypeClock
@@ -18162,7 +18183,7 @@ static bool type_needs_native(int typeId) {
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
   if (typeId == kTypeSpectralWarp || typeId == kTypeSpectralCrossSynthesis || typeId == kTypeDispersion || typeId == kTypeMaterialResonator || typeId == kTypeSpectralDelay || typeId == kTypeEarlyReflectionConvolution || typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
-    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralFreeze) return true;
+    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralWarble || typeId == kTypeSpectralSmear || typeId == kTypeSpectralFreeze) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
     || typeId == kTypeSampleDelay || typeId == kTypeExponentialDelay || typeId == kTypeDelayEffect
@@ -19639,7 +19660,8 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if(node.typeId==kTypeMaterialResonator){process_material_resonator(g,node,frames);return;}
     if(node.typeId==kTypeDispersion){process_dispersion(g,node,frames);return;}
-    if (node.typeId == kTypeStftContrast || node.typeId == kTypeStftGate || node.typeId == kTypeSpectralBlur) {
+    if (node.typeId == kTypeStftContrast || node.typeId == kTypeStftGate || node.typeId == kTypeSpectralBlur
+        || node.typeId == kTypeSpectralWarble || node.typeId == kTypeSpectralSmear) {
       process_stft_dynamics(g, node, frames);
       return;
     }

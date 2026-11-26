@@ -12,6 +12,8 @@ const NODE_GRAPH_SPECTRAL_FACE_MODULES = Object.freeze({
   stftGate: Object.freeze({ styles: ["bandGain", "bars", "overlay", "curve"], floorDb: -110, ceilingDb: -10, boostDb: 0, rangeDb: 60 }),
   stftContrast: Object.freeze({ styles: ["bandGain", "bars", "overlay", "curve"], floorDb: -110, ceilingDb: -10, boostDb: 18, rangeDb: 24 }),
   spectralBlur: Object.freeze({ styles: ["particles", "overlay", "miniWaterfall"], floorDb: -90, ceilingDb: 0 }),
+  spectralWarble: Object.freeze({ styles: ["particles", "overlay", "miniWaterfall"], floorDb: -90, ceilingDb: 0 }),
+  spectralSmear: Object.freeze({ styles: ["particles", "overlay", "miniWaterfall"], floorDb: -90, ceilingDb: 0 }),
   spectralFreeze: Object.freeze({ styles: ["overlay", "curve", "miniWaterfall", "bars"], floorDb: -90, ceilingDb: 0 }),
   spectralDelay: Object.freeze({ styles: ["miniWaterfall", "curve", "overlay", "bars"], floorDb: -84, ceilingDb: 0 }),
   spectralWarp: Object.freeze({ styles: ["overlay", "curve", "mirrorBars", "bars"], floorDb: -90, ceilingDb: 0 }),

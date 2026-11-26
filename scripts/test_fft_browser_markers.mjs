@@ -21,7 +21,7 @@ try {
     const plain=entries.find(e=>e.type==='polyBlep');
     const nature=nodeGraphEmojiCatalog.find(c=>c.id==='sky');
     return {rows,plain:createNodeGraphModuleStoreButton(plain).querySelector('.scene-context-store-card-category').textContent,nature};
-  },["earlyReflectionConvolution","spectralFreeze","spectralSmear","spectralDelay","spectralBlur","stftContrast","stftGate","convolutionResonator","noiseConvReverb","fftReconstruction","stftBlur","spectrogram","circularSpectrogram","spectrum1d"]);
+  },["earlyReflectionConvolution","spectralFreeze","spectralSmear","spectralDelay","spectralBlur","spectralWarble","stftContrast","stftGate","convolutionResonator","noiseConvReverb","fftReconstruction","stftBlur","spectrogram","circularSpectrogram","spectrum1d"]);
   for(const row of result.rows) {
     assert.equal(row.emoji,'🌊',row.type);assert.equal(row.text,row.label);
     assert.ok(!row.text.includes('🌊')&&!row.title.includes('🌊'),'browser marker must not contaminate labels/titles');

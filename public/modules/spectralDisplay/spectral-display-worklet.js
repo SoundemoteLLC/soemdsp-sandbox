@@ -21,6 +21,8 @@ const SPECTRAL_DISPLAY_SOURCES = Object.freeze({
   stftGate: Object.freeze({ tap: "stft", prefix: "soemdsp_stft_gate" }),
   stftContrast: Object.freeze({ tap: "stft", prefix: "soemdsp_stft_contrast" }),
   spectralBlur: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),
+  spectralWarble: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),
+  spectralSmear: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),
   spectralFreeze: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),
   spectralDelay: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),
   spectralWarp: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),

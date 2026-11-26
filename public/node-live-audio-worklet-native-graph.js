@@ -294,6 +294,8 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   convolutionResonator: 268,
   vocoder: 269,
   spectralBlur: 272,
+  spectralWarble: 281,
+  spectralSmear: 282,
   spectralFreeze: 273,
   earlyReflectionConvolution: 274,
   spectralDelay: 275,
@@ -636,22 +638,24 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   }
   if (t === "spectralBlur") {
     if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
-    if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_PAN;
-    if (k === "phaseSmoothMs") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
-    if (k === "amplitudeSmoothMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
-    if (k === "smearSeconds") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
-    if (k === "blurHz") return P.NATIVE_GRAPH_PARAM_WIDTH;
-    if (k === "blurCents") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
-    if (k === "cloudWander") return P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED;
-    if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "fuzz") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "wander") return P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED;
+    if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+  }
+  if (t === "spectralWarble") {
+    if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "swarm") return P.NATIVE_GRAPH_PARAM_SHAPE;
-    if (k === "swarmLevel") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
-    if (k === "swarmRate") return P.NATIVE_GRAPH_PARAM_LFO_RATE;
-    if (k === "swarmDrift") return P.NATIVE_GRAPH_PARAM_LFO_VARIATION;
-    if (k === "swarmSeed") return P.NATIVE_GRAPH_PARAM_SEED;
-    if (k === "swarmCharacter") return P.NATIVE_GRAPH_PARAM_MODE;
-    if (k === "swarmFuzz") return P.NATIVE_GRAPH_PARAM_CENTER;
-    if (k === "swarmVoices") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
+    if (k === "rate") return P.NATIVE_GRAPH_PARAM_LFO_RATE;
+    if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
+    if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+  }
+  if (t === "spectralSmear") {
+    if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
+    if (k === "smearSeconds") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "blurCents") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
+    if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "amplitudeSmoothMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
   if(t==="dispersion") {
@@ -6294,22 +6298,26 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "spectralBlur") {
       push("fftSize", P.NATIVE_GRAPH_PARAM_STAGES, disc("fftSize", 4096));
-      push("stereoSpread", P.NATIVE_GRAPH_PARAM_PAN, cont("stereoSpread", 1));
-      push("phaseSmoothMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("phaseSmoothMs", 10));
-      push("amplitudeSmoothMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("amplitudeSmoothMs", 0));
-      push("smearSeconds", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("smearSeconds", 2));
-      push("blurHz", P.NATIVE_GRAPH_PARAM_WIDTH, cont("blurHz", 100));
-      push("blurCents", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("blurCents", 0));
-      push("cloudWander", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("cloudWander", 0.5));
-      push("diffusion", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusion", 1));
+      push("fuzz", P.NATIVE_GRAPH_PARAM_CENTER, cont("fuzz", 50));
+      push("wander", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("wander", 0.5));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      continue;
+    }
+    if (type === "spectralWarble") {
+      push("fftSize", P.NATIVE_GRAPH_PARAM_STAGES, disc("fftSize", 4096));
       push("swarm", P.NATIVE_GRAPH_PARAM_SHAPE, cont("swarm", 0));
-      push("swarmLevel", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("swarmLevel", 0));
-      push("swarmRate", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("swarmRate", 5));
-      push("swarmDrift", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("swarmDrift", 0));
-      push("swarmSeed", P.NATIVE_GRAPH_PARAM_SEED, disc("swarmSeed", 1));
-      push("swarmCharacter", P.NATIVE_GRAPH_PARAM_MODE, disc("swarmCharacter", 0));
-      push("swarmFuzz", P.NATIVE_GRAPH_PARAM_CENTER, cont("swarmFuzz", 0));
-      push("swarmVoices", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("swarmVoices", 3));
+      push("rate", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("rate", 5));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      continue;
+    }
+    if (type === "spectralSmear") {
+      push("fftSize", P.NATIVE_GRAPH_PARAM_STAGES, disc("fftSize", 4096));
+      push("smearSeconds", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("smearSeconds", 2));
+      push("blurCents", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("blurCents", 0));
+      push("diffusion", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusion", 1));
+      push("amplitudeSmoothMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("amplitudeSmoothMs", 0));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;
     }

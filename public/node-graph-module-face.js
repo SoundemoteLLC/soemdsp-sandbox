@@ -1375,14 +1375,6 @@ function nodeGraphModuleFaceDrawOwnedStripes(batch, x, y, w, h, z, css = "rgba(2
   }
 }
 
-/** Face cells that do nothing in the module's current mode: { param: { when: controlling param, values: [its values that make this one inactive] } }. */
-const NODE_GRAPH_FACE_INACTIVE_PARAMS = Object.freeze({
-  spectralBlur: Object.freeze({
-    swarm: { when: "swarmCharacter", values: [1] }, swarmRate: { when: "swarmCharacter", values: [1] }, swarmDrift: { when: "swarmCharacter", values: [1] },
-    swarmFuzz: { when: "swarmCharacter", values: [0] }, cloudWander: { when: "swarmCharacter", values: [0] }, swarmVoices: { when: "swarmCharacter", values: [0] },
-  }),
-});
-
 function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
   const spec = nodeGraphModuleFaceSpecForElement(el);
   if (!spec) return;
@@ -1723,21 +1715,6 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       nodeGraphGlGraphDrawSeedWidget(batch, {
         host: cell(0, w), value: cell(0, wd.w), dice: cell(wd.w, bw), plus: cell(wd.w + bw, bw), minus: cell(wd.w + bw * 2, bw),
       }, text, z);
-    }
-  }
-  // Not-applicable parameters: a cell the module's current mode does not use is veiled (the app's dimmed, under-construction look), driven by
-  // the value of the controlling parameter on every redraw, so it follows a Character change with no extra events.
-  const inactiveRules = NODE_GRAPH_FACE_INACTIVE_PARAMS[el?.dataset?.nodeType];
-  if (inactiveRules) {
-    for (const wd of widgets) {
-      const rule = wd.type === "cell" && wd.param ? inactiveRules[wd.param] : null;
-      if (!rule) continue;
-      const choice = Math.round(nodeGraphModuleFaceValue(nodeGraphModuleFaceInput(el, rule.when)));
-      if (!rule.values.includes(choice)) continue;
-      const gap = wd.row.kind === "cells" && wd.x > 0 ? Math.max(hairFace, NODE_GRAPH_FACE_CELL_GAP_PX) : 0;
-      const top = wd.y + Math.max(hairFace, NODE_GRAPH_FACE_CELL_GAP_PX);
-      // The same 135deg stripes as a jack-owned cell, in grey: "this does nothing right now".
-      nodeGraphModuleFaceDrawOwnedStripes(batch, ox + (wd.x + gap) * z, oy + top * z, (wd.w - gap) * z, (wd.h - (top - wd.y)) * z, z, "rgba(150, 160, 180, 0.22)");
     }
   }
   // Debug overlay (D): a "cpu" tag in the corner of every cell whose parameter

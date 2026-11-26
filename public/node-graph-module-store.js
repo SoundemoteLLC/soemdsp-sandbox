@@ -95,7 +95,6 @@ const nodeGraphModuleCatalogShelfIdSet = Object.freeze(new Set(nodeGraphModuleCa
 // Default underconstructionsort shelf. UC = on this list (shop cards disabled,
 // native stub diagnostics silenced). Edit this array; do not keep a second set.
 const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
-  "spectralSmear",
   "fftReconstruction",
   "canvas",
   "metallicRatio",
@@ -200,7 +199,6 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
 
 /** Short shop-card reminder for under-construction modules (title tooltip). */
 const nodeGraphModuleConstructionPlans = Object.freeze({
-  spectralSmear: "pre and post ringing smear",
   fftReconstruction: "General buffered-audio FFT reconstruction: sample/live capture, independently controlled read position and speed, and spectral time stretching. Plan: docs/FFT_RECONSTRUCTION_PLAN.md. No DSP yet.",
   gradientVectorscope: "Woscope XY beam with gradient-along-length and dest persist. Parked until that face is finished.",
   canvas: "Composite images, scopes, and shaders. Parked until the shader stack ships.",
@@ -1136,8 +1134,8 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   spectralSmear: {
     browserEmoji: "🌊",
     category: "space", label: "Spectral Smear",
-    description: "Under construction: pre and post ringing smear.",
-    notes: ["under construction", "spectral", "smear", "pre and post ringing smear", "pre-ringing", "post-ringing"],
+    description: "Native STFT smear: Time Smear averages the spectrum over time, Blur spreads each partial by a number of cents (the same musical interval at every pitch), Diffusion scrambles phase and Amplitude Smooth lags each bin. Processing delay follows FFT Size.",
+    notes: ["spectral", "STFT", "smear", "blur", "diffusion", "ambient", "native"],
   },
   spectralDelay: {
     browserEmoji: "🌊",
@@ -1148,8 +1146,14 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   spectralBlur: {
     browserEmoji: "🌊",
     category: "space", label: "Spectral Blur",
-    description: "Native STFT ambient wash with 512-16384 sample windows, time/frequency blur and stereo phase diffusion. Processing delay follows FFT Size; larger settings cost more peak CPU and memory.",
-    notes: ["spectral", "STFT", "blur", "ambient", "smear", "native"],
+    description: "Native STFT chorus cloud: every partial is detuned by four slowly wandering voices (Fuzz in cents, Wander in Hz), a lush fuzzy supersaw from a single oscillator. Processing delay follows FFT Size.",
+    notes: ["spectral", "STFT", "blur", "cloud", "chorus", "supersaw", "detune", "native"],
+  },
+  spectralWarble: {
+    browserEmoji: "🌊",
+    category: "space", label: "Spectral Warble",
+    description: "Native STFT phase wobble: each partial wobbles by Swarm degrees at Rate Hz, a fuzzy buzz that stays in place in time. Processing delay follows FFT Size.",
+    notes: ["spectral", "STFT", "warble", "wobble", "fuzz", "native"],
   },
   stftContrast: {
     browserEmoji: "🌊",
@@ -4020,6 +4024,14 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   spectralBlur: {
     source: "native_modules/spectral_blur/spectral_blur.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_blur/spectral_blur.cpp",
+  },
+  spectralWarble: {
+    source: "native_modules/spectral_warble/spectral_warble.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_warble/spectral_warble.cpp",
+  },
+  spectralSmear: {
+    source: "native_modules/spectral_smear/spectral_smear.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_smear/spectral_smear.cpp",
   },
   stftContrast: {
     source: "native_modules/stft_contrast/stft_contrast.cpp",

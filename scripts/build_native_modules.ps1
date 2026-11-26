@@ -61,9 +61,13 @@ $modules = @(
     "soemdsp_spectral_freeze_configure", "soemdsp_spectral_freeze_fft_size", "soemdsp_spectral_freeze_latency_for_handle", "soemdsp_spectral_freeze_capture_count"
   ) }
   @{ Name = "spectral_blur"; Simd = $false; Exports = @(
-    "soemdsp_spectral_blur_create", "soemdsp_spectral_blur_destroy", "soemdsp_spectral_blur_reset",
-    "soemdsp_spectral_blur_sample", "soemdsp_spectral_blur_right", "soemdsp_spectral_blur_latency",
-    "soemdsp_spectral_blur_version", "soemdsp_spectral_blur_metadata_json", "soemdsp_spectral_blur_metadata_json_size", "soemdsp_spectral_blur_set_smoothing", "soemdsp_spectral_blur_set_stereo_spread", "soemdsp_spectral_blur_set_swarm", "soemdsp_spectral_blur_set_cloud", "soemdsp_spectral_blur_set_blur_cents", "soemdsp_spectral_blur_set_cloud_wander", "soemdsp_spectral_blur_set_fft_size", "soemdsp_spectral_blur_fft_size", "soemdsp_spectral_blur_latency_for_handle"
+    "soemdsp_spectral_blur_create", "soemdsp_spectral_blur_destroy", "soemdsp_spectral_blur_reset", "soemdsp_spectral_blur_sample", "soemdsp_spectral_blur_right", "soemdsp_spectral_blur_latency", "soemdsp_spectral_blur_version", "soemdsp_spectral_blur_metadata_json", "soemdsp_spectral_blur_metadata_json_size", "soemdsp_spectral_blur_set_fft_size", "soemdsp_spectral_blur_fft_size", "soemdsp_spectral_blur_latency_for_handle", "soemdsp_spectral_blur_set_cloud"
+  ) }
+  @{ Name = "spectral_warble"; Simd = $false; Exports = @(
+    "soemdsp_spectral_warble_create", "soemdsp_spectral_warble_destroy", "soemdsp_spectral_warble_reset", "soemdsp_spectral_warble_sample", "soemdsp_spectral_warble_right", "soemdsp_spectral_warble_latency", "soemdsp_spectral_warble_version", "soemdsp_spectral_warble_metadata_json", "soemdsp_spectral_warble_metadata_json_size", "soemdsp_spectral_warble_set_fft_size", "soemdsp_spectral_warble_fft_size", "soemdsp_spectral_warble_latency_for_handle", "soemdsp_spectral_warble_set_warble"
+  ) }
+  @{ Name = "spectral_smear"; Simd = $false; Exports = @(
+    "soemdsp_spectral_smear_create", "soemdsp_spectral_smear_destroy", "soemdsp_spectral_smear_reset", "soemdsp_spectral_smear_sample", "soemdsp_spectral_smear_right", "soemdsp_spectral_smear_latency", "soemdsp_spectral_smear_version", "soemdsp_spectral_smear_metadata_json", "soemdsp_spectral_smear_metadata_json_size", "soemdsp_spectral_smear_set_fft_size", "soemdsp_spectral_smear_fft_size", "soemdsp_spectral_smear_latency_for_handle", "soemdsp_spectral_smear_set_amplitude_smooth", "soemdsp_spectral_smear_set_blur_cents"
   ) }
   @{ Name = "stft_contrast"; Simd = $false; Exports = @(
     "soemdsp_stft_contrast_create", "soemdsp_stft_contrast_destroy", "soemdsp_stft_contrast_reset", "soemdsp_stft_contrast_sample", "soemdsp_stft_contrast_right", "soemdsp_stft_contrast_latency", "soemdsp_stft_contrast_version", "soemdsp_stft_contrast_metadata_json", "soemdsp_stft_contrast_metadata_json_size", "soemdsp_stft_contrast_display_bins", "soemdsp_stft_contrast_display_size", "soemdsp_stft_contrast_display_power", "soemdsp_stft_contrast_display_gain", "soemdsp_stft_contrast_display_rate", "soemdsp_stft_contrast_display_frames"

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 let chromium;try{({chromium}=await import('playwright'));}catch{({chromium}=createRequire(new URL('../../soemdsp-sandbox/package.json',import.meta.url))('playwright'));}
-const types=["earlyReflectionConvolution","spectralFreeze","dispersion","spectralCrossSynthesis","spectralWarp","materialResonator","spectralSmear","spectralDelay","spectralBlur","stftContrast","stftGate","convolutionResonator","noiseConvReverb","fftReconstruction","stftBlur","spectrum1d","vocoder"];
+const types=["earlyReflectionConvolution","spectralFreeze","dispersion","spectralCrossSynthesis","spectralWarp","materialResonator","spectralSmear","spectralDelay","spectralBlur","spectralWarble","stftContrast","stftGate","convolutionResonator","noiseConvReverb","fftReconstruction","stftBlur","spectrum1d","vocoder"];
 const browser=await chromium.launch({channel:'chrome',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 try {
  const page=await browser.newPage();
