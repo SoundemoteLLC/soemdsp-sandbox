@@ -1405,6 +1405,9 @@
       channels: "color",
       defaultStops: "coldFire",
     }),
+    spectralPrism: Object.freeze({
+      channels: "color",
+    }),
     spectrogramBurn: Object.freeze({
       channels: "color",
       defaultStops: "spectrogram",

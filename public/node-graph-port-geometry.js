@@ -905,6 +905,11 @@ function nodeGraphPortWireColor(node, port, io) {
   if (nodeGraphPortIsDigitalSignal(type, canonicalPort, io)) {
     return nodeGraphCssColor("--node-digital-fill", "#ffffff");
   }
+  if (typeof nodeGraphResolvePortType === "function"
+    && nodeGraphResolvePortType(type, canonicalPort, io) === "spectral"
+    && typeof nodeGraphJackChannelCssColor === "function") {
+    return nodeGraphJackChannelCssColor("magenta");
+  }
   // CMYK Y — Graph chunk cables (was hardcoded magenta).
   if (typeof nodeGraphPortIsGraphChunkSignal === "function"
     && nodeGraphPortIsGraphChunkSignal(type, canonicalPort, io)

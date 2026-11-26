@@ -721,30 +721,6 @@ function sturmianShouldAnimate(face) {
     && !(typeof scopePaintEngineState === "function" && scopePaintEngineState() === "paused");
 }
 
-function sturmianParamRowGroups(type) {
-  const groups = (typeof nodeGraphModuleDefinitions === "object" && nodeGraphModuleDefinitions[type]?.parameterRows) || [];
-  return Array.isArray(groups) ? groups : [];
-}
-
-/** Pack common sliders into the compact rows from definition.parameterRows. */
-function sturmianLayoutParamRows(article) {
-  const body = article?.querySelector(":scope > .dsp-node-body");
-  if (!body) return;
-  const type = article.dataset?.nodeType || "sturmianGrid";
-  for (const group of sturmianParamRowGroups(type)) {
-    const keys = Array.isArray(group) ? group : [group];
-    const rows = keys
-      .map((key) => body.querySelector(`:scope > .node-parameter-row[data-param="${CSS.escape(key)}"]`))
-      .filter((row) => row && !row.hidden && !row.classList.contains("node-parameter-row-hidden"));
-    if (rows.length < 2) continue;
-    const wrap = document.createElement("div");
-    wrap.className = "sturmian-param-row";
-    wrap.style.setProperty("--sturmian-param-cols", String(rows.length));
-    rows[0].before(wrap);
-    for (const row of rows) wrap.append(row);
-  }
-}
-
 registerNodeGraphChromelessModuleUi("sturmianGrid", {
   createBody: sturmianCreateBody,
   afterMount(article, face, node, type) {
@@ -758,8 +734,6 @@ registerNodeGraphChromelessModuleUi("sturmianGrid", {
         paint: sturmianPaint,
       });
     }
-    // Param rows are appended after this hook returns; pack them on the next turn.
-    queueMicrotask(() => sturmianLayoutParamRows(article));
   },
 });
 

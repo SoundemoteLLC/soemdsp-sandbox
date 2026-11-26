@@ -250,6 +250,7 @@ const nodeGraphModuleStoreDepartments = Object.freeze([
   { id: "oms",          emoji: "♻️", label: "Oscillator 2D", defaultModule: "spiral", symbol: "2D",  title: "Oscillator 2D", pitch: "2D motion oscillators: spirals, orbits, and ornamental X/Y voices." },
   { id: "modulator",    emoji: "♾️", label: "Modulator",    symbol: "⇄",   title: "Modulator", pitch: "Motion sources for pitch, amplitude, time, and texture. Small control engines that make patches move." },
   { id: "additive",     emoji: "📊", label: "Additive", defaultModule: ["additiveGenerator", "additiveOut"],     symbol: "∑",   title: "Additive",   pitch: "Harmonic-stack voices: build timbre from partials, not a single waveform." },
+  { id: "spectral", emoji: "🌊", label: "Spectral", symbol: "STFT", title: "Spectral", pitch: "Frequency-domain signals", listed: true },
   { id: "chaos",        emoji: "🌌", label: "Chaos", defaultModule: "lorenzAttractor",        symbol: "∞",   title: "Chaos",     pitch: "All the various attractors and strange motion systems. The wild shelf where math starts looking back." },
   { id: "noise",        emoji: "🌧️", label: "Noise", defaultModule: "fluvNoise",        symbol: "✦",   title: "Noise",     pitch: "Noise, dust, instability, sparks, and all the useful mess a clean machine secretly needs." },
   { id: "drum",         emoji: "🥁", label: "Drum", defaultModule: "robinSinepulse",         symbol: "▥",   title: "Drum",      pitch: "Rhythm machines, drum voices, pattern engines, and percussion control surfaces." },
@@ -1121,6 +1122,11 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     browserEmoji: "🌊", category: "space", label: "Spectral Cross-Synthesis",
     description: "Voice envelope onto external Synth fine structure and phase. Stereo native STFT with envelope width in Hz, attack/release, transfer and aligned dry/wet.",
     notes: ["spectral", "STFT", "cross synthesis", "voice", "synth", "native"],
+  },
+  spectralPrism: {
+    browserEmoji: "🌊", category: "space", label: "Spectral Prism",
+    description: "Seeded spectral stereo placement, centred bass and an unchanged mono fold-down.",
+    notes: ["spectral", "STFT", "stereo", "width", "prism", "native"],
   },
   spectralWarp: {
     browserEmoji: "🌊", category: "space", label: "Spectral Shift / Warp",

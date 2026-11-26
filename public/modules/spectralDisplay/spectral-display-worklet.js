@@ -17,6 +17,7 @@
 // serial changes only when new data exists, so faces move only on audio.
 
 const SPECTRAL_DISPLAY_SOURCES = Object.freeze({
+  spectralPrism: Object.freeze({ tap: "prism" }),
   vocoder: Object.freeze({ tap: "vocoder" }),
   stftGate: Object.freeze({ tap: "stft", prefix: "soemdsp_stft_gate" }),
   stftContrast: Object.freeze({ tap: "stft", prefix: "soemdsp_stft_contrast" }),
@@ -216,7 +217,29 @@ NodeLiveAudioProcessor.prototype.spectralDisplayAnalyse = function spectralDispl
 NodeLiveAudioProcessor.prototype.spectralDisplayCollect = function spectralDisplayCollect(nodeId, state, dataPorts) {
   const source = SPECTRAL_DISPLAY_SOURCES[String(this.nodes.get(nodeId)?.type || "")];
   if (!source) return;
-  if (source.tap === "vocoder") this.spectralDisplayVocoder(nodeId, state, dataPorts);
+  if (source.tap === "prism") this.spectralDisplayPrism(nodeId, state, dataPorts);
+  else if (source.tap === "vocoder") this.spectralDisplayVocoder(nodeId, state, dataPorts);
   else if (source.tap === "stft") this.spectralDisplayStft(nodeId, state, dataPorts, source.prefix);
   else this.spectralDisplayAnalyse(nodeId, state, dataPorts, source.lanes);
+};
+
+NodeLiveAudioProcessor.prototype.spectralDisplayPrism = function spectralDisplayPrism(nodeId, state, dataPorts) {
+  const native=this.nativeGraph,h=this.spectralDisplayNativeHandle(nodeId);
+  if(!h||!native?.soemdsp_spectral_prism_display_count)return;
+  const serial=native.soemdsp_spectral_prism_display_serial(h);
+  const count=native.soemdsp_spectral_prism_display_count(h);
+  if(!count||state.prismSerial===serial)return;
+  const memory=native.memory.buffer;
+  let rate=sampleRate;
+  const ptr=native.soemdsp_spectral_prism_display_hz(h)>>>0;
+  if(!ptr||ptr+count*4>memory.byteLength)return;
+  // Read only the native Nyquist value; no spectrum arrays cross the bridge.
+  const nyquist=new Float32Array(memory,ptr,count)[count-1];
+  if(nyquist>0)rate=2*nyquist;
+  state.prismSerial=serial;
+  const size=native.soemdsp_spectral_prism_fft_size(h);
+  const position=native.soemdsp_spectral_prism_display_position(h),high=Math.fround(position);
+  const evolution=native.soemdsp_spectral_prism_display_evolution(h),evolutionHigh=Math.fround(evolution);
+  // Preserve fractional travel for negative positions and long-running sessions.
+  dataPorts.push([nodeId,"PrismMeta",new Float32Array([serial,size,high,rate,position-high,evolutionHigh,evolution-evolutionHigh])]);
 };

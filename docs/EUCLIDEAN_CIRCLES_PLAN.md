@@ -1,7 +1,8 @@
 # Euclidean Circles: plan
 
-Status: plan only (2026-11-17). Inspired by Sturmian Grid, but drawn as concentric
-rings instead of a grid. Nothing built yet.
+Status: native + browser v1 implemented (2026-11-25) in the isolated
+`codex/euclidean-sequencer` worktree. Inspired by Sturmian Grid, but drawn as
+concentric rings instead of a grid. Not merged into master.
 
 ## Idea
 
@@ -84,3 +85,65 @@ Source for the Melody ring.
    variations, with Reset after N bars). Fractional hits and ring coupling are deferred.
 5. **Editing is by dragging the rings on the display:** drag around a ring to rotate it, drag
    in or out on a ring to change its hits, and use sliders as well for exact values.
+
+---
+
+# Euclidean Sequencer implementation checkpoint
+
+Branch: `codex/euclidean-sequencer`. Browser module and native engine integrated.
+
+## Completed
+
+- Native core in `native_modules/graph_engine/euclidean_sequencer.h`.
+- Engine process dispatch: type 284 (281 was claimed by master's Spectral Warble during integration).
+- Four independent lengths and hit counts, rotating patterns and per-loop Drift.
+- Shared engine `gate_hit` detection for Restart / Adv. Adv overrides f / Rate.
+- One-sample lane triggers; latched melody position, pitch and Hz outputs.
+- Continuous internal phase per ring. External Adv advances discretely.
+- Reset after is explicitly global advance events (steps), not an undefined bar.
+- Work per sample is bounded: four lanes, at most one advance per sample.
+- No fixed 32-step DSP ceiling; Steps/Hits are structural integer counts.
+- Native type, parameter and port binding; efficient-product registration.
+- Module Browser entry, 7 GU spawn width, standard parameter controls/tooltips.
+- Shared WebGL2 picture-device shader face, with no private GL context or
+  Canvas2D/SVG fallback. Fixed module-space backing across workspace zoom.
+- Explicit native telemetry: Steps, Hits, effective Rotate, phase, hit counter,
+  last hit position and elapsed hit age. No inferred UI clock or missed hits.
+- Angular ring drag edits Rotate; radial drag edits Hits through shared slider
+  writes/commits. Shift is fine adjustment. No wheel parameter editing.
+- Rebuilt standalone graph engine and combined WASM.
+
+## Verification performed
+
+Temporary native WASM proof (outside the repository, not a new permanent smoke):
+all n=1..128 and k=0..n produce exactly k hits, rotation preserves hit count,
+unequal rings advance independently, external clock ownership, reset, 8 Hz at
+48 kHz, per-ring loop drift and automatic restart pass.
+
+The native build passes. Browser acceptance confirms shader compilation, live
+per-ring telemetry, angular Rotate editing and radial Hits editing. Render
+Sample produces two one-sample Kick pulses over one second at the default
+8 Hz step rate / 16 Steps / 4 Hits. The existing canonical smoke reference
+remains sample-exact: zero difference on all 88200 channel samples.
+
+## Remaining
+
+1. Architect listening/interaction acceptance before merging. Recheck that type
+   284 remains unique when integrating newer master changes.
+2. Decide Swing's exact clock law before adding it. Adv must own incoming timing.
+3. Manual per-dot overrides, accent velocity, fractional Hits, ring coupling
+   and alternate shared-bar view remain deferred, not exposed as working.
+
+## Native slot mapping
+
+Lane Vol 1..4: Steps; Lane Bias 1..4: Hits.
+Bleed2/3/4 and Phase: lane Rotate (steps).
+Frequency: Rate (Hz); LFO Amplitude: Drift (steps per ring loop).
+Oversample: Reset after (steps); Offset: Semitone Offset (st).
+Width: Pitch Range (st); Mode: stable Classic=0 / Position=1 enum IDs.
+
+Output ports: Mono/Left/Right/Saw are Kick/Snare/Hat/Melody triggers;
+Ramp/Square are pitch/Hz; Tri/Sine/Trisaw/Phase01 are per-ring phase taps.
+Use canonical public `pitch` with the shared note-name helper, not a copied
+Sturmian `Pitch` label or hardcoded octave name. Clock detection and musical
+Hz conversion already call the existing shared library; no library changes.

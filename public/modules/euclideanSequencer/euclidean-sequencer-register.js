@@ -1,0 +1,66 @@
+// Module metadata and controls only. All sequencing runs in graph_engine.
+const EUCLIDEAN_LANES = ["Kick", "Snare", "Hat", "Melody"];
+const EUCLIDEAN_RING_DEFAULTS = [[16, 4], [12, 3], [8, 3], [15, 5]];
+
+registerNodeGraphChromelessModule("euclideanSequencer", {
+  label: "Euclidean Sequencer",
+  customDisplayArea: true,
+  definition: {
+    planRole: "source", planFreeRun: true, planScopeCapture: true,
+    chrome: "LayoutA", customDisplayArea: true,
+    defaultWidthGu: 7, displayHeightGu: 7,
+    inputs: ["Restart", "Adv", "f"], digitalInputs: ["Restart", "Adv"],
+    inputLabels: { Restart: "\u21ba", Adv: "\u25b6", f: "\u0192" },
+    inputTooltips: {
+      Restart: "Returns all rings to step zero and clears accumulated Drift.",
+      Adv: "Each trigger advances every ring by one step. While wired, Adv owns timing; Rate and f are ignored.",
+      f: "Step rate in Hz. Replaces Rate unless Adv is wired.",
+    },
+    fJackParam: "rate", advJackParam: "rate", advJackOwnsInputs: ["f"],
+    face: [
+      { kind: "cells", params: [["rate", "Rate"], ["drift", "Drift", "bipolar"]], h: 52 },
+      ...EUCLIDEAN_LANES.map((name, i) => ({ kind: "cells", h: 52,
+        params: [[`steps${i + 1}`, `${name} Steps`], [`hits${i + 1}`, "Hits"], [`rotate${i + 1}`, "Rotate", "bipolar"]] })),
+      { kind: "cells", params: [["reset", "Reset after"]], horizontal: true },
+      { kind: "cells", params: [["semitoneOffset", "Transpose", "bipolar"], ["pitchRange", "Pitch Range"]], h: 52 },
+      { kind: "cells", params: [["pitchSource", "Pitch Source"]], horizontal: true },
+    ],
+    outputs: [...EUCLIDEAN_LANES, "pitch", "f"], digitalOutputs: EUCLIDEAN_LANES,
+    outputLabels: { Kick: "Kick \u238d", Snare: "Snare \u238d", Hat: "Hat \u238d",
+      Melody: "Melody \u238d", pitch: "\u266f/\u266d", f: "\u0192" },
+    outputTooltips: {
+      ...Object.fromEntries(EUCLIDEAN_LANES.map((name) => [name, `One-sample trigger when the ${name} ring hits.`])),
+      pitch: "Melody note number: 57 + Semitone Offset + position map times Pitch Range. Holds the last Melody hit.",
+      f: "Melody pitch converted to Hz. Wire to an oscillator f inlet.",
+    },
+    parameters: [
+      { key: "rate", label: "Rate", defaultValue: "8", min: "0", max: "20000", mid: "8", step: "any",
+        nonlinearSlider: true, kind: "frequency", unit: "Hz", tooltip: "Steps per second. f replaces Rate; Adv takes priority over both." },
+      ...EUCLIDEAN_LANES.flatMap((name, i) => [
+        { key: `steps${i + 1}`, label: `${name} Steps`, defaultValue: String(EUCLIDEAN_RING_DEFAULTS[i][0]),
+          min: "1", max: "32", mid: "16", step: "1", removeTrailingZeros: true, nonlinearSlider: false, linearSmoothing: false,
+          tooltip: `${name} ring length in steps. Each ring loops independently.` },
+        { key: `hits${i + 1}`, label: `${name} Hits`, defaultValue: String(EUCLIDEAN_RING_DEFAULTS[i][1]),
+          min: "0", max: "32", mid: "8", step: "1", removeTrailingZeros: true, nonlinearSlider: false, linearSmoothing: false,
+          tooltip: `Evenly distributed occupied steps on ${name}. Values above Steps fill the ring.` },
+        { key: `rotate${i + 1}`, label: `${name} Rotate`, defaultValue: "0", min: "-32", max: "32", mid: "0",
+          step: "1", removeTrailingZeros: true, unit: "t", nonlinearSlider: false, linearSmoothing: false,
+          tooltip: `Offsets ${name} by this many steps, wrapping around its own length.` },
+      ]),
+      { key: "drift", label: "Drift", defaultValue: "0", min: "-4", max: "4", mid: "0", step: "any",
+        unit: "t/\u21bb", nonlinearSlider: false, tooltip: "Steps (t) of added rotation per completed ring loop. Restart clears it." },
+      { key: "reset", label: "Reset after", defaultValue: "0", min: "0", max: "128", mid: "16", step: "1",
+        removeTrailingZeros: true, nonlinearSlider: true, linearSmoothing: false, unit: "t",
+        tooltip: "Restart all rings after this many global advances. Zero disables automatic restart." },
+      { key: "semitoneOffset", label: "Semitone Offset", defaultValue: "0", min: "-48", max: "48", mid: "0",
+        step: "1", removeTrailingZeros: true, unit: "st", nonlinearSlider: false, tooltip: "Transposes the held Melody pitch from note number 57." },
+      { key: "pitchRange", label: "Pitch Range", defaultValue: "21", min: "0", max: "48", mid: "21",
+        step: "1", removeTrailingZeros: true, unit: "st", nonlinearSlider: false, tooltip: "Semitone span covered by the Melody position map." },
+      { key: "pitchSource", label: "Pitch Source", defaultValue: "0", min: "0", max: "1", mid: "0", step: "1",
+        nonlinearSlider: false, linearSmoothing: false, choices: ["Classic", "Position"], displayChoices: true,
+        tooltip: "Classic uses a pentatonic map; Position uses the hit's normalized position directly. Both latch on Melody hits." },
+    ],
+  },
+  catalog: { category: "Sequence", description: "Four independent Euclidean rhythm rings with Drift and melody pitch.",
+    notes: ["euclidean", "sequencer", "rhythm", "polyrhythm", "rings"] },
+});

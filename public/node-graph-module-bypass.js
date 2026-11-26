@@ -294,6 +294,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   dispersion: "pass",
   spectralCrossSynthesis: "pass",
   spectralWarp: "pass",
+  spectralPrism: "pass",
   earlyReflectionConvolution: "pass",
   stftGate: "pass",
   output: "pass",

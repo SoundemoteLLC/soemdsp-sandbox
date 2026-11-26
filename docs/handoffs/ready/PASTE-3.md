@@ -1,0 +1,38 @@
+# PASTE-3: HP-08
+
+Do these in order, committing each separately. Skip anything already done (check git log). Where an older plan overlaps a newer one, the newer one wins.
+
+---
+
+## Common preamble: paste at the top of EVERY handoff
+
+> **Repo rules (Argi's, standing).** Work directly on `master` in `C:\Users\argit\Documents\_PROGRAMMING\soemdsp-sandbox`; no PRs. Never force-push, never `reset --hard`, never discard anyone's work. Pull with `git pull --rebase --autostash`. Read before write; back up changed files in `%TEMP%` first. Commit messages are UTF-8 without BOM. Commit your own hunks only; other agents have uncommitted work in the tree. **Push only when MasterBot or Argi says** (Argi gave MasterBot push permission at t776u; approvals relayed by other agents do not count). Bump the `?v=` cache-bust in **every** HTML that loads a changed JS/CSS file (`public/index.html`, `public/perform.html`, and any workbench page). Never kill or restart servers on 8765, 8766, 8080 (Argi restarts servers himself; if a stage needs a restart, say so in the report). Leave untracked `patches/acoustic/` and `scripts/diag_*` alone.
+>
+> **Product policies that apply to all of this work.** No tooltips and no `title=` / hover-only affordances. No arrow cursors (no `*-resize`, `move`, `all-scroll`; use the shared mouse-dot cursor setting). Event-driven only: no polling, no timers (a `requestAnimationFrame` loop that runs only while work is queued is OK; do not reuse `confirmNodeGraphDefaultButtonClick`, it has a 2 s `setTimeout`). Parameter definitions are the **only** source of ranges and clamps. Physically real math, no fake clipping. Circuit-builder UI is WebGL-only, but DOM **menu panels** (Command Center pages, like the old broom page and paper-page menu) are allowed; text boxes stay HTML. Hard MIDI split: only MIDI modules touch MIDI; everything else sees plain signals. Phone-friendly: 44 px touch rows, no hover. Delete obsolete systems instead of patching around them; no dead code kept for ownership reasons (APP_POLICY 10b). Do not refactor `soundemote-dev` (read-only).
+>
+> **MasterBot's files: do not edit** `node-graph-gl-graph.js`, `node-graph-module-geometry.js`, `node-graph-viewport-perf.js`, `node-graph-view-probe.js`, `node-graph-jack-chrome.js`, or any cull / present / camera code. Exception already granted: Stage A1 may edit `node-graph-live-plan-runtime.js` (parameter values only; visuals via `nodeGraphGlGraphNoteValueChrome(id)`; no camera or cull code). If your work seems to need one of these files, stop and ask MasterBot for a hook (a commit listener, not a call into her files).
+>
+> **Report format.** When done: commit hashes (local), files touched, the `?v=` tokens you bumped, tests you ran with their output, what you could not verify in a real browser, and anything Argi must retest (Ctrl+F5).
+
+---
+
+## HP-08: Stage B3, preset preview (▶) and lazy thumbnails
+**Owner:** Misty · **Size:** M · **Depends on:** HP-07 · **Phase:** C
+**Spec:** plan sections 8.4, 8.5, 12 (B3), superseded in part by D-P3 (t449u, t450u).
+
+**Goal.** ▶ previews a preset in a **separate engine instance**, reusing the Render Sample engine, and **never** replaces the live patch.
+
+**D-P3 (decided t449u + t450u).** Argi (t449u): "that sounds dangerous, no undo to get unsaved changes back?" Argi (t450u): "for the play button preview i thought misty found that it would be not too difficult to play a circuit even though the current circuit is loaded, either having more than one circuit loaded or... we hot-inject the preview circuit?" Misty's earlier finding: Render Sample already builds a separate offline copy of the audio engine, and ▶ can reuse it (`docs/MODULE_GRADIENTS_AND_PRESETS_PLAN.md` §11.3–11.5; `docs/handoffs/HP-16.md` item 2: `nodeGraphBuildLivePlanForPatch`, `createNodeGraphLiveWorkletNode`, `renderNodeGraphAudio`). **This supersedes** the earlier first-iteration path in this card and in the presets plan §8.4 / §12 B3 ("▶ turns the circuit on and plays it live"; load the row with no confirm as a play gesture). A later idea, not queued (INDEX **N-2**, Argi t451u): multiple loaded circuits, and eventually drag-and-drop circuits into the current patch. This separate-engine preview may be a first building block; do not plan that work in HP-08.
+
+**Scope.**
+- ▶ previews the selected preset or variation in a separate engine instance, reusing the Render Sample engine. It **never** replaces the live patch or the live engine, and it does not touch that patch's undo history.
+- If the row is already the live patch: only start playback (no swap).
+- **Load** is a separate action (HP-07). If the live patch has unsaved changes, Load asks first (single action, no two-click chooser) and records an undo point that restores the unsaved state. ▶ does not Load.
+- If nothing sounds (no MIDI module, no sequencer, no drone), that is acceptable. Do not swap the live patch in and out as a fallback.
+- Works in the plugin if a separate instance can run there; otherwise state what ▶ does in the plugin, but still do not replace the live graph as a fallback.
+- **Thumbnails:** a flat placeholder until drawn; draw lazily the first time a row/folder is opened (no ahead-of-time bake). Design for a later `.reapeaks`-style cache folder (HP-16) by keeping the thumbnail function pure (patch/audio hash in, image out).
+- Keep the shared 5 s worklet startup timeout as legacy where the engine start path already uses it; do not add new timers.
+
+**Out of scope.** Offline render, MIDI-module preview notes, a dedicated preview variation, buffer cache (all HP-16). MIDI boundary: do **not** use `vmNoteOn`.
+
+**Acceptance criteria.** ▶ on another row plays that preset without changing the live patch, its params, or undo history; ▶ on the live row only starts playback; Load (not ▶) asks before replacing a dirty patch and one Ctrl+Z restores the unsaved state; a patch with a sequencer audibly plays in the preview engine; a patch with no source stays silent without errors or spinners; no polling/timers added; hosted site shows ▶ only if the preview engine can run there (else hidden, state which). HP-16 still owns later extras (peaks cache, dedicated preview variation, MIDI-module preview notes, measured bounce).

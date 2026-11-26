@@ -109,6 +109,8 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   hilbert: 151,
   binaryClock: 152,
   sturmianGrid: 262,
+  euclideanSequencer: 284,
+  dividerSequencer: 285,
   lutCell: 34,
   lookaheadLimiter: 35,
   limiter: 109, // Pump Limiter
@@ -303,6 +305,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   dispersion: 277,
   spectralCrossSynthesis: 278,
   spectralWarp: 279,
+  spectralPrism: 283,
   pitchMutator: 280,
   stftContrast: 270,
   stftGate: 271,
@@ -534,6 +537,26 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   const k = String(key || "");
   const t = String(type || "");
   if (t === "script") return undefined;
+  if (t === "dividerSequencer") {
+    const divide = /^divide([1-4])$/.exec(k);
+    if (divide) return P.NATIVE_GRAPH_PARAM_LANE_VOL1 + Number(divide[1]) - 1;
+    const offset = /^offset([1-4])$/.exec(k);
+    if (offset) return P.NATIVE_GRAPH_PARAM_LANE_BIAS1 + Number(offset[1]) - 1;
+    return { rate: P.NATIVE_GRAPH_PARAM_FREQUENCY, logic: P.NATIVE_GRAPH_PARAM_MODE,
+      reset: P.NATIVE_GRAPH_PARAM_OVERSAMPLE }[k];
+  }
+  if (t === "euclideanSequencer") {
+    const steps = /^steps([1-4])$/.exec(k);
+    if (steps) return P.NATIVE_GRAPH_PARAM_LANE_VOL1 + Number(steps[1]) - 1;
+    const hits = /^hits([1-4])$/.exec(k);
+    if (hits) return P.NATIVE_GRAPH_PARAM_LANE_BIAS1 + Number(hits[1]) - 1;
+    const rotate = /^rotate([1-4])$/.exec(k);
+    if (rotate) return [P.NATIVE_GRAPH_PARAM_BLEED2, P.NATIVE_GRAPH_PARAM_BLEED3,
+      P.NATIVE_GRAPH_PARAM_BLEED4, P.NATIVE_GRAPH_PARAM_PHASE][Number(rotate[1]) - 1];
+    return { rate: P.NATIVE_GRAPH_PARAM_FREQUENCY, drift: P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE,
+      reset: P.NATIVE_GRAPH_PARAM_OVERSAMPLE, semitoneOffset: P.NATIVE_GRAPH_PARAM_ATT_OFFSET,
+      pitchRange: P.NATIVE_GRAPH_PARAM_WIDTH, pitchSource: P.NATIVE_GRAPH_PARAM_MODE }[k];
+  }
   if (t === "sturmianGrid") {
     // Per-type only: these names mean other things on other modules.
     if (k === "stepPattern") return P.NATIVE_GRAPH_PARAM_STURMIAN_PATTERN;
@@ -682,6 +705,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   }
   if(t==="spectralWarp") {
     const ids={fftSize:22,pitchSemitones:10,stereoShiftHz:31,shiftHz:14,warp:13,pivotHz:30,mix:40,gainDb:90};
+    if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
+  }
+  if(t==="spectralPrism") {
+    const ids={fftSize:22,centreDb:90,spread:31,fold:58,amplitude:12,monoBassHz:30,tilt:13,phase:14,smoothCents:42,shimmerSpeedHz:57,shimmerDepth:47,evolveRateHz:46,evolveDepth:45,evolveTransition:41,shimmerQuantize:50,seed:48,mix:40};
     if(Object.prototype.hasOwnProperty.call(ids,k))return ids[k];
   }
   if (t === "materialResonator") {
@@ -1022,7 +1049,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (t === "earlyReflectionConvolution" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "spectralDelay" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
   if (t === "materialResonator" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
-  if((t==="dispersion"||t==="spectralCrossSynthesis"||t==="spectralWarp")&&p==="error")return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
+  if((t==="dispersion"||t==="spectralCrossSynthesis"||t==="spectralWarp"||t==="spectralPrism")&&p==="error")return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
+  if (t === "euclideanSequencer") {
+    const ports = { kick: "MONO", snare: "LEFT", hat: "RIGHT", melody: "SAW", pitch: "RAMP", f: "SQUARE" };
+    if (ports[p]) return NodeLiveAudioProcessor[`NATIVE_GRAPH_PORT_${ports[p]}`];
+  }
   if (t === "sturmianGrid") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "snare") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -1032,6 +1063,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
     if (p === "__phase") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     if (p === "__bar") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
+  }
+  if (t === "dividerSequencer") {
+    const ports = { a: "MONO", b: "LEFT", c: "RIGHT", d: "SAW", combined: "RAMP" };
+    if (ports[p]) return NodeLiveAudioProcessor[`NATIVE_GRAPH_PORT_${ports[p]}`];
   }
   if (t === "vactrol") {
     if (p === "tone") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
@@ -1719,7 +1754,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
     if (p === "synth l" || p === "car l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_L;
     if (p === "synth r" || p === "car r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_R;
   }
-  if (tDst === "sturmianGrid") {
+  if (tDst === "dividerSequencer") {
+    if (p === "restart") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
+    if (p === "adv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
+    if (p === "f" || p === "\u0192") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_F;
+  }
+  if (tDst === "sturmianGrid" || tDst === "euclideanSequencer") {
     if (p === "restart") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RESET;
     if (p === "adv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
     if (p === "f" || p === "\u0192" || p === "frequency") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_F;
@@ -6268,6 +6308,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
         push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
       continue;
     }
+    if(type==="spectralPrism") {
+      push("fftSize",P.NATIVE_GRAPH_PARAM_STAGES,disc("fftSize",2048));
+      push("seed",P.NATIVE_GRAPH_PARAM_SEED,disc("seed",1));
+      for(const[key,value]of Object.entries({centreDb:0,spread:1,fold:0,amplitude:1,monoBassHz:120,tilt:0,phase:.25,smoothCents:300,shimmerSpeedHz:0,shimmerDepth:.5,evolveRateHz:1,evolveDepth:0,evolveTransition:1,shimmerQuantize:0,mix:1}))
+        push(key,this.mapNativeGraphParamId(type,key),cont(key,value));
+      continue;
+    }
     if(type==="spectralWarp") {
       push("fftSize",P.NATIVE_GRAPH_PARAM_STAGES,disc("fftSize",1024));
       for(const[key,value]of Object.entries({pitchSemitones:0,stereoShiftHz:0,shiftHz:0,warp:1,pivotHz:1000,mix:1,gainDb:0}))
@@ -8186,6 +8233,31 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("rotateX", P.NATIVE_GRAPH_PARAM_LANE_BIAS1, cont("rotateX", 0));
       push("rotateY", P.NATIVE_GRAPH_PARAM_LANE_BIAS2, cont("rotateY", 0));
       push("rotateZ", P.NATIVE_GRAPH_PARAM_LANE_BIAS3, cont("rotateZ", 0));
+      continue;
+    }
+    if (type === "dividerSequencer") {
+      for (let lane = 1; lane <= 4; lane += 1) {
+        push(`divide${lane}`, P.NATIVE_GRAPH_PARAM_LANE_VOL1 + lane - 1, disc(`divide${lane}`, [2, 3, 5, 7][lane - 1]));
+        push(`offset${lane}`, P.NATIVE_GRAPH_PARAM_LANE_BIAS1 + lane - 1, disc(`offset${lane}`, 0));
+      }
+      push("rate", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("rate", 8));
+      push("logic", P.NATIVE_GRAPH_PARAM_MODE, disc("logic", 1));
+      push("reset", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("reset", 0));
+      continue;
+    }
+    if (type === "euclideanSequencer") {
+      for (let lane = 1; lane <= 4; lane += 1) {
+        for (const [prefix, defaults, continuous] of [
+          ["steps", [16, 12, 8, 15], false], ["hits", [4, 3, 3, 5], false], ["rotate", [0, 0, 0, 0], true],
+        ]) {
+          const key = `${prefix}${lane}`;
+          push(key, this.mapNativeGraphParamId(type, key), (continuous ? cont : disc)(key, defaults[lane - 1]));
+        }
+      }
+      for (const [key, value, continuous] of [
+        ["rate", 8, true], ["drift", 0, true], ["reset", 0, false],
+        ["semitoneOffset", 0, true], ["pitchRange", 21, true], ["pitchSource", 0, false],
+      ]) push(key, this.mapNativeGraphParamId(type, key), (continuous ? cont : disc)(key, value));
       continue;
     }
     if (type === "sturmianGrid") {
@@ -11080,6 +11152,16 @@ NodeLiveAudioProcessor.prototype.bindNativeGraphBlockViews = function bindNative
 /** Map native audio port id → face port name(s) for nodeOutputs / scopes. */
 NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPortNames(type, portId) {
   const P = NodeLiveAudioProcessor;
+  if (type === "dividerSequencer") {
+    return [["A"], ["B"], ["C"], ["D"], ["Combined"], ["__GateA"], ["__GateB"],
+      ["__GateC"], ["__GateD"], ["__Tick"], ["__ClockPhase"], ["__CombinedGate"]][portId] || [];
+  }
+  if (type === "euclideanSequencer") {
+    const names = { [P.NATIVE_GRAPH_PORT_MONO]: "Kick", [P.NATIVE_GRAPH_PORT_LEFT]: "Snare",
+      [P.NATIVE_GRAPH_PORT_RIGHT]: "Hat", [P.NATIVE_GRAPH_PORT_SAW]: "Melody",
+      [P.NATIVE_GRAPH_PORT_RAMP]: "pitch", [P.NATIVE_GRAPH_PORT_SQUARE]: "f" };
+    return names[portId] ? [names[portId]] : [];
+  }
   // Comb Pluck / Mode Resonator hit view (pluck-hit-display.js): seconds since the
   // last Trigger edge (-1 before any), output peak follower, last velocity, hit count.
   if (type === "combPluck" || type === "modeResonator") {
@@ -11835,6 +11917,27 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       if (tapId == null) continue;
       const hash = this.fnv1aHash32(tapId);
       const writeHz = Number(entry.writeHz);
+      if (type === "dividerSequencer") {
+        const observe = this.nativeGraph?.soemdsp_graph_divider_observe;
+        if (typeof observe !== "function") throw new Error("Divider Sequencer native telemetry missing; rebuild WASM");
+        this.appendScopeBufferSample(`${nodeId}:__Logic`, observe(this.nativeGraphHandle, hash, 0, 2));
+        for (let lane = 0; lane < 4; lane += 1) {
+          for (let field = 0; field < 2; field += 1) {
+            this.appendScopeBufferSample(`${nodeId}:__Divider${lane}_${field}`,
+              observe(this.nativeGraphHandle, hash, lane, field));
+          }
+        }
+      }
+      if (type === "euclideanSequencer") {
+        const observe = this.nativeGraph?.soemdsp_graph_euclidean_observe;
+        if (typeof observe !== "function") throw new Error("Euclidean Sequencer native telemetry export missing; rebuild WASM");
+        for (let lane = 0; lane < 4; lane += 1) {
+          for (let field = 0; field < 7; field += 1) {
+            this.appendScopeBufferSample(`${nodeId}:__Ring${lane}_${field}`,
+              observe(this.nativeGraphHandle, hash, lane, field));
+          }
+        }
+      }
       // writeHz 0 / unset = every engine sample (waveform / phosphor faces).
       let hop = 1;
       if (Number.isFinite(writeHz) && writeHz > 0 && writeHz < engineRateForFaces) {
@@ -11876,6 +11979,10 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
           P.NATIVE_GRAPH_PORT_TRISAW,
           P.NATIVE_GRAPH_PORT_PHASE01,
         );
+      } else if (type === "dividerSequencer") {
+        ports = Array.from({ length: 12 }, (_, port) => port);
+      } else if (type === "euclideanSequencer") {
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SQUARE);
       } else if (type === "sturmianGrid") {
         // Melody / Pitch / f plus hidden __Phase and __Bar face taps.
         ports = facePorts.concat(

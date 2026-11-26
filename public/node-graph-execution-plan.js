@@ -880,6 +880,7 @@ displayType === "scope1dTrace" ||
     displayType === "spectrogramBurn" ||
     displayType === "spectrumLine" ||
     displayType === "spectralStyle" ||
+    displayType === "spectralPrism" ||
     displayType === "phosphorLight" ||
     displayType === "matrixFace" ||
     displayType === "matrixWaterfallFace" ||

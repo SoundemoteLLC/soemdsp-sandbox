@@ -314,6 +314,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "spectrumDrawStyle",
     "spectrumPeakHold",
     "spectralStyle",
+    "spectralPrism",
     "spectralPeakHold",
     "shape",
     "outerPlate",
@@ -888,6 +889,10 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze(["spectralStyle", "spectralPeakHold"]),
+  }),
+  spectralPrism: Object.freeze({
+    fields: Object.freeze([]),
+    colors: Object.freeze([]), toggles: Object.freeze([]), choices: Object.freeze([]),
   }),
   // 1D Spectrum: same FFT analysis choices as Spectrogram (shared keys) + its
   // own axis / dB / draw / peak choices. Colors on the shared color row.
@@ -3210,6 +3215,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   spectrogramBurn: "Spectrogram",
   spectrumLine: "1D Spectrum",
   spectralStyle: "Spectral",
+  spectralPrism: "Spectral Prism",
   rgbShapeFace: "Shape",
   rgbPictureFace: "Picture",
   imageBurnFace: "Image Ghost",

@@ -57,6 +57,11 @@
 (function initNodeGraphGlLineRenderer(global) {
   const MAX_DIM = 4096;
   const FLOATS = 12; // pos2, local2, len1, half1, feather1, caps1, rgba4
+  const SPECTRAL_WIRE_DEFAULTS = Object.freeze({
+    width: 5, brightPoint: 0, edgeBrightness: 1.6, centerAlpha: 0.1,
+    bend: 999, shape: -2, dimPoint: 10, iridescence: 0.55, hueSpread: 0.7, sheenLength: 180,
+    shimmerSpeed: 0, baseTint: 0.3, phase: 0,
+  });
   const PULSE_TRAIN_MAX = 16384;
   // Canonical display Expo skirt (APP_POLICY §3). One source for JS and GLSL.
   // coverage = 1 - (1 - e^-3t) / (1 - e^-3), t in [0, 1] past the solid edge.
@@ -76,9 +81,13 @@
   // 0 = display Expo skirt (default), 1 = chrome smootherstep.
   const COVERAGE_GLSL = `
 uniform float uEdge;
+float expoSkirt(float t) {
+  t = clamp(t, 0.0, 1.0);
+  return ${NODE_GRAPH_GL_LINES_EXPO_SKIRT_GLSL};
+}
 float edgeCurve(float t) {
   if (uEdge > 0.5) return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-  return ${NODE_GRAPH_GL_LINES_EXPO_SKIRT_GLSL};
+  return expoSkirt(t);
 }
 float coverageEdgeAt(float halfPx, float feather, float dist) {
   if (dist <= halfPx) return 1.0;
@@ -124,7 +133,21 @@ void main() {
   // Camera: radius / half are zoom-1 world px, feather is screen px (as dots).
   // caps 11: horizontal plate fade. local.x is t in 0..1 (opaque -> clear).
   // Do not treat it as a ring or expand the quad with zoom.
-  if (caps > 10.5 && caps < 11.5) {
+  if (caps > 11.5 && caps < 13.0) {
+    if (uPixel > 0.5) {
+      float side = caps > 12.25 ? -1.0 : 1.0;
+      vec2 n = local;
+      float nl = length(n);
+      if (nl > 0.0001) n /= nl;
+      float z = max(uCam.z, 0.0001);
+      float width = max(halfPx * z, 0.5);
+      float reach = width + feather;
+      pos = position + n * side * (reach / z);
+      localOut = vec2(segLen, side * reach);
+      halfOut = width;
+    }
+    capsOut = 12.0;
+  } else if (caps > 10.5 && caps < 11.5) {
     capsOut = 11.0;
   } else if (uPixel > 0.5 && caps > 9.75) {
     float z = max(uCam.z, 0.0001);
@@ -197,6 +220,15 @@ varying vec4 vColour;
 uniform float uCoverage;
 uniform vec3 uCam;
 uniform vec2 uDash;
+// Spectral tube only: bright-point position, brightness, floor alpha, bend;
+// iridescence, hue spread, world-pixel sheen length, jack tint, phase.
+uniform vec4 uSpectralProfile;
+uniform vec4 uSpectralColour;
+uniform float uSpectralPhase;
+uniform float uSpectralDimPoint;
+uniform float uSpectralShape;
+uniform float uSpectralPixelMode;
+uniform float uSpectralPixels[32];
 ${COVERAGE_GLSL}
 // Identical to SoemGl.GLSL_DITHER (ordered 8x8). Keep in lockstep.
 float soemDither(vec2 fragCoord) {
@@ -212,7 +244,66 @@ float soemDither(vec2 fragCoord) {
 vec3 soemDitherRgb(vec3 c, vec2 fragCoord) {
   return floor(clamp(c, 0.0, 1.0) * 255.0 + soemDither(fragCoord) + 0.5) / 255.0;
 }
+// Two user-positioned points joined by a hyperbolic decay. Bright point zero
+// starts fading at the outer edge: no mandatory solid-width inner wall.
+float spectralGlowTail(float distance, float bright, float dim, float bend) {
+  float t = clamp((distance - bright) / max(dim - bright, 1e-4), 0.0, 1.0);
+  if (abs(uSpectralShape) > 1e-4) {
+    t = (exp(uSpectralShape * t) - 1.0) / (exp(uSpectralShape) - 1.0);
+  }
+  return (1.0 - t) / (1.0 + bend * t);
+}
+vec2 spectralInnerGlow(float across, float radius, float bright, float dim, float bend) {
+  vec2 g = vec2(dFdx(across), dFdy(across));
+  vec2 acc = vec2(0.0);
+  for (int j = 0; j < 4; j += 1) {
+    for (int i = 0; i < 4; i += 1) {
+      vec2 o = (vec2(float(i), float(j)) + 0.5) * 0.25 - 0.5;
+      float y = across + dot(o, g);
+      float a = spectralGlowTail(radius + y, bright, dim, bend);
+      float b = spectralGlowTail(radius - y, bright, dim, bend);
+      // Integrate the profile and outer edge together, not two blurred masks.
+      float coverage = coverageEdgeAt(radius, min(vFeather, 0.5), abs(y));
+      acc += vec2((1.0 - (1.0 - a) * (1.0 - b)) * coverage, coverage);
+    }
+  }
+  return acc * 0.0625;
+}
 void main() {
+  if (vCaps > 11.5 && vCaps < 13.0) {
+    float w = max(vHalf, 0.5);
+    float d = abs(vLocal.y);
+    vec2 profile;
+    if (uSpectralPixelMode > 0.5) {
+      // Custom falloff replaces only the curve, not the appearance controls.
+      vec2 g = vec2(dFdx(vLocal.y), dFdy(vLocal.y));
+      float alpha = 0.0;
+      float coverage = 0.0;
+      for (int j = 0; j < 4; j += 1) {
+        for (int i = 0; i < 4; i += 1) {
+          vec2 o = (vec2(float(i), float(j)) + 0.5) * 0.25 - 0.5;
+          float inward = w - abs(vLocal.y + dot(o, g));
+          int bin = int(floor(max(inward, 0.0)));
+          if (inward >= 0.0 && bin < 32) alpha += uSpectralPixels[bin];
+          if (inward >= 0.0) coverage += 1.0;
+        }
+      }
+      profile = vec2(alpha, coverage) * 0.0625;
+    } else {
+      bool collapsed = w < 0.75;
+      profile = collapsed ? vec2(coverageEdge(w, min(vFeather, 0.5), d)) : spectralInnerGlow(vLocal.y, w, uSpectralProfile.x, uSpectralDimPoint, uSpectralProfile.w);
+    }
+    float glow = profile.x / max(profile.y, 1e-6);
+    float t = vLocal.x / max(uSpectralColour.z, 1e-3) - uSpectralPhase + 0.15 * d / w;
+    vec3 palette = vec3(0.72) + vec3(0.28) * cos(6.28318530718 * (t * uSpectralColour.y + vec3(0.0, 0.34, 0.67)));
+    vec3 base = mix(vec3(0.86, 0.90, 0.96), vColour.rgb, uSpectralColour.w);
+    vec3 rgb = mix(base, palette, uSpectralColour.x);
+    vec3 lit = mix(rgb * min(uSpectralProfile.y, 1.0), vec3(1.0), clamp(uSpectralProfile.y - 1.0, 0.0, 1.0));
+    float a = mix(profile.x, profile.y, uSpectralProfile.z);
+    rgb = mix(rgb, lit, glow);
+    gl_FragColor = (uCoverage > 0.5 && a < 0.004) ? vec4(0.0) : vec4(soemDitherRgb(rgb, gl_FragCoord.xy), a * vColour.a);
+    return;
+  }
   if (vCaps > 10.5 && vCaps < 11.5) {
     float t = clamp(vLocal.x, 0.0, 1.0);
     float a = 1.0 - t;
@@ -1029,6 +1120,13 @@ void main() {
         camDevice: gl.getUniformLocation(program, "uDevice"),
         lineDash: gl.getUniformLocation(program, "uDash"),
         lineEdge: gl.getUniformLocation(program, "uEdge"),
+        spectralProfile: gl.getUniformLocation(program, "uSpectralProfile"),
+        spectralColour: gl.getUniformLocation(program, "uSpectralColour"),
+        spectralPhase: gl.getUniformLocation(program, "uSpectralPhase"),
+        spectralDimPoint: gl.getUniformLocation(program, "uSpectralDimPoint"),
+        spectralShape: gl.getUniformLocation(program, "uSpectralShape"),
+        spectralPixelMode: gl.getUniformLocation(program, "uSpectralPixelMode"),
+        spectralPixels: gl.getUniformLocation(program, "uSpectralPixels[0]"),
         imgProgram,
         imgBuf: gl.createBuffer(),
         imgTex: gl.createTexture(),
@@ -1112,6 +1210,7 @@ void main() {
       // Edge kind (APP_POLICY section 3): "chrome" = smootherstep for the
       // circuit builder's fixed-width edges; anything else = display Expo skirt.
       edge: options?.edge === "chrome" ? "chrome" : "display",
+      spectralWire: options?.spectralWire || null,
     };
   }
 
@@ -1144,6 +1243,7 @@ void main() {
       keepMesh: batch.keepMesh,
       lazyText: batch.lazyText,
       edge: batch.edge,
+      spectralWire: batch.spectralWire,
       textPixelated: batch.textPixelated,
     };
     if (!batch.layers) batch.layers = [];
@@ -1520,13 +1620,15 @@ void main() {
   // has no end cap and no gap. `across` is the distance from the centerline.
   // Solid rgba. dip > 0: per-vertex darkening of RGB around the middle of the
   // arc length (cosine bell over half-width dipWidth / 2), alpha unchanged.
-  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, dip = 0, dipWidth = 0.5) {
+  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, dip = 0, dipWidth = 0.5, options = null) {
     if (!batch || !points || points.length < 4) return;
+    const spectral = options?.spectral === true;
+    if (spectral && !batch.spectralWire) batch.spectralWire = SPECTRAL_WIRE_DEFAULTS;
     // Dip: colour is per vertex, so subdivide the polyline (straight
     // splits, shape unchanged) until no piece is longer than 1/128 of the
     // arc, enough for the dip bell to read smooth on uneven (adaptive) pieces.
     const hw = dipWidth / 2;
-    const dipping = dip > 0 && hw > 0;
+    const dipping = !spectral && dip > 0 && hw > 0;
     if (dipping) {
       const segs = points.length / 2 - 1;
       let total = 0;
@@ -1550,6 +1652,10 @@ void main() {
     const k = batch.camera ? 1 : (batch.scale || 1);
     const r = Math.max(0, halfPx) + Math.max(0, feather);
     const count = points.length / 2;
+    const spectralArc = spectral ? new Float32Array(count) : null;
+    if (spectralArc) for (let i = 1; i < count; i += 1) {
+      spectralArc[i] = spectralArc[i - 1] + Math.hypot(points[i * 2] - points[i * 2 - 2], points[i * 2 + 1] - points[i * 2 - 1]);
+    }
     const dirX = new Float32Array(count);
     const dirY = new Float32Array(count);
     for (let i = 0; i < count - 1; i += 1) {
@@ -1615,9 +1721,9 @@ void main() {
       if (batch.camera) {
         const c0 = ink ? ink[i] : rgba;
         const c1 = ink ? ink[i + 1] : rgba;
-        const end = (x, y, n, side, c) => push(batch, x, y, n[0], n[1], 0, half, fade, c, side > 0 ? 3 : 3.5);
-        end(x0, y0, n0, 1, c0); end(x0, y0, n0, -1, c0); end(x1, y1, n1, 1, c1);
-        end(x0, y0, n0, -1, c0); end(x1, y1, n1, -1, c1); end(x1, y1, n1, 1, c1);
+        const end = (x, y, n, side, c, index) => push(batch, x, y, n[0], n[1], spectralArc ? spectralArc[index] : 0, half, fade, c, spectral ? (side > 0 ? 12 : 12.5) : (side > 0 ? 3 : 3.5));
+        end(x0, y0, n0, 1, c0, i); end(x0, y0, n0, -1, c0, i); end(x1, y1, n1, 1, c1, i + 1);
+        end(x0, y0, n0, -1, c0, i); end(x1, y1, n1, -1, c1, i + 1); end(x1, y1, n1, 1, c1, i + 1);
         continue;
       }
       const rk = r * k;
@@ -1630,7 +1736,8 @@ void main() {
       const tri = [0, 1, 2, 1, 3, 2];
       for (let t = 0; t < tri.length; t += 1) {
         const v = quad[tri[t]];
-        push(batch, v[0], v[1], 0, v[2], 0, half, fade, ink ? ink[tri[t] < 2 ? i : i + 1] : rgba, 1);
+        const index = tri[t] < 2 ? i : i + 1;
+        push(batch, v[0], v[1], spectralArc ? spectralArc[index] : 0, v[2], spectralArc ? spectralArc[index] : 0, half, fade, ink ? ink[index] : rgba, spectral ? 12 : 1);
       }
     }
   }
@@ -3852,6 +3959,16 @@ void main() {
       if (s.lineDash) gl.uniform2f(s.lineDash, batch.dashOn || 0, batch.dashOff || 0);
       if (s.coverage) gl.uniform1f(s.coverage, max || straight ? 1 : 0);
       if (s.lineEdge) gl.uniform1f(s.lineEdge, batch.edge === "chrome" ? 1 : 0);
+      if (batch.spectralWire) {
+        const v = { ...SPECTRAL_WIRE_DEFAULTS, ...batch.spectralWire };
+        gl.uniform4f(s.spectralProfile, v.brightPoint, v.edgeBrightness, v.centerAlpha, v.bend);
+        gl.uniform4f(s.spectralColour, v.iridescence, v.hueSpread, v.sheenLength, v.baseTint);
+        gl.uniform1f(s.spectralPhase, v.phase);
+        gl.uniform1f(s.spectralDimPoint, v.dimPoint);
+        gl.uniform1f(s.spectralShape, v.shape);
+        gl.uniform1f(s.spectralPixelMode, v.pixelProfile ? 1 : 0);
+        if (v.pixelProfile) gl.uniform1fv(s.spectralPixels, v.pixelProfile);
+      }
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
       gl.bufferData(gl.ARRAY_BUFFER, data.subarray(start, n), gl.STREAM_DRAW);
       const sizes = [2, 2, 1, 1, 1, 1, 4];
@@ -4762,6 +4879,7 @@ void main() {
   }
 
   const api = {
+    nodeGraphSpectralWireDefaults: SPECTRAL_WIRE_DEFAULTS,
     nodeGraphGlLinesFillBlack,
     nodeGraphGlLinesExpoSkirt,
     nodeGraphGlLinesBegin,

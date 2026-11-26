@@ -12,6 +12,16 @@ if (!(Test-Path -LiteralPath $clang)) {
 # instead of one repeated clang++ invocation per module. Add a new module by
 # adding one entry here (Name, Exports, and Simd only if it uses <wasm_simd128.h>).
 $modules = @(
+  @{ Name = "spectral_prism"; Simd = $false; Exports = @(
+    "soemdsp_spectral_prism_create", "soemdsp_spectral_prism_destroy", "soemdsp_spectral_prism_reset",
+    "soemdsp_spectral_prism_configure", "soemdsp_spectral_prism_sample", "soemdsp_spectral_prism_right",
+    "soemdsp_spectral_prism_error", "soemdsp_spectral_prism_fft_size", "soemdsp_spectral_prism_latency",
+    "soemdsp_spectral_prism_latency_for_handle", "soemdsp_spectral_prism_state_bytes",
+    "soemdsp_spectral_prism_version", "soemdsp_spectral_prism_metadata_json", "soemdsp_spectral_prism_metadata_json_size",
+    "soemdsp_spectral_prism_display_count", "soemdsp_spectral_prism_display_serial", "soemdsp_spectral_prism_display_position",
+    "soemdsp_spectral_prism_display_evolution",
+    "soemdsp_spectral_prism_display_hz", "soemdsp_spectral_prism_display_pan", "soemdsp_spectral_prism_display_level", "soemdsp_spectral_prism_display_field"
+  ) }
   @{ Name = "spectral_warp"; Simd = $false; Exports = @(
     "soemdsp_spectral_warp_create", "soemdsp_spectral_warp_destroy", "soemdsp_spectral_warp_reset",
     "soemdsp_spectral_warp_configure", "soemdsp_spectral_warp_set_pitch_stereo", "soemdsp_spectral_warp_sample", "soemdsp_spectral_warp_right",
@@ -172,6 +182,8 @@ $modules = @(
     "soemdsp_graph_block_output_channel_ptr",
     "soemdsp_graph_ear_protect_gain",
     "soemdsp_graph_node_port_ptr",
+    "soemdsp_graph_euclidean_observe",
+    "soemdsp_graph_divider_observe",
     "soemdsp_graph_node_native_handle",
     "soemdsp_graph_node_effective_hz",
     "soemdsp_graph_node_effective_lo_hz",

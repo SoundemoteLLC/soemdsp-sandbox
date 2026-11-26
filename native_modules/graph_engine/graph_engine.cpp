@@ -18,6 +18,8 @@
 #include <soemdsp/math/scalar_helpers.h>
 #include <soemdsp/routing/stereo_route.h>
 #include <soemdsp/utility/memory_pool.h>
+#include "euclidean_sequencer.h"
+#include "divider_sequencer.h"
 
 using soemdsp::math::gate_hit;
 using soemdsp::math::gate_hit_height;
@@ -845,6 +847,12 @@ extern "C" int soemdsp_material_resonator_create();
 extern "C" int soemdsp_dispersion_create();
 extern "C" int soemdsp_spectral_cross_synthesis_create();
 extern "C" int soemdsp_spectral_warp_create();
+extern "C" int soemdsp_spectral_prism_create();
+extern "C" void soemdsp_spectral_prism_destroy(int h);
+extern "C" int soemdsp_spectral_prism_configure(int h,int size,double rate,double spread,double bass,double tilt,double smooth,double phase,double shimmerSpeed,double shimmerDepth,double seed,double quantize,double centreDb,double fold,double evolveRate,double evolveDepth,double evolveTransition);
+extern "C" double soemdsp_spectral_prism_sample(int h,double l,double r,double mix,double amplitude);
+extern "C" double soemdsp_spectral_prism_right(int h);
+extern "C" double soemdsp_spectral_prism_error(int h);
 extern "C" void soemdsp_spectral_warp_destroy(int h);
 extern "C" int soemdsp_spectral_warp_configure(int h,int size,double shift,double warp,double pivot,double rate);
 extern "C" int soemdsp_spectral_warp_set_pitch_stereo(int h,double semitones,double stereoHz);
@@ -2608,6 +2616,8 @@ static const int kTypeArp = 150;
 static const int kTypeHilbert = 151;
 static const int kTypeBinaryClock = 152;
 static const int kTypeSturmianGrid = 262;
+static const int kTypeEuclideanSequencer = 284;
+static const int kTypeDividerSequencer = 285;
 static const int kParamSturmianReset = 421;
 static const int kParamSturmianPitchSource = 422;
 static const int kParamSturmianPitchRange = 423;
@@ -2682,6 +2692,7 @@ static const int kTypeSpectralWarble = 281; // Spectral Warble: per-partial pitc
 static const int kTypeSpectralSmear = 282; // Spectral Smear: Time Smear, Blur (cents), Diffusion, Amplitude Smooth
 static const int kTypeSpectralCrossSynthesis = 278;
 static const int kTypeSpectralWarp = 279;
+static const int kTypeSpectralPrism = 283;
 static const int kTypePitchMutator = 280; // Pitch Mutator: log2(Hz) LUT -> Freq Out
 static const int kTypeSpectralFreeze = 273;
 static const int kTypeEarlyReflectionConvolution = 274;
@@ -3040,6 +3051,8 @@ struct Node {
   double acidSlideTo;
   unsigned char acidHasPitch;
   double sturmPhase;
+  sandbox_euclidean::State euclidean;
+  sandbox_divider::State dividerSequencer;
   double sturmLastAdv; // Adv jack rising-edge latch (own state, not Step Register's)
   int sturmStep;
   int sturmBar;
@@ -3380,6 +3393,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_convolution_resonator_destroy(handle);
   } else if (kind == kTypeSpectralWarp) {
     soemdsp_spectral_warp_destroy(handle);
+  } else if (kind == kTypeSpectralPrism) {
+    soemdsp_spectral_prism_destroy(handle);
   } else if (kind == kTypeSpectralCrossSynthesis) {
     soemdsp_spectral_cross_synthesis_destroy(handle);
   } else if (kind == kTypeVocoder) {
@@ -3924,6 +3939,8 @@ static void init_node_defaults(Node& n, int typeId) {
   n.acidSlideTo = 36.0;
   n.acidHasPitch = 0;
   n.sturmPhase = 0.0;
+  sandbox_euclidean::reset(n.euclidean);
+  sandbox_divider::reset(n.dividerSequencer);
   n.sturmLastAdv = 0.0;
   n.sturmStep = -1;
   n.sturmBar = 0;
@@ -5071,6 +5088,33 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.laneBias[1], 0.0, true);  // pitch source: Classic
     init_control(n.laneBias[2], 21.0, true); // pitch range, 21 st = original span
   }
+  if (typeId == kTypeDividerSequencer) {
+    const double divides[4] = {2, 3, 5, 7};
+    for (int lane = 0; lane < 4; ++lane) {
+      init_control(n.laneVol[lane], divides[lane], true);
+      init_control(n.laneBias[lane], 0.0, true);
+    }
+    init_control(n.frequency, 8.0, false);
+    init_control(n.mode, 1.0, true);
+    init_control(n.oversample, 0.0, true);
+  }
+  if (typeId == kTypeEuclideanSequencer) {
+    const double steps[4] = {16, 12, 8, 15}, hits[4] = {4, 3, 3, 5};
+    for (int lane = 0; lane < 4; ++lane) {
+      init_control(n.laneVol[lane], steps[lane], true);
+      init_control(n.laneBias[lane], hits[lane], true);
+    }
+    init_control(n.bleed2, 0.0, false);
+    init_control(n.bleed3, 0.0, false);
+    init_control(n.bleed4, 0.0, false);
+    init_control(n.phaseParam, 0.0, false);
+    init_control(n.frequency, 8.0, false);
+    init_control(n.lfoAmplitude, 0.0, false);
+    init_control(n.oversample, 0.0, true);
+    init_control(n.offset, 0.0, false);
+    init_control(n.width, 21.0, false);
+    init_control(n.mode, 0.0, true);
+  }
   n.phase = 0.0;
   n.lastReset = 0.0;
   n.singleActive = false;
@@ -5195,6 +5239,12 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.frequency,0,false);init_control(n.width,0,false);
     init_control(n.stages,1024,true);init_control(n.phaseParam,0,false);init_control(n.shape,1,false);
     init_control(n.center,1000,false);init_control(n.mix,1,false);init_control(n.gainDb,0,false);
+  }
+  if(typeId==kTypeSpectralPrism){
+    init_control(n.stages,2048,true);init_control(n.width,.7,false);init_control(n.center,120,false);
+    init_control(n.shape,0,false);init_control(n.diffusionAmount,300,false);init_control(n.phaseParam,.25,false);
+    init_control(n.lfoRate,0,false);init_control(n.lfoVariation,.5,false);init_control(n.seed,1,true);init_control(n.mix,1,false);
+    init_control(n.feedback,0,false);
   }
   if(typeId==kTypeDispersion){init_control(n.frequency,300,false);init_control(n.stages,50,true);init_control(n.width,2,false);init_control(n.shape,0,false);init_control(n.mode,0,true);init_control(n.pan,0,false);init_control(n.mix,1,false);
    init_control(n.waveform,1,true);init_control(n.timingMode,1,true);init_control(n.center,15,false);init_control(n.lpfFrequency,8000,false);init_control(n.diffusionAmount,0,false);init_control(n.resonance,1,false);init_control(n.feedback,1,false);init_control(n.lfoVariation,0,false);init_control(n.gainDb,0,false);
@@ -6026,6 +6076,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeVocoder) return soemdsp_vocoder_create();
   if (typeId == kTypeSpectralCrossSynthesis) return soemdsp_spectral_cross_synthesis_create();
   if (typeId == kTypeSpectralWarp) return soemdsp_spectral_warp_create();
+  if (typeId == kTypeSpectralPrism) return soemdsp_spectral_prism_create();
   if (typeId == kTypeSpectralBlur) return soemdsp_spectral_blur_create();
   if (typeId == kTypeSpectralWarble) return soemdsp_spectral_warble_create();
   if (typeId == kTypeSpectralSmear) return soemdsp_spectral_smear_create();
@@ -16480,6 +16531,29 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
   }
 }
 
+static void process_spectral_prism(Circuit& g,Node& node,int frames){
+  if(node.nativeHandle<=0)return;
+  using namespace soemdsp::routing;
+  const StereoRoute route=stereo_route(probe_stereo_route_wiring(g,node));
+  mix_node_inputs(g,node,frames);
+  for(int f=0;f<frames;++f){
+    control_frame(g,node,f);
+    soemdsp_spectral_prism_configure(node.nativeHandle,(int)control_audio(g,node.stages,f),g.sampleRate,
+      control_audio(g,node.width,f),control_audio(g,node.center,f),control_audio(g,node.shape,f),
+      control_audio(g,node.diffusionAmount,f),control_audio(g,node.phaseParam,f),control_audio(g,node.lfoRate,f),
+      control_audio(g,node.lfoVariation,f),control_audio(g,node.seed,f),control_audio(g,node.feedback,f),
+      control_audio(g,node.gainDb,f),control_audio(g,node.saturate,f),
+      control_audio(g,node.lfoBaseSpeed,f),control_audio(g,node.lfoAmplitude,f),control_audio(g,node.diffusionSize,f));
+    const double m=g.mixMono[f],l=g.mixLeft[f],r=g.mixRight[f];
+    const double a=stereo_route_feed(route.feedL,m,l,r),b=stereo_route_feed(route.feedR,m,l,r);
+    const double y=soemdsp_spectral_prism_sample(node.nativeHandle,a,b,control_audio(g,node.mix,f),control_audio(g,node.amplitude,f));
+    const double yr=soemdsp_spectral_prism_right(node.nativeHandle);
+    // A stereo generator always publishes both sides, including when only Mono is observed.
+    node.buf[kPortMono][f]=.5*(y+yr);node.buf[kPortLeft][f]=y;node.buf[kPortRight][f]=yr;
+    node.buf[kPortIsIdle][f]=soemdsp_spectral_prism_error(node.nativeHandle);
+  }
+}
+
 static void process_spectral_warp(Circuit& g,Node& node,int frames){
   if(node.nativeHandle<=0)return;
   using namespace soemdsp::routing;
@@ -18039,6 +18113,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeVocoder
     || typeId == kTypeSpectralCrossSynthesis
     || typeId == kTypeSpectralWarp
+    || typeId == kTypeSpectralPrism
     || typeId == kTypeEarlyReflectionConvolution
     || typeId == kTypeSpectralDelay
     || typeId == kTypeMaterialResonator
@@ -18207,7 +18282,7 @@ static bool type_needs_native(int typeId) {
 // Adding or removing one makes the host rebuild the engine, and their capacity is the node count
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
-  if (typeId == kTypeSpectralWarp || typeId == kTypeSpectralCrossSynthesis || typeId == kTypeDispersion || typeId == kTypeMaterialResonator || typeId == kTypeSpectralDelay || typeId == kTypeEarlyReflectionConvolution || typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
+  if (typeId == kTypeSpectralPrism || typeId == kTypeSpectralWarp || typeId == kTypeSpectralCrossSynthesis || typeId == kTypeDispersion || typeId == kTypeMaterialResonator || typeId == kTypeSpectralDelay || typeId == kTypeEarlyReflectionConvolution || typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
     || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralWarble || typeId == kTypeSpectralSmear || typeId == kTypeSpectralFreeze) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
@@ -19515,7 +19590,85 @@ static void process_sturmian_grid(Circuit& g, Node& node, int frames) {
   }
 }
 
+// Lane Vol 1..4 = Steps, Lane Bias 1..4 = Hits, Bleed2/3/4 + Phase = Rotate.
+// Frequency = Rate, LFO amplitude = Drift (steps/loop), Oversample = reset steps,
+// Offset = semitones, Width = pitch range, Mode = stable Classic(0)/Position(1).
+static void process_euclidean_sequencer(Circuit& g, Node& node, int frames) {
+  const bool resetWired = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const bool advWired = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const bool fWired = mix_live_port(g, node, kPortF, frames, g.mixF);
+  Control* rotations[4] = {&node.bleed2, &node.bleed3, &node.bleed4, &node.phaseParam};
+  const int triggerPorts[4] = {kPortMono, kPortLeft, kPortRight, kPortSaw};
+  const int phasePorts[4] = {kPortTri, kPortSine, kPortTrisaw, kPortPhase01};
+  for (int frame = 0; frame < frames; ++frame) {
+    control_frame(g, node, frame);
+    sandbox_euclidean::Params params{};
+    for (int lane = 0; lane < 4; ++lane) {
+      params.rings[lane] = {control_effective(node.laneVol[lane]),
+        control_effective(node.laneBias[lane]), control_audio(g, *rotations[lane], frame)};
+    }
+    params.rate = fWired ? g.mixF[frame] : control_audio(g, node.frequency, frame);
+    params.drift = control_audio(g, node.lfoAmplitude, frame);
+    params.resetSteps = control_effective(node.oversample);
+    params.semitones = control_audio(g, node.offset, frame);
+    params.pitchRange = control_audio(g, node.width, frame);
+    params.positionPitch = control_effective(node.mode) >= 0.5;
+    const bool reset = resetWired && gate_hit(g.mixReset[frame], &node.lastReset);
+    const bool adv = advWired && gate_hit(g.mixTrigger[frame], &node.sturmLastAdv);
+    sandbox_euclidean::sample(node.euclidean, params, g.sampleRate, reset, advWired, adv);
+    for (int lane = 0; lane < 4; ++lane) {
+      node.buf[triggerPorts[lane]][frame] = node.euclidean.rings[lane].trigger;
+      node.buf[phasePorts[lane]][frame] = node.euclidean.rings[lane].phase;
+    }
+    node.buf[kPortRamp][frame] = node.euclidean.pitch;
+    node.buf[kPortSquare][frame] = node.euclidean.frequency;
+  }
+}
+
+// Lane Vol 1..4 = Divide, Lane Bias 1..4 = Offset (master ticks).
+// Frequency = Rate in Hz, Mode = stable OR(0), XOR(1), AND(2).
+// Oversample = master ticks before restart (zero disables).
+static void process_divider_sequencer(Circuit& g, Node& node, int frames) {
+  const bool resetWired = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const bool clockWired = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const bool fWired = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const int pulsePorts[4] = {kPortMono, kPortLeft, kPortRight, kPortSaw};
+  const int gatePorts[4] = {kPortSquare, kPortTri, kPortSine, kPortTrisaw};
+  for (int frame = 0; frame < frames; ++frame) {
+    control_frame(g, node, frame);
+    sandbox_divider::Params p{};
+    p.rate = fWired ? g.mixF[frame] : control_audio(g, node.frequency, frame);
+    p.logic = (int)control_effective(node.mode);
+    p.resetAfter = control_effective(node.oversample);
+    for (int lane = 0; lane < 4; ++lane) {
+      p.divide[lane] = control_effective(node.laneVol[lane]);
+      p.offset[lane] = control_effective(node.laneBias[lane]);
+    }
+    const bool restart = resetWired && gate_hit(g.mixReset[frame], &node.lastReset);
+    const bool clockHit = clockWired && gate_hit(g.mixTrigger[frame], &node.sturmLastAdv);
+    sandbox_divider::sample(node.dividerSequencer, p, g.sampleRate, restart,
+      clockWired, clockHit, clockWired && soemdsp::math::gate_on(g.mixTrigger[frame]));
+    const auto& s = node.dividerSequencer;
+    for (int lane = 0; lane < 4; ++lane) {
+      node.buf[pulsePorts[lane]][frame] = s.pulses[lane];
+      node.buf[gatePorts[lane]][frame] = s.gates[lane];
+    }
+    node.buf[kPortRamp][frame] = s.pulse;
+    node.buf[kPortCenterSquare][frame] = s.tick;
+    node.buf[kPortPhase01][frame] = s.phase;
+    node.buf[kPortIsIdle][frame] = s.combined;
+  }
+}
+
 static void dispatch_process_node(Circuit& g, Node& node, int frames) {
+    if (node.typeId == kTypeDividerSequencer) {
+      process_divider_sequencer(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeEuclideanSequencer) {
+      process_euclidean_sequencer(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypeSturmianGrid) {
       process_sturmian_grid(g, node, frames);
       return;
@@ -19665,6 +19818,9 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeSpectralWarp) {
       process_spectral_warp(g,node,frames);return;
+    }
+    if (node.typeId == kTypeSpectralPrism) {
+      process_spectral_prism(g,node,frames);return;
     }
     if (node.typeId == kTypeSpectralCrossSynthesis) {
       process_spectral_cross_synthesis(g, node, frames);
@@ -20729,6 +20885,37 @@ extern "C" double* soemdsp_graph_node_port_ptr(int handle, unsigned int nodeHash
   if (is_graph_port(port)) return nullptr;
   const int p = clamp_src_port(port);
   return g->nodes[idx].buf[p];
+}
+
+extern "C" double soemdsp_graph_divider_observe(int handle, unsigned int nodeHash, int lane, int field) {
+  Circuit* g = get(handle);
+  if (!g || lane < 0 || lane >= 4) return 0.0;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0 || g->nodes[idx].typeId != kTypeDividerSequencer) return 0.0;
+  const Node& n = g->nodes[idx];
+  if (field == 0) return soemdsp::math::maxd(1.0, dsp_floor(control_effective(n.laneVol[lane])));
+  if (field == 1) return dsp_floor(control_effective(n.laneBias[lane]));
+  if (field == 2) return control_effective(n.mode);
+  return 0.0;
+}
+
+// Read-only face telemetry; never encode counters or layout facts in audio ports.
+extern "C" double soemdsp_graph_euclidean_observe(int handle, unsigned int nodeHash, int lane, int field) {
+  Circuit* g = get(handle);
+  if (!g || lane < 0 || lane >= 4) return 0.0;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0 || g->nodes[idx].typeId != kTypeEuclideanSequencer) return 0.0;
+  const auto& ring = g->nodes[idx].euclidean.rings[lane];
+  switch (field) {
+    case 0: return ring.steps;
+    case 1: return ring.occupied;
+    case 2: return ring.effectiveRotation;
+    case 3: return ring.phase;
+    case 4: return ring.hits;
+    case 5: return ring.lastHitPhase;
+    case 6: return ring.hitAge;
+    default: return 0.0;
+  }
 }
 
 // Upload glue for modules that need host→WASM buffer fill (Music Player PCM,

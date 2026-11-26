@@ -1056,6 +1056,17 @@
   "customFolder": ""
  },
  {
+  "type": "dividerSequencer",
+  "faceLayout": "spawn",
+  "chrome": "LayoutA",
+  "layout": "dividerSequencer",
+  "display": true,
+  "visibleParams": 11,
+  "inputs": 3,
+  "outputs": 5,
+  "customFolder": "public/modules/dividerSequencer"
+ },
+ {
   "type": "doppler",
   "faceLayout": "spawn",
   "chrome": "LayoutA",
@@ -1252,6 +1263,17 @@
   "inputs": 4,
   "outputs": 3,
   "customFolder": "public/modules/eqFilter"
+ },
+ {
+  "type": "euclideanSequencer",
+  "faceLayout": "spawn",
+  "chrome": "LayoutA",
+  "layout": "euclideanSequencer",
+  "display": true,
+  "visibleParams": 18,
+  "inputs": 3,
+  "outputs": 6,
+  "customFolder": "public/modules/euclideanSequencer"
  },
  {
   "type": "evolveField",

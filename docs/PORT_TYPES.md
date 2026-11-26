@@ -11,6 +11,7 @@ One jack name, one type. Types are metadata (`portTypes` on the module def, or l
 | `code` | text / curve payloads | white square |
 | `data` | generic non-audio data | data plane |
 | `graphChunk` | Additive Yellow Graph chunks | yellow |
+| `spectral` | stereo complex STFT frames (transport pending) | magenta round; iridescent glass tube preview |
 | `blockRate` | Additive cyan Parameter / once-per-quantum | cyan |
 | `setup` | Setup param (once-per-quantum automatable, not realtime) | purple square |
 | `texture` | TV / RGBA video-style taps (📺) | reserved |
@@ -25,5 +26,5 @@ No MIDI type. No phase/frequency subtypes.
   - `audio` ↔ `digital` (white gates/triggers are voltages; Knob can drive 2t D)
   - `audio` / `digital` **into** `setup` (Knob/OSC sampled once per quantum). `setup` does not feed analog.
 - Mismatch → no connection + wire-break animation.
-- Cable color is owned by the **output** jack (no from→to color transition).
+- Cable base color is owned by the **input/destination** jack (no from→to color transition).
 - `setup` is a parameter class (`setup: true` on the param). Jacks live on the param row (not left-column IO). Paint is existing param purple (`#c44dff` / `#b184ff`), **square**. Cyan stays Additive / graphics.

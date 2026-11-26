@@ -541,6 +541,8 @@ function cloneNodeGraphTypedDisplaySettings(node) {
       return typeof normalizeNodeGraphXyPadDisplaySettings === "function"
         ? { traceDisplaySettings: normalizeNodeGraphXyPadDisplaySettings(bag) }
         : { traceDisplaySettings: bag || {} };
+    case "spectralPrism":
+      return { traceDisplaySettings: normalizeNodeGraphSpectralPrismSettings(bag) };
     case "spectralStyle":
       return {
         traceDisplaySettings: typeof normalizeNodeGraphSpectralStyleSettings === "function"

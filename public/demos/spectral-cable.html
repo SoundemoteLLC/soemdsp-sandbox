@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spectral Cable Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root { color-scheme: dark; --node-jack-magenta: #e040fb; }
+    body { margin: 0; background: #0c1013; color: #e8e9df; font: 13px monospace; }
+    header { display: flex; align-items: center; gap: 16px; min-height: 44px; padding: 8px 12px; border-bottom: 1px solid #344046; }
+    h1 { font: bold 16px monospace; margin: 0; }
+    header span { color: #93a6ac; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; height: calc(100dvh - 44px); }
+    .scene { position: relative; min-width: 0; overflow: hidden; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+    aside { padding: 10px; border-left: 1px solid #344046; overflow-y: auto; }
+    .row { display: grid; grid-template-columns: minmax(0, 1fr) 66px; column-gap: 8px; margin: 0 0 10px; }
+    .row label { align-self: center; }
+    .row input[type=range] { grid-column: 1 / -1; width: 100%; margin: 5px 0 0; accent-color: #c58bd8; }
+    input, select, button { font: inherit; color: inherit; background: #172027; border: 1px solid #46535a; min-height: 26px; border-radius: 3px; }
+    input[type=number] { width: 66px; padding: 2px 4px; }
+    .modes { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .modes label { display: flex; gap: 4px; align-items: center; }
+    button { padding: 3px 9px; }
+    #hint { color: #a9bbc0; min-height: 48px; line-height: 1.5; margin: 12px 0 0; }
+    @media (max-width: 650px) {
+      main { grid-template-columns: 1fr; height: auto; }
+      .scene { height: 53dvh; min-height: 340px; }
+      aside { border-left: 0; border-top: 1px solid #344046; }
+      header { gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <header><h1>🌊 Spectral Cable</h1><span>Visual prototype</span><button id="reset" aria-label="Reset cable appearance">↺</button></header>
+  <main>
+    <section class="scene" aria-label="Spectral cable preview"><canvas id="preview"></canvas></section>
+    <aside>
+      <div class="modes">
+        <select id="route" aria-label="Cable route"><option value="ribbon">Ribbon</option><option value="trace">Trace</option></select>
+        <label title="Override edge brightness to 100% without changing your setting"><input id="selected" type="checkbox">Selected</label>
+      </div>
+      <div class="modes"><label><input id="pixel-mode" type="checkbox" checked>Custom falloff</label></div>
+      <div id="geometry-controls"></div>
+      <details id="pixel-editor"><summary>Edit pixel falloff</summary><button id="pixel-isolate">First pixel only</button><div id="pixel-controls"></div></details>
+      <div id="controls"></div>
+      <p id="hint" role="status"></p>
+    </aside>
+  </main>
+  <script src="../lib/gl/soem-gl-util.js"></script>
+  <script src="../lib/visual/picture-device.js"></script>
+  <script src="../lib/visual/gl-line-renderer.js?v=spectral-tube-13"></script>
+  <script src="../node-graph-jack-chrome.js"></script>
+  <script src="spectral-cable.js?v=spectral-tube-13"></script>
+</body>
+</html>

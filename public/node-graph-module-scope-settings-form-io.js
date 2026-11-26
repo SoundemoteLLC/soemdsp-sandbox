@@ -629,6 +629,7 @@ if (type === "portalFace") {
   if (type === "spectralStyle") {
     return normalizeNodeGraphSpectralStyleSettings({}, nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId()));
   }
+  if (type === "spectralPrism") return normalizeNodeGraphSpectralPrismSettings();
   if (type === "spectrogramBurn") {
     return normalizeNodeGraphSpectrogramSettings(nodeGraphSpectrogramSettingsDefaults);
   }
@@ -738,6 +739,7 @@ function normalizeNodeGraphDisplaySettingsForFormType(settings, type = nodeGraph
   if (type === "spectralStyle") {
     return normalizeNodeGraphSpectralStyleSettings(settings, nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId()));
   }
+  if (type === "spectralPrism") return normalizeNodeGraphSpectralPrismSettings(settings);
   if (type === "spectrogramBurn") {
     const node = nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId());
     return normalizeNodeGraphSpectrogramSettings(settings, node);
@@ -1278,6 +1280,7 @@ if (settingsSchema === "portalFace") {
   if (settingsSchema === "spectralStyle") {
     return normalizeNodeGraphSpectralStyleSettings(node.traceDisplaySettings || {}, node);
   }
+  if (settingsSchema === "spectralPrism") return normalizeNodeGraphSpectralPrismSettings(node.traceDisplaySettings);
   if (settingsSchema === "spectrogramBurn") {
     const merged = { ...(node.traceDisplaySettings || {}) };
     if (merged.fftSize == null && node.params?.fftSize != null) {

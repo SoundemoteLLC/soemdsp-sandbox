@@ -11,6 +11,7 @@
  *   code       — text/curve payloads (white square)
  *   data       — generic non-audio data plane
  *   graphChunk — Additive Yellow Graph chunks (yellow)
+ *   spectral   — stereo complex STFT frames (round magenta)
  *   blockRate  — Additive cyan Parameter / once-per-quantum (cyan)
  *   setup      — setup param (purple square): automatable once/quantum, not realtime
  *   texture    — 📺 picture on the shared WebGL picture device (not audio)
@@ -22,6 +23,7 @@ const NODE_GRAPH_PORT_TYPES = Object.freeze({
   code: "code",
   data: "data",
   graphChunk: "graphChunk",
+  spectral: "spectral",
   blockRate: "blockRate",
   setup: "setup",
   texture: "texture",

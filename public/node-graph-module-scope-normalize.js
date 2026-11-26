@@ -321,6 +321,7 @@ function nodeGraphDisplaySettingsFormTypeUsesGradient(type) {
   return Boolean(type && [
     "spectrogramBurn",
     "spectralStyle",
+    "spectralPrism",
     "videoFeedbackFace",
     "scope2d",
     "phosphorLight",

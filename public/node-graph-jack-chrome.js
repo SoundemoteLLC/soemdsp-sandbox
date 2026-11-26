@@ -366,6 +366,9 @@ function nodeGraphJackChannel(type, port, io = "output") {
   if (!key.trim()) {
     return "";
   }
+  if (typeof nodeGraphResolvePortType === "function" && nodeGraphResolvePortType(type, key, io) === "spectral") {
+    return "magenta";
+  }
   // Port-name SSOT for voice buses (works even if def lookup misses).
   if (key === "Polyphony" || key === "Monophony" || key === "Voices") {
     return "black";

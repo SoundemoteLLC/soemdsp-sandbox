@@ -340,6 +340,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
       let flexRemain = flexPool;
       row.params.forEach((cell, i) => {
         const mode = cell[2] || "";
+        const input = moduleEl ? nodeGraphModuleFaceInput(moduleEl, cell[0]) : null;
         let cx;
         let cw;
         if (nFlex && nStack) {
@@ -360,7 +361,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
           ...base, type: "cell", param: cell[0], label: cell[1],
           // A slider alone on its row is always a horizontal slider (app-wide).
           horizontal: mode === "horizontal" || (mode !== "stack" && mode !== "button" && n === 1) || (!mode && !!row.horizontal),
-          bipolar: mode === "bipolar",
+          bipolar: input?.dataset?.bipolar != null ? input.dataset.bipolar === "true" : mode === "bipolar",
           stack: mode === "stack",
           button: mode === "button",
           buttonOn: mode === "button" && cell[3] && typeof cell[3] === "object" ? cell[3] : null,
@@ -901,6 +902,8 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     beginNodeGraphModuleFaceValueEdit(article, face, wd, p);
     return;
   }
+  // Face cells honour the same typed-only metadata as ordinary number readouts.
+  if (input?.dataset?.control === "number") return;
   // Same law as every slider: Ctrl/Cmd+click mouse-up resets; mouse-down+drag
   // with Ctrl/Cmd is fine-tune (B-111). Never reset on pointerdown.
   const resetOnClick = wd.type !== "seedButton" && wd.type !== "seedNumber"

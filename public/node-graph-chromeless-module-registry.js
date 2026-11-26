@@ -31,6 +31,21 @@ function registerNodeGraphChromelessModuleUi(type, uiConfig) {
   nodeGraphChromelessModuleRegistrations.set(type, { ...existing, ...uiConfig, type });
 }
 
+// Move the existing controls, retaining their slider/port identity and events.
+function nodeGraphLayoutParameterRows(body, type) {
+  const groups = nodeGraphModuleDefinitions[type]?.parameterRows;
+  if (!body || !Array.isArray(groups)) return;
+  for (const group of groups) {
+    const keys = Array.isArray(group) ? group : [group];
+    const rows = keys.map((key) => body.querySelector(`:scope > .node-parameter-row[data-param="${CSS.escape(key)}"]`)).filter(Boolean);
+    if (rows.length < 2) continue;
+    const wrapper = document.createElement("div");
+    wrapper.className = "node-parameter-group";
+    rows[0].before(wrapper);
+    wrapper.append(...rows);
+  }
+}
+
 // "layout" always equals the module's own type for this tier (see
 // nodeGraphModuleDefinitions entries below) -- has() takes a layout string
 // since that's what callers already have on hand (node-graph-module-sizing.js,

@@ -1653,6 +1653,7 @@ function createNodeGraphModuleElement(type, node) {
     for (const parameter of mountParameters) {
       body.append(createNodeGraphParameter(node, type, parameter));
     }
+    nodeGraphLayoutParameterRows(body, type);
     article.append(body);
     if (typeof mountNodeGraphModuleFace === "function") {
       mountNodeGraphModuleFace(article, type);

@@ -23,10 +23,10 @@ try {
     return {rows,plain:createNodeGraphModuleStoreButton(plain).querySelector('.scene-context-store-card-category').textContent,nature};
   },["earlyReflectionConvolution","spectralFreeze","spectralSmear","spectralDelay","spectralBlur","spectralWarble","stftContrast","stftGate","convolutionResonator","noiseConvReverb","fftReconstruction","stftBlur","spectrogram","circularSpectrogram","spectrum1d"]);
   for(const row of result.rows) {
-    assert.equal(row.emoji,'🌊',row.type);assert.equal(row.text,row.label);
+    assert.equal(row.emoji,row.type==='spectrum1d'?'📟':'🌊',row.type);assert.equal(row.text,row.label);
     assert.ok(!row.text.includes('🌊')&&!row.title.includes('🌊'),'browser marker must not contaminate labels/titles');
     assert.equal(row.category,row.expectedCategory,'category remains unchanged');
   }
   assert.notEqual(result.plain,'🌊');assert.equal(result.nature.label,'Nature');assert.ok(result.nature.glyphs.includes('🌊'));
-  console.log('14 FFT/STFT browser markers, unchanged categories/titles, normal-module icons, and Nature wave emoji pass.');
+  console.log('FFT/STFT browser markers, Spectrum 1D meter icon, unchanged categories/titles, and Nature wave emoji pass.');
 }finally{await browser.close();}

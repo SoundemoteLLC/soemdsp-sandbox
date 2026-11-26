@@ -17612,6 +17612,20 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   font-size: 0.78rem;
 }
 
+.node-parameter-group {
+  display: flex;
+  gap: 1px;
+  min-width: 0;
+  align-items: stretch;
+}
+.node-parameter-group > .node-parameter-row {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.node-parameter-group:not(:has(> .node-parameter-row:not([hidden]):not(.node-parameter-row-hidden))) {
+  display: none;
+}
+
 .node-parameter-row {
   display: grid;
   grid-template-columns: var(--node-port-column-width) minmax(0, 1fr) var(--node-port-column-width);

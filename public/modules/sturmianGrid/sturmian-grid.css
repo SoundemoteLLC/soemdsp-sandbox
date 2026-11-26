@@ -26,18 +26,6 @@
   pointer-events: auto;
 }
 
-/* Compact common-slider rows in the param band under the grid. */
-.dsp-node > .dsp-node-body > .sturmian-param-row {
-  display: grid;
-  grid-template-columns: repeat(var(--sturmian-param-cols, 1), minmax(0, 1fr));
-  column-gap: 1px;
-  align-items: stretch;
-  min-width: 0;
-}
-.dsp-node > .dsp-node-body > .sturmian-param-row > .node-parameter-row {
-  min-width: 0;
-}
-
 /* Slider rows are 40 px like face cells (Inner/Rotate, Blit Freq/Phase); sizing reads definition.sliderRowHeightPx. */
 .dsp-node[data-node-type="sturmianGrid"] > .dsp-node-body {
   --node-body-row-height: 40px;
