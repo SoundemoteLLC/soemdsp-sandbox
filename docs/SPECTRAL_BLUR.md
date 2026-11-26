@@ -1,7 +1,7 @@
 # Spectral Blur
 
 Native listening proof on `codex/convolution-resonator`, 2026-11-18.
-Module Browser: Space. Native type 272, `spectral_blur` version 7 (adds Swarm, Rate, Drift and Seed, the Cloud character and Pitch Blur; see below).
+Module Browser: Space. Native type 272, `spectral_blur` version 8 (adds Swarm, Rate, Drift and Seed, the Cloud character and Pitch Blur; see below).
 
 ## Controls
 
@@ -57,9 +57,10 @@ Module Browser: Space. Native type 272, `spectral_blur` version 7 (adds Swarm, R
   Level and Drift noise: same Seed, same input, same settings, same sound.
 - Character: Warble (default) or Cloud. Warble is the Swarm wobble above. Cloud is a different engine (below).
   Changing it warms a second core and crossfades 50 ms, like an FFT Size change (Cloud runs at an 8x overlap).
-- Fuzz: default 0, in cents (the definition spans 0..200, mid 50). Cloud only. Each partial is sprayed to within
-  plus or minus Fuzz cents of itself, a new amount every hop. 0 is dry.
-- Voices: default 3 (2..4), shown on the face next to Fuzz. Cloud only: independent sprays of one analysis, averaged.
+- Fuzz: default 0, in cents (the definition spans 0..200, mid 50). Cloud only. Each voice detunes every partial by a
+  slowly wandering amount up to plus or minus Fuzz cents. 0 is dry.
+- Voices: default 3 (2..4), shown on the face next to Fuzz. Cloud only: independent detune streams of one analysis, averaged.
+- Wander: default 0.5 Hz (0..20). Cloud only: how fast each partial's detune wanders.
 - Mix: dry/wet aligned to the selected FFT size, default fully wet. No limiter or saturation.
 
 ## Swarm DSP
@@ -79,22 +80,30 @@ still affects Diffusion only. No FFT is added.
 
 ## Cloud
 
-Cloud is Warble's fuzzy sibling for high input: Warble moves each bin by a few degrees or Hz, which is a
-constant offset in Hz and so audible as a warble on a high partial but invisible on a low one. Cloud works in
-cents, so every pitch gets the same relative fuzz. All values are real units, set by the definition (APP_POLICY 25):
+Cloud turns a saw into a lush, fuzzy chorus without oscillators: every partial is detuned by several slowly wandering
+voices of one analysis. All values are real units (APP_POLICY 25).
 
-- Fuzz (cents): the spray is a smooth random field over the spectrum (a knot every 8 bins, triangular, plus or
-  minus Fuzz cents), redrawn white every hop and per voice. A source bin moves by k*(2^(c/1200)-1) bins (linear
-  interpolation, at most 32 bins) and its phase advances for that offset held one hop, so a tiny Fuzz stays
-  coherent and a wide one decorrelates into fur. Left and right share the draws (linked).
-- Level (dB): in Cloud it is a white per-hop, per-bin level dither of plus or minus Level dB, 0 = none.
-- Seed: seeds each voice (Seed + voice); same Seed, input and settings give the same sound.
-- Voices: averaged, 1/L each.
-- Deviation from the plan: Swarm (degrees), Rate and Drift (Hz) are Warble-only. Plan 11.3 had Swarm scale
-  Fuzz; that would mix degrees with cents, which APP_POLICY 25 forbids.
-- Level: each frame is power-matched to its source and the overlap-add loss of decorrelated frames is
-  compensated analytically. No clamp. Measured with sines the output is about 0 to -1.5 dB against dry at wide Fuzz.
-- Cost is independent of pitch (the spray is per bin); Cloud at 4 voices is about 3x plain cost in the JS harness.
+- Fuzz (cents, 0..200): how far a voice detunes a partial, at its peak. 0 is dry. The same musical interval at every pitch.
+- Wander (Hz, default 0.5, 0..20): how fast each partial's detune moves. A fraction of a Hz is a slow lush beat; a few
+  Hz makes the detune itself shimmer; high values are fuzz and eventually metallic FM (a partial that wanders 200 cents
+  at 5 Hz is a very wide FM). Cloud only (Rate is Warble's speed).
+- Voices (2..4, default 3): independent detune streams, averaged (1/L each).
+- Level (dB): a slow level wander per voice at the Wander rate. 0 = none. Seed: seeds each voice (Seed + voice).
+- Swarm (degrees), Rate, Drift are Warble-only (Swarm would mix degrees into cents, which APP_POLICY 25 forbids).
+
+How it works (and why the first version sounded ugly):
+
+- The detune is a smooth mean-reverting random state per voice at knots every 8 bins, and every bin takes the state
+  of the local spectral peak it belongs to (strongest bin within 3 bins, from the previous hop), so a whole partial
+  lobe is moved by the same number of bins. Before, a constant-cents shift was a different number of bins for every
+  bin of a lobe, so lobes slid out of phase and fell apart.
+- The extra phase is ACCUMULATED hop after hop (2 pi delta hop / N per hop), so a detuned partial is a continuous
+  sinusoid. Before, a white per-hop jump (about 94 Hz at 4096) put a buzz at the hop rate on everything, which was the metallic sound.
+- The lobe is moved with four neighbours (Catmull-Rom) and its (-1)^bin sign pattern is moved with it (the window is
+  centred, so adjacent bins of a lobe alternate in sign; interpolating raw bins cancelled the lobe).
+- Each frame is power-matched to its source and the synthesis-window pass of the moved grain is matched to the
+  source frame's, so Fuzz does not change the loudness. Measured with sines: about 0 to -0.5 dB at 50 cents with the
+  default Wander, about -1 dB at 2 Hz, about -3 dB at 200 cents (a very wide, fast detune is not a coherent partial any more).
 - Old patches and bit-identical Warble were deliberately not preserved for Cloud (Argi: build it the best way for the sound).
 
 ## DSP And State
@@ -156,7 +165,7 @@ work in both.
 ## Cloud preset
 
 `patches/demo_patches/spectral_blur_cloud.json` (made with the app exporter): keyboard -> pulse train ->
-Spectral Blur -> Output. Character Cloud, Fuzz 50 cents, Voices 3, Seed 1, Level 0 dB, Time Smear 0, Frequency
+Spectral Blur -> Output. Character Cloud, Fuzz 50 cents, Wander 0.5 Hz, Voices 3, Seed 1, Level 0 dB, Time Smear 0, Frequency
 Blur 0, Diffusion 0, Stereo Spread 0, Amplitude Smooth 0, Mix 1. FFT 4096: the 50 cent spray needs resolution on
 low notes (a 2048 FFT cannot resolve 50 cents below about 400 Hz); try 2048 for tighter transients.
 

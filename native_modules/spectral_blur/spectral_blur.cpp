@@ -13,7 +13,7 @@ constexpr double twoPi = 6.283185307179586;
 // Swarm is in real units: Swarm = phase wobble in degrees, Level = level wobble in dB, Drift = pitch wander in Hz. No other scaling.
 constexpr double kDegrees = 0.017453292519943295;
 // Cloud: up to 4 voices; each source bin may be sprayed at most this many bins away so a high bin cannot fan across the spectrum (a cost / fan-out guard).
-constexpr int kMaxVoices = 4, kCloudCapBins = 32, kCloudKnot = 8;
+constexpr int kMaxVoices = 4, kCloudCapBins = 32, kCloudKnot = 8, kCloudLobe = 3;
 // dsp_sin_cos wants an angle near one turn; Cloud's per-hop offsets can be many turns, so they are wrapped first.
 inline double wrapTurns(double a) { return a - twoPi * (double)(long long)(a / twoPi + (a < 0 ? -0.5 : 0.5)); }
 soemdsp::fft::Radix2<size> fft{};
@@ -48,10 +48,14 @@ struct Core {
   double cloudFuzz;
   int cloudVoices;
   unsigned int cloudRng[kMaxVoices];
-  int cloudTarget[kMaxVoices][bins];
-  float cloudLo[kMaxVoices][bins], cloudHi[kMaxVoices][bins], cloudCos[kMaxVoices][bins], cloudSin[kMaxVoices][bins];
-  double specRe[bins], specIm[bins], accRe[bins], accIm[bins], cloudCorr[bins];
+  unsigned short cloudTarget[kMaxVoices][bins];
+  float cloudGain[kMaxVoices][bins], cloudFrac[kMaxVoices][bins], cloudCos[kMaxVoices][bins], cloudSin[kMaxVoices][bins];
+  double specRe[bins], specIm[bins], accRe[bins], accIm[bins];
+  unsigned short cloudPeak[bins]; // the local spectral peak each bin belongs to
+  float cloudAcc[kMaxVoices][bins]; // accumulated extra phase of each source bin (radians)
+  double cloudDetune[kMaxVoices][bins / kCloudKnot + 3], cloudLevelState[kMaxVoices][bins / kCloudKnot + 3];
   int position, hop, windowSize;
+  double cloudWander = 0.5; // Hz
   double blurCents = 0; // Pitch Blur: extra width in cents, on top of Frequency Blur (Hz)
   double right, lastRate, phaseSmoothMs, amplitudeSmoothMs, stereoSpread;
 
@@ -66,6 +70,7 @@ struct Core {
     for (int k = 0; k < bins; ++k) {
       offset[k] = smoothOffset[k] = 0;
       sideOffset[k] = smoothSideOffset[k] = 0;
+      for (int v = 0; v < kMaxVoices; ++v) cloudAcc[v][k] = 0;
       swarmPhaseState[k] = swarmAmpState[k] = swarmDriftState[k] = swarmDriftPhase[k] = 0;
       for (int c = 0; c < 2; ++c) {
         power[c][k] = prevR[c][k] = prevI[c][k] = phaseI[c][k] = 0;
@@ -77,6 +82,7 @@ struct Core {
         velocityI[c][k] = q == 1 ? 1 : q == 3 ? -1 : 0;
       }
     }
+    for (int v = 0; v < kMaxVoices; ++v) for (int n = 0; n < bins / kCloudKnot + 3; ++n) cloudDetune[v][n] = cloudLevelState[v][n] = 0;
     position = hop = 0; right = lastRate = 0; rng = 0x9e3779b9u; sideRng = 0xC2B2AE35u;
     seedSwarm();
     seedCloud();
@@ -162,52 +168,59 @@ struct Core {
     }
     const bool swarming = !cloud && (swarm != 0 || swarmLevel != 0 || swarmDrift != 0);
     if (cloud) {
-      // Fuzz in cents. Per hop and per voice a random spray offset (a triangular variable, +-Fuzz cents) is drawn at knots every kCloudKnot bins
-      // (about two Hann main lobes) and interpolated across the spectrum, so the whole lobe of one partial moves together: its grain keeps its
-      // shape and the partial becomes a line that jumps by a few cents every hop (a band), not noise. The offset is in cents, so its width in bins
-      // grows with the bin and a 2 kHz partial gets the same relative fuzz as a 100 Hz one. A source bin is moved to bin k + delta (linear
-      // interpolation between the two neighbours, capped at kCloudCapBins) and its phase advances by that frequency offset held for one hop
-      // (2 pi delta hop / N): a tiny Fuzz stays coherent, a wide one decorrelates. Draws are white per hop and shared by Left and Right (linked).
-      // Level adds a small white level dither per bin and voice (+-Level dB). Each voice takes 1/L of the amplitude (the voices average).
+      // Cloud = a continuous, slowly wandering detune of every partial, per voice, in cents (a chorus that is not made of oscillators).
+      // Per voice, a mean-reverting random state (the Wander parameter sets how fast it wanders, Fuzz how many cents it reaches) lives at knots
+      // every kCloudKnot bins (about two Hann main lobes) and is interpolated across the spectrum, so a whole partial moves together. A source bin
+      // is moved to bin k + delta (delta = k * (2^(c/1200) - 1) bins, linear interpolation between the two neighbours, capped at kCloudCapBins)
+      // and its phase is rotated by the frequency offset ACCUMULATED hop after hop (2 pi delta hop / N per hop), so the moved partial is a
+      // continuous sinusoid at the detuned frequency, not a train of phase jumps: smooth beating, no hop-rate buzz. Level wanders the same way
+      // (+-Level dB, smooth across bins and time). The voices share nothing but the one analysis and are averaged (1/L each). Left and Right
+      // share every draw (linked).
       const int voices = cloudVoices < 1 ? 1 : cloudVoices > kMaxVoices ? kMaxVoices : cloudVoices;
       const double centsToRatio = 0.6931471805599453 / 1200.0;
       const double voiceGain = 1.0 / voices;
-      // Frame-to-frame correlation of a bin's sum, from the statistics of its spray (nothing is measured per hop): the phase offset one hop applies
-      // is a triangular variable of peak kappa = 2 pi spread hop / N, with characteristic function psi = (sin(kappa/2) / (kappa/2))^2; L voices
-      // correlate r = L psi^2 / (1 + (L - 1) psi^2) between hops. Decorrelated frames overlap-add with less power than coherent ones (a grain that
-      // is no longer Hann-shaped passes less of the synthesis window: at 8x with the 1/3 gain the power falls from 1 toward 1/8), which the
-      // per-frame makeup below undoes.
-      for (int k = 1; k < bins - 1; ++k) {
-        double spread = k * (soemdsp_maths::dsp_exp((cloudFuzz < 0 ? -cloudFuzz : cloudFuzz) * centsToRatio) - 1.0);
-        if (spread > kCloudCapBins) spread = kCloudCapBins;
-        const double half = 0.5 * twoPi * spread * hopSize / size;
-        double psi = 1;
-        if (half > 1e-6) { double sn, cs; soemdsp_maths::dsp_sin_cos(wrapTurns(half), &sn, &cs); psi = (sn / half) * (sn / half); }
-        const double psi2 = psi * psi;
-        cloudCorr[k] = voices * psi2 / (1.0 + (voices - 1.0) * psi2);
+      const double wanderPole = soemdsp_maths::dsp_exp(-twoPi * (cloudWander > 0 ? cloudWander : 0) * hopSize / rate);
+      const double wanderInject = __builtin_sqrt(1.0 - wanderPole * wanderPole) * 1.7320508075688772; // uniform [-1,1] has variance 1/3
+      const int knots = (bins - 1) / kCloudKnot + 2;
+      // Every bin of one partial's lobe has to be moved by the SAME amount, or the lobe's bins slide out of phase with each other frame after
+      // frame (a constant-cents shift is a different number of bins at every bin) and the partial falls apart (a level loss and a ragged,
+      // metallic grain). So each bin takes the detune of the local peak it belongs to (the strongest bin within +-kCloudLobe of it, from the
+      // previous hop's power: a peak moves slowly), and the shift in bins is that peak's bin * (2^(cents/1200) - 1).
+      for (int k = 0; k < bins; ++k) {
+        const int lo = k > kCloudLobe ? k - kCloudLobe : 0, hi = k + kCloudLobe < bins ? k + kCloudLobe : bins - 1;
+        int best = k; double bestPower = power[0][k] + power[1][k];
+        for (int j = lo; j <= hi; ++j) { const double pw = power[0][j] + power[1][j]; if (pw > bestPower) { bestPower = pw; best = j; } }
+        cloudPeak[k] = (unsigned short)best;
       }
-      double knot[bins / kCloudKnot + 3];
       for (int v = 0; v < voices; ++v) {
-        const int knots = (bins - 1) / kCloudKnot + 2;
-        for (int n = 0; n < knots; ++n) knot[n] = 0.5 * (cloudRandom(v) + cloudRandom(v));
+        for (int n = 0; n < knots; ++n) {
+          double d = wanderPole * cloudDetune[v][n] + wanderInject * cloudRandom(v);
+          double l = wanderPole * cloudLevelState[v][n] + wanderInject * cloudRandom(v);
+          cloudDetune[v][n] = d < -1 ? -1 : d > 1 ? 1 : d;
+          cloudLevelState[v][n] = l < -1 ? -1 : l > 1 ? 1 : l;
+        }
         for (int k = 1; k < bins - 1; ++k) {
-          const int n = k / kCloudKnot;
-          const double along = (double)(k - n * kCloudKnot) / kCloudKnot;
-          const double u = knot[n] + (knot[n + 1] - knot[n]) * along;
-          double delta = k * (soemdsp_maths::dsp_exp(cloudFuzz * u * centsToRatio) - 1.0);
+          const int pk = cloudPeak[k];
+          const int n = pk / kCloudKnot;
+          const double along = (double)(pk - n * kCloudKnot) / kCloudKnot;
+          const double u = cloudDetune[v][n] + (cloudDetune[v][n + 1] - cloudDetune[v][n]) * along;
+          const double lv = cloudLevelState[v][n] + (cloudLevelState[v][n + 1] - cloudLevelState[v][n]) * along;
+          double delta = pk * (soemdsp_maths::dsp_exp(cloudFuzz * u * centsToRatio) - 1.0);
           if (delta > kCloudCapBins) delta = kCloudCapBins;
           if (delta < -kCloudCapBins) delta = -kCloudCapBins;
           double t = k + delta;
-          if (t < 1.0) t = 1.0;
-          if (t > bins - 2.0 - 1e-9) t = bins - 2.0 - 1e-9;
+          if (t < 2.0 || t > bins - 3.0 - 1e-9) { t = k; delta = 0; } // too near DC / Nyquist for the four-bin move: stays where it is
           const int t0 = (int)t;
           const double frac = t - t0;
+          double acc = cloudAcc[v][k] + twoPi * delta * hopSize / size;
+          acc -= twoPi * (double)(long long)(acc / twoPi);
+          cloudAcc[v][k] = (float)acc;
           double sn, cs;
-          soemdsp_maths::dsp_sin_cos(wrapTurns(twoPi * (t - k) * hopSize / size), &sn, &cs);
-          const double gain = voiceGain * soemdsp_maths::dsp_exp(swarmLevel * cloudRandom(v) * 0.11512925464970229);
-          cloudTarget[v][k] = t0;
-          cloudLo[v][k] = (float)(gain * (1.0 - frac));
-          cloudHi[v][k] = (float)(gain * frac);
+          soemdsp_maths::dsp_sin_cos(wrapTurns(acc), &sn, &cs);
+          const double gain = voiceGain * soemdsp_maths::dsp_exp(swarmLevel * lv * 0.11512925464970229);
+          cloudTarget[v][k] = (unsigned short)t0;
+          cloudGain[v][k] = (float)gain;
+          cloudFrac[v][k] = (float)frac;
           cloudCos[v][k] = (float)cs; cloudSin[v][k] = (float)sn;
         }
       }
@@ -234,8 +247,12 @@ struct Core {
       }
     }
     for (int c = 0; c < 2; ++c) {
+      // Cloud: how much of the analysis frame's energy the synthesis window passes (windowed / unwindowed), measured on the source frame
+      // so the moved spectrum can be held to the same figure below.
+      double srcEnergy = 0, srcWindowed = 0;
       for (int i = 0; i < size; ++i) {
         re[c][i] = input[c][(position + 1 + i) % size] * window[i]; im[c][i] = 0;
+        if (cloud) { const double e = (double)re[c][i] * re[c][i]; srcEnergy += e; srcWindowed += e * window[i] * window[i]; }
       }
       transform(size, re[c], im[c], false);
       for (int k = 0; k < bins; ++k) {
@@ -298,23 +315,27 @@ struct Core {
           for (int v = 0; v < voices; ++v) {
             const double yr = xr * cloudCos[v][k] - xi * cloudSin[v][k], yi = xr * cloudSin[v][k] + xi * cloudCos[v][k];
             const int t0 = cloudTarget[v][k];
-            accRe[t0] += yr * cloudLo[v][k]; accIm[t0] += yi * cloudLo[v][k];
-            accRe[t0 + 1] += yr * cloudHi[v][k]; accIm[t0 + 1] += yi * cloudHi[v][k];
+            // The window is centred in the frame, so the bins of a partial's lobe alternate in sign, (-1)^k. Moving a lobe by delta bins has to
+            // keep that pattern at its new place, (-1)^(t0) and (-1)^(t0 + 1) for the two neighbours it is shared between; interpolating the
+            // raw bins would add opposite signs and cancel the lobe (a level loss and a ragged, metallic grain).
+            // Four neighbours (Catmull-Rom weights, which sum to 1) keep the shape of the lobe much better than two.
+            const double f = cloudFrac[v][k], f2 = f * f, f3 = f2 * f, g = cloudGain[v][k];
+            const double w[4] = { g * (-0.5 * f3 + f2 - 0.5 * f), g * (1.5 * f3 - 2.5 * f2 + 1.0), g * (-1.5 * f3 + 2.0 * f2 + 0.5 * f), g * (0.5 * f3 - 0.5 * f2) };
+            for (int j = 0; j < 4; ++j) {
+              const int q = t0 - 1 + j;
+              if (q < 0 || q >= bins) continue;
+              const double sj = ((q + k) & 1) ? -w[j] : w[j]; // the lobe's (-1)^bin pattern moves with it: factor (-1)^(q - k)
+              accRe[q] += yr * sj; accIm[q] += yi * sj;
+            }
           }
         }
         // One normalisation per frame keeps the frame's power equal to the power it came from, so Fuzz changes the character and not the level
         // (the voices average to exactly the source at Fuzz 0; a wide spray is power-preserving). It is a level match, not a clip.
         double accPower = accRe[0] * accRe[0] + accRe[bins - 1] * accRe[bins - 1];
-        double correlated = 0;
         for (int k = 1; k < bins - 1; ++k) {
-          const double bp = 2 * (specRe[k] * specRe[k] + specIm[k] * specIm[k]);
           accPower += 2 * (accRe[k] * accRe[k] + accIm[k] * accIm[k]);
-          correlated += bp * cloudCorr[k];
         }
-        // Makeup for the overlap-add of decorrelated frames: the power-weighted correlation r of the frame gives 1 / sqrt((1 - r) / 8 + r).
-        const double r = sourcePower > 0 ? correlated / sourcePower : 1.0;
-        const double makeup = 1.0 / __builtin_sqrt((1.0 - r) * 0.125 + r);
-        const double normal = accPower > 1e-30 && sourcePower > 0 ? makeup * __builtin_sqrt(sourcePower / accPower) : 1.0;
+        const double normal = accPower > 1e-30 && sourcePower > 0 ? __builtin_sqrt(sourcePower / accPower) : 1.0;
         for (int k = 0; k < bins; ++k) {
           const bool edge = k == 0 || k == bins - 1;
           re[c][k] = (float)(accRe[k] * normal);
@@ -323,8 +344,17 @@ struct Core {
         }
       }
       transform(size, re[c], im[c], true);
+      float frameGain = olaGain;
+      if (cloud) {
+        // A moved partial is not exactly a Hann-shaped grain any more, so the synthesis window passes a different share of it. Hold that share
+        // to the source frame's (identical at Fuzz 0, so a dry Cloud is untouched): a level match per frame, not a clip.
+        double synEnergy = 0, synWindowed = 0;
+        for (int i = 0; i < size; ++i) { const double e = (double)re[c][i] * re[c][i]; synEnergy += e; synWindowed += e * window[i] * window[i]; }
+        if (srcEnergy > 1e-24 && synEnergy > 1e-24 && synWindowed > 1e-24 && srcWindowed > 1e-24)
+          frameGain = (float)(olaGain * __builtin_sqrt((srcWindowed / srcEnergy) / (synWindowed / synEnergy)));
+      }
       for (int i = 0; i < size; ++i)
-        ola[c][(position + 1 + i) % size] += re[c][i] * window[i] * olaGain;
+        ola[c][(position + 1 + i) % size] += re[c][i] * window[i] * frameGain;
     }
     return true;
   }
@@ -369,7 +399,7 @@ struct State {
     for (auto& core : cores) {
       core.phaseSmoothMs = 10; core.amplitudeSmoothMs = 0; core.stereoSpread = 1;
       core.swarm = 0; core.swarmLevel = 0; core.swarmRate = 5; core.swarmDrift = 0; core.swarmSeed = 1;
-      core.blurCents = 0; core.cloud = false; core.cloudFuzz = 0; core.cloudVoices = 3;
+      core.blurCents = 0; core.cloudWander = 0.5; core.cloud = false; core.cloudFuzz = 0; core.cloudVoices = 3;
     }
     reset();
   }
@@ -419,12 +449,13 @@ const char metadata[] = R"json({"module":"spectral_blur","targetType":"spectralB
 {"key":"phaseSmoothMs","label":"Phase Smooth","kind":"time","defaultValue":"10","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Time constant for smoothing the unwrapped phase-diffusion trajectory. Zero keeps raw phase motion. Does not smooth spectral magnitudes or reduce their contrast. Updates at the STFT hop rate."},
 {"key":"amplitudeSmoothMs","label":"Amplitude Smooth","kind":"time","defaultValue":"0","min":"0","mid":"10","max":"200","unit":"ms","step":"any","nonlinearSlider":true,"tooltip":"Additional symmetric per-bin magnitude smoothing after frequency spreading. Zero preserves the sharp amplitude texture. Increase gently to soften chatter; this is not compression, saturation or limiting. Updates at the STFT hop rate."},
 {"key":"swarm","label":"Swarm","defaultValue":"0","min":"0","mid":"45","max":"180","unit":"°","step":"any","tooltip":"Peak phase wobble of each partial, in degrees, a fuzzy buzz that stays in place in time. Zero is off and leaves the sound unchanged. It is not a smear: with Time Smear, Frequency Blur and Diffusion at zero, transients keep their time (plus the FFT Size delay). Wobble updates at the STFT hop rate."},
-{"key":"swarmLevel","label":"Level","defaultValue":"0","min":"0","mid":"6","max":"24","unit":"dB","step":"any","tooltip":"Level wobble of each partial, in dB (plus or minus at its peak), applied after Amplitude Smooth. Zero leaves levels alone. Updates at the STFT hop rate."},
-{"key":"swarmRate","label":"Rate","kind":"frequency","defaultValue":"5","min":"0","mid":"5","max":"1000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm, Level and Drift are zero."},
+{"key":"swarmLevel","label":"Level","defaultValue":"0","min":"0","mid":"6","max":"24","unit":"dB","step":"any","tooltip":"Level wobble of each partial, in dB (plus or minus at its peak). Warble: applied after Amplitude Smooth. Cloud: a level wander per voice at the Wander rate. Zero leaves levels alone. Updates at the STFT hop rate."},
+{"key":"swarmRate","label":"Rate","kind":"frequency","defaultValue":"5","min":"0","mid":"5","max":"1000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm, Level and Drift are zero. Warble only (Cloud has Wander)."},
 {"key":"swarmDrift","label":"Drift","kind":"frequency","defaultValue":"0","min":"0","mid":"1","max":"20","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"Pitch wander of each partial around its own frequency, in Hz at its peak. It is not Frequency Blur: no power moves to neighboring bins. Uses the Swarm Rate."},
 {"key":"swarmSeed","label":"Seed","kind":"seed","defaultValue":"1","min":"0","mid":"1","max":"16777215","step":"1","linearSmoothing":false,"smoothingType":"none","tooltip":"Seed for the Swarm, Level and Drift noise. Same Seed, same input and same settings give the same sound. No effect while Swarm, Level and Drift are zero."},
-{"key":"swarmCharacter","label":"Character","kind":"choice","choices":["Warble","Cloud"],"defaultValue":"0","min":"0","mid":"0","max":"1","step":"1","linearSmoothing":false,"displayChoices":true,"divideChoicesVisibly":true,"tooltip":"Warble is the slow per-partial wobble (Swarm, Level, Rate, Drift). Cloud smears each partial into a soft band that is the same width in cents at every pitch, so a high note gets the same fuzz as a low one, still in place in time (no Time Smear needed). Cloud runs at an 8x overlap and uses Fuzz, Level (as a fast level dither), Voices and Seed; Swarm, Rate and Drift are Warble-only. A Character change warms a second core and crossfades."},
-{"key":"swarmFuzz","label":"Fuzz","defaultValue":"0","min":"0","mid":"50","max":"200","unit":"\u00a2","step":"any","nonlinearSlider":true,"tooltip":"Cloud width in cents: each partial is sprayed to within plus or minus this many cents of itself, a different amount every hop. Zero is dry. The spray reaches at most 32 bins from a partial. Only used by Cloud."},
+{"key":"swarmCharacter","label":"Character","kind":"choice","choices":["Warble","Cloud"],"defaultValue":"0","min":"0","mid":"0","max":"1","step":"1","linearSmoothing":false,"displayChoices":true,"divideChoicesVisibly":true,"tooltip":"Warble is the slow per-partial wobble (Swarm, Level, Rate, Drift). Cloud detunes each partial with several slowly wandering voices (a lush chorus, not individual oscillators), the same width in cents at every pitch, still in place in time (no Time Smear needed). Cloud runs at an 8x overlap and uses Fuzz, Wander, Level, Voices and Seed; Swarm, Rate and Drift are Warble-only. A Character change warms a second core and crossfades."},
+{"key":"swarmFuzz","label":"Fuzz","defaultValue":"0","min":"0","mid":"50","max":"200","unit":"\u00a2","step":"any","nonlinearSlider":true,"tooltip":"Cloud width in cents: each voice detunes every partial by a slowly wandering amount up to plus or minus this many cents (a smooth chorus, not noise). Zero is dry. The detune reaches at most 32 bins from a partial. Only used by Cloud."},
+{"key":"cloudWander","label":"Wander","kind":"frequency","defaultValue":"0.5","min":"0","mid":"0.5","max":"20","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"How fast each partial's Cloud detune wanders, in Hz. A fraction of a Hz is a slow, lush chorus beat; a few Hz makes the detune itself shimmer; higher is fuzz and eventually metallic FM. Only used by Cloud (Rate is the Warble speed)."},
 {"key":"swarmVoices","label":"Voices","defaultValue":"3","min":"2","mid":"3","max":"4","step":"1","linearSmoothing":false,"tooltip":"Cloud voices: independent sprays of the same single analysis, summed power-for-power. More voices is a denser fur. Only used by Cloud."},
 {"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion, Amplitude Smooth, Swarm, Level and Drift for neutral reconstruction."}]})json";
 }
@@ -482,6 +513,10 @@ extern "C" void soemdsp_spectral_blur_set_cloud(int h, double character, double 
 extern "C" void soemdsp_spectral_blur_set_blur_cents(int h, double cents) {
   if (auto* s = get(h)) for (auto& core : s->cores) core.blurCents = __builtin_isfinite(cents) && cents > 0 ? cents : 0;
 }
+// Cloud Wander: how fast each partial's detune wanders, in Hz (0 = frozen at the starting detune). Cheap to call every sample.
+extern "C" void soemdsp_spectral_blur_set_cloud_wander(int h, double hz) {
+  if (auto* s = get(h)) for (auto& core : s->cores) core.cloudWander = __builtin_isfinite(hz) && hz > 0 ? hz : 0;
+}
 extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount) {
   if (auto* s = get(h)) for (auto& core : s->cores) core.stereoSpread = __builtin_isfinite(amount) ? amount : 0;
 }
@@ -496,6 +531,6 @@ extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double
 extern "C" double soemdsp_spectral_blur_right(int h) { auto* s = get(h); return s ? s->right : 0; }
 extern "C" int soemdsp_spectral_blur_latency() { return 4096; }
 extern "C" int soemdsp_spectral_blur_latency_for_handle(int h) { return soemdsp_spectral_blur_fft_size(h); }
-extern "C" int soemdsp_spectral_blur_version() { return 7; }
+extern "C" int soemdsp_spectral_blur_version() { return 8; }
 extern "C" const char* soemdsp_spectral_blur_metadata_json() { return metadata; }
 extern "C" int soemdsp_spectral_blur_metadata_json_size() { return sizeof(metadata) - 1; }

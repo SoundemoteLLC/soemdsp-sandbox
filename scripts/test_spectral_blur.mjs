@@ -6,7 +6,7 @@ const latency = x.soemdsp_spectral_blur_latency();
 assert.equal(latency, 4096);
 const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,
   x.soemdsp_spectral_blur_metadata_json(), x.soemdsp_spectral_blur_metadata_json_size())));
-assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'blurCents', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'swarm', 'swarmLevel', 'swarmRate', 'swarmDrift', 'swarmSeed', 'swarmCharacter', 'swarmFuzz', 'swarmVoices', 'mix']);
+assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'blurCents', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'swarm', 'swarmLevel', 'swarmRate', 'swarmDrift', 'swarmSeed', 'swarmCharacter', 'swarmFuzz', 'cloudWander', 'swarmVoices', 'mix']);
 assert.equal(meta.parameters.find(p => p.key === 'swarmCharacter').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmFuzz').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmFuzz').unit, '\u00a2');
@@ -18,7 +18,7 @@ assert.equal(meta.parameters.find(p => p.key === 'swarm').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmDrift').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmSeed').kind, 'seed');
 assert.equal(meta.parameters.find(p => p.key === 'swarmRate').unit, 'Hz');
-assert.equal(x.soemdsp_spectral_blur_version(), 7);
+assert.equal(x.soemdsp_spectral_blur_version(), 8);
 assert.equal(meta.parameters.find(p => p.key === 'smearSeconds').unit, 's');
 assert.equal(meta.parameters.find(p => p.key === 'blurHz').unit, 'Hz');
 assert.ok(meta.parameters.every(p => p.tooltip));
@@ -252,12 +252,14 @@ x.soemdsp_spectral_blur_destroy(h);
     const big = fresh(); swarmSet(big, 3, 5000, 4, 4000000000);
     const out = render(big, n, sr, [0, 0, 0, 1], tone);
     assert.ok(out[0].every(Number.isFinite), 'Swarm 3, Drift 4, Rate 5000 and a 32-bit Seed stay finite');
+    // (the 16384-sample core pool holds about six handles at once, so free the ones already used)
+    for (const h of [reference, wide, rateSlow, big]) x.soemdsp_spectral_blur_destroy(h);
     const more = fresh(); swarmSet(more, 1, 5, 0, 1); const one = render(more, n, sr, [0, 0, 0, 1], tone);
     const twice = fresh(); swarmSet(twice, 2, 5, 0, 1); const two = render(twice, n, sr, [0, 0, 0, 1], tone);
     assert.ok(diffEnergy(one, two) > 0, 'Swarm 2 is used as given, not clamped to 1');
     const seedA = fresh(); swarmSet(seedA, 1, 5, 0, 16777215); const seedB = fresh(); swarmSet(seedB, 1, 5, 0, 16777216);
     assert.ok(diffEnergy(render(seedA, n, sr, [0, 0, 0, 1], tone), render(seedB, n, sr, [0, 0, 0, 1], tone)) > 0, 'Seeds past 16777215 are different seeds');
-    for (const h of [reference, wide, rateSlow, big, more, twice, seedA, seedB]) x.soemdsp_spectral_blur_destroy(h);
+    for (const h of [more, twice, seedA, seedB]) x.soemdsp_spectral_blur_destroy(h);
   }
   // CPU: Swarm adds a few per-bin poles and randoms per hop and no FFT; compare against the same module with Swarm off at 16384
   {

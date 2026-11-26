@@ -642,6 +642,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "smearSeconds") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
     if (k === "blurHz") return P.NATIVE_GRAPH_PARAM_WIDTH;
     if (k === "blurCents") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
+    if (k === "cloudWander") return P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED;
     if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
     if (k === "swarm") return P.NATIVE_GRAPH_PARAM_SHAPE;
     if (k === "swarmLevel") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
@@ -6299,6 +6300,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("smearSeconds", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("smearSeconds", 2));
       push("blurHz", P.NATIVE_GRAPH_PARAM_WIDTH, cont("blurHz", 100));
       push("blurCents", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("blurCents", 0));
+      push("cloudWander", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("cloudWander", 0.5));
       push("diffusion", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusion", 1));
       push("swarm", P.NATIVE_GRAPH_PARAM_SHAPE, cont("swarm", 0));
       push("swarmLevel", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("swarmLevel", 0));

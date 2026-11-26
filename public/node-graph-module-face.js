@@ -1379,7 +1379,7 @@ function nodeGraphModuleFaceDrawOwnedStripes(batch, x, y, w, h, z, css = "rgba(2
 const NODE_GRAPH_FACE_INACTIVE_PARAMS = Object.freeze({
   spectralBlur: Object.freeze({
     swarm: { when: "swarmCharacter", values: [1] }, swarmRate: { when: "swarmCharacter", values: [1] }, swarmDrift: { when: "swarmCharacter", values: [1] },
-    swarmFuzz: { when: "swarmCharacter", values: [0] }, swarmVoices: { when: "swarmCharacter", values: [0] },
+    swarmFuzz: { when: "swarmCharacter", values: [0] }, cloudWander: { when: "swarmCharacter", values: [0] }, swarmVoices: { when: "swarmCharacter", values: [0] },
   }),
 });
 

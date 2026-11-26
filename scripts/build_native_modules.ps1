@@ -63,7 +63,7 @@ $modules = @(
   @{ Name = "spectral_blur"; Simd = $false; Exports = @(
     "soemdsp_spectral_blur_create", "soemdsp_spectral_blur_destroy", "soemdsp_spectral_blur_reset",
     "soemdsp_spectral_blur_sample", "soemdsp_spectral_blur_right", "soemdsp_spectral_blur_latency",
-    "soemdsp_spectral_blur_version", "soemdsp_spectral_blur_metadata_json", "soemdsp_spectral_blur_metadata_json_size", "soemdsp_spectral_blur_set_smoothing", "soemdsp_spectral_blur_set_stereo_spread", "soemdsp_spectral_blur_set_swarm", "soemdsp_spectral_blur_set_cloud", "soemdsp_spectral_blur_set_blur_cents", "soemdsp_spectral_blur_set_fft_size", "soemdsp_spectral_blur_fft_size", "soemdsp_spectral_blur_latency_for_handle"
+    "soemdsp_spectral_blur_version", "soemdsp_spectral_blur_metadata_json", "soemdsp_spectral_blur_metadata_json_size", "soemdsp_spectral_blur_set_smoothing", "soemdsp_spectral_blur_set_stereo_spread", "soemdsp_spectral_blur_set_swarm", "soemdsp_spectral_blur_set_cloud", "soemdsp_spectral_blur_set_blur_cents", "soemdsp_spectral_blur_set_cloud_wander", "soemdsp_spectral_blur_set_fft_size", "soemdsp_spectral_blur_fft_size", "soemdsp_spectral_blur_latency_for_handle"
   ) }
   @{ Name = "stft_contrast"; Simd = $false; Exports = @(
     "soemdsp_stft_contrast_create", "soemdsp_stft_contrast_destroy", "soemdsp_stft_contrast_reset", "soemdsp_stft_contrast_sample", "soemdsp_stft_contrast_right", "soemdsp_stft_contrast_latency", "soemdsp_stft_contrast_version", "soemdsp_stft_contrast_metadata_json", "soemdsp_stft_contrast_metadata_json_size", "soemdsp_stft_contrast_display_bins", "soemdsp_stft_contrast_display_size", "soemdsp_stft_contrast_display_power", "soemdsp_stft_contrast_display_gain", "soemdsp_stft_contrast_display_rate", "soemdsp_stft_contrast_display_frames"

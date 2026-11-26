@@ -8767,6 +8767,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["swarm", "Swarm"], ["swarmLevel", "Level"]], h: 40 },
       { kind: "cells", params: [["swarmRate", "Rate"], ["swarmDrift", "Drift"]], h: 40 },
       { kind: "cells", params: [["swarmFuzz", "Fuzz"], ["swarmVoices", "Voices"]], h: 40 },
+      { kind: "cells", params: [["cloudWander", "Wander", "horizontal"]], h: 26 },
       { kind: "cells", params: [["swarmSeed", "Seed", "horizontal"]], h: 26 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
@@ -8917,7 +8918,7 @@ const nodeGraphModuleDefinitions = (
         "max": "24",
         "unit": "dB",
         "step": "any",
-        "tooltip": "Level wobble of each partial, in dB (plus or minus at its peak), applied after Amplitude Smooth. Zero leaves levels alone. Updates at the STFT hop rate."
+        "tooltip": "Level wobble of each partial, in dB (plus or minus at its peak). Warble: applied after Amplitude Smooth. Cloud: a level wander per voice at the Wander rate. Zero leaves levels alone. Updates at the STFT hop rate."
       },
       {
         "key": "swarmRate",
@@ -8930,7 +8931,7 @@ const nodeGraphModuleDefinitions = (
         "unit": "Hz",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm, Level and Drift are zero."
+        "tooltip": "How fast the Swarm wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm, Level and Drift are zero. Warble only (Cloud has Wander)."
       },
       {
         "key": "swarmDrift",
@@ -8971,7 +8972,7 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "step": "1",
         "linearSmoothing": false,
-        "tooltip": "Warble is the slow per-partial wobble (Swarm, Level, Rate, Drift). Cloud smears each partial into a soft band that is the same width in cents at every pitch, so a high note gets the same fuzz as a low one, still in place in time (no Time Smear needed). Cloud runs at an 8x overlap and uses Fuzz, Level (as a fast level dither), Voices and Seed; Swarm, Rate and Drift are Warble-only. A Character change warms a second core and crossfades."
+        "tooltip": "Warble is the slow per-partial wobble (Swarm, Level, Rate, Drift). Cloud detunes each partial with several slowly wandering voices (a lush chorus, not individual oscillators), the same width in cents at every pitch, still in place in time (no Time Smear needed). Cloud runs at an 8x overlap and uses Fuzz, Wander, Level, Voices and Seed; Swarm, Rate and Drift are Warble-only. A Character change warms a second core and crossfades."
       },
       {
         "key": "swarmFuzz",
@@ -8983,7 +8984,20 @@ const nodeGraphModuleDefinitions = (
         "unit": "\u00a2",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "Cloud width in cents: each partial is sprayed to within plus or minus this many cents of itself, a different amount every hop. Zero is dry. The spray reaches at most 32 bins from a partial. Only used by Cloud."
+        "tooltip": "Cloud width in cents: each voice detunes every partial by a slowly wandering amount up to plus or minus this many cents (a smooth chorus, not noise). Zero is dry. The detune reaches at most 32 bins from a partial. Only used by Cloud."
+      },
+      {
+        "key": "cloudWander",
+        "label": "Wander",
+        "kind": "frequency",
+        "defaultValue": "0.5",
+        "min": "0",
+        "mid": "0.5",
+        "max": "20",
+        "unit": "Hz",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "How fast each partial's Cloud detune wanders, in Hz. A fraction of a Hz is a slow, lush chorus beat; a few Hz makes the detune itself shimmer; higher is fuzz and eventually metallic FM. Only used by Cloud (Rate is the Warble speed)."
       },
       {
         "key": "swarmVoices",
