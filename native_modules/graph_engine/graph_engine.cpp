@@ -888,7 +888,8 @@ extern "C" int soemdsp_spectral_freeze_configure(int h, int length, double blend
 extern "C" void soemdsp_spectral_blur_destroy(int h);
 extern "C" double soemdsp_spectral_blur_sample(int h, double l, double r, double mix, double rate);
 extern "C" double soemdsp_spectral_blur_right(int h);
-extern "C" void soemdsp_spectral_blur_set_cloud(int h, double fuzzCents, double wanderHz, double voices, double seed);
+extern "C" void soemdsp_spectral_blur_set_cloud(int h, double fuzzCents, double grainDb, double voices, double seed);
+extern "C" void soemdsp_spectral_blur_set_stereo(int h, double spread, double monoBassHz);
 extern "C" int soemdsp_spectral_blur_set_fft_size(int h, int length);
 extern "C" int soemdsp_spectral_warble_create();
 extern "C" void soemdsp_spectral_warble_destroy(int h);
@@ -2674,7 +2675,7 @@ static const int kTypeCombPluck = 266; // Comb Pluck: strict Trigger + built-in 
 static const int kTypeNoiseConvReverb = 267; // Noise Convolution Reverb: shaped noise IR, zero-latency partitioned convolution
 static const int kTypeConvolutionResonator = 268;
 static const int kTypeVocoder = 269;
-static const int kTypeSpectralBlur = 272; // Spectral Blur: the Cloud engine (Fuzz, Wander, Seed)
+static const int kTypeSpectralBlur = 272; // Spectral Cloud (type key spectralBlur): Fuzz, Grain, Stereo Spread, Mono Bass, Voices, Seed
 static const int kTypeSpectralWarble = 281; // Spectral Warble: per-partial pitch wobble (Depth, Rate, Drunk, Voices, Stereo Spread, Mono Bass, Seed)
 static const int kTypeSpectralSmear = 282; // Spectral Smear: Time Smear, Blur (cents), Diffusion, Amplitude Smooth
 static const int kTypeSpectralCrossSynthesis = 278;
@@ -5124,8 +5125,10 @@ static void init_node_defaults(Node& n, int typeId) {
   }
   if (typeId == kTypeSpectralBlur) {
     init_control(n.stages, 4096, true);
-    init_control(n.center, 50, false);        // fuzz (cents)
-    init_control(n.lfoBaseSpeed, 0.5, false); // wander (Hz)
+    init_control(n.center, 100, false);       // fuzz (cents)
+    init_control(n.level, 1, false);          // grain (dB)
+    init_control(n.pan, 1, false);            // stereo spread
+    init_control(n.frequency, 0, false);      // mono bass (Hz)
     init_control(n.oversample, 3, true);      // voices (discrete)
     init_control(n.seed, 0, true);            // seed (discrete)
     init_control(n.mix, 1, false);
@@ -16424,8 +16427,9 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
     double y, yr;
     if (node.typeId == kTypeSpectralBlur) {
       soemdsp_spectral_blur_set_fft_size(node.nativeHandle, (int)control_audio(g, node.stages, f));
-      soemdsp_spectral_blur_set_cloud(node.nativeHandle, control_audio(g, node.center, f), control_audio(g, node.lfoBaseSpeed, f),
+      soemdsp_spectral_blur_set_cloud(node.nativeHandle, control_audio(g, node.center, f), control_audio(g, node.level, f),
         control_audio(g, node.oversample, f), control_audio(g, node.seed, f));
+      soemdsp_spectral_blur_set_stereo(node.nativeHandle, control_audio(g, node.pan, f), control_audio(g, node.frequency, f));
       y = soemdsp_spectral_blur_sample(node.nativeHandle, left, right, control_audio(g, node.mix, f), g.sampleRate);
       yr = soemdsp_spectral_blur_right(node.nativeHandle);
     } else if (node.typeId == kTypeSpectralWarble) {

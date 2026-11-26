@@ -6,7 +6,7 @@
 | **Date** | 2026-11-25 |
 | **Status** | Built 2026-11-25 via `docs/SPECTRAL_DISPLAY_VISION.md` (one pass): shared analysis core, 1D Spectrum PoC, one frequency Curve, honest-dB Spectrogram / Circular Spectrogram, Spectrum Circle on the shared core with a Ceiling, and the §7 processor style faces. Scope Spectrum mode still uses its fixed −100..0 dB pooling (Phase 3 cleanup). Listening acceptance by Argi open. |
 | **Repo** | `C:\Users\argit\Documents\_PROGRAMMING\soemdsp-sandbox` |
-| **Related** | `docs/SPECTRUM_1D.md`, `docs/CIRCULAR_SPECTROGRAM.md`, `docs/SPECTRUM_CIRCLE.md`, `docs/SPECTRAL_BLUR.md` |
+| **Related** | `docs/SPECTRUM_1D.md`, `docs/CIRCULAR_SPECTROGRAM.md`, `docs/SPECTRUM_CIRCLE.md`, `docs/SPECTRAL_CLOUD.md` |
 
 Handoff for an outside coding AI. Upgrade STFT / FFT *displays* one module at a time. Get the proof-of-concept perfect, then a few more, then the rest. Do not start every display at once. Do not change audio DSP except a read-only band/bin tap when a processor face needs it (see §7). Leave other agents' dirty files alone.
 

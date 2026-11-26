@@ -135,7 +135,7 @@ them simultaneously. Proposed order follows musical value and implementation ris
 ### 3. Spectral Blur
 
 - [x] Native v1: Time Smear (seconds), Frequency Blur (Hz), Diffusion blend,
-  Mix and phase-evolving tails. See [SPECTRAL_BLUR.md](SPECTRAL_BLUR.md).
+  Mix and phase-evolving tails. See [SPECTRAL_CLOUD.md](SPECTRAL_CLOUD.md).
 - [ ] User listening acceptance and follow-up priorities.
 - [ ] Later: direction/bias, freeze interaction, diffusion and feedback.
 - Proof: neutral reconstruction; independent time/frequency controls; sensible

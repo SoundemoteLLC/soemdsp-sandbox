@@ -1147,9 +1147,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   spectralBlur: {
     browserEmoji: "🌊",
-    category: "space", label: "Spectral Blur",
-    description: "Native STFT chorus cloud: every partial is detuned by four slowly wandering voices (Fuzz in cents, Wander in Hz), a lush fuzzy supersaw from a single oscillator. Processing delay follows FFT Size.",
-    notes: ["spectral", "STFT", "blur", "cloud", "chorus", "supersaw", "detune", "native"],
+    category: "space", label: "Spectral Cloud",
+    description: "Native STFT cloud: every partial blooms into a soft, diffuse band Fuzz cents wide, centred on its pitch (no detune, no vibrato), with Grain, Voices and its own stereo (Stereo Spread, Mono Bass). Processing delay follows FFT Size.",
+    notes: ["spectral", "STFT", "cloud", "fuzz", "diffuse", "texture", "native"],
   },
   spectralWarble: {
     browserEmoji: "🌊",

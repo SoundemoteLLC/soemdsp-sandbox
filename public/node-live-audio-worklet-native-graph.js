@@ -639,7 +639,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   if (t === "spectralBlur") {
     if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "fuzz") return P.NATIVE_GRAPH_PARAM_CENTER;
-    if (k === "wander") return P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED;
+    if (k === "grain") return P.NATIVE_GRAPH_PARAM_LEVEL;
+    if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_PAN;
+    if (k === "monoBassHz") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
     if (k === "voices") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
@@ -6306,8 +6308,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "spectralBlur") {
       push("fftSize", P.NATIVE_GRAPH_PARAM_STAGES, disc("fftSize", 4096));
-      push("fuzz", P.NATIVE_GRAPH_PARAM_CENTER, cont("fuzz", 50));
-      push("wander", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("wander", 0.5));
+      push("fuzz", P.NATIVE_GRAPH_PARAM_CENTER, cont("fuzz", 100));
+      push("grain", P.NATIVE_GRAPH_PARAM_LEVEL, cont("grain", 1));
+      push("stereoSpread", P.NATIVE_GRAPH_PARAM_PAN, cont("stereoSpread", 1));
+      push("monoBassHz", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("monoBassHz", 0));
       push("voices", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("voices", 3));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));

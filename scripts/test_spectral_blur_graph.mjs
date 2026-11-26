@@ -6,13 +6,13 @@ import { performance } from "node:perf_hooks";
 const x = (await WebAssembly.instantiate(fs.readFileSync(new URL("../native_modules/combined/soemdsp_combined.wasm", import.meta.url)),
   { env: { emo_process_block() {} } })).instance.exports;
 const N = 128, rate = 48000;
-// slots: 22 fft size, 30 fuzz (cents), 46 wander (Hz), 48 seed, 13 warble depth (cents), 57 rate (Hz), 47 drunk, 10 mono bass (Hz, Warble), 52 time smear (s), 10 blur (cents),
+// slots: 22 fft size, 30 Cloud fuzz (cents), 51 Cloud grain (dB), 1 stereo spread, 10 mono bass (Hz; Cloud and Warble), 48 seed, 13 warble depth (cents), 57 rate (Hz), 47 drunk, 10 mono bass (Hz, Warble), 52 time smear (s), 10 blur (cents),
 // 42 diffusion, 41 amplitude smooth (ms), 31 frequency blur (Hz), 1 stereo spread, 55 phase smooth (ms), 32 voices, 40 mix
 const modules = [
   {
     name: "spectral_blur", type: 272,
-    specs: [[[22, 4096]], [[22, 2048], [30, 80], [46, 0.7], [32, 4], [48, 5], [40, 0.8]], [[22, 512], [30, 0], [32, 2], [48, 1]]],
-    sync: (ref, p) => x.soemdsp_spectral_blur_set_cloud(ref, p(30, 50), p(46, 0.5), p(32, 3), p(48, 0)),
+    specs: [[[22, 4096]], [[22, 2048], [30, 300], [51, 3], [1, 0.5], [10, 200], [32, 4], [48, 5], [40, 0.8]], [[22, 512], [30, 0], [51, 0], [32, 2], [48, 1]]],
+    sync: (ref, p) => { x.soemdsp_spectral_blur_set_cloud(ref, p(30, 100), p(51, 1), p(32, 3), p(48, 0)); x.soemdsp_spectral_blur_set_stereo(ref, p(1, 1), p(10, 0)); },
     sample: (ref, a, z, p) => x.soemdsp_spectral_blur_sample(ref, a, z, p(40, 1), rate),
   },
   {

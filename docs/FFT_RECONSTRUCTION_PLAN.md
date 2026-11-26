@@ -141,6 +141,6 @@ approved merely because this module is described as general-purpose.
 - Listening: no frame buzz mistaken for sustain, and no hidden processing that
   destroys the extreme contrast or diffuse texture the user wants to explore.
 
-Related: [STFT roadmap](STFT_ROADMAP.md), [Spectral Blur](SPECTRAL_BLUR.md),
+Related: [STFT roadmap](STFT_ROADMAP.md), [Spectral Cloud](SPECTRAL_CLOUD.md),
 [Spectral Freeze](SPECTRAL_FREEZE.md), and
 [FFT/convolution roadmap](FFT_CONVOLUTION_ROADMAP.md).

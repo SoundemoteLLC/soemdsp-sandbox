@@ -208,7 +208,7 @@ const nodeGraphNodeLabels = Object.freeze({
   phaser: "Phaser",
   vocoder: "Vocoder",
   stftContrast: "STFT Contrast",
-  spectralBlur: "Spectral Blur",
+  spectralBlur: "Spectral Cloud",
   spectralWarble: "Spectral Warble",
   spectralFreeze: "Spectral Freeze",
   spectralDelay: "Spectral Delay",
@@ -8929,8 +8929,9 @@ const nodeGraphModuleDefinitions = (
     visualInputs: [{ key: "spectralBlurIn", label: "In", port: "In" }],
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["fuzz", "Fuzz"], ["wander", "Wander"]], h: 40 },
+      { kind: "cells", params: [["fuzz", "Fuzz"], ["grain", "Grain"]], h: 40 },
       { kind: "cells", params: [["voices", "Voices", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
@@ -8978,38 +8979,60 @@ const nodeGraphModuleDefinitions = (
       {
         "key": "fuzz",
         "label": "Fuzz",
-        "defaultValue": "50",
+        "defaultValue": "100",
         "min": "0",
-        "mid": "50",
-        "max": "200",
+        "mid": "100",
+        "max": "1200",
         "unit": "¢",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "How far each voice detunes every partial, in cents at its peak, the same musical interval at every pitch. A smooth chorus, not noise. Zero is dry."
+        "tooltip": "How wide the cloud is around every partial, in cents either side: the same musical width at every pitch. Small values add air and keep the pitch tonal; large values turn each harmonic into a soft diffuse band. The centre pitch never moves. 0 is dry."
       },
       {
-        "key": "wander",
-        "label": "Wander",
-        "kind": "frequency",
-        "defaultValue": "0.5",
+        "key": "grain",
+        "label": "Grain",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "1",
+        "max": "6",
+        "unit": "dB",
+        "step": "any",
+        "tooltip": "Fast random level flicker on every frequency bin, in dB. It only ever dips bins, then the level is matched, so it never makes the sound louder. 0 is a smooth, hissy cloud; a few dB makes the fur rougher and more textured."
+      },
+      {
+        "key": "stereoSpread",
+        "label": "Stereo Spread",
+        "defaultValue": "1",
         "min": "0",
         "mid": "0.5",
-        "max": "20",
+        "max": "1",
+        "unit": "×",
+        "step": "any",
+        "tooltip": "How differently the cloud moves in each ear. 0 = the same in both (mono in stays mono); 1 = fully independent fur left and right, a wide stereo wash. Changes phase only, never level, and does not cross-feed. In mono, a high Spread can sound up to about 3 dB quieter."
+      },
+      {
+        "key": "monoBassHz",
+        "label": "Mono Bass",
+        "kind": "frequency",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "120",
+        "max": "1000",
         "unit": "Hz",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "How fast each partial's detune wanders, in Hz. A fraction of a Hz is a slow, lush chorus beat; a few Hz makes the detune itself shimmer; higher is fuzz and eventually metallic FM. Updates at the STFT hop rate."
+        "tooltip": "Keeps the cloud identical in both ears below this frequency, so the low end stays solid in mono. Smooth one-octave transition. 0 = off."
       },
       {
         "key": "voices",
         "label": "Voices",
         "defaultValue": "3",
-        "min": "2",
-        "mid": "3",
+        "min": "1",
+        "mid": "2",
         "max": "4",
         "step": "1",
         "linearSmoothing": false,
-        "tooltip": "Detune voices: independent wandering detune streams of the one analysis, averaged. More voices is a denser, smoother fur. Four is the most the engine holds."
+        "tooltip": "Independent cloud layers summed together. More voices make the low, still-tonal harmonics denser and smoother. Costs CPU per voice."
       },
       {
         "key": "seed",
@@ -9024,7 +9047,7 @@ const nodeGraphModuleDefinitions = (
         "nonlinearSlider": false,
         "linearSmoothing": false,
         "smoothingType": "none",
-        "tooltip": "Detune seed. Same Seed = same output; new modules get their own."
+        "tooltip": "Random pattern of the cloud. The same Seed, input and settings always give the same output."
       },
       {
         "key": "mix",

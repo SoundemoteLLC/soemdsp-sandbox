@@ -1,6 +1,6 @@
 # Spectral Smear
 
-Spectral Smear is the original Spectral Blur, now its own module. The Cloud engine became Spectral Blur ([SPECTRAL_BLUR.md](SPECTRAL_BLUR.md)) and the phase wobble became Spectral Warble ([SPECTRAL_WARBLE.md](SPECTRAL_WARBLE.md)); all three share one STFT engine (`native_modules/spectral_blur/spectral_stft_engine.h`).
+Spectral Smear is the original Spectral Blur, now its own module. The Cloud engine became Spectral Cloud ([SPECTRAL_CLOUD.md](SPECTRAL_CLOUD.md)) and the phase wobble became Spectral Warble ([SPECTRAL_WARBLE.md](SPECTRAL_WARBLE.md)); all three share one STFT engine (`native_modules/spectral_blur/spectral_stft_engine.h`).
 
 Native listening proof on `codex/convolution-resonator`, 2026-11-18.
 Module Browser: Space. Native type 282, `spectral_smear`.
