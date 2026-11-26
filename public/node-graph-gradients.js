@@ -358,9 +358,32 @@
     });
   }
 
+  /** The [nodeId, key] pairs the enabled gradients move (offset-provider targets: ghosts and displays show them). */
+  function targets() {
+    const out = [];
+    for (const gradient of currentGradients() || []) {
+      if (!usable(gradient)) continue;
+      for (const entry of gradient.params) if (plain(entry)) out.push([entry.nodeId, entry.key]);
+    }
+    return out;
+  }
+
   /** Tell the engine and the autosave that a gradient changed (a position or stop edit). Events only. */
   function notifyChanged(status) {
     if (typeof root.markNodeGraphRenderPending === "function") root.markNodeGraphRenderPending();
+    // The moved values show at once where a modulated value shows: ghost, slider number and every display reading the param.
+    if (typeof root.syncNodeGraphGhostSliders === "function") root.syncNodeGraphGhostSliders();
+    // Every gradient's nodes, enabled or not: a gradient just switched Off must repaint its nodes back to their base too.
+    const ids = new Set();
+    for (const gradient of currentGradients() || []) {
+      for (const entry of (plain(gradient) && Array.isArray(gradient.params) ? gradient.params : [])) if (plain(entry)) ids.add(String(entry.nodeId));
+    }
+    for (const id of ids) {
+      if (typeof root.nodeGraphGlGraphNoteValueChrome === "function") root.nodeGraphGlGraphNoteValueChrome(id);
+      const el = typeof root.nodeGraphNodeElement === "function" ? root.nodeGraphNodeElement(id) : null;
+      if (el && typeof root.syncNodeGraphParameterVisualsForNodeElement === "function") root.syncNodeGraphParameterVisualsForNodeElement(el);
+    }
+    if (ids.size && typeof root.scheduleNodeGraphModuleScopeDrawIfNeeded === "function") root.scheduleNodeGraphModuleScopeDrawIfNeeded();
     if (typeof root.scheduleNodeGraphLiveParameterSync === "function") root.scheduleNodeGraphLiveParameterSync();
     if (typeof root.scheduleNodeGraphWorkspaceAutosave === "function") root.scheduleNodeGraphWorkspaceAutosave(status || "Gradient changed");
   }
@@ -380,6 +403,6 @@
 
   if (typeof root.registerNodeGraphParamOffsetProvider === "function") {
     // Gradients first, the Pitch Mutator (order 20) after them: docs/MODULE_GRADIENTS_AND_PRESETS_PLAN.md section 4.4.
-    root.registerNodeGraphParamOffsetProvider({ id: "gradients", order: 10, applyParams, applyToBase });
+    root.registerNodeGraphParamOffsetProvider({ id: "gradients", order: 10, applyParams, applyToBase, targets });
   }
 })(typeof window !== "undefined" ? window : globalThis);

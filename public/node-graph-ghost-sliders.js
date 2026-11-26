@@ -144,9 +144,20 @@ function nodeGraphGhostSliderTargets(map) {
   return targets;
 }
 
+/** Params an offset provider (gradients, Pitch Mutator lane) moves right now: they ghost like a modulation. Rebuilt every sync. */
+let nodeGraphGhostSliderOffsetKeys = new Set();
+
+function nodeGraphGhostSliderRefreshOffsetKeys() {
+  nodeGraphGhostSliderOffsetKeys = typeof nodeGraphParamOffsetTargetKeys === "function"
+    ? nodeGraphParamOffsetTargetKeys()
+    : new Set();
+  return nodeGraphGhostSliderOffsetKeys;
+}
+
 /** Could nodeGraphParameterGhostSignal return non-null for this slider? */
 function nodeGraphGhostSliderIsCandidate(map, entry) {
-  if (nodeGraphGhostSliderTargets(map).has(nodeGraphGhostSliderMapKey(entry.node, entry.key))) {
+  const mapKey = nodeGraphGhostSliderMapKey(entry.node, entry.key);
+  if (nodeGraphGhostSliderTargets(map).has(mapKey) || nodeGraphGhostSliderOffsetKeys.has(mapKey)) {
     return true;
   }
   // Root face mx_* rows ghost via cables into the exposed child param.
@@ -485,9 +496,14 @@ function nodeGraphParameterGhostSignal(node, key, sliderHint = null) {
   const targetSlider = sliderHint && sliderHint.isConnected
     ? sliderHint
     : nodeGraphSliderForParameter(node, key);
-  const baseDomain = targetSlider
+  const knobDomain = targetSlider
     ? nodeGraphReadNodeNumber(node, key)
     : nodeGraphReadPatchParameterValue(patchNode, key);
+  // Offset providers (gradients, the Pitch Mutator lane) move the base before any modulation folds onto it, the same order the engine uses.
+  const baseDomain = typeof applyNodeGraphParamOffsetsToBase === "function"
+    ? applyNodeGraphParamOffsetsToBase(patchNode, key, nodeGraphFiniteNumber(knobDomain), metadata)
+    : knobDomain;
+  const offsetMoved = Number.isFinite(Number(baseDomain)) && Number(baseDomain) !== nodeGraphFiniteNumber(knobDomain);
   const sources = [];
   const sourcesLo = [];
   const sourcesHi = [];
@@ -520,7 +536,14 @@ function nodeGraphParameterGhostSignal(node, key, sliderHint = null) {
     addSource(sourcesHi, span.hi);
   }
   if (!sources.length) {
-    return null;
+    if (!offsetMoved) {
+      return null;
+    }
+    const effectiveDomain = Number(baseDomain);
+    const unit = typeof nodeGraphParamDomainToUnit === "function"
+      ? nodeGraphParamDomainToUnit(effectiveDomain, metadata)
+      : nodeGraphParameterValueToNormalizedSignal(effectiveDomain, metadata);
+    return { signal: nodeGraphNormalizedParameterSignalBounds(unit, metadata), effectiveDomain };
   }
   // The same fold for the newest samples and for the lowest / highest of the frame.
   const fold = (list) => {
@@ -605,7 +628,8 @@ function nodeGraphGhostSliderClearEntry(slider, readout) {
 
 function syncNodeGraphGhostSliders() {
   const mods = nodeGraphMvp?.patch?.modulations;
-  if (!mods?.length) {
+  const offsetKeys = nodeGraphGhostSliderRefreshOffsetKeys();
+  if (!mods?.length && !offsetKeys.size) {
     if (!nodeGraphGhostSliderHadAny) {
       return;
     }

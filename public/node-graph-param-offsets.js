@@ -2,9 +2,10 @@
 // without rewriting it) is computed. Gradients are first in the list, the Pitch Mutator second (see docs/MODULE_GRADIENTS_AND_PRESETS_PLAN.md
 // section 4.4). node.params (the base) is never written here: saving, undo and snapshots stay honest.
 //
-// A provider is { id, order, applyParams(node, params), applyToBase?(node, key, base, metadata) }:
+// A provider is { id, order, applyParams(node, params), applyToBase?(node, key, base, metadata), targets?() }:
 //   applyParams   moves values in `params` (a copy of node's params, keyed by param key) in place, for one node.
 //   applyToBase   returns the effective value of one key from its base value (the single-value path of the live engine).
+//   targets       the [nodeId, key] pairs it can move right now (the ghost sliders ask, so an offset shows like a modulation does).
 // Providers run in ascending `order` (ties keep registration order); registering the same id again replaces that provider.
 //
 // Consumers: node-graph-live-plan-runtime.js (live params), node-graph-live-parameter-runtime.js (one value), plugin-host.js (the diff it
@@ -32,6 +33,7 @@
       seq: 0,
       applyParams: provider.applyParams,
       applyToBase: typeof provider.applyToBase === "function" ? provider.applyToBase : null,
+      targets: typeof provider.targets === "function" ? provider.targets : null,
     };
     const existing = providers.find((p) => p.id === id);
     entry.seq = existing ? existing.seq : sequence++;
@@ -86,6 +88,18 @@
     return value;
   }
 
+  /** Every [nodeId, key] some provider can move right now, as "nodeId\u0000key" strings (the ghost sliders' map key). */
+  function nodeGraphParamOffsetTargetKeys() {
+    const out = new Set();
+    for (const provider of providers) {
+      if (!provider.targets) continue;
+      for (const pair of provider.targets() || []) {
+        if (Array.isArray(pair) && pair[0] != null && pair[1] != null) out.add(`${String(pair[0])}\u0000${String(pair[1])}`);
+      }
+    }
+    return out;
+  }
+
   /** A copy of a node's numeric params with every provider applied: what the plugin host diffs and sends to the native engine. */
   function nodeGraphEffectiveNodeParams(node) {
     const out = {};
@@ -104,4 +118,5 @@
   root.applyNodeGraphParamOffsets = applyNodeGraphParamOffsets;
   root.applyNodeGraphParamOffsetsToBase = applyNodeGraphParamOffsetsToBase;
   root.nodeGraphEffectiveNodeParams = nodeGraphEffectiveNodeParams;
+  root.nodeGraphParamOffsetTargetKeys = nodeGraphParamOffsetTargetKeys;
 })(typeof window !== "undefined" ? window : globalThis);
