@@ -1194,6 +1194,8 @@ function beginNodeGraphModuleStorePointerPlacement(event) {
   let groupTypes = null;
   if (!addButton) {
     const deptButton = event.target.closest("[data-store-department]");
+    // A new press starts fresh: a click swallowed after an earlier drag never carries over.
+    if (deptButton) delete deptButton.dataset.dragPlaced;
     const deptId = String(deptButton?.dataset.storeDepartment || "").trim();
     const defaultTypes = typeof nodeGraphModuleStoreDepartmentDefaultModules === "function"
       ? nodeGraphModuleStoreDepartmentDefaultModules(deptId)
@@ -1257,6 +1259,10 @@ function spawnNodeGraphModuleStorePlacementIfDragged(event) {
   nodeGraphMvp.modulePlacement.armed = false;
   nodeGraphMvp.modulePlacement.pointerId = pointerId;
   nodeGraphMvp.modulePlacement.sourceElement = sourceElement;
+  // The press became a drag from a category tile: the click the browser sends after the release (to the captured tile) is not a
+  // tap and must not open the category. Marked here, at the drag threshold, because the release can be finished by the workspace's
+  // own pointerup before the document-level release handler runs. The next press on the tile clears it.
+  if (placement.fromDepartment && sourceElement) sourceElement.dataset.dragPlaced = "1";
   return true;
 }
 
@@ -1780,13 +1786,6 @@ function setNodeGraphPatchDefaultsVisible(visible) {
     }
     if (typeof syncNodeGraphSettingsView === "function") {
       syncNodeGraphSettingsView();
-    }
-    // Gradients page (HP-04): bind once, render on open.
-    if (typeof bindNodeGraphGradientPage === "function") {
-      bindNodeGraphGradientPage();
-    }
-    if (typeof renderNodeGraphGradientPage === "function") {
-      renderNodeGraphGradientPage();
     }
     syncNodeGraphReadyPanelChrome();
   }

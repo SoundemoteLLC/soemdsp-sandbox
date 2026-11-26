@@ -264,7 +264,7 @@ function nodeInteractionMouseHint(element) {
   if (element.id === "nodeRenderButton") {
     return nodeGraphTooltipText("audio.render");
   }
-  if (element.id === "nodeDeleteButton" || element.id === "nodeSceneHistoryDeleteButton") {
+  if (element.id === "nodeSceneHistoryDeleteButton") {
     return nodeGraphTooltipText("actions.deleteSelection");
   }
   if (element.matches("button")) {

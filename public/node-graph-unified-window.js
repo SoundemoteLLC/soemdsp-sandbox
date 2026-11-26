@@ -62,6 +62,14 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     icon: "📄",
     showInNav: true,
   }),
+  gradients: Object.freeze({
+    key: "gradients",
+    elementId: "nodeGradientsPage",
+    workspaceKey: "gradients",
+    label: "Gradients",
+    icon: "🌈",
+    showInNav: true,
+  }),
   moduleActions: Object.freeze({
     key: "moduleActions",
     elementId: "nodeModuleActionsWindow",
@@ -98,7 +106,7 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     key: "patchDefaults",
     elementId: "nodePatchDefaultsPanel",
     workspaceKey: "patchDefaults",
-    label: "Gradients",
+    label: "Ready",
     icon: "🧹",
     showInNav: true,
   }),
@@ -143,6 +151,7 @@ const nodeGraphUnifiedWindowPageOrder = Object.freeze([
   "moduleBrowser",
   "moduleFace",
   "presets",
+  "gradients",
   "moduleActions",
   "traceDisplaySettings",
   "metaparameters",
@@ -652,6 +661,11 @@ function closeNodeGraphUnifiedWindowPage(page = "", options = {}) {
           setNodeGraphPresetsPageOpen(false);
         }
         break;
+      case "gradients":
+        if (typeof setNodeGraphGradientsPageOpen === "function") {
+          setNodeGraphGradientsPageOpen(false);
+        }
+        break;
       case "moduleFace":
         if (typeof setNodeGraphModuleFacePageOpen === "function") {
           setNodeGraphModuleFacePageOpen(false);
@@ -967,6 +981,11 @@ function openNodeGraphUnifiedWindowPage(page = "", options = {}) {
       case "presets":
         if (typeof setNodeGraphPresetsPageOpen === "function") {
           setNodeGraphPresetsPageOpen(true);
+        }
+        break;
+      case "gradients":
+        if (typeof setNodeGraphGradientsPageOpen === "function") {
+          setNodeGraphGradientsPageOpen(true);
         }
         break;
       case "moduleFace":
@@ -1631,6 +1650,17 @@ function syncNodeGraphUnifiedWindowNavBars() {
       page: "hotkeys",
       prepare(element) {
         const existing = element.querySelector("#nodeHotkeysUnifiedNavHost, :scope > .node-unified-window-nav-host");
+        if (existing) {
+          return existing;
+        }
+        return ensureNodeGraphUnifiedWindowNavHost(element);
+      },
+    },
+    {
+      elementId: "nodeGradientsPage",
+      page: "gradients",
+      prepare(element) {
+        const existing = element.querySelector("#nodeGradientsUnifiedNavHost, :scope > .node-unified-window-nav-host");
         if (existing) {
           return existing;
         }

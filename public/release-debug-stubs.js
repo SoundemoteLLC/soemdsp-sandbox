@@ -10,8 +10,6 @@
 
 function renderNodeGraphExecutionPlanDebug() {}
 function renderNodeGraphExecutionSummarySelection() {}
-function toggleDebugSections() {}
-
 function installNodeGraphDebugApi() {}
 function stopNodeGraphMockInputDebug() {}
 function downloadNodeGraphLivePlanJson() {

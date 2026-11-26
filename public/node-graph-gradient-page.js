@@ -1,5 +1,6 @@
 // Gradients page (Stage A3, docs/MODULE_GRADIENTS_AND_PRESETS_PLAN.md sections 4.2, 4.8, 4.9).
-// The 🧹 page, the only gradient UI in the app: a DOM menu panel (allowed for Command Center pages), one card per gradient.
+// The 🌈 page (#nodeGradientsPage; its own Command Center page since HP-22), the only gradient UI in the app:
+// a DOM menu panel (allowed for Command Center pages), one card per gradient.
 //
 // Model and maths: node-graph-gradients.js (NodeGraphGradients). This file only edits patch.gradients:
 //   - while dragging (playhead or a stop) it changes the live gradient in place and asks for a param sync, so sliders and audio glide;
@@ -210,7 +211,7 @@ function nodeGraphGradientPageCard(gradient) {
 function renderNodeGraphGradientPage() {
   const host = document.getElementById("nodeGradientsBody");
   if (!host) return;
-  const panel = document.getElementById("nodePatchDefaultsPanel");
+  const panel = document.getElementById("nodeGradientsPage");
   if (panel && panel.hidden) return;
   const fragment = document.createDocumentFragment();
   const top = document.createElement("div");
@@ -443,5 +444,61 @@ function bindNodeGraphGradientPage() {
     addNodeGraphPatchCommitListener(() => {
       if (!nodeGraphGradientPageState.drag) renderNodeGraphGradientPage();
     });
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ the 🌈 page window
+
+function applyNodeGraphGradientsPageSize(size = {}, panelArg = null) {
+  const panel = panelArg || document.getElementById("nodeGradientsPage");
+  if (!panel) return { width: 0, height: 0 };
+  if (typeof applyNodeGraphUnifiedWindowShellSize === "function") return applyNodeGraphUnifiedWindowShellSize(panel, size);
+  const width = Math.round(nodeGraphFiniteNumber(size.width));
+  const height = Math.round(nodeGraphFiniteNumber(size.height));
+  if (width >= 24) panel.style.width = `${width}px`;
+  if (height >= 120) panel.style.height = `${height}px`;
+  return { width, height };
+}
+
+function setNodeGraphGradientsPageOpen(open) {
+  const panel = document.getElementById("nodeGradientsPage");
+  if (!panel) return;
+  const switching = Boolean(nodeGraphMvp?._unifiedWindowSwitching);
+  if (open && !switching && typeof openNodeGraphUnifiedWindowPage === "function") {
+    openNodeGraphUnifiedWindowPage("gradients");
+    return;
+  }
+  panel.hidden = !open;
+  if (!open) return;
+  panel.classList.add("node-unified-window");
+  if (typeof markNodeGraphFloatingWindowSurface === "function") markNodeGraphFloatingWindowSurface(panel);
+  if (typeof noteNodeGraphUnifiedWindowOpened === "function") noteNodeGraphUnifiedWindowOpened("gradients", panel);
+  bindNodeGraphGradientPage();
+  renderNodeGraphGradientPage();
+}
+
+function bindNodeGraphGradientsPageWindow() {
+  if (document.documentElement.dataset.gradientsPageBound === "true") return;
+  document.documentElement.dataset.gradientsPageBound = "true";
+  document.getElementById("nodeGradientsPageClose")?.addEventListener("click", () => {
+    if (typeof closeNodeGraphUnifiedWindowPage === "function") {
+      closeNodeGraphUnifiedWindowPage("gradients");
+      return;
+    }
+    setNodeGraphGradientsPageOpen(false);
+  });
+  document.querySelector("#nodeGradientsPage .scene-context-heading")?.addEventListener("pointerdown", (event) => {
+    if (typeof beginNodeGraphRegisteredFloatingWindowDrag === "function") beginNodeGraphRegisteredFloatingWindowDrag(event, "gradients");
+  });
+  document.getElementById("nodeGradientsPageResizeHandle")?.addEventListener("pointerdown", (event) => {
+    if (typeof beginNodeGraphRegisteredFloatingWindowResize === "function") beginNodeGraphRegisteredFloatingWindowResize(event, "gradients");
+  });
+}
+
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindNodeGraphGradientsPageWindow, { once: true });
+  } else {
+    bindNodeGraphGradientsPageWindow();
   }
 }

@@ -27,7 +27,7 @@ static const char kMetadataJson[] =
     "\"parameters\":["
       "{\"key\":\"phase\",\"label\":\"Phase\",\"kind\":\"phase\",\"defaultValue\":0,\"min\":0,\"mid\":0.5,\"max\":1,\"step\":0.01,\"unit\":\"cycle\"},"
       "{\"key\":\"freq\",\"label\":\"Freq\",\"kind\":\"frequency\",\"defaultValue\":100,\"min\":0,\"mid\":220,\"max\":20000,\"step\":\"any\",\"unit\":\"Hz\"},"
-      "{\"key\":\"amp\",\"label\":\"Amp\",\"defaultValue\":1,\"min\":0,\"mid\":0.5,\"max\":1,\"step\":\"any\"},"
+      "{\"key\":\"amp\",\"label\":\"Amp\",\"defaultValue\":1,\"min\":-1,\"mid\":0,\"max\":1,\"step\":\"any\"},"
       "{\"key\":\"method\",\"label\":\"Method\",\"defaultValue\":1,\"min\":0,\"mid\":1,\"max\":3,\"step\":1,"
         "\"choices\":[\"Polynomial\",\"Wavetable\",\"std::sin\",\"Taylor\"]}"
     "]"
@@ -113,7 +113,8 @@ extern "C" void soemdsp_sine_wavetable_sample(
 
   const double rate = sampleRate < 1.0 ? 1.0 : sampleRate;
   const double safeFrequency = safe(frequency);
-  const double level = maxd(0.0, safe(amplitude)) * nyquist_fade_amplitude(safeFrequency, rate);
+  // Signed level: negative amplitude inverts the output at that size. The param definition is the only limit (HP-22).
+  const double level = safe(amplitude) * nyquist_fade_amplitude(safeFrequency, rate);
   const double samplePhase = s.phase + safe(phaseOffsetRadians);
   s.samplePhase01 = wrap01(samplePhase / kTwoPi);
 

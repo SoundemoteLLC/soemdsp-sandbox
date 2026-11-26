@@ -1193,21 +1193,16 @@ function nodeGraphFloatingWindowPosition(element, x, y, options = {}) {
  *
  * Default is ALWAYS off — debug and release builds alike. Session-only via
  * Visibility → Debug; never restored from UI settings / Clear Startup / Save.
- * Hiding also re-collapses the evidence panels so a prior "Show Evidence"
- * cannot leave developer chrome visible after Hide Debug or a cold start.
+ * G is the one debug switch: the CPU / RAM / GPU guide plus the collapsed
+ * Engine status row. Hiding debug also collapses Engine status again.
  */
 function renderNodeGraphKeyboardDebugToggle() {
   const button = document.getElementById("nodeKeyboardDebugToggleButton");
   const visible = nodeGraphMvp?.keyboardDebugInfoVisible === true;
   document.body.classList.toggle("keyboard-debug-hidden", !visible);
-  // When debug is off, force evidence collapsed too (release-like UX).
   if (!visible) {
-    document.body.classList.add("debug-collapsed");
-    const evidence = document.getElementById("toggleDebugButton");
-    if (evidence) {
-      evidence.textContent = "Show Evidence";
-      evidence.setAttribute("aria-pressed", "false");
-    }
+    const engine = document.getElementById("nodeDebugEngineDetails");
+    if (engine) engine.open = false;
   }
   setNodeGraphVisibilityToggleLabel(button, visible, "Debug", {
     onMark: nodeGraphVisibilityOnMarks.debug,
@@ -1233,15 +1228,9 @@ function hideNodeGraphDebugChrome() {
   }
   document.body.classList.add("keyboard-debug-hidden");
   document.body.classList.remove("constraint-guide-visible");
-  document.body.classList.add("debug-collapsed");
   if (typeof renderNodeGraphKeyboardDebugToggle === "function") {
     renderNodeGraphKeyboardDebugToggle();
   } else {
-    const evidence = document.getElementById("toggleDebugButton");
-    if (evidence) {
-      evidence.textContent = "Show Evidence";
-      evidence.setAttribute("aria-pressed", "false");
-    }
     const button = document.getElementById("nodeKeyboardDebugToggleButton");
     setNodeGraphVisibilityToggleLabel(button, false, "Debug", {
       onMark: nodeGraphVisibilityOnMarks.debug,
@@ -4526,6 +4515,10 @@ function toggleNodeGraphConstraintGuideVisibility() {
 
 function toggleNodeGraphKeyboardDebugVisibility() {
   nodeGraphMvp.keyboardDebugInfoVisible = !(nodeGraphMvp.keyboardDebugInfoVisible === true);
+  // G is the one switch for the CPU / RAM / GPU guide: it drops the separate Shift+D guide override, so a saved
+  // override can never pin the guide on while G says debug is off (HP-22).
+  nodeGraphMvp.constraintGuideVisible = false;
+  renderNodeGraphConstraintGuide();
   renderNodeGraphKeyboardDebugToggle();
   persistNodeGraphDebugChromePreference();
   setNodeInteractionHelp(

@@ -232,7 +232,7 @@ function nodeGraphHistoryActionButtons(kind) {
       ? ["nodeRedoButton", "nodeSceneRedoButton"]
       : kind === "last"
         ? ["nodeHistoryLastAction"]
-        : ["nodeSceneHistoryDeleteButton", "nodeDeleteButton", "nodeSceneDeleteModule"];
+        : ["nodeSceneHistoryDeleteButton", "nodeSceneDeleteModule"];
   return ids.map((id) => document.getElementById(id)).filter(Boolean);
 }
 

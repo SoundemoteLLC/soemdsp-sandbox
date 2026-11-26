@@ -1,4 +1,4 @@
-// HP-04 / Stage A3: the Gradients page (the 🧹 panel). Real page on its own server.py port (never 8765 / 8766 / 8080) unless
+// HP-04 / Stage A3, HP-22: the Gradients page (its own 🌈 page; the 🧹 page keeps only the Ready controls). Real page on its own server.py port (never 8765 / 8766 / 8080) unless
 // SANDBOX_URL is set; runs on index.html and perform.html.
 // Create from a snapshot, move sliders on two modules, snapshot: both register. Dragging the playhead glides the effective value while
 // the saved base never changes, and the release is exactly one undo step. Rename, Delete stop, Set start, On / Off and tap-to-add each
@@ -43,8 +43,19 @@ try {
       const a = showNodeGraphModule("polyBlep", { x: 100, y: 100 }, opt);
       const b = showNodeGraphModule("spectrum1d", { x: 600, y: 100 }, opt);
       delete nodeGraphMvp.patch.gradients;
+      // HP-22: the 🧹 page holds only the Ready controls and patch info; the gradients live on the 🌈 page.
       openNodeGraphUnifiedWindowPage("patchDefaults");
-      const panel = document.getElementById("nodePatchDefaultsPanel");
+      await wait(30);
+      const broom = document.getElementById("nodePatchDefaultsPanel");
+      out.broomHasGradients = Boolean(broom.querySelector("#nodeGradientsBody"));
+      out.broomLabels = [...broom.querySelectorAll(".node-patch-defaults-actions button")].map((x) => x.getAttribute("aria-label") || x.textContent.trim());
+      out.broomTitles = broom.querySelectorAll("[title]").length;
+      out.navIcons = (typeof nodeGraphUnifiedWindowPages === "object")
+        ? [nodeGraphUnifiedWindowPages.gradients?.icon, nodeGraphUnifiedWindowPages.patchDefaults?.icon] : [];
+      openNodeGraphUnifiedWindowPage("gradients");
+      const panel = document.getElementById("nodeGradientsPage");
+      out.broomClosedOnSwitch = broom.hidden;
+      out.gradientsOpen = !panel.hidden;
       panel.style.width = "370px";
       panel.style.left = "10px";
       await wait(50);
@@ -134,6 +145,9 @@ try {
     });
     const where = file || "index.html";
     const ok = (cond, msg) => { assert.ok(cond, `${where}: ${msg} ${JSON.stringify(r)}`); };
+    ok(!r.broomHasGradients && r.broomLabels.length >= 4 && r.broomTitles === 0, "the 🧹 page keeps Lock / Write Defaults / Hide Unused / Hide Wires, no gradients, no tooltips");
+    ok(r.navIcons[0] === "🌈" && r.navIcons[1] === "🧹", "🌈 Gradients and 🧹 Ready are separate pages");
+    ok(r.gradientsOpen, "the 🌈 page opens");
     ok(r.created.length === 1 && r.created[0] === "Gradient 1" && r.createSteps === 1, "Snapshot starts Gradient 1 in one step");
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(JSON.stringify(r.registered) === JSON.stringify(["a.frequency", "b.floorDb"]) && r.snapshotSteps === 1, "both moved params register");

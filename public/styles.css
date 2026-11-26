@@ -4471,7 +4471,6 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 }
 
 #nodeSceneHistoryDeleteButton.is-history-glow-delete,
-#nodeDeleteButton.is-history-glow-delete,
 #nodeSceneDeleteModule.is-history-glow-delete {
   color: #fff !important;
   background: #c62828 !important;
@@ -5561,10 +5560,42 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   overflow: auto;
 }
 
-/* Gradients page (HP-04): the top of the 🧹 panel. Phone-first: 44 px rows, no hover-only affordances. */
+/* Gradients page (HP-04; its own 🌈 page since HP-22). Phone-first: 44 px rows, no hover-only affordances. */
+.node-gradients-page {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: var(--node-unified-window-min-width, 24px);
+  min-height: var(--node-unified-window-min-height, 120px);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(127, 199, 217, 0.42);
+  border-radius: var(--node-module-frame-radius);
+  corner-shape: var(--node-module-corner-shape, squircle);
+  background: rgba(9, 12, 15, 0.96);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+}
+
+.node-gradients-page[hidden] {
+  display: none !important;
+}
+
+.node-gradients-page > .scene-context-heading,
+.node-gradients-page > .node-unified-window-nav-host {
+  flex: 0 0 auto;
+}
+
+.node-gradients-page-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 0 28px;
+}
+
 .node-gradients-section {
   padding: 6px;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .node-gradients-body {
@@ -5725,14 +5756,6 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   margin: 4px 2px;
   color: rgba(200, 205, 212, 0.72);
   font-size: 12px;
-}
-
-.node-patch-defaults-ready-title {
-  padding: 8px 8px 0;
-  color: rgba(200, 205, 212, 0.72);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 .node-patch-defaults-actions {
@@ -24547,6 +24570,26 @@ button[data-transport-action="stop"]:disabled {
   border-color: rgba(127, 199, 217, 0.58);
 }
 
+/* Engine status (G debug only): collapsed by default, one row of live pills + the render line. */
+.node-debug-engine {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.node-debug-engine > summary {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  list-style-position: inside;
+  cursor: var(--node-adjust-cursor, default);
+}
+
+.node-debug-engine[open] > summary {
+  color: rgba(243, 241, 236, 0.86);
+}
+
 .node-output-summary {
   flex: 1 1 100%;
   min-width: min(100%, 24rem);
@@ -24721,16 +24764,6 @@ button[data-transport-action="stop"]:disabled {
   border-radius: 999px;
   color: var(--accent-2);
   font-size: 0.72rem;
-}
-
-/* "Hide Debug" (nodeKeyboardDebugToggleButton, body.keyboard-debug-hidden)
-   is the master switch -- when it's off, the "Show Evidence" button and
-   everything it can reveal should be gone too, not just left in whatever
-   debug-collapsed state they happened to be in. Without this, someone
-   could turn off Hide Debug and still have previously-revealed evidence
-   panels sitting there, or still see a button offering to reveal more. */
-body.keyboard-debug-hidden #toggleDebugButton {
-  display: none;
 }
 
 /* Check All Modules writes native-module self-test results into the debug log.

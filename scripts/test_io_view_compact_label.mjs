@@ -9,7 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(root, "public/node-graph-io-compact-label.js"), "utf8"), ctx, { filename: "node-graph-io-compact-label.js" });
-const label = (ports) => ctx.nodeGraphIoCompactLabel(ports.map(([l, c]) => ({ label: l, connected: !!c })));
+const label = (ports) => ctx.nodeGraphIoCompactLabel(ports.map(([l, c]) => (typeof c === "number" ? { label: l, connections: c } : { label: l, connected: !!c })));
 
 for (const side of ["input side", "output side"]) {
   // rule 1: one jack always shows its label, connected or not
@@ -19,13 +19,14 @@ for (const side of ["input side", "output side"]) {
   assert.equal(label([["a", false], ["⎍", false], ["c", false]]), "", `${side}: several jacks, none connected is blank`);
   // rule 3: several jacks, one connected: that jack's label (not the first jack's)
   assert.equal(label([["a", false], ["⎍", true], ["c", false]]), "⎍", `${side}: one connected shows it`);
-  // rule 4: several connected: first connected (definition order), then the count of the OTHERS
-  assert.equal(label([["a", false], ["⎍", true], ["c", true]]), "⎍, 1", `${side}: two connected is "label, 1"`);
-  assert.equal(label([["⎍", true], ["b", true], ["c", true], ["d", false]]), "⎍, 2", `${side}: three connected is "label, 2"`);
+  // rule 4 (HP-22): more than one connection shows only the count
+  assert.equal(label([["a", false], ["⎍", true], ["c", true]]), "2", `${side}: two connected jacks is "2"`);
+  assert.equal(label([["⎍", true], ["b", true], ["c", true], ["d", false]]), "3", `${side}: three connected is "3"`);
+  assert.equal(label([["L", 2]]), "2", `${side}: one jack with two cables is "2"`);
+  assert.equal(label([["L", 1]]), "L", `${side}: one jack with one cable keeps its label`);
+  assert.equal(label([["L", 0], ["R", 3]]), "3", `${side}: three cables on one of two jacks is "3"`);
 }
 
-// definition order, not the order the caller's DOM or y happens to give: only the array order counts
-assert.equal(label([["z-first-in-definition", true], ["a", true]]), "z-first-in-definition, 1", "the first connected in the given (definition) order leads");
 
 // the two sides of one module are computed independently
 const inputs = [["f", true], ["g", false]];
@@ -36,6 +37,6 @@ assert.equal(label(outputs), "out", "outputs: a single jack still shows its labe
 // degenerate input
 assert.equal(label([]), "", "no jacks, no label");
 assert.equal(ctx.nodeGraphIoCompactLabel(null), "", "null is blank");
-assert.equal(label([["  spaced   name ", true], ["b", true]]), "spaced name, 1", "labels are whitespace-normalized");
+assert.equal(label([["  spaced   name ", true], ["b", false]]), "spaced name", "labels are whitespace-normalized");
 
 console.log("test_io_view_compact_label: ok");

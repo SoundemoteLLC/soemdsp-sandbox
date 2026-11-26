@@ -5229,10 +5229,14 @@ function createNodeGraphModuleDepartmentButton(departmentId, entries) {
   button.className = "scene-context-store-department-card";
   button.type = "button";
   button.dataset.storeDepartment = departmentId;
-  button.title = `${titleText}: module department`;
   button.setAttribute("aria-label", `Open ${titleText} module department.`);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
+    // The click after a drag that placed this category's default module is not a tap.
+    if (button.dataset.dragPlaced) {
+      delete button.dataset.dragPlaced;
+      return;
+    }
     setNodeGraphModuleStoreDepartment(departmentId);
   });
 

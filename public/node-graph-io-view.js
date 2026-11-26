@@ -173,10 +173,11 @@
     const signature = `${state.view}|${patch.nodes.length}|` + connections.map((c) => `${c.sourceNode}.${c.sourcePort}>${c.destinationNode}.${c.destinationPort}`).join(",");
     if (signature === compactSignature) return;
     compactSignature = signature;
-    const wired = new Set();
+    const wired = new Map();
+    const bump = (key) => wired.set(key, (wired.get(key) || 0) + 1);
     for (const c of connections) {
-      wired.add(`o|${c.sourceNode}|${c.sourcePort}`);
-      wired.add(`i|${c.destinationNode}|${c.destinationPort}`);
+      bump(`o|${c.sourceNode}|${c.sourcePort}`);
+      bump(`i|${c.destinationNode}|${c.destinationPort}`);
     }
     let changed = false;
     for (const node of patch.nodes) {
@@ -189,7 +190,7 @@
         const rows = [...column.querySelectorAll(":scope > .node-io-row")];
         const ports = rows.map((row) => ({
           label: row.querySelector(":scope > .node-io-label")?.textContent || "",
-          connected: wired.has(`${io === "output" ? "o" : "i"}|${node.id}|${row.dataset.port}`),
+          connections: wired.get(`${io === "output" ? "o" : "i"}|${node.id}|${row.dataset.port}`) || 0,
         }));
         const text = state.view === "A" ? nodeGraphIoCompactLabel(ports) : "";
         const next = text ? COMPACT_MARK + text : "";
