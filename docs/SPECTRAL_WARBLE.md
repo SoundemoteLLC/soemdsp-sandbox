@@ -37,7 +37,10 @@ Swarm (degrees), Level and Drift are gone. There is no level modulation of any k
 ## Known limits (measured, not hidden)
 
 - A partial that sweeps hundreds of cents several times per window is no longer a steady grain, so the overlap-add loses level:
-  about 1 dB at Depth 25 / Rate 4 on an 880 Hz saw, up to about 6 dB at Depth 200 / Rate 20 (reported by test T9).
+  about 1 dB at Depth 25 / Rate 4 on an 880 Hz saw, up to about 6 dB at Depth 200 / Rate 20 (reported by test T9). This is NOT the cause of the old
+  Smear Hop Smooth loss (non-overlapping bursts of spread energy): doubling Warble's overlap to 16 left the 6 dB unchanged, and the loss grows with the
+  partial's frequency (an 880 Hz saw loses more than a 110 Hz one), which points at the grain model itself (a rigid, constant-frequency lobe per frame
+  cannot follow a frequency that moves by many bins inside one window), not at the overlap-add. It stays a documented limit.
 - Detuning a saw's harmonics randomises their phase alignment: at the same RMS the peak rises by up to about 5 dB. That is the
   sound, not a gain.
 - At FFT 8192 and above a 4 Hz wobble is faster than the window, so the output shows an envelope ripple; use 4096 or less
