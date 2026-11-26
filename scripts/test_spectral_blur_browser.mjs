@@ -42,11 +42,14 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
 };`;
       await route.fulfill({ response, body: await response.text() + probe });
     });
+    const pageErrors = [];
+    page.on('pageerror', e => pageErrors.push(e.message));
     await page.goto((process.env.SANDBOX_URL || 'http://127.0.0.1:9447/') + '?mode=circuitbuilder',
       { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForFunction(() => typeof showNodeGraphModule === 'function'
       && document.body.dataset.nodeBootFinished === 'interface-ready', null, { timeout: 150000, polling: 500 });
     await page.waitForTimeout(500);
+    assert.deepEqual(pageErrors, [], 'the page booted without script errors: ' + pageErrors.join(' | '));
     const id = await page.evaluate((type) => {
       const options = { record: false, autosaveWorkingPatch: false, skipLivePlan: true };
       const source = showNodeGraphModule('polyBlep', { x: 20, y: 40 }, options);
