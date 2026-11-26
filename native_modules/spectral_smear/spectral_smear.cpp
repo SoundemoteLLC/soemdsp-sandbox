@@ -26,7 +26,7 @@ extern "C" int soemdsp_spectral_smear_create() {
     fft.ensure(); fft512.ensure(); fft1024.ensure(); fft2048.ensure(); fft4096.ensure(); fft8192.ensure();
     s->initialize();
     // Smear: no Cloud, no Warble. Phase Smooth, Stereo Spread, Frequency Blur and Pitch Blur are parameters.
-    s->desiredCloud = false; for (auto& core : s->cores) { core.cloud = false; core.swarm = 0; core.swarmLevel = 0; core.swarmDrift = 0; core.phaseSmoothMs = 10; core.stereoSpread = 1; }
+    s->setEngine(kSmear);
     s->reset();
     pool[i] = s; return i + 1;
   }

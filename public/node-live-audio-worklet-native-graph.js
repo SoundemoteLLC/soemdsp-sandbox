@@ -646,8 +646,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   }
   if (t === "spectralWarble") {
     if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
-    if (k === "swarm") return P.NATIVE_GRAPH_PARAM_SHAPE;
+    if (k === "depth") return P.NATIVE_GRAPH_PARAM_SHAPE;
     if (k === "rate") return P.NATIVE_GRAPH_PARAM_LFO_RATE;
+    if (k === "drunk") return P.NATIVE_GRAPH_PARAM_LFO_VARIATION;
+    if (k === "voices") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
+    if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_PAN;
+    if (k === "monoBassHz") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
@@ -6311,8 +6315,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "spectralWarble") {
       push("fftSize", P.NATIVE_GRAPH_PARAM_STAGES, disc("fftSize", 4096));
-      push("swarm", P.NATIVE_GRAPH_PARAM_SHAPE, cont("swarm", 0));
-      push("rate", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("rate", 5));
+      push("depth", P.NATIVE_GRAPH_PARAM_SHAPE, cont("depth", 25));
+      push("rate", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("rate", 4));
+      push("drunk", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("drunk", 0.5));
+      push("voices", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("voices", 3));
+      push("stereoSpread", P.NATIVE_GRAPH_PARAM_PAN, cont("stereoSpread", 1));
+      push("monoBassHz", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("monoBassHz", 120));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;

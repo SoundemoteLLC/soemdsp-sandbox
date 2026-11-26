@@ -9,10 +9,12 @@
 namespace {
 constexpr int size = 16384, bins = size / 2 + 1, capacity = 64;
 constexpr double twoPi = 6.283185307179586;
-// Swarm is in real units: Swarm = phase wobble in degrees, Level = level wobble in dB, Drift = pitch wander in Hz. No other scaling.
-constexpr double kDegrees = 0.017453292519943295;
 // Cloud: up to 4 voices; each source bin may be sprayed at most this many bins away so a high bin cannot fan across the spectrum (a cost / fan-out guard).
-constexpr int kMaxVoices = 4, kCloudCapBins = 32, kCloudKnot = 8, kCloudLobe = 3;
+constexpr int kMaxVoices = 4, kCloudKnot = 8, kCloudLobe = 3;
+// Warble: a motion knot every 2 bins (every harmonic gets its own motion even at FFT 2048) and a +-2 bin peak search.
+constexpr int kWarbleKnot = 2, kWarbleLobe = 2, kWarbleKnots = bins / kWarbleKnot + 3;
+// Which engine a module uses. Smear: 4x overlap time/frequency smear. Warble: per-partial pitch wobble. Cloud: the cloud (8x overlap).
+enum Engine { kSmear = 0, kWarble = 1, kCloud = 2 };
 // dsp_sin_cos wants an angle near one turn; Cloud's per-hop offsets can be many turns, so they are wrapped first.
 inline double wrapTurns(double a) { return a - twoPi * (double)(long long)(a / twoPi + (a < 0 ? -0.5 : 0.5)); }
 soemdsp::fft::Radix2<size> fft{};
@@ -37,22 +39,27 @@ struct Core {
   double prevR[2][bins], prevI[2][bins], velocityR[2][bins], velocityI[2][bins];
   double prefix[bins + 1], blurred[bins], offset[bins], smoothOffset[bins], magnitudeState[2][bins];
   double sideOffset[bins], smoothSideOffset[bins];
-  // Swarm: separate, mean-reverting per-bin modulators (hop rate, shared by both channels). They never touch the Diffusion walk above.
-  double swarmPhaseState[bins], swarmAmpState[bins], swarmDriftState[bins], swarmDriftPhase[bins];
-  double swarmSin[bins], swarmCos[bins], swarmGain[bins];
-  unsigned int rng, sideRng, swarmRng, swarmSeed;
-  double swarm, swarmLevel, swarmRate, swarmDrift; // degrees, dB, Hz, Hz
-  // Cloud: fuzz in cents (log-frequency spray), white per-hop scatter, voices from one analysis. Runs at an 8x overlap (hop = N/8).
-  bool cloud;
+  unsigned int rng, sideRng, seed;
+  int engine; // Engine
+  // Moved partials (Warble and Cloud): per channel, per voice, per bin the target bin, fraction, rotation and gain of a partial's lobe, the
+  // accumulated extra phase, and the local spectral peak each bin belongs to. Cloud uses channel 0 for both channels (linked).
+  unsigned short mvTarget[2][kMaxVoices][bins];
+  float mvGain[2][kMaxVoices][bins], mvFrac[2][kMaxVoices][bins], mvCos[2][kMaxVoices][bins], mvSin[2][kMaxVoices][bins];
+  float mvAcc[2][kMaxVoices][bins], mvDelta[2][kMaxVoices][bins]; // mvDelta: last hop's shift in bins, for the trapezoid rule
+  unsigned short mvPeak[2][bins];
+  double specRe[bins], specIm[bins], accRe[bins], accIm[bins];
+  // Cloud: fuzz in cents, voices from one analysis (hop = N/8).
   double cloudFuzz;
   int cloudVoices;
   unsigned int cloudRng[kMaxVoices];
-  unsigned short cloudTarget[kMaxVoices][bins];
-  float cloudGain[kMaxVoices][bins], cloudFrac[kMaxVoices][bins], cloudCos[kMaxVoices][bins], cloudSin[kMaxVoices][bins];
-  double specRe[bins], specIm[bins], accRe[bins], accIm[bins];
-  unsigned short cloudPeak[bins]; // the local spectral peak each bin belongs to
-  float cloudAcc[kMaxVoices][bins]; // accumulated extra phase of each source bin (radians)
-  double cloudDetune[kMaxVoices][bins / kCloudKnot + 3], cloudLevelState[kMaxVoices][bins / kCloudKnot + 3];
+  double cloudDetune[kMaxVoices][bins / kCloudKnot + 3];
+  // Warble: per voice and knot, three unit-variance motion generators (0 = mid, 1 = left side, 2 = right side): a sine phase and two cascaded
+  // one-poles of seeded noise, plus a per-knot rate factor and the latest output.
+  double warbleDepth = 25, warbleRate = 4, warbleDrunk = 0.5, monoBassHz = 0;
+  int warbleVoices = 3;
+  unsigned int warbleRng[kMaxVoices];
+  float wPhase[3][kMaxVoices][kWarbleKnots], wG1[3][kMaxVoices][kWarbleKnots], wG2[3][kMaxVoices][kWarbleKnots], wX[3][kMaxVoices][kWarbleKnots];
+  float wRate[3][kMaxVoices][kWarbleKnots]; // r_n in [-1, 1] per generator, drawn once from the seed (so the two ears do not share a rate)
   int position, hop, windowSize;
   double cloudWander = 0.5; // Hz
   double blurCents = 0; // Pitch Blur: extra width in cents, on top of Frequency Blur (Hz)
@@ -69,8 +76,7 @@ struct Core {
     for (int k = 0; k < bins; ++k) {
       offset[k] = smoothOffset[k] = 0;
       sideOffset[k] = smoothSideOffset[k] = 0;
-      for (int v = 0; v < kMaxVoices; ++v) cloudAcc[v][k] = 0;
-      swarmPhaseState[k] = swarmAmpState[k] = swarmDriftState[k] = swarmDriftPhase[k] = 0;
+      for (int c = 0; c < 2; ++c) for (int v = 0; v < kMaxVoices; ++v) mvAcc[c][v][k] = mvDelta[c][v][k] = 0;
       for (int c = 0; c < 2; ++c) {
         power[c][k] = prevR[c][k] = prevI[c][k] = phaseI[c][k] = 0;
         magnitudeState[c][k] = 0;
@@ -81,15 +87,15 @@ struct Core {
         velocityI[c][k] = q == 1 ? 1 : q == 3 ? -1 : 0;
       }
     }
-    for (int v = 0; v < kMaxVoices; ++v) for (int n = 0; n < bins / kCloudKnot + 3; ++n) cloudDetune[v][n] = cloudLevelState[v][n] = 0;
+    for (int v = 0; v < kMaxVoices; ++v) for (int n = 0; n < bins / kCloudKnot + 3; ++n) cloudDetune[v][n] = 0;
     position = hop = 0; right = lastRate = 0; rng = 0x9e3779b9u; sideRng = 0xC2B2AE35u;
-    seedSwarm();
     seedCloud();
+    seedWarble();
   }
   // Each Cloud voice has its own stream, from Seed + voice index: same Seed, input and settings give the same fur.
   void seedCloud() {
     for (int v = 0; v < kMaxVoices; ++v) {
-      cloudRng[v] = (swarmSeed + (unsigned int)v) * 2654435761u ^ 0x68E31DA4u;
+      cloudRng[v] = (seed + (unsigned int)v) * 2654435761u ^ 0x68E31DA4u;
       if (!cloudRng[v]) cloudRng[v] = 0x1B873593u;
     }
   }
@@ -98,15 +104,21 @@ struct Core {
     s ^= s << 13; s ^= s >> 17; s ^= s << 5;
     return (double)s * (2.0 / 4294967296.0) - 1.0;
   }
-  // The Swarm stream is its own: same Seed + same input + same params gives the same output after a reset.
-  void seedSwarm() {
-    swarmRng = swarmSeed * 2654435761u ^ 0x7F4A7C15u;
-    if (!swarmRng) swarmRng = 0x2545F491u;
-    for (int k = 0; k < bins; ++k) swarmPhaseState[k] = swarmAmpState[k] = swarmDriftState[k] = swarmDriftPhase[k] = 0;
+  double warbleRandom(int v) {
+    unsigned int& r = warbleRng[v];
+    r ^= r << 13; r ^= r >> 17; r ^= r << 5;
+    return (double)r * (2.0 / 4294967296.0) - 1.0;
   }
-  double swarmRandom() {
-    swarmRng ^= swarmRng << 13; swarmRng ^= swarmRng >> 17; swarmRng ^= swarmRng << 5;
-    return (double)swarmRng * (2.0 / 4294967296.0) - 1.0;
+  // Every Warble generator comes from Seed + voice: the per-knot rate factors and the starting phases are drawn once, in a fixed order, so the
+  // same Seed, input and settings always give the same sound, and a reset reseeds cleanly.
+  void seedWarble() {
+    for (int v = 0; v < kMaxVoices; ++v) {
+      warbleRng[v] = (seed + (unsigned int)v) * 2246822519u ^ 0x7F4A7C15u;
+      if (!warbleRng[v]) warbleRng[v] = 0x2545F491u; // safety: xorshift never leaves 0
+      for (int n = 0; n < kWarbleKnots; ++n) {
+        for (int st = 0; st < 3; ++st) { wRate[st][v][n] = (float)warbleRandom(v); wPhase[st][v][n] = (float)(twoPi * 0.5 * (warbleRandom(v) + 1.0)); wG1[st][v][n] = wG2[st][v][n] = wX[st][v][n] = 0; }
+      }
+    }
   }
   double random() {
     rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
@@ -148,9 +160,10 @@ struct Core {
     for (int k = 0; k < bins; ++k) blurred[k] *= match;
   }
   bool frame(double seconds, double widthHz, double diffusion, double rate) {
-    const int size = windowSize, hopSize = size / (cloud ? 8 : 4), bins = size / 2 + 1;
+    const bool cloud = engine == kCloud, warble = engine == kWarble, moved = cloud || warble;
+    const int size = windowSize, hopSize = size / (moved ? 8 : 4), bins = size / 2 + 1;
     // Overlap-add gain for the Hann analysis * Hann synthesis windows: the squared windows sum to 3 * overlap / 8, so 8 / (3 * overlap).
-    const float olaGain = cloud ? 1.0f / 3 : 2.0f / 3;
+    const float olaGain = moved ? 1.0f / 3 : 2.0f / 3;
     const double pole = seconds > 0 ? soemdsp_maths::dsp_exp(-hopSize / (rate * seconds)) : 0;
     double radius = widthHz * size / rate;
     if (radius > bins - 1) radius = bins - 1;
@@ -165,15 +178,14 @@ struct Core {
       sideOffset[k] += sideRandom() * jitter;
       smoothSideOffset[k] = sideOffset[k] + phasePole * (smoothSideOffset[k] - sideOffset[k]);
     }
-    const bool swarming = !cloud && (swarm != 0 || swarmLevel != 0 || swarmDrift != 0);
+    const bool stereoWarble = warble && stereoSpread != 0;
     if (cloud) {
       // Cloud = a continuous, slowly wandering detune of every partial, per voice, in cents (a chorus that is not made of oscillators).
       // Per voice, a mean-reverting random state (the Wander parameter sets how fast it wanders, Fuzz how many cents it reaches) lives at knots
       // every kCloudKnot bins (about two Hann main lobes) and is interpolated across the spectrum, so a whole partial moves together. A source bin
       // is moved to bin k + delta (delta = k * (2^(c/1200) - 1) bins, linear interpolation between the two neighbours)
       // and its phase is rotated by the frequency offset ACCUMULATED hop after hop (2 pi delta hop / N per hop), so the moved partial is a
-      // continuous sinusoid at the detuned frequency, not a train of phase jumps: smooth beating, no hop-rate buzz. Level wanders the same way
-      // (+-Level dB, smooth across bins and time). The voices share nothing but the one analysis and are averaged (1/L each). Left and Right
+      // continuous sinusoid at the detuned frequency, not a train of phase jumps: smooth beating, no hop-rate buzz. The voices share nothing but the one analysis and are averaged (1/L each). Left and Right
       // share every draw (linked).
       const int voices = cloudVoices < 1 ? 1 : cloudVoices > kMaxVoices ? kMaxVoices : cloudVoices;
       const double centsToRatio = 0.6931471805599453 / 1200.0;
@@ -189,58 +201,126 @@ struct Core {
         const int lo = k > kCloudLobe ? k - kCloudLobe : 0, hi = k + kCloudLobe < bins ? k + kCloudLobe : bins - 1;
         int best = k; double bestPower = power[0][k] + power[1][k];
         for (int j = lo; j <= hi; ++j) { const double pw = power[0][j] + power[1][j]; if (pw > bestPower) { bestPower = pw; best = j; } }
-        cloudPeak[k] = (unsigned short)best;
+        mvPeak[0][k] = (unsigned short)best;
       }
       for (int v = 0; v < voices; ++v) {
         for (int n = 0; n < knots; ++n) {
           double d = wanderPole * cloudDetune[v][n] + wanderInject * cloudRandom(v);
-          double l = wanderPole * cloudLevelState[v][n] + wanderInject * cloudRandom(v);
           cloudDetune[v][n] = d < -1 ? -1 : d > 1 ? 1 : d;
-          cloudLevelState[v][n] = l < -1 ? -1 : l > 1 ? 1 : l;
         }
         for (int k = 1; k < bins - 1; ++k) {
-          const int pk = cloudPeak[k];
+          const int pk = mvPeak[0][k];
           const int n = pk / kCloudKnot;
           const double along = (double)(pk - n * kCloudKnot) / kCloudKnot;
           const double u = cloudDetune[v][n] + (cloudDetune[v][n + 1] - cloudDetune[v][n]) * along;
-          const double lv = cloudLevelState[v][n] + (cloudLevelState[v][n + 1] - cloudLevelState[v][n]) * along;
           double delta = pk * (soemdsp_maths::dsp_exp(cloudFuzz * u * centsToRatio) - 1.0);
           double t = k + delta;
           if (t < 2.0 || t > bins - 3.0 - 1e-9) { t = k; delta = 0; } // too near DC / Nyquist for the four-bin move: stays where it is
           const int t0 = (int)t;
           const double frac = t - t0;
-          double acc = cloudAcc[v][k] + twoPi * delta * hopSize / size;
+          double acc = mvAcc[0][v][k] + twoPi * delta * hopSize / size;
           acc -= twoPi * (double)(long long)(acc / twoPi);
-          cloudAcc[v][k] = (float)acc;
+          mvAcc[0][v][k] = (float)acc;
           double sn, cs;
           soemdsp_maths::dsp_sin_cos(wrapTurns(acc), &sn, &cs);
-          const double gain = voiceGain * soemdsp_maths::dsp_exp(swarmLevel * lv * 0.11512925464970229);
-          cloudTarget[v][k] = (unsigned short)t0;
-          cloudGain[v][k] = (float)gain;
-          cloudFrac[v][k] = (float)frac;
-          cloudCos[v][k] = (float)cs; cloudSin[v][k] = (float)sn;
+          mvTarget[0][v][k] = (unsigned short)t0;
+          mvGain[0][v][k] = (float)voiceGain;
+          mvFrac[0][v][k] = (float)frac;
+          mvCos[0][v][k] = (float)cs; mvSin[0][v][k] = (float)sn;
         }
       }
-    } else if (swarming) {
-      // One-pole, hop-rate, mean-reverting noise: state = pole * state + sqrt(1 - pole^2) * noise. The sqrt keeps the depth the same at
-      // every Rate (only the speed changes); the state is clamped to +-1 and always comes back to 0, it never integrates like Diffusion.
-      const double swarmPole = soemdsp_maths::dsp_exp(-twoPi * (swarmRate > 0 ? swarmRate : 0) * hopSize / rate);
-      const double inject = __builtin_sqrt(1.0 - swarmPole * swarmPole) * 1.7320508075688772; // uniform [-1,1] has variance 1/3
-      const double driftStep = twoPi * hopSize / rate; // radians per hop per Hz of pitch wander, at a state of 1
-      for (int k = 1; k < bins - 1; ++k) {
-        double p = swarmPole * swarmPhaseState[k] + inject * swarmRandom();
-        double a = swarmPole * swarmAmpState[k] + inject * swarmRandom();
-        double d = swarmPole * swarmDriftState[k] + inject * swarmRandom();
-        swarmPhaseState[k] = p = p < -1 ? -1 : p > 1 ? 1 : p;
-        swarmAmpState[k] = a = a < -1 ? -1 : a > 1 ? 1 : a;
-        swarmDriftState[k] = d = d < -1 ? -1 : d > 1 ? 1 : d;
-        // Drift is a small pitch wander: an extra phase advance per hop (mean-reverting around 0), accumulated and wrapped.
-        double dp = swarmDriftPhase[k] + swarmDrift * d * driftStep;
-        dp -= twoPi * (double)(long long)(dp / twoPi);
-        swarmDriftPhase[k] = dp;
-        const double angle = swarm * kDegrees * p + dp;
-        soemdsp_maths::dsp_sin_cos(angle, &swarmSin[k], &swarmCos[k]);
-        swarmGain[k] = soemdsp_maths::dsp_exp(swarmLevel * a * 0.11512925464970229); // +-Level dB at the state's peak (ln(10)/20); no range is imposed here
+    } else if (warble) {
+      // Warble: every PARTIAL moves its own pitch, smoothly, in cents. For each voice and each knot (every 2 bins, so every harmonic has its
+      // own motion) there are three unit-variance motion generators: x = cos(pi D / 2) sqrt(2) sin(phase) + sin(pi D / 2) g, where the phase
+      // advances at the knot's own rate R_n = Rate 2^(Drunk r_n) and g is seeded noise through two cascaded one-poles at R_n, scaled to unit
+      // variance by the filter's analytic stationary variance. Nothing is clamped, so Depth is the RMS pitch deviation in cents at every Drunk.
+      // The channel motion is w_c = cos(pi S_n / 2) m + sin(pi S_n / 2) side_c, which has unit variance for any Spread; S_n is Spread with the
+      // Mono Bass ramp. A partial's lobe is moved by the same number of bins in every bin (the local peak's), with its phase ACCUMULATED hop
+      // after hop, so it is a continuous sinusoid at the detuned pitch.
+      const int voices = warbleVoices < 1 ? 1 : warbleVoices > kMaxVoices ? kMaxVoices : warbleVoices; // safety: below 1 divides by zero, above kMaxVoices is past the arrays
+      const double centsToRatio = 0.6931471805599453 / 1200.0;
+      const double hopSeconds = (double)hopSize / rate;
+      double sinHalfPiD, cosHalfPiD; soemdsp_maths::dsp_sin_cos(wrapTurns(0.5 * 3.141592653589793 * warbleDrunk), &sinHalfPiD, &cosHalfPiD);
+      const double mixSine = cosHalfPiD * 1.4142135623730951, mixNoise = sinHalfPiD;
+      const int knots = (bins - 1) / kWarbleKnot + 2;
+      const int streams = stereoWarble ? 3 : 1;
+      for (int v = 0; v < voices; ++v) {
+        for (int n = 0; n < knots; ++n) {
+          for (int st = 0; st < streams; ++st) {
+            const double knotRate = warbleRate * soemdsp_maths::dsp_exp(warbleDrunk * wRate[st][v][n] * 0.6931471805599453);
+            const double step = twoPi * knotRate * hopSeconds;
+            const double a = soemdsp_maths::dsp_exp(-step); // the one-pole coefficient of the noise path
+            const double variance = (1.0 - a) * (1.0 + a * a) / ((1.0 + a) * (1.0 + a) * (1.0 + a)) / 3.0; // two cascaded one-poles on uniform noise
+            const double scale = variance > 1e-30 ? 1.0 / __builtin_sqrt(variance) : 0.0; // safety: a zero rate has no noise path and would divide by zero
+            double phi = wPhase[st][v][n] + step;
+            phi -= twoPi * (double)(long long)(phi / twoPi);
+            wPhase[st][v][n] = (float)phi;
+            const double w = warbleRandom(v);
+            const double g1 = a * wG1[st][v][n] + (1.0 - a) * w;
+            const double g2 = a * wG2[st][v][n] + (1.0 - a) * g1;
+            wG1[st][v][n] = (float)g1; wG2[st][v][n] = (float)g2;
+            double sn, cs; soemdsp_maths::dsp_sin_cos(wrapTurns(phi), &sn, &cs);
+            wX[st][v][n] = (float)(mixSine * sn + mixNoise * g2 * scale);
+          }
+        }
+      }
+      const int channels = stereoWarble ? 2 : 1;
+      // Mono Bass: Spread rises from 0 at MonoBass / sqrt(2) to its full value at MonoBass sqrt(2) over one octave (raised cosine); 0 is off.
+      static double knotCos[kWarbleKnots], knotSin[kWarbleKnots], fanL[kMaxVoices][kWarbleKnots], fanR[kMaxVoices][kWarbleKnots];
+      for (int n = 0; n < knots; ++n) {
+        double ramp = 1.0;
+        if (monoBassHz > 0) {
+          const double hz = (n * kWarbleKnot + 0.5 * kWarbleKnot) * rate / size;
+          double t = hz > 0 ? soemdsp_maths::dsp_ln(hz / (monoBassHz * 0.7071067811865476)) * 1.4426950408889634 : 0.0;
+          t = t < 0 ? 0 : t > 1 ? 1 : t; // the shape of the one-octave ramp, not a parameter limit
+          double sn, cs; soemdsp_maths::dsp_sin_cos(wrapTurns(3.141592653589793 * t), &sn, &cs);
+          ramp = 0.5 - 0.5 * cs;
+        }
+        const double sNode = stereoSpread * ramp;
+        double sn, cs; soemdsp_maths::dsp_sin_cos(wrapTurns(0.5 * 3.141592653589793 * sNode), &sn, &cs);
+        knotCos[n] = cs; knotSin[n] = sn;
+        for (int v = 0; v < voices; ++v) {
+          const double pan = voices > 1 ? sNode * (2.0 * v / (voices - 1) - 1.0) : 0.0;
+          double ps, pc; soemdsp_maths::dsp_sin_cos(wrapTurns(0.7853981633974483 * (1.0 + pan)), &ps, &pc);
+          fanL[v][n] = (float)(1.4142135623730951 * pc); fanR[v][n] = (float)(1.4142135623730951 * ps);
+        }
+      }
+      for (int c = 0; c < channels; ++c) {
+        for (int k = 0; k < bins; ++k) {
+          const int lo = k > kWarbleLobe ? k - kWarbleLobe : 0, hi = k + kWarbleLobe < bins ? k + kWarbleLobe : bins - 1;
+          int best = k; double bestPower = power[c][k];
+          for (int j = lo; j <= hi; ++j) if (power[c][j] > bestPower) { bestPower = power[c][j]; best = j; }
+          mvPeak[c][k] = (unsigned short)best;
+        }
+        for (int v = 0; v < voices; ++v) {
+          for (int k = 1; k < bins - 1; ++k) {
+            const int pk = mvPeak[c][k];
+            const int n = pk / kWarbleKnot;
+            // One knot per partial (its peak's), never blended with a neighbour: two independent motions blended would cancel part of the wobble.
+            // The peak comes from the INPUT's power, so a steady input keeps its knot.
+            const int side = stereoWarble ? 1 + c : 0; // stream 1 = left side, 2 = right side
+            const double w = knotCos[n] * wX[0][v][n] + (stereoWarble ? knotSin[n] * wX[side][v][n] : 0.0);
+            const double cents = warbleDepth * w;
+            double delta = pk * (soemdsp_maths::dsp_exp(cents * centsToRatio) - 1.0);
+            double t = k + delta;
+            if (t < 2.0 || t > bins - 3.0 - 1e-9) { t = k; delta = 0; } // safety: too near DC / Nyquist for the four-bin move, so it stays where it is
+            const int t0 = (int)t;
+            const double frac = t - t0;
+            // The phase gained over the hop is the integral of the shift; the mean of last hop's and this hop's shift (trapezoid rule) is second-order
+            // accurate, where holding this hop's value is only first order and leaves a hop-rate ripple in the overlap-add at fast Rate and big FFT sizes.
+            double acc = mvAcc[c][v][k] + twoPi * 0.5 * (mvDelta[c][v][k] + delta) * hopSize / size;
+            mvDelta[c][v][k] = (float)delta;
+            acc -= twoPi * (double)(long long)(acc / twoPi);
+            mvAcc[c][v][k] = (float)acc;
+            double sn, cs;
+            soemdsp_maths::dsp_sin_cos(wrapTurns(acc), &sn, &cs);
+            const double fan = c == 0 ? fanL[v][n] : fanR[v][n];
+            mvTarget[c][v][k] = (unsigned short)t0;
+            mvGain[c][v][k] = (float)(fan / voices);
+            mvFrac[c][v][k] = (float)frac;
+            mvCos[c][v][k] = (float)cs; mvSin[c][v][k] = (float)sn;
+          }
+        }
       }
     }
     for (int c = 0; c < 2; ++c) {
@@ -249,7 +329,7 @@ struct Core {
       double srcEnergy = 0, srcWindowed = 0;
       for (int i = 0; i < size; ++i) {
         re[c][i] = input[c][(position + 1 + i) % size] * window[i]; im[c][i] = 0;
-        if (cloud || swarming) { const double e = (double)re[c][i] * re[c][i]; srcEnergy += e; srcWindowed += e * window[i] * window[i]; }
+        if (moved) { const double e = (double)re[c][i] * re[c][i]; srcEnergy += e; srcWindowed += e * window[i] * window[i]; }
       }
       transform(size, re[c], im[c], false);
       for (int k = 0; k < bins; ++k) {
@@ -284,15 +364,8 @@ struct Core {
           const double phase = smoothOffset[k] + (c == 0 ? -0.5 : 0.5) * stereoSpread * smoothSideOffset[k];
           soemdsp_maths::dsp_sin_cos(diffusion * phase, &sn, &cs);
         }
-        if (swarming && !edge) {
-          // Swarm rotates the ANALYSIS phase and scales the sounding magnitude (after the Amplitude Smooth lag, so that lag cannot erase it).
-          const double sc = swarmCos[k], ss = swarmSin[k];
-          const double cs2 = cs * sc - sn * ss, sn2 = sn * sc + cs * ss;
-          cs = cs2; sn = sn2;
-          magnitude *= swarmGain[k];
-        }
         const double pr = phaseR[c][k], pi = phaseI[c][k];
-        if (cloud) {
+        if (moved) {
           specRe[k] = magnitude * (pr * cs - pi * sn);
           specIm[k] = edge ? 0 : magnitude * (pr * sn + pi * cs);
           continue;
@@ -301,8 +374,9 @@ struct Core {
         im[c][k] = edge ? 0 : (float)(magnitude * (pr * sn + pi * cs));
         if (k > 0 && k < bins - 1) { re[c][size - k] = re[c][k]; im[c][size - k] = -im[c][k]; }
       }
-      if (cloud) {
-        const int voices = cloudVoices < 1 ? 1 : cloudVoices > kMaxVoices ? kMaxVoices : cloudVoices;
+      if (moved) {
+        const int cc = stereoWarble ? c : 0; // Cloud and a linked Warble share channel 0's moves
+        const int voices = warble ? (warbleVoices < 1 ? 1 : warbleVoices > kMaxVoices ? kMaxVoices : warbleVoices) : (cloudVoices < 1 ? 1 : cloudVoices > kMaxVoices ? kMaxVoices : cloudVoices); // safety: array bounds
         for (int k = 0; k < bins; ++k) accRe[k] = accIm[k] = 0;
         accRe[0] = specRe[0]; accRe[bins - 1] = specRe[bins - 1]; // DC and Nyquist stay where they are
         double sourcePower = specRe[0] * specRe[0] + specRe[bins - 1] * specRe[bins - 1];
@@ -310,13 +384,13 @@ struct Core {
           const double xr = specRe[k], xi = specIm[k];
           sourcePower += 2 * (xr * xr + xi * xi);
           for (int v = 0; v < voices; ++v) {
-            const double yr = xr * cloudCos[v][k] - xi * cloudSin[v][k], yi = xr * cloudSin[v][k] + xi * cloudCos[v][k];
-            const int t0 = cloudTarget[v][k];
+            const double yr = xr * mvCos[cc][v][k] - xi * mvSin[cc][v][k], yi = xr * mvSin[cc][v][k] + xi * mvCos[cc][v][k];
+            const int t0 = mvTarget[cc][v][k];
             // The window is centred in the frame, so the bins of a partial's lobe alternate in sign, (-1)^k. Moving a lobe by delta bins has to
             // keep that pattern at its new place, (-1)^(t0) and (-1)^(t0 + 1) for the two neighbours it is shared between; interpolating the
             // raw bins would add opposite signs and cancel the lobe (a level loss and a ragged, metallic grain).
             // Four neighbours (Catmull-Rom weights, which sum to 1) keep the shape of the lobe much better than two.
-            const double f = cloudFrac[v][k], f2 = f * f, f3 = f2 * f, g = cloudGain[v][k];
+            const double f = mvFrac[cc][v][k], f2 = f * f, f3 = f2 * f, g = mvGain[cc][v][k];
             const double w[4] = { g * (-0.5 * f3 + f2 - 0.5 * f), g * (1.5 * f3 - 2.5 * f2 + 1.0), g * (-1.5 * f3 + 2.0 * f2 + 0.5 * f), g * (0.5 * f3 - 0.5 * f2) };
             for (int j = 0; j < 4; ++j) {
               const int q = t0 - 1 + j;
@@ -342,8 +416,8 @@ struct Core {
       }
       transform(size, re[c], im[c], true);
       float frameGain = olaGain;
-      if (cloud || swarming) {
-        // A moved or phase-wobbled partial is not exactly a Hann-shaped grain any more, so the synthesis window passes a different share of it. Hold that share
+      if (moved) {
+        // A moved partial is not exactly a Hann-shaped grain any more, so the synthesis window passes a different share of it. Hold that share
         // to the source frame's (identical at Fuzz 0, so a dry Cloud is untouched): a level match per frame, not a clip.
         double synEnergy = 0, synWindowed = 0;
         for (int i = 0; i < size; ++i) { const double e = (double)re[c][i] * re[c][i]; synEnergy += e; synWindowed += e * window[i] * window[i]; }
@@ -356,7 +430,7 @@ struct Core {
     return true;
   }
   double tick(double left, double r, double seconds, double width, double diffusion, double mix, double rate) {
-    const int size = windowSize, hopSize = size / (cloud ? 8 : 4);
+    const int size = windowSize, hopSize = size / (engine != kSmear ? 8 : 4);
     const double values[] = {left, r, seconds, width, diffusion, mix, rate};
     for (double v : values)
       if (!__builtin_isfinite(v)) { reset(); return 0; }
@@ -383,26 +457,26 @@ struct Core {
 struct State {
   Core cores[2];
   int current, desired, warm;
-  bool desiredCloud;
   double fade, right, rate;
   bool changing, started;
   void reset() {
     for (auto& core : cores) core.reset(4096);
-    cores[0].cloud = cores[1].cloud = desiredCloud;
     current = warm = 0; fade = right = rate = 0; changing = started = false;
   }
   void initialize() {
-    desired = 4096; desiredCloud = false;
+    desired = 4096;
     for (auto& core : cores) {
-      core.phaseSmoothMs = 10; core.amplitudeSmoothMs = 0; core.stereoSpread = 1;
-      core.swarm = 0; core.swarmLevel = 0; core.swarmRate = 5; core.swarmDrift = 0; core.swarmSeed = 1;
-      core.blurCents = 0; core.cloudWander = 0.5; core.cloud = false; core.cloudFuzz = 0; core.cloudVoices = 3;
+      core.engine = kSmear;
+      core.phaseSmoothMs = 10; core.amplitudeSmoothMs = 0; core.stereoSpread = 1; core.seed = 1;
+      core.blurCents = 0; core.cloudWander = 0.5; core.cloudFuzz = 0; core.cloudVoices = 3;
+      core.warbleDepth = 25; core.warbleRate = 4; core.warbleDrunk = 0.5; core.warbleVoices = 3; core.monoBassHz = 0;
     }
     reset();
   }
+  // Which engine this module runs; both cores. (A module sets it once, in create.)
+  void setEngine(int e) { for (auto& core : cores) core.engine = e; reset(); }
   void beginChange() {
     Core& from = cores[current]; Core& to = cores[1 - current];
-    to.cloud = desiredCloud; // the hop (N/4 or N/8) is part of the core; it changes with the same warm-and-crossfade as an FFT size change
     to.reset(desired);
     // Conservatively remap one-sided power, with FFT normalization accounted for.
     const double scale = (double)to.windowSize / from.windowSize;
@@ -420,7 +494,7 @@ struct State {
     if (rate != 0 && rate != sr) reset();
     rate = sr;
     if (!started) { cores[current].reset(desired); started = true; }
-    if (!changing && (cores[current].windowSize != desired || cores[current].cloud != desiredCloud)) beginChange();
+    if (!changing && cores[current].windowSize != desired) beginChange();
     const double a = cores[current].tick(l, r, seconds, hz, diffusion, mix, sr);
     right = cores[current].right;
     if (!changing) return a;

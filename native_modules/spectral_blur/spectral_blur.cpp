@@ -23,7 +23,7 @@ extern "C" int soemdsp_spectral_blur_create() {
     fft.ensure(); fft512.ensure(); fft1024.ensure(); fft2048.ensure(); fft4096.ensure(); fft8192.ensure();
     s->initialize();
     // Blur is the Cloud engine: 8x overlap, four voices, no smear, blur, diffusion, level wobble or Warble.
-    s->desiredCloud = true; for (auto& core : s->cores) { core.cloud = true; core.cloudVoices = 3; core.swarmLevel = 0; core.cloudFuzz = 50; }
+    s->setEngine(kCloud); for (auto& core : s->cores) { core.cloudVoices = 3; core.cloudFuzz = 50; }
     s->reset();
     pool[i] = s; return i + 1;
   }
@@ -56,7 +56,7 @@ extern "C" void soemdsp_spectral_blur_set_cloud(int h, double fuzzCents, double 
       core.cloudWander = __builtin_isfinite(wanderHz) && wanderHz > 0 ? wanderHz : 0;
       const double v = __builtin_isfinite(voices) ? voices : 1;
       core.cloudVoices = v < 1 ? 1 : v > kMaxVoices ? kMaxVoices : (int)(v + 0.5);
-      if (sd != core.swarmSeed) { core.swarmSeed = sd; core.seedSwarm(); core.seedCloud(); }
+      if (sd != core.seed) { core.seed = sd; core.seedCloud(); }
     }
   }
 }

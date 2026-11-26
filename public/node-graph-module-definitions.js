@@ -9067,7 +9067,9 @@ const nodeGraphModuleDefinitions = (
     visualInputs: [{ key: "spectralWarbleIn", label: "In", port: "In" }],
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["swarm", "Swarm"], ["rate", "Rate"]], h: 40 },
+      { kind: "cells", params: [["depth", "Depth"], ["rate", "Rate"]], h: 40 },
+      { kind: "cells", params: [["drunk", "Drunk"], ["voices", "Voices"]], h: 40 },
+      { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
@@ -9113,28 +9115,75 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "Analysis window and processing delay in samples. At 48 kHz: 512 = 10.67 ms, 4096 = 85.33 ms, 8192 = 170.67 ms, 16384 = 341.33 ms. Smaller is tighter; larger resolves lower frequencies and costs more memory and peak CPU. Edits warm and crossfade, but intentionally change delay. Plugin-host compensation is not yet verified."
       },
       {
-        "key": "swarm",
-        "label": "Swarm",
-        "defaultValue": "0",
+        "key": "depth",
+        "label": "Depth",
+        "defaultValue": "25",
         "min": "0",
-        "mid": "45",
-        "max": "180",
-        "unit": "°",
+        "mid": "25",
+        "max": "200",
+        "unit": "¢",
         "step": "any",
-        "tooltip": "Peak phase wobble of each partial, in degrees, a fuzzy buzz that stays in place in time. Zero is off and leaves the sound unchanged. It is not a smear: transients keep their time plus the FFT window delay."
+        "nonlinearSlider": true,
+        "tooltip": "How far each partial's pitch wobbles, in cents (average, RMS): the same musical amount on low and high notes. Every harmonic moves on its own, so the tone swims instead of doing one vibrato. 0 is dry."
       },
       {
         "key": "rate",
         "label": "Rate",
         "kind": "frequency",
-        "defaultValue": "5",
+        "defaultValue": "4",
+        "min": "0.05",
+        "mid": "4",
+        "max": "20",
+        "unit": "Hz",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Average wobble speed in Hz. Around 2-6 Hz is a lush, vocal warble; slower is a gentle swim; faster gets nervous. Each partial runs at its own speed around this (see Drunk). Motion updates about 94 times a second at FFT 4096 (half that at 8192, a quarter at 16384), so very high rates step at big FFT sizes."
+      },
+      {
+        "key": "drunk",
+        "label": "Drunk",
+        "defaultValue": "0.5",
         "min": "0",
-        "mid": "5",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "×",
+        "step": "any",
+        "tooltip": "How irregular the wobble is. 0 = every partial is a smooth, regular vibrato at Rate (just out of step with each other); 1 = a wandering, organic motion with each partial's speed spread over an octave."
+      },
+      {
+        "key": "voices",
+        "label": "Voices",
+        "defaultValue": "3",
+        "min": "1",
+        "mid": "2",
+        "max": "4",
+        "step": "1",
+        "linearSmoothing": false,
+        "tooltip": "How many independently wobbling copies sing each partial. More voices make a thicker chorus that gently beats; the level stays matched. Costs CPU per voice."
+      },
+      {
+        "key": "stereoSpread",
+        "label": "Stereo Spread",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "×",
+        "step": "any",
+        "tooltip": "How differently the two ears wobble, and how wide the voices are spread. 0 = identical channels; 1 = each ear has its own motion and the voices fan out left to right. The level per channel stays matched."
+      },
+      {
+        "key": "monoBassHz",
+        "label": "Mono Bass",
+        "kind": "frequency",
+        "defaultValue": "120",
+        "min": "0",
+        "mid": "120",
         "max": "1000",
         "unit": "Hz",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "How fast the wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm is zero."
+        "tooltip": "Below this frequency both ears wobble identically and the voices stay centred, so the bass stays solid in mono. One-octave smooth transition. 0 = off."
       },
       {
         "key": "seed",
@@ -9149,7 +9198,7 @@ const nodeGraphModuleDefinitions = (
         "nonlinearSlider": false,
         "linearSmoothing": false,
         "smoothingType": "none",
-        "tooltip": "Wobble seed. Same Seed = same output; new modules get their own."
+        "tooltip": "The random pattern of the wobble. The same Seed, input and settings always give the same output."
       },
       {
         "key": "mix",

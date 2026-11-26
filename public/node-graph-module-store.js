@@ -1154,8 +1154,8 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   spectralWarble: {
     browserEmoji: "🌊",
     category: "space", label: "Spectral Warble",
-    description: "Native STFT phase wobble: each partial wobbles by Swarm degrees at Rate Hz, a fuzzy buzz that stays in place in time. Processing delay follows FFT Size.",
-    notes: ["spectral", "STFT", "warble", "wobble", "fuzz", "native"],
+    description: "Native STFT ensemble warble: every partial wobbles in pitch on its own (Depth in cents, Rate, Drunk), sung by several voices spread in stereo. A lush, organic chorus with no noise and no smear. Processing delay follows FFT Size.",
+    notes: ["spectral", "STFT", "warble", "chorus", "ensemble", "vibrato", "stereo", "native"],
   },
   stftContrast: {
     browserEmoji: "🌊",

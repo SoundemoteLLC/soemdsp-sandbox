@@ -9,7 +9,7 @@ try { ({ chromium } = await import('playwright')); }
 catch { ({ chromium } = createRequire(new URL('../../soemdsp-sandbox/package.json', import.meta.url))('playwright')); }
 const modules = [
   { type: 'spectralBlur', prefix: 'soemdsp_spectral_blur', set: { fuzz: '80', wander: '1', voices: '4', seed: '7' }, defaults: { fuzz: 50, wander: 0.5, voices: 3 } },
-  { type: 'spectralWarble', prefix: 'soemdsp_spectral_warble', set: { swarm: '90', rate: '4', seed: '7' }, defaults: { swarm: 0, rate: 5 } },
+  { type: 'spectralWarble', prefix: 'soemdsp_spectral_warble', set: { depth: '60', rate: '6', drunk: '0.8', voices: '4', stereoSpread: '0.5', monoBassHz: '200', seed: '7' }, defaults: { depth: 25, rate: 4, drunk: 0.5, voices: 3, stereoSpread: 1, monoBassHz: 120 } },
   { type: 'spectralSmear', prefix: 'soemdsp_spectral_smear', set: { smearSeconds: '0.5', blurHz: '200', blurCents: '100', diffusion: '0.5', stereoSpread: '0.5', amplitudeSmoothMs: '20' }, defaults: { smearSeconds: 2, blurHz: 100, blurCents: 0, diffusion: 1, stereoSpread: 1, phaseSmoothMs: 10, amplitudeSmoothMs: 0 } },
 ];
 const browser = await chromium.launch({ headless: true, channel: 'chrome', args: [
