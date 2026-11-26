@@ -11,6 +11,9 @@ constexpr int size = 16384, bins = size / 2 + 1, capacity = 64;
 constexpr double twoPi = 6.283185307179586;
 // Cloud: up to 4 voices; each source bin may be sprayed at most this many bins away so a high bin cannot fan across the spectrum (a cost / fan-out guard).
 constexpr int kMaxVoices = 4;
+// Smear: the share of power left when overlapping diffused frames are independent (see the level note in frame()); fitted over Phase Smooth and both hops.
+constexpr double kSmearMakeupPower = 1.1; // see the level note in frame()
+constexpr int kMaxOverlap = 16; // the largest overlap the Smear level model tabulates
 // Warble: a motion knot every 2 bins (every harmonic gets its own motion even at FFT 2048) and a +-2 bin peak search.
 constexpr int kWarbleKnot = 2, kWarbleLobe = 2, kWarbleKnots = bins / kWarbleKnot + 3;
 // Which engine a module uses. Smear: 4x overlap time/frequency smear. Warble: per-partial pitch wobble. Cloud: the cloud (8x overlap).
@@ -55,7 +58,9 @@ struct Core {
   unsigned int cloudRng[kMaxVoices], cloudSideRng[kMaxVoices], cloudGrainRng[kMaxVoices];
   double cloudSide[kMaxVoices][bins];
   float bandMakeup[bins]; // per bin: amplitude makeup for the overlap-add of frames whose phases have decorrelated (Cloud and Smear)
-  float smearRamp[bins]; // per bin: the Mono Bass ramp on Smear's side walk
+  float smearRamp[bins];
+  double smearCorr[kMaxOverlap], smearDenominator = 1; // overlap-add weight autocorrelation of the squared window at lags of whole hops, and 1 + 2 sum of it
+  double smearVar[kMaxOverlap]; // per hop: variance of the Phase-Smooth-lagged walk over m hops for a unit step variance // per bin: the Mono Bass ramp on Smear's side walk
   int overlap = 4; // frames per window: hop = N / overlap (Smear: Normal 4 / Smooth 8; Warble and Cloud 8)
   double diffusionSpeed = 30; // Hz: the phase-diffusion half-width per bin (Smear)
   // Warble: per voice and knot, three unit-variance motion generators (0 = mid, 1 = left side, 2 = right side): a sine phase and two cascaded
@@ -76,6 +81,13 @@ struct Core {
       const int index = i < windowSize ? (i < windowSize / 2 ? i : windowSize - i) * (size / windowSize) : 0;
       window[i] = i >= windowSize ? 0 : i == windowSize / 2 ? 1 : 0.5f - 0.5f * fft.twRe[index];
       for (int c = 0; c < 2; ++c) input[c][i] = ola[c][i] = 0;
+    }
+    {
+      // How strongly overlapping frames weigh each other: the autocorrelation of the squared (analysis x synthesis) window at lags of m hops.
+      const int hopLen = windowSize / overlap; double c0 = 0; smearDenominator = 1;
+      for (int i = 0; i < windowSize; ++i) c0 += (double)window[i] * window[i] * window[i] * window[i];
+      for (int m = 0; m < kMaxOverlap; ++m) smearCorr[m] = 0;
+      for (int m = 1; m < overlap && m < kMaxOverlap; ++m) { double a = 0; for (int i = 0; i + m * hopLen < windowSize; ++i) a += (double)window[i] * window[i] * window[i + m * hopLen] * window[i + m * hopLen]; smearCorr[m] = c0 > 0 ? a / c0 : 0; smearDenominator += 2 * smearCorr[m]; }
     }
     for (int k = 0; k < bins; ++k) {
       offset[k] = smoothOffset[k] = 0;
@@ -190,18 +202,16 @@ struct Core {
     }
     if (engine == kSmear) {
       // Mono Bass: the side walk is scaled by a raised-cosine ramp from 0 at MonoBass / sqrt(2) to 1 at MonoBass sqrt(2) (0 = off).
-      // Level: frames whose diffused phases have decorrelated add in power; each bin is given back what that loses, 1 / sqrt(rho^2 + (1 - rho^2) kappa), with
-      // rho = sinc(Diffusion jitter) the per-hop correlation. Pure incoherence would give kappa = (1 / overlap) / 0.514 (the window-pass match restores 0.514),
-      // but the walk is smoothed by Phase Smooth, so consecutive frames stay partly coherent: MEASURED at Hop Normal and Smooth with the default 10 ms the
-      // loss to restore is the same at both (about 4 dB at full diffusion), so kappa is the measured constant 0.39. It is 1 at Diffusion 0 and only
-      // restores a loss, so it cannot boost.
-      const double kappa = 0.39;
       bandMakeup[0] = bandMakeup[bins - 1] = 1.0f; smearRamp[0] = smearRamp[bins - 1] = 1.0f;
-      const double stepAngle = (diffusion < 0 ? -diffusion : diffusion) * jitter;
-      const double rho = stepAngle < 1e-9 ? 1.0 : (stepAngle >= 3.141592653589793 ? 0.0 : soemdsp_maths::dsp_sin(stepAngle) / stepAngle);
-      const float makeup = (float)(1.0 / __builtin_sqrt(rho * rho + (1.0 - rho * rho) * kappa));
+      // Variance of the Phase-Smooth-lagged walk (a one-pole with pole p on a random walk) over m hops, per unit step variance:
+      // sum_{k<m} (1 - p^(k+1))^2 + (1 - p^m)^2 p^2 / (1 - p^2).
+      for (int m = 1; m < overlap && m < kMaxOverlap; ++m) {
+        double sum = 0, pk = 1; for (int k = 0; k < m; ++k) { pk *= phasePole; sum += (1 - pk) * (1 - pk); }
+        double pm = 1; for (int k = 0; k < m; ++k) pm *= phasePole;
+        smearVar[m] = sum + (phasePole < 1 ? (1 - pm) * (1 - pm) * phasePole * phasePole / (1 - phasePole * phasePole) : 0);
+      }
       for (int k = 1; k < bins - 1; ++k) {
-        bandMakeup[k] = makeup;
+        bandMakeup[k] = 1.0f;
         double ramp = 1.0;
         if (monoBassHz > 0) {
           const double hz = k * rate / size;
@@ -422,16 +432,40 @@ struct Core {
         }
         const double targetMagnitude = __builtin_sqrt((blurred[k] > 0 ? blurred[k] : 0) / (edge ? 1 : 2));
         magnitudeState[c][k] = targetMagnitude + amplitudePole * (magnitudeState[c][k] - targetMagnitude);
-        // Smeared and spread energy has no live phase to hold the frames together, so it forms short bursts that do NOT overlap-add in amplitude the way a
-        // steady partial does: its level then falls as 1 / overlap (power) while the live share keeps its coherence. The synthesis-window match restores
-        // the share a Hann-shaped grain passes; this gives back the part that scales with the overlap, relative to the 4x reference: the incoherent share
-        // (1 - live) is raised by sqrt(overlap / 4). It is 1 for live input and at Hop Normal, so a steady partial and the 4x level are untouched.
-        const double spreadMakeup = engine == kSmear ? 1.0 / __builtin_sqrt(liveWeight + (1.0 - liveWeight) * (4.0 / overlap)) : 1.0;
-        double magnitude = magnitudeState[c][k] * (engine == kSmear ? bandMakeup[k] : 1.0f) * spreadMakeup;
+        const double diffusionHere = engine == kSmear ? diffusion * liveWeight + (1.0 - liveWeight) : diffusion;
+        // Level. A bin whose phase takes the diffusion walk adds to the next frame's in POWER rather than amplitude, which at 8x or 4x overlap loses level
+        // that the synthesis-window match does not restore. Each bin is given back only that loss: 1 / sqrt(rho^2 + (1 - rho^2) kappa), where rho is the
+        // correlation between consecutive frames. The walk's per-hop step is uniform +-jitter (variance jitter^2 / 3), scaled by diffusionHere, and Phase Smooth is a
+        // one-pole lag with pole p on it, which leaves an increment variance of sigma^2 (1 - p) / (1 + p); with Gaussian increments rho = exp(-variance / 2).
+        // kappa is the share of the power that stays when the frames are independent. It is 1 for live input without Diffusion (rho = 1), and the factor never
+        // exceeds 1 / sqrt(kappa), so it restores a loss and cannot boost.
+        double bandGain = 1.0;
+        if (engine == kSmear) {
+          // The frames overlap in time; their phases agree to the degree the walk has not moved between them. Between frames m hops apart the walk differs by an
+          // angle of variance v Var_m (v = diffusionHere^2 jitter^2 / 3 per hop, Var_m the lagged-walk variance above), so their coherence is exp(-v Var_m / 2).
+          // The power that survives the overlap-add, against the fully coherent sum, is (1 + 2 sum_m C_m rho_m) / (1 + 2 sum_m C_m), with C_m the window
+          // autocorrelation. Each bin is given 1 / sqrt of that: only what decorrelation loses, which is 1 when the walk is still (Diffusion 0 on live input).
+          const double v = diffusionHere * diffusionHere * jitter * jitter / 3.0;
+          double numerator = 1.0;
+          for (int m = 1; m < overlap && m < kMaxOverlap; ++m) numerator += 2.0 * smearCorr[m] * soemdsp_maths::dsp_exp(-0.5 * v * smearVar[m]);
+          bandGain = 1.0 / __builtin_sqrt(numerator / smearDenominator);
+          // Smeared or spread energy has no live phase to tie one frame to the next, so even when its walk is slow (frames nominally coherent) it forms short
+          // bursts that do not add in amplitude: its level then falls as 1 / overlap, which the model above does not see. Relative to the 4x reference (where it is
+          // already restored), that part is given back in proportion to how coherent the walk is, so it vanishes when the walk already decorrelates the frames.
+          const double coherent1 = overlap > 1 ? soemdsp_maths::dsp_exp(-0.5 * v * smearVar[1]) : 1.0;
+          bandGain *= 1.0 / __builtin_sqrt(1.0 - (1.0 - liveWeight) * coherent1 * coherent1 * (1.0 - 4.0 / overlap));
+          // The window-pass match leaves the modelled loss slightly under-restored when the frames are fully independent (measured: the loss to restore is about 1.2x the
+          // model's in dB); raising the makeup to that power keeps it 1 for coherent bins and scales only what is restored.
+          bandGain = soemdsp_maths::pow_pos(bandGain, kSmearMakeupPower);
+        }
+        double magnitude = magnitudeState[c][k] * bandGain;
         double sn = 0, cs = 1;
-        if (!edge && diffusion > 0) {
+        // Smeared or spread energy has no phase of its own to keep: left to copy its source bin's phase it adds up with the other spread bins into a pulse train
+        // (a saw blurred without Diffusion peaks +24 dB). So the share of a bin that is not live input always takes the full phase walk, whatever Diffusion is;
+        // Diffusion scales only the live share. Neutral settings (c = 1, Diffusion 0) are untouched.
+        if (!edge && diffusionHere > 0) {
           const double phase = smoothOffset[k] + (c == 0 ? -0.5 : 0.5) * stereoSpread * (engine == kSmear ? smearRamp[k] : 1.0f) * smoothSideOffset[k];
-          soemdsp_maths::dsp_sin_cos(diffusion * phase, &sn, &cs);
+          soemdsp_maths::dsp_sin_cos(wrapTurns(diffusionHere * phase), &sn, &cs); // the walk is unwrapped (it can reach hundreds of radians at a high Diffusion Speed); sin_cos wants one turn
         }
         const double pr = phaseR[c][k], pi = phaseI[c][k];
         if (moved) {

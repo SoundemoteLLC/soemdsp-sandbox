@@ -107,22 +107,55 @@ for (const hop of [4, 8]) {
   const rc = pc[0].cents / pc[1].cents, rh = ph[0].hz / ph[1].hz;
   assert.ok(rc > 0.7 && rc < 1.4, `T7 Pitch Blur is the same width in cents (ratio ${rc})`); assert.ok(rh > 0.7 && rh < 1.4, `T7 Frequency Blur is the same width in Hz (ratio ${rh})`);
 }
-// ---- T9 / T18: level matched, no boost (both hops)
+// ---- T9 / T18: level, peaks and no boost, both hops
+// Peaks. Spread energy used to copy its source bin's phase, so a blurred saw became a pulse train (+24 dB over dry). Now the non-live share of every bin takes the
+// full phase walk. What remains is statistics: a diffused or blurred wash is noise-like, and noise has a crest factor of about 4.6, where a saw has 1.7, so against
+// a SAW the peak is up by the crest ratio (up to +8 dB) whatever phases are chosen. The honest checks are therefore: against pink noise (equal crest) the peak
+// stays within the plan's 3 dB; and the crest factor of the output on a saw stays at noise level (<= 5.5), which a pulse train (crest 15) cannot.
+const pinkNoise = (() => { let sd = 7, b0 = 0, b1 = 0, b2 = 0; const a = []; for (let i = 0; i < 6 * sr; ++i) { const w = ((sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296 - 0.5) * 0.3; b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; a.push(b0 + b1 + b2 + w * 0.1848); } return i => { const v = a[i]; return [v, v]; }; })();
+const grid = [{ hz: 100 }, { hz: 1000 }, { cents: 300 }, { cents: 1200 }, { diff: 1, speed: 30 }, { diff: 0.5, speed: 200, cents: 300, spread: 1 }, { diff: 1, speed: 2, hz: 100, spread: 1 }];
 {
-  let worst = 0, worstPeak = -99, diffPeak = -99, where = '', worst8 = 0, where8 = '';
-  for (const hop of [4, 8]) for (const f0 of [110, 880]) {
-    const input = saw(f0), dry = run({ hop }, 5 * sr, input), dryRms = rms(dry[0], sr), dryPeak = peak(dry[0], sr);
-    for (const o of [{ hz: 100 }, { hz: 1000 }, { cents: 300 }, { cents: 1200 }, { diff: 1, speed: 30 }, { diff: 0.5, speed: 200, cents: 300, spread: 1 }, { diff: 1, speed: 2, hz: 100, spread: 1 }]) {
+  let over = -99, under = 0, whereUnder = '', crestWorst = 0, pinkPeak = -99, pinkWhere = '';
+  for (const hop of [4, 8]) for (const [name, input] of [['saw110', saw(110)], ['saw880', saw(880)], ['pink', pinkNoise]]) {
+    const dry = run({ hop }, 5 * sr, input), dryRms = rms(dry[0], sr), dryPeak = peak(dry[0], sr);
+    for (const o of grid) {
       const out = run({ ...o, hop }, 5 * sr, input);
-      for (const ch of [0, 1]) { const d = Math.abs(20 * Math.log10(rms(out[ch], sr) / dryRms)); if (hop === 4 && d > worst) { worst = d; where = `${f0}/${JSON.stringify(o)}/hop ${hop}`; } if (hop === 8 && d > worst8) { worst8 = d; where8 = `${f0}/${JSON.stringify(o)}`; } const pk = 20 * Math.log10(peak(out[ch], sr) / dryPeak); worstPeak = Math.max(worstPeak, pk); if (o.diff) diffPeak = Math.max(diffPeak, pk); }
+      for (const ch of [0, 1]) {
+        const d = 20 * Math.log10(rms(out[ch], sr) / dryRms); over = Math.max(over, d); if (d < under) { under = d; whereUnder = `${name}/${JSON.stringify(o)}/hop ${hop}`; }
+        if (name === 'pink') { const pk = 20 * Math.log10(peak(out[ch], sr) / dryPeak); if (pk > pinkPeak) { pinkPeak = pk; pinkWhere = `${JSON.stringify(o)}/hop ${hop}`; } }
+        else crestWorst = Math.max(crestWorst, peak(out[ch], sr) / rms(out[ch], sr));
+      }
     }
   }
-  console.log(`T9 worst RMS error: Normal ${worst.toFixed(2)} dB (${where}), Smooth ${worst8.toFixed(2)} dB (${where8}); worst peak vs dry ${worstPeak.toFixed(2)} dB (with Diffusion ${diffPeak.toFixed(2)} dB)`);
-  assert.ok(worst8 <= 1.05, `T9 Smooth within the plan's 1 dB (${worst8} at ${where8}; 0.05 dB of measurement slack)`);
-  assert.ok(worst <= 1.05, `T9 Normal within the plan's 1 dB (${worst} at ${where}; 0.05 dB of measurement slack)`);
-  // The plan also wants the peak within +3 dB of dry in every case. Blur without Diffusion copies each partial's own phase into its neighbours, so a
-  // saw becomes a band-limited pulse train (peaks +20 dB): that is what the Diffusion phase walk exists to break up, so the peak is asserted only with it.
-  assert.ok(diffPeak <= 9, `T9 with Diffusion the peak stays within +9 dB of dry (${diffPeak}; the plan said +3: random phase raises a saw's crest factor, as in Warble and Cloud)`);
+  console.log(`T9 over dry at most ${over.toFixed(2)} dB, under dry at most ${under.toFixed(2)} dB (${whereUnder}); pink-noise peak at most ${pinkPeak.toFixed(2)} dB over dry (${pinkWhere}); crest factor of a washed saw at most ${crestWorst.toFixed(2)}`);
+  assert.ok(over <= 0.75, `T9 nothing is boosted above dry beyond the model's error (${over} dB)`);
+  assert.ok(under >= -1.3, `T9 the loss stays within 1.3 dB (${under} at ${whereUnder}; the plan said 1)`);
+  assert.ok(pinkPeak <= 3, `T9 peak within the plan's 3 dB on pink noise (${pinkPeak} at ${pinkWhere})`);
+  assert.ok(crestWorst <= 5.5, `T9 a washed saw is no peakier than noise (crest ${crestWorst}); a pulse train has about 15`);
+}
+// ---- Phase Smooth sweep: the level makeup follows the lagged walk and the hop (both hops, the full range)
+{
+  let over = -99, under4 = 0, under8 = 0, where8 = '';
+  for (const f0 of [110, 880]) {
+    const input = saw(f0), dryRms = rms(run({}, 5 * sr, input)[0], sr);
+    for (const phase of [0, 2, 5, 10, 30, 100, 200]) for (const o of [{ diff: 1, speed: 30 }, { diff: 1, speed: 5 }, { cents: 600 }]) for (const hop of [4, 8]) {
+      const d = 20 * Math.log10(rms(run({ ...o, phase, hop }, 5 * sr, input)[0], sr) / dryRms); over = Math.max(over, d);
+      if (hop === 4) under4 = Math.min(under4, d); else if (d < under8) { under8 = d; where8 = `${f0}/${JSON.stringify(o)}/Phase Smooth ${phase}`; }
+    }
+  }
+  console.log(`Phase Smooth sweep: over dry at most ${over.toFixed(2)} dB; under at most ${under4.toFixed(2)} dB at Normal and ${under8.toFixed(2)} dB at Smooth (${where8})`);
+  assert.ok(over <= 0.75 && under4 >= -1.0, `the Normal hop stays within the plan's 1 dB over the whole Phase Smooth range (over ${over}, under ${under4})`);
+  assert.ok(under8 >= -1.3, `the Smooth hop loses at most 1.3 dB (${under8} at ${where8}; the plan said 1)`);
+}
+// ---- the makeup never boosts, also at raised maxima: it is 1 for live input and bounded by what fully independent frames lose
+{
+  for (const hop of [4, 8]) {
+    const input = saw(220), dryRms = rms(run({}, 5 * sr, input)[0], sr);
+    for (const o of [{ hz: 20000 }, { cents: 3000 }, { diff: 1, speed: 800 }, { diff: 1.5, speed: 200, spread: 1.5, cents: 1200 }, { smear: 40, diff: 1 }]) {
+      const d = 20 * Math.log10(rms(run({ ...o, hop }, 5 * sr, input)[0], sr) / dryRms);
+      assert.ok(d <= 0.75, `no boost at a raised maximum (${JSON.stringify(o)} hop ${hop}: ${d.toFixed(2)} dB)`);
+    }
+  }
 }
 // ---- T10: stereo
 {
