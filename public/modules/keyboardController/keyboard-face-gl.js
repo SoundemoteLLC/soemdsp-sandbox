@@ -303,11 +303,7 @@ const NODE_GRAPH_MIDI_KEY_LOOK = (() => {
     ghost: {
       play: rgba(74, 163, 255, 0.45),
       chord: { top: rgba(61, 220, 132, 0.28), bottom: rgba(31, 154, 85, 0.16), ring: rgba(61, 220, 132, 0.38) },
-      patch: { top: rgba(255, 120, 120, 0.28), bottom: rgba(220, 90, 90, 0.16), ring: rgba(255, 120, 120, 0.38) },
-      patchSet: { top: rgba(255, 170, 170, 0.72), bottom: rgba(220, 90, 90, 0.34) },
       blackChord: { top: rgba(61, 220, 132, 0.32), bottom: rgba(31, 154, 85, 0.18), border: rgba(125, 255, 176, 0.45) },
-      blackPatch: { top: rgba(255, 120, 120, 0.32), bottom: rgba(220, 90, 90, 0.18), border: rgba(255, 170, 170, 0.45) },
-      blackPatchSet: { top: rgba(255, 140, 140, 0.55), bottom: rgba(90, 18, 18, 0.92), border: rgba(255, 160, 160, 0.7) },
     },
     // Outer marks the old box-shadow rings carried (2px), drawn inside the key.
     goldRing: rgba(241, 184, 75, 0.55),

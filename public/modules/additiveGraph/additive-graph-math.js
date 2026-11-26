@@ -130,9 +130,6 @@ function nodeGraphAdditiveGeneratorSyncSlopeRange(nodeId, patchNode, priorParams
   for (const [key, value] of Object.entries(next)) {
     if (Number(params[key]) === value) continue;
     patchNode.params = { ...patchNode.params, [key]: value };
-    if (typeof nodeGraphWriteActiveCircuitPatchParam === "function") {
-      nodeGraphWriteActiveCircuitPatchParam(nodeId, key, value);
-    }
     const slider = typeof nodeGraphNodeElement === "function"
       ? nodeGraphNodeElement(nodeId)?.querySelector(`input[data-param="${key}"]`)
       : null;

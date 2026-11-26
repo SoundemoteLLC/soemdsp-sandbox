@@ -113,9 +113,6 @@ function serializeNodeGraphPatch(patch = nodeGraphMvp.patch, options = {}) {
       && normalizeNodeGraphPatchViewBox(patch.patchView)
       ? { patchView: normalizeNodeGraphPatchViewBox(patch.patchView) }
       : {}),
-    circuitPatches: patch.circuitPatches,
-    activeCircuitPatch: patch.activeCircuitPatch,
-    defaultCircuitPatch: patch.defaultCircuitPatch,
     // Omitted when empty (patches without gradients serialize as before) and when asked to (the fingerprint, below).
     ...(!options.omitGradients && typeof nodeGraphNormalizeGradients === "function" && nodeGraphNormalizeGradients(patch.gradients).length
       ? { gradients: nodeGraphNormalizeGradients(patch.gradients) }

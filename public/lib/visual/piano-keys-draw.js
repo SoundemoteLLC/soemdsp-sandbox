@@ -355,14 +355,6 @@ function nodeGraphPianoKeysPaint(look, state, opts) {
       bottom = nodeGraphPianoKeysOver(L.ghost.chord.bottom, W.base.bottom);
       ring = L.ghost.chord.ring;
       ringPx = 2;
-    } else if (has("ghost-patch")) {
-      top = nodeGraphPianoKeysOver(L.ghost.patch.top, W.base.top);
-      bottom = nodeGraphPianoKeysOver(L.ghost.patch.bottom, W.base.bottom);
-      ring = L.ghost.patch.ring;
-      ringPx = 2;
-    } else if (has("patch-set")) {
-      top = nodeGraphPianoKeysOver(L.ghost.patchSet.top, W.base.top);
-      bottom = nodeGraphPianoKeysOver(L.ghost.patchSet.bottom, W.base.bottom);
     }
     if (!ring && style && style.inset) ring = style.inset;
     // MIDI / chord Play Keys ghost: the sequencer.css inset ring (not on gold / chord slots).
@@ -398,15 +390,6 @@ function nodeGraphPianoKeysPaint(look, state, opts) {
     bottom = nodeGraphPianoKeysOver(L.ghost.blackChord.bottom, B.ghostBase.bottom);
     border = L.ghost.blackChord.border;
     ringPx = 2;
-  } else if (has("ghost-patch")) {
-    top = nodeGraphPianoKeysOver(L.ghost.blackPatch.top, B.ghostBase.top);
-    bottom = nodeGraphPianoKeysOver(L.ghost.blackPatch.bottom, B.ghostBase.bottom);
-    border = L.ghost.blackPatch.border;
-    ringPx = 2;
-  } else if (has("patch-set")) {
-    top = nodeGraphPianoKeysOver(L.ghost.blackPatchSet.top, B.base.top);
-    bottom = nodeGraphPianoKeysOver(L.ghost.blackPatchSet.bottom, B.base.bottom);
-    border = L.ghost.blackPatchSet.border;
   }
   if (has("ghost-play") && !has("held") && !has("chord-memory")) { border = L.ghost.play; ringPx = 2; }
   top = top || (style && style.top);

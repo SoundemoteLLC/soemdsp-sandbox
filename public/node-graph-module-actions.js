@@ -1781,12 +1781,6 @@ function setNodeGraphPatchDefaultsVisible(visible) {
     if (typeof syncNodeGraphSettingsView === "function") {
       syncNodeGraphSettingsView();
     }
-    if (typeof nodeGraphBindCircuitPatchList === "function") {
-      nodeGraphBindCircuitPatchList();
-    }
-    if (typeof nodeGraphRenderCircuitPatchList === "function") {
-      nodeGraphRenderCircuitPatchList();
-    }
     syncNodeGraphReadyPanelChrome();
   }
   if (typeof rememberNodeGraphWorkspaceWindowState === "function") {

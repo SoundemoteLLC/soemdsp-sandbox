@@ -86,7 +86,7 @@ try {
     const bad = [];
     for (let n = 0; n <= 127; n += 1) {
       const want = nodeGraphKeyboardPitchLabel(n);
-      const got = { seq: sequencerPitchLabel(n), arp: nodeGraphArpPitchLabel(n), patch: nodeGraphCircuitPatchMidiName(n), pm: nodeGraphPitchManagerPitchText(n).split(" ")[1] };
+      const got = { seq: sequencerPitchLabel(n), arp: nodeGraphArpPitchLabel(n), pm: nodeGraphPitchManagerPitchText(n).split(" ")[1] };
       for (const [k, v] of Object.entries(got)) if (v !== want) bad.push(`${n} ${k}: ${v} != ${want}`);
     }
     const caps = {};

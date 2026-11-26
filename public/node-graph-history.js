@@ -205,9 +205,6 @@ function applyNodeGraphHistorySnapshot(snapshot, status) {
     skipValidate: true,
     status,
   });
-  if (typeof nodeGraphRenderCircuitPatchList === "function") {
-    nodeGraphRenderCircuitPatchList();
-  }
   scheduleNodeGraphHistoryAutosave();
 }
 

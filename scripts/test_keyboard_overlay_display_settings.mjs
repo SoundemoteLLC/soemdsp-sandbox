@@ -67,7 +67,7 @@ const ctx = {
   },
 };
 ctx.globalThis = ctx;
-ctx.nodeGraphKeyboardModes = Object.freeze(["slide", "press", "hold", "toggle", "chordMemory", "triggerPatch"]);
+ctx.nodeGraphKeyboardModes = Object.freeze(["slide", "press", "hold", "toggle", "chordMemory"]);
 ctx.nodeGraphKeyboardMode = (value) => (ctx.nodeGraphKeyboardModes.includes(value) ? value : "slide");
 ctx.nodeGraphKeyboardModeLabel = (value) => ({
   slide: "Slide",
@@ -75,7 +75,6 @@ ctx.nodeGraphKeyboardModeLabel = (value) => ({
   hold: "Hold",
   toggle: "Toggle",
   chordMemory: "Chord Memory",
-  triggerPatch: "Trigger Patch",
 }[ctx.nodeGraphKeyboardMode(value)] || "Slide");
 ctx.nodeGraphKeyboardClampVel127 = (value, fallback = 127) => {
   const n = Math.round(Number(value));
@@ -113,7 +112,7 @@ const html = ctx.buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml();
 check(html.includes('data-midi-key-layout="mode"'), "rendered display settings include the Mode select");
 check(html.includes('data-midi-key-layout="velMin"') && html.includes('value="127"'), "rendered Min Vel defaults to 127");
 check(html.includes('data-midi-key-layout="velMax"'), "rendered display settings include Max Vel");
-check(html.includes(">Slide<") && html.includes(">Hold<") && html.includes(">Trigger Patch<"), "Mode options use the existing labels");
+check(html.includes(">Slide<") && html.includes(">Hold<") && !html.includes("Trigger Patch"), "Mode options use the existing labels (Trigger Patch removed in HP-01)");
 check(!html.includes("Hide keyboard info") && !html.includes("freq ") && !html.includes("data-keyboard-signal"), "rendered settings omit hide-info and live readouts");
 
 const oldPatch = ctx.normalizeNodeGraphKeyboardFaceSettings({

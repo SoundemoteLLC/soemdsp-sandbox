@@ -363,7 +363,7 @@ function buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml() {
     : {};
   const playModes = typeof nodeGraphKeyboardModes !== "undefined" && Array.isArray(nodeGraphKeyboardModes)
     ? nodeGraphKeyboardModes
-    : ["slide", "press", "hold", "toggle", "chordMemory", "triggerPatch"];
+    : ["slide", "press", "hold", "toggle", "chordMemory"];
   const playMode = typeof nodeGraphKeyboardMode === "function"
     ? nodeGraphKeyboardMode(faceSettings.mode)
     : (playModes.includes(faceSettings.mode) ? faceSettings.mode : "slide");

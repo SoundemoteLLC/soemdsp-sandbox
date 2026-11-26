@@ -180,9 +180,6 @@ function syncNodeGraphPatchParameterFromSlider(slider, options = {}) {
       patchNode.paramMeta[key],
     ),
   };
-  if (typeof nodeGraphWriteActiveCircuitPatchParam === "function") {
-    nodeGraphWriteActiveCircuitPatchParam(node, key, patchNode.params[key]);
-  }
   if (
     patchNode.type === "audioPlayer"
     && key === "transport"

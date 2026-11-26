@@ -1930,7 +1930,6 @@ function nodeGraphKeyboardRuntime(nodeId) {
       previousGate: 0,
       pulseSerial: 0,
       arpLatchPointerId: null,
-      triggerPatchPointerId: null,
       vmBlueMidi: -1,
       polyphony: null,
       playRegs: { c0: 0, c1: 0, c2: 0 },
@@ -2316,29 +2315,6 @@ function renderNodeGraphVoiceManagerDebug() {
   });
 }
 
-function nodeGraphTriggerPatchClearGhost(nodeId) {
-  if (typeof document === "undefined") return;
-  for (const face of nodeGraphKeyboardFaces(nodeId)) {
-    // Grid Keyboard pads are elements; piano keys are key-model state.
-    face.querySelectorAll(".ghost-patch").forEach((el) => {
-      el.classList.remove("ghost-patch");
-    });
-    if (typeof nodeGraphKeyboardAllKeys === "function") {
-      nodeGraphKeyboardAllKeys(face).forEach((key) => key.state.remove("ghost-patch"));
-    }
-  }
-  nodeGraphKeyboardRuntime(nodeId).triggerPatchPointerId = null;
-}
-
-/** el: a Grid Keyboard pad element, or a piano key-model key (keyboard-face-gl.js). */
-function nodeGraphTriggerPatchGhostKey(el, pointerId) {
-  const nodeId = nodeGraphKeyboardNodeIdFromElement(el?.surface || el);
-  nodeGraphTriggerPatchClearGhost(nodeId);
-  const state = el?.state || el?.classList;
-  if (state) state.add("ghost-patch");
-  nodeGraphKeyboardRuntime(nodeId).triggerPatchPointerId = pointerId;
-}
-
 function renderNodeGraphKeyboardHeldKeys() {
   // Keyboard faces paint their own latch / chord-memory only.
   // Hardware MIDI must not light a Keyboard; wire MIDI Play Keys -> Keyboard Play Keys.
@@ -2350,7 +2326,6 @@ function renderNodeGraphKeyboardHeldKeys() {
         momentary: typeof nodeGraphChordMemoryMomentaryMaskForNode === "function"
           ? nodeGraphChordMemoryMomentaryMaskForNode(nodeId)
           : null,
-        triggerPatch: nodeGraphKeyboardModeForNode(nodeId) === "triggerPatch",
       });
     }
     return byNode.get(nodeId);
@@ -2362,11 +2337,9 @@ function renderNodeGraphKeyboardHeldKeys() {
     const local = midi >= 0 && midi <= 127 && Boolean(state.gold[midi]);
     const playGhost = typeof noteMaskGet === "function"
       && (state.momentary instanceof Uint8Array && noteMaskGet(state.momentary, midi));
-    const setPatch = state.triggerPatch && Boolean(nodeGraphMvp.patch?.circuitPatches?.[midi]?.values);
     key.state.toggle("held", local);
     key.state.toggle("ghost-play", Boolean(playGhost) && !local);
     key.state.remove("ghost-arp");
-    key.state.toggle("patch-set", setPatch);
   });
   if (typeof nodeGraphChordMemoryPaintKeys === "function") {
     nodeGraphChordMemoryPaintKeys();
@@ -2723,7 +2696,6 @@ const nodeGraphKeyboardModes = Object.freeze([
   "hold",
   "toggle",
   "chordMemory",
-  "triggerPatch",
 ]);
 
 /** Normalize a raw mode value. Missing / unknown = "slide" (the module default). */
@@ -2758,7 +2730,6 @@ function nodeGraphKeyboardModeLabel(value) {
     hold: "Hold",
     toggle: "Toggle",
     chordMemory: "Chord Memory",
-    triggerPatch: "Trigger Patch",
   }[nodeGraphKeyboardMode(value)] || "Slide";
 }
 
@@ -3582,31 +3553,6 @@ function updateNodeGraphKeyboardSignal(event) {
       return;
     }
     // Any other event during arp latch: ignore play path.
-    event.preventDefault();
-    return;
-  }
-
-  // Trigger Patch: one click loads that note's circuit patch. Dragging does not.
-  // Ghost red while the pointer is down so empty slots still show a press.
-  if (mode === "triggerPatch") {
-    const pointerId = event.pointerId;
-    if (event.type === "pointerdown" && !event.ctrlKey && !event.shiftKey && !altDown) {
-      const target = nodeGraphKeyboardEventTargetKey(event, surface);
-      if (target) {
-        if (typeof nodeGraphApplyCircuitPatchSlot === "function") {
-          const midi = Math.max(0, Math.min(127, Math.round(Number(target.midi))));
-          nodeGraphApplyCircuitPatchSlot(midi);
-        }
-        nodeGraphTriggerPatchGhostKey(target, pointerId);
-        try { surface.setPointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
-      }
-    } else if (
-      rt.triggerPatchPointerId === pointerId
-      && (event.type === "pointerup" || event.type === "pointercancel" || event.type === "lostpointercapture")
-    ) {
-      try { surface.releasePointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
-      nodeGraphTriggerPatchClearGhost(nodeId);
-    }
     event.preventDefault();
     return;
   }

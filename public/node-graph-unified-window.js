@@ -54,11 +54,11 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     icon: "\uD83D\uDD79\uFE0F",
     showInNav: true,
   }),
-  pages: Object.freeze({
-    key: "pages",
-    elementId: "nodePagesPage",
-    workspaceKey: "pages",
-    label: "Pages",
+  presets: Object.freeze({
+    key: "presets",
+    elementId: "nodePresetsPage",
+    workspaceKey: "presets",
+    label: "Presets",
     icon: "📄",
     showInNav: true,
   }),
@@ -142,7 +142,7 @@ const nodeGraphUnifiedWindowPageOrder = Object.freeze([
   "commandCenter",
   "moduleBrowser",
   "moduleFace",
-  "pages",
+  "presets",
   "moduleActions",
   "traceDisplaySettings",
   "metaparameters",
@@ -647,9 +647,9 @@ function closeNodeGraphUnifiedWindowPage(page = "", options = {}) {
           setNodeGraphMiniPerformPageOpen(false);
         }
         break;
-      case "pages":
-        if (typeof setNodeGraphPagesPageOpen === "function") {
-          setNodeGraphPagesPageOpen(false);
+      case "presets":
+        if (typeof setNodeGraphPresetsPageOpen === "function") {
+          setNodeGraphPresetsPageOpen(false);
         }
         break;
       case "moduleFace":
@@ -964,9 +964,9 @@ function openNodeGraphUnifiedWindowPage(page = "", options = {}) {
           setNodeGraphMiniPerformPageOpen(true);
         }
         break;
-      case "pages":
-        if (typeof setNodeGraphPagesPageOpen === "function") {
-          setNodeGraphPagesPageOpen(true);
+      case "presets":
+        if (typeof setNodeGraphPresetsPageOpen === "function") {
+          setNodeGraphPresetsPageOpen(true);
         }
         break;
       case "moduleFace":
@@ -1638,10 +1638,10 @@ function syncNodeGraphUnifiedWindowNavBars() {
       },
     },
     {
-      elementId: "nodePagesPage",
-      page: "pages",
+      elementId: "nodePresetsPage",
+      page: "presets",
       prepare(element) {
-        const existing = element.querySelector("#nodePagesUnifiedNavHost, :scope > .node-unified-window-nav-host");
+        const existing = element.querySelector("#nodePresetsUnifiedNavHost, :scope > .node-unified-window-nav-host");
         if (existing) {
           return existing;
         }

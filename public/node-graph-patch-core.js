@@ -1224,12 +1224,6 @@ function validateNodeGraphPatch(patch) {
     const gradients = nodeGraphNormalizeGradients(patch.gradients);
     if (gradients.length) normalized.gradients = gradients;
   }
-  normalized.circuitPatches = patch.circuitPatches;
-  normalized.activeCircuitPatch = patch.activeCircuitPatch;
-  normalized.defaultCircuitPatch = patch.defaultCircuitPatch;
-  if (typeof nodeGraphEnsureCircuitPatches === "function") {
-    nodeGraphEnsureCircuitPatches(normalized);
-  }
   if (loadWarnings.length) {
     // Ephemeral — stripped before serialize / commit persistence.
     normalized.loadWarnings = loadWarnings;

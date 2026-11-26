@@ -232,15 +232,12 @@ function renderNodeGraphGridKeyboardPads() {
     const momMask = typeof nodeGraphChordMemoryMomentaryMaskForNode === "function"
       ? nodeGraphChordMemoryMomentaryMaskForNode(nodeId)
       : null;
-    const triggerPatch = nodeGraphKeyboardModeForNode(nodeId) === "triggerPatch";
     surface.querySelectorAll(".node-grid-keyboard-pad[data-grid-midi]").forEach((pad) => {
       const midi = Number(pad.dataset.gridMidi);
       if (!(midi >= 0 && midi <= 127)) return;
       const goldOn = Boolean(gold[midi]);
-      const setPatch = triggerPatch && Boolean(nodeGraphMvp.patch?.circuitPatches?.[midi]?.values);
       pad.classList.toggle("held", goldOn);
       pad.classList.toggle("active", Number.isFinite(playing) && playing === midi);
-      pad.classList.toggle("patch-set", setPatch);
       const playGhost = typeof noteMaskGet === "function"
         && (momMask instanceof Uint8Array && noteMaskGet(momMask, midi));
       pad.classList.toggle("ghost-play", Boolean(playGhost) && !goldOn);
@@ -300,26 +297,6 @@ function updateNodeGraphGridKeyboardSignal(event) {
     if (event.type === "pointerup" || event.type === "pointercancel") {
       try { surface.releasePointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
       rt.arpLatchPointerId = null;
-    }
-    event.preventDefault();
-    return;
-  }
-
-  if (mode === "triggerPatch") {
-    const pointerId = event.pointerId;
-    if (event.type === "pointerdown" && !event.ctrlKey && !event.shiftKey && !altDown && pad) {
-      const midi = Math.max(0, Math.min(127, Math.round(Number(pad.dataset.gridMidi))));
-      if (typeof nodeGraphApplyCircuitPatchSlot === "function") {
-        nodeGraphApplyCircuitPatchSlot(midi);
-      }
-      nodeGraphTriggerPatchGhostKey(pad, pointerId);
-      try { surface.setPointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
-    } else if (
-      rt.triggerPatchPointerId === pointerId
-      && (event.type === "pointerup" || event.type === "pointercancel" || event.type === "lostpointercapture")
-    ) {
-      try { surface.releasePointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
-      nodeGraphTriggerPatchClearGhost(nodeId);
     }
     event.preventDefault();
     return;
