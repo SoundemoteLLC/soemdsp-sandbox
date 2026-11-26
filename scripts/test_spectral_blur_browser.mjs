@@ -10,7 +10,7 @@ catch { ({ chromium } = createRequire(new URL('../../soemdsp-sandbox/package.jso
 const modules = [
   { type: 'spectralBlur', prefix: 'soemdsp_spectral_blur', set: { fuzz: '300', grain: '3', stereoSpread: '0.5', monoBassHz: '200', voices: '4', seed: '7' }, defaults: { fuzz: 100, grain: 1, stereoSpread: 1, monoBassHz: 0, voices: 3 } },
   { type: 'spectralWarble', prefix: 'soemdsp_spectral_warble', set: { depth: '60', rate: '6', drunk: '0.8', voices: '4', stereoSpread: '0.5', monoBassHz: '200', seed: '7' }, defaults: { depth: 25, rate: 4, drunk: 0.5, voices: 3, stereoSpread: 1, monoBassHz: 120 } },
-  { type: 'spectralSmear', prefix: 'soemdsp_spectral_smear', set: { smearSeconds: '0.5', blurHz: '200', blurCents: '100', diffusion: '0.5', stereoSpread: '0.5', amplitudeSmoothMs: '20' }, defaults: { smearSeconds: 2, blurHz: 100, blurCents: 0, diffusion: 1, stereoSpread: 1, phaseSmoothMs: 10, amplitudeSmoothMs: 0 } },
+  { type: 'spectralSmear', prefix: 'soemdsp_spectral_smear', set: { smearSeconds: '0.5', blurHz: '200', blurCents: '100', diffusion: '0.5', diffusionSpeedHz: '60', stereoSpread: '0.5', monoBassHz: '200', amplitudeSmoothMs: '20', seed: '7' }, defaults: { smearSeconds: 2, blurHz: 100, blurCents: 0, diffusion: 1, diffusionSpeedHz: 30, stereoSpread: 1, monoBassHz: 120, phaseSmoothMs: 10, amplitudeSmoothMs: 0 } },
 ];
 const browser = await chromium.launch({ headless: true, channel: 'chrome', args: [
   '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
@@ -83,6 +83,10 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     assert.deepEqual(state.values, Object.values(mod.defaults), `${mod.type} defaults`);
     assert.ok(state.sliders.every(Boolean) && state.mixOnFace, `${mod.type}: its controls are on the face`);
     assert.equal(state.renderer, 'spectralStyle');
+    // T13: the inactive-parameter rules name only parameters this module has, and the table is the one the face draws from
+    const rules = await page.evaluate(({ id, type }) => { const r = NODE_GRAPH_FACE_INACTIVE_PARAMS[type] || {}; const n = nodeGraphPatchNode(id); const has = k => !!nodeGraphSliderForParameter(id, k); return Object.entries(r).map(([k, rule]) => [k, has(k), rule.anyOf.every(c => has(c.when))]); }, { id, type: mod.type });
+    assert.ok(rules.every(([k, ok, whens]) => ok && whens), `${mod.type}: every inactive rule names real parameters (${JSON.stringify(rules)})`);
+    if (mod.type === 'spectralSmear') assert.deepEqual(rules.map(r => r[0]).sort(), ['diffusionSpeedHz', 'monoBassHz', 'phaseSmoothMs', 'stereoSpread']);
     await page.evaluate(({ id, set }) => { for (const [k, v] of Object.entries(set)) updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, k), v); }, { id, set: mod.set });
     await page.waitForFunction(() => nodeGraphMvp.live.outputLevelSmooth > 0.00001, null, { timeout: 30000 });
     const peak = await page.evaluate(() => nodeGraphMvp.live.outputLevelSmooth);

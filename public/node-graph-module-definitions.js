@@ -8400,8 +8400,11 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["smearSeconds", "Time Smear", "horizontal"]], h: 26 },
       { kind: "cells", params: [["blurHz", "Frequency Blur"], ["blurCents", "Pitch Blur"]], h: 40 },
-      { kind: "cells", params: [["diffusion", "Diffusion"], ["stereoSpread", "Stereo Spread"]], h: 40 },
+      { kind: "cells", params: [["diffusion", "Diffusion"], ["diffusionSpeedHz", "Diffusion Speed"]], h: 40 },
+      { kind: "choices", param: "hopMode", labels: ["Normal", "Smooth"], h: 26 },
+      { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
       { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
@@ -8469,7 +8472,7 @@ const nodeGraphModuleDefinitions = (
         "unit": "Hz",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "Power-spreading neighborhood half-width in Hz, the same number of Hz at every pitch (so a high partial gets a narrower musical interval than a low one; Pitch Blur is the constant-interval version). Smooth triangular kernel, level preserving. Zero leaves bins separate. FFT Size sets the frequency resolution."
+        "tooltip": "Power-spreading neighborhood half-width in Hz, the same number of Hz at every pitch (so a high partial gets a narrower musical interval than a low one; Pitch Blur is the constant-interval version). Smooth triangular kernel; the level stays matched. Zero leaves bins separate. FFT Size sets the frequency resolution."
       },
       {
         "key": "blurCents",
@@ -8481,7 +8484,7 @@ const nodeGraphModuleDefinitions = (
         "unit": "¢",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "Power-spreading half-width in cents, added to Frequency Blur: the same musical interval at every pitch, so a bass note and a high note are smeared by the same relative amount. Smooth triangular kernel, level preserving. Zero is off."
+        "tooltip": "Power-spreading half-width in cents, added to Frequency Blur: the same musical interval at every pitch, so a bass note and a high note are smeared by the same relative amount. Smooth triangular kernel, the level stays matched. Zero is off."
       },
       {
         "key": "diffusion",
@@ -8495,6 +8498,46 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "Phase excursion amount, from coherent phase to full diffusion. Rotates each bin without complex-spectrum crossfade cancellations. Stereo Spread controls channel decorrelation; no makeup gain."
       },
       {
+        "key": "diffusionSpeedHz",
+        "label": "Diffusion Speed",
+        "kind": "frequency",
+        "defaultValue": "30",
+        "min": "0",
+        "mid": "30",
+        "max": "200",
+        "unit": "Hz",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "How fast the diffused phases drift, in Hz. The default 30 Hz melts the blur into a soft wash with no ringing tones; very low values (about 2 Hz) bring back the old glassy sound, which can ring metallic with a wide blur. Only does something while Diffusion is above 0."
+      },
+      {
+        "key": "hopMode",
+        "label": "Hop",
+        "kind": "choice",
+        "choices": [
+          "Normal",
+          "Smooth"
+        ],
+        "choiceKeys": [
+          "normal",
+          "smooth"
+        ],
+        "choiceIds": [
+          4,
+          8
+        ],
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0",
+        "max": "1",
+        "step": "1",
+        "linearSmoothing": false,
+        "smoothingType": "none",
+        "displayChoices": true,
+        "divideChoicesVisibly": true,
+        "tooltip": "How finely the sound is processed in time. Normal is the standard quality; Smooth makes twice as many analysis frames, which gives softer, less grainy motion in tails and diffusion, at about double the CPU. It does not change the delay or the level. Switching is glitch-free."
+      },
+      {
         "key": "stereoSpread",
         "label": "Stereo Spread",
         "defaultValue": "1",
@@ -8504,6 +8547,19 @@ const nodeGraphModuleDefinitions = (
         "unit": "×",
         "step": "any",
         "tooltip": "Opposite-channel phase diffusion spread. Zero links the phase motion; higher values give mono input a stereo wash. Does not crossfeed audio. Requires Diffusion above zero; mono summing can change tone through phase cancellation."
+      },
+      {
+        "key": "monoBassHz",
+        "label": "Mono Bass",
+        "kind": "frequency",
+        "defaultValue": "120",
+        "min": "0",
+        "mid": "120",
+        "max": "1000",
+        "unit": "Hz",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Below this frequency both ears get the same phase motion, so the bass stays solid in mono. One-octave smooth transition. 0 = off. Only does something while Diffusion and Stereo Spread are above 0."
       },
       {
         "key": "phaseSmoothMs",
@@ -8530,6 +8586,21 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "nonlinearSlider": true,
         "tooltip": "Additional symmetric per-bin magnitude smoothing after frequency spreading. Zero preserves the sharp amplitude texture. Increase gently to soften chatter; this is not compression, saturation or limiting. Updates at the STFT hop rate."
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "kind": "seed",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0",
+        "max": "16777215",
+        "maxDigits": 0,
+        "step": "1",
+        "nonlinearSlider": false,
+        "linearSmoothing": false,
+        "smoothingType": "none",
+        "tooltip": "The random pattern of the diffusion. The same Seed, input and settings always give the same output; each new module gets its own."
       },
       {
         "key": "mix",

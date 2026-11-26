@@ -54,7 +54,10 @@ struct Core {
   int cloudVoices = 3;
   unsigned int cloudRng[kMaxVoices], cloudSideRng[kMaxVoices], cloudGrainRng[kMaxVoices];
   double cloudSide[kMaxVoices][bins];
-  float cloudMakeup[bins]; // per bin: amplitude makeup for the overlap-add of frames whose phases have decorrelated
+  float bandMakeup[bins]; // per bin: amplitude makeup for the overlap-add of frames whose phases have decorrelated (Cloud and Smear)
+  float smearRamp[bins]; // per bin: the Mono Bass ramp on Smear's side walk
+  int overlap = 4; // frames per window: hop = N / overlap (Smear: Normal 4 / Smooth 8; Warble and Cloud 8)
+  double diffusionSpeed = 30; // Hz: the phase-diffusion half-width per bin (Smear)
   // Warble: per voice and knot, three unit-variance motion generators (0 = mid, 1 = left side, 2 = right side): a sine phase and two cascaded
   // one-poles of seeded noise, plus a per-knot rate factor and the latest output.
   double warbleDepth = 25, warbleRate = 4, warbleDrunk = 0.5, monoBassHz = 0;
@@ -82,14 +85,14 @@ struct Core {
         power[c][k] = prevR[c][k] = prevI[c][k] = phaseI[c][k] = 0;
         magnitudeState[c][k] = 0;
         phaseR[c][k] = 1;
-        // The exact bin-centered advance is a multiple of pi/2 at this hop.
-        const int q = k % 4;
-        velocityR[c][k] = q == 0 ? 1 : q == 2 ? -1 : 0;
-        velocityI[c][k] = q == 1 ? 1 : q == 3 ? -1 : 0;
+        // The exact bin-centred phase advance per hop is 2 pi k / overlap.
+        double vs, vc; soemdsp_maths::dsp_sin_cos(twoPi * (double)(k % overlap) / overlap, &vs, &vc);
+        velocityR[c][k] = vc; velocityI[c][k] = vs;
       }
     }
     for (int v = 0; v < kMaxVoices; ++v) for (int k = 0; k < bins; ++k) cloudSide[v][k] = 0;
-    position = hop = 0; right = lastRate = 0; rng = 0x9e3779b9u; sideRng = 0xC2B2AE35u;
+    position = hop = 0; right = lastRate = 0; rng = seed * 2654435761u ^ 0x9e3779b9u; sideRng = seed * 2246822519u ^ 0xC2B2AE35u; // seed 0 keeps the original constants
+    if (!rng) rng = 0x9e3779b9u; if (!sideRng) sideRng = 0xC2B2AE35u; // safety: xorshift never leaves 0
     seedCloud();
     seedWarble();
   }
@@ -167,16 +170,16 @@ struct Core {
   }
   bool frame(double seconds, double widthHz, double diffusion, double rate) {
     const bool cloud = engine == kCloud, warble = engine == kWarble, moved = cloud || warble;
-    const int size = windowSize, hopSize = size / (moved ? 8 : 4), bins = size / 2 + 1;
+    const int size = windowSize, hopSize = size / overlap, bins = size / 2 + 1;
     // Overlap-add gain for the Hann analysis * Hann synthesis windows: the squared windows sum to 3 * overlap / 8, so 8 / (3 * overlap).
-    const float olaGain = moved ? 1.0f / 3 : 2.0f / 3;
+    const float olaGain = 8.0f / (3.0f * overlap);
     const double pole = seconds > 0 ? soemdsp_maths::dsp_exp(-hopSize / (rate * seconds)) : 0;
-    double radius = widthHz * size / rate;
-    if (radius > bins - 1) radius = bins - 1;
+    const double radius = widthHz * size / rate; // boxMean handles a kernel wider than the spectrum, so there is no cap
     const double widthCents = cloud ? cloudFuzz : blurCents; // Cloud's Fuzz is the cents width of the magnitude kernel
     const double centsRatio = widthCents > 0 ? soemdsp_maths::dsp_exp(widthCents * 0.6931471805599453 / 1200.0) - 1.0 : 0.0; // safety: a negative width has no meaning
     // Keep the phase walk unwrapped: scaling a wrapped angle would jump at pi.
-    const double jitter = __builtin_sqrt(12.0 * twoPi * 2.0 * hopSize / rate);
+    // Diffusion Speed (Hz) is the half-width of the phase-diffusion line per bin: a uniform step of +-jitter per hop has variance 4 pi Speed H / sr.
+    const double jitter = __builtin_sqrt(12.0 * 3.141592653589793 * (diffusionSpeed > 0 ? diffusionSpeed : 0) * hopSize / rate); // safety: a negative speed is the square root of a negative number
     const double phasePole = phaseSmoothMs > 0 ? soemdsp_maths::dsp_exp(-hopSize / (rate * phaseSmoothMs * 0.001)) : 0;
     const double amplitudePole = amplitudeSmoothMs > 0 ? soemdsp_maths::dsp_exp(-hopSize / (rate * amplitudeSmoothMs * 0.001)) : 0;
     for (int k = 1; k < bins - 1; ++k) {
@@ -184,6 +187,29 @@ struct Core {
       smoothOffset[k] = offset[k] + phasePole * (smoothOffset[k] - offset[k]);
       sideOffset[k] += sideRandom() * jitter;
       smoothSideOffset[k] = sideOffset[k] + phasePole * (smoothSideOffset[k] - sideOffset[k]);
+    }
+    if (engine == kSmear) {
+      // Mono Bass: the side walk is scaled by a raised-cosine ramp from 0 at MonoBass / sqrt(2) to 1 at MonoBass sqrt(2) (0 = off).
+      // Level: frames whose diffused phases have decorrelated add in power; each bin is given back what that loses, 1 / sqrt(rho^2 + (1 - rho^2) kappa), with
+      // rho = sinc(Diffusion jitter) the per-hop correlation and kappa = (1 / overlap) / 0.514 the incoherent share left once the window-pass match below
+      // has restored the 0.514 it measures. It is 1 at Diffusion 0 and only restores a loss, so it cannot boost.
+      const double kappa = (1.0 / overlap) * 1.9444444444444444;
+      bandMakeup[0] = bandMakeup[bins - 1] = 1.0f; smearRamp[0] = smearRamp[bins - 1] = 1.0f;
+      const double stepAngle = (diffusion < 0 ? -diffusion : diffusion) * jitter;
+      const double rho = stepAngle < 1e-9 ? 1.0 : (stepAngle >= 3.141592653589793 ? 0.0 : soemdsp_maths::dsp_sin(stepAngle) / stepAngle);
+      const float makeup = (float)(1.0 / __builtin_sqrt(rho * rho + (1.0 - rho * rho) * kappa));
+      for (int k = 1; k < bins - 1; ++k) {
+        bandMakeup[k] = makeup;
+        double ramp = 1.0;
+        if (monoBassHz > 0) {
+          const double hz = k * rate / size;
+          double t = soemdsp_maths::dsp_ln(hz / (monoBassHz * 0.7071067811865476)) * 1.4426950408889634;
+          t = t < 0 ? 0 : t > 1 ? 1 : t; // the shape of the one-octave ramp, not a parameter limit
+          double sn, cs; soemdsp_maths::dsp_sin_cos(wrapTurns(3.141592653589793 * t), &sn, &cs);
+          ramp = 0.5 - 0.5 * cs;
+        }
+        smearRamp[k] = (float)ramp;
+      }
     }
     const bool stereoWarble = warble && stereoSpread != 0, stereoCloud = cloud && stereoSpread != 0;
     if (cloud) {
@@ -199,7 +225,7 @@ struct Core {
       const double grainX = cloudGrain * 0.2302585092994046; // Grain ln(10) / 10
       const double grainNorm = (grainX > 1e-9 || grainX < -1e-9) ? 1.0 / __builtin_sqrt((1.0 - soemdsp_maths::dsp_exp(-grainX)) / grainX) : 1.0; // unity mean power
       const double voiceGain = 1.0 / voices;
-      cloudMakeup[0] = cloudMakeup[bins - 1] = 1.0f; // DC and Nyquist are not walked
+      bandMakeup[0] = bandMakeup[bins - 1] = 1.0f; // DC and Nyquist are not walked
       for (int k = 1; k < bins - 1; ++k) {
         const double df = k * rate / size * ratio;
         const double step = __builtin_sqrt(12.0 * 3.141592653589793 * df * hopSize / rate);
@@ -215,7 +241,7 @@ struct Core {
         // 1/8, of which the synthesis-window pass match below measures and restores 0.514). A uniform step of +-s per hop correlates successive frames by
         // rho = sin(s) / s (0 once the phase is fully random), so the OLA part left over is 1 / sqrt(rho^2 + (1 - rho^2) 0.243) per bin, applied after the
         // frame's power match; it is a statistic of the walk, not a measurement.
-        { const double rho = step >= 3.141592653589793 ? 0.0 : (step < 1e-9 ? 1.0 : soemdsp_maths::dsp_sin(step) / step); cloudMakeup[k] = (float)(1.0 / __builtin_sqrt(rho * rho + (1.0 - rho * rho) * 0.243)); }
+        { const double rho = step >= 3.141592653589793 ? 0.0 : (step < 1e-9 ? 1.0 : soemdsp_maths::dsp_sin(step) / step); bandMakeup[k] = (float)(1.0 / __builtin_sqrt(rho * rho + (1.0 - rho * rho) * 0.243)); }
         const double spreadK = stereoSpread * ramp;
         for (int v = 0; v < voices; ++v) {
           double walk = mvAcc[0][v][k];
@@ -337,7 +363,7 @@ struct Core {
       double srcEnergy = 0, srcWindowed = 0;
       for (int i = 0; i < size; ++i) {
         re[c][i] = input[c][(position + 1 + i) % size] * window[i]; im[c][i] = 0;
-        if (moved) { const double e = (double)re[c][i] * re[c][i]; srcEnergy += e; srcWindowed += e * window[i] * window[i]; }
+        { const double e = (double)re[c][i] * re[c][i]; srcEnergy += e; srcWindowed += e * window[i] * window[i]; }
       }
       transform(size, re[c], im[c], false);
       for (int k = 0; k < bins; ++k) {
@@ -345,6 +371,7 @@ struct Core {
         if (!__builtin_isfinite(magnitude2)) return false;
         const double edge = k == 0 || k == bins - 1 ? 1 : 2;
         power[c][k] = pole * power[c][k] + (1 - pole) * edge * magnitude2;
+        if (engine == kSmear) continue; // Smear assigns phase below, once the blurred power is known
         if (magnitude2 > 1e-24) {
           const double magnitude = __builtin_sqrt(magnitude2);
           const double old = prevR[c][k] * prevR[c][k] + prevI[c][k] * prevI[c][k];
@@ -364,12 +391,38 @@ struct Core {
       blurPower(c, radius, centsRatio);
       for (int k = 0; k < bins; ++k) {
         const bool edge = k == 0 || k == bins - 1;
+        if (engine == kSmear) {
+          // Live versus smeared phase: where the input is really present (c = 1) the phase is the input's; smeared tails and spread energy (c -> 0)
+          // continue the bin's held phase advance instead of taking noise-floor phase, so tails neither crackle nor freeze into steady tones.
+          const double a = re[c][k], b = im[c][k], magnitude2 = a * a + b * b, pOut = blurred[k] > 0 ? blurred[k] : 0;
+          double pr = phaseR[c][k], pi = phaseI[c][k];
+          const double vr = velocityR[c][k], vi = velocityI[c][k];
+          double cr = pr * vr - pi * vi, ci = pr * vi + pi * vr; // the continued phase
+          const double cn = cr * cr + ci * ci; if (cn > 1e-30) { const double inv = 1.0 / __builtin_sqrt(cn); cr *= inv; ci *= inv; } else { cr = 1; ci = 0; } // safety: renormalise, never divide by zero
+          if (magnitude2 > 1e-24) {
+            const double magnitude = __builtin_sqrt(magnitude2), ar = a / magnitude, ai = b / magnitude;
+            const double pIn = (k == 0 || k == bins - 1 ? 1.0 : 2.0) * magnitude2; // the input power in the same one-sided units as blurred[]
+            const double weight = pOut > 1e-300 ? (pIn / pOut < 1.0 ? pIn / pOut : 1.0) : 1.0; // blend weight
+            const double old = prevR[c][k] * prevR[c][k] + prevI[c][k] * prevI[c][k];
+            if (old > 1e-24) {
+              const double norm = __builtin_sqrt(old * magnitude2);
+              const double mr = (a * prevR[c][k] + b * prevI[c][k]) / norm, mi = (b * prevR[c][k] - a * prevI[c][k]) / norm;
+              double nr = vr + weight * (mr - vr), ni = vi + weight * (mi - vi); // the held advance follows the measured one by the blend weight
+              const double nn = nr * nr + ni * ni; if (nn > 1e-30) { const double inv = 1.0 / __builtin_sqrt(nn); nr *= inv; ni *= inv; } else { nr = vr; ni = vi; } // safety: renormalise
+              velocityR[c][k] = nr; velocityI[c][k] = ni;
+            }
+            double nr = cr + weight * (ar - cr), ni = ci + weight * (ai - ci);
+            const double nn = nr * nr + ni * ni; if (nn > 1e-30) { const double inv = 1.0 / __builtin_sqrt(nn); nr *= inv; ni *= inv; } else { nr = ar; ni = ai; } // safety: opposite vectors cancel; take the input's
+            phaseR[c][k] = nr; phaseI[c][k] = ni;
+          } else { phaseR[c][k] = cr; phaseI[c][k] = ci; }
+          prevR[c][k] = a; prevI[c][k] = b;
+        }
         const double targetMagnitude = __builtin_sqrt((blurred[k] > 0 ? blurred[k] : 0) / (edge ? 1 : 2));
         magnitudeState[c][k] = targetMagnitude + amplitudePole * (magnitudeState[c][k] - targetMagnitude);
-        double magnitude = magnitudeState[c][k];
+        double magnitude = magnitudeState[c][k] * (engine == kSmear ? bandMakeup[k] : 1.0f);
         double sn = 0, cs = 1;
         if (!edge && diffusion > 0) {
-          const double phase = smoothOffset[k] + (c == 0 ? -0.5 : 0.5) * stereoSpread * smoothSideOffset[k];
+          const double phase = smoothOffset[k] + (c == 0 ? -0.5 : 0.5) * stereoSpread * (engine == kSmear ? smearRamp[k] : 1.0f) * smoothSideOffset[k];
           soemdsp_maths::dsp_sin_cos(diffusion * phase, &sn, &cs);
         }
         const double pr = phaseR[c][k], pi = phaseI[c][k];
@@ -424,7 +477,7 @@ struct Core {
         const double normal = accPower > 1e-30 && sourcePower > 0 ? __builtin_sqrt(sourcePower / accPower) : 1.0;
         for (int k = 0; k < bins; ++k) {
           const bool edge = k == 0 || k == bins - 1;
-          const double mk = cloud ? cloudMakeup[k] : 1.0;
+          const double mk = cloud ? bandMakeup[k] : 1.0;
           re[c][k] = (float)(accRe[k] * normal * mk);
           im[c][k] = edge ? 0 : (float)(accIm[k] * normal * mk);
           if (!edge) { re[c][size - k] = re[c][k]; im[c][size - k] = -im[c][k]; }
@@ -432,8 +485,8 @@ struct Core {
       }
       transform(size, re[c], im[c], true);
       float frameGain = olaGain;
-      if (moved) {
-        // A moved partial is not exactly a Hann-shaped grain any more, so the synthesis window passes a different share of it. Hold that share
+      {
+        // A moved or diffused partial is not exactly a Hann-shaped grain any more, so the synthesis window passes a different share of it. Hold that share
         // to the source frame's (identical at Fuzz 0, so a dry Cloud is untouched): a level match per frame, not a clip.
         double synEnergy = 0, synWindowed = 0;
         for (int i = 0; i < size; ++i) { const double e = (double)re[c][i] * re[c][i]; synEnergy += e; synWindowed += e * window[i] * window[i]; }
@@ -446,7 +499,7 @@ struct Core {
     return true;
   }
   double tick(double left, double r, double seconds, double width, double diffusion, double mix, double rate) {
-    const int size = windowSize, hopSize = size / (engine != kSmear ? 8 : 4);
+    const int size = windowSize, hopSize = size / overlap;
     const double values[] = {left, r, seconds, width, diffusion, mix, rate};
     for (double v : values)
       if (!__builtin_isfinite(v)) { reset(); return 0; }
@@ -472,7 +525,7 @@ struct Core {
 };
 struct State {
   Core cores[2];
-  int current, desired, warm;
+  int current, desired, warm, desiredOverlap = 4;
   double fade, right, rate;
   bool changing, started;
   void reset() {
@@ -482,7 +535,7 @@ struct State {
   void initialize() {
     desired = 4096;
     for (auto& core : cores) {
-      core.engine = kSmear;
+      core.engine = kSmear; core.overlap = 4; core.diffusionSpeed = 30;
       core.phaseSmoothMs = 10; core.amplitudeSmoothMs = 0; core.stereoSpread = 1; core.seed = 1;
       core.blurCents = 0; core.cloudFuzz = 100; core.cloudGrain = 1; core.cloudVoices = 3;
       core.warbleDepth = 25; core.warbleRate = 4; core.warbleDrunk = 0.5; core.warbleVoices = 3; core.monoBassHz = 0;
@@ -490,9 +543,10 @@ struct State {
     reset();
   }
   // Which engine this module runs; both cores. (A module sets it once, in create.)
-  void setEngine(int e) { for (auto& core : cores) core.engine = e; reset(); }
+  void setEngine(int e) { desiredOverlap = e == kSmear ? 4 : 8; for (auto& core : cores) { core.engine = e; core.overlap = desiredOverlap; } reset(); }
   void beginChange() {
     Core& from = cores[current]; Core& to = cores[1 - current];
+    to.overlap = desiredOverlap; // the hop is part of the core; it changes with the same warm-and-crossfade as an FFT size change
     to.reset(desired);
     // Conservatively remap one-sided power, with FFT normalization accounted for.
     const double scale = (double)to.windowSize / from.windowSize;
@@ -504,13 +558,24 @@ struct State {
         if (a + 1 <= to.windowSize / 2) to.power[c][a + 1] += v * f;
       }
     }
+    if (to.windowSize == from.windowSize) {
+      // Same N (a hop-only change): continue the same phase walks, so the crossfade is between coherent signals and does not dip.
+      for (int c = 0; c < 2; ++c) for (int k = 0; k < bins; ++k) {
+        to.power[c][k] = from.power[c][k]; to.magnitudeState[c][k] = from.magnitudeState[c][k];
+        to.phaseR[c][k] = from.phaseR[c][k]; to.phaseI[c][k] = from.phaseI[c][k];
+        to.velocityR[c][k] = from.velocityR[c][k]; to.velocityI[c][k] = from.velocityI[c][k];
+        to.prevR[c][k] = from.prevR[c][k]; to.prevI[c][k] = from.prevI[c][k];
+      }
+      for (int k = 0; k < bins; ++k) { to.offset[k] = from.offset[k]; to.smoothOffset[k] = from.smoothOffset[k]; to.sideOffset[k] = from.sideOffset[k]; to.smoothSideOffset[k] = from.smoothSideOffset[k]; }
+      to.rng = from.rng; to.sideRng = from.sideRng;
+    }
     warm = to.windowSize; fade = 0; changing = true;
   }
   double tick(double l, double r, double seconds, double hz, double diffusion, double mix, double sr) {
     if (rate != 0 && rate != sr) reset();
     rate = sr;
     if (!started) { cores[current].reset(desired); started = true; }
-    if (!changing && cores[current].windowSize != desired) beginChange();
+    if (!changing && (cores[current].windowSize != desired || cores[current].overlap != desiredOverlap)) beginChange();
     const double a = cores[current].tick(l, r, seconds, hz, diffusion, mix, sr);
     right = cores[current].right;
     if (!changing) return a;

@@ -1375,6 +1375,29 @@ function nodeGraphModuleFaceDrawOwnedStripes(batch, x, y, w, h, z, css = "rgba(2
   }
 }
 
+/**
+ * Face cells that do nothing for the module's current settings: { type: { param: { anyOf: [{ when: controlling param, values: [its values that make this
+ * one inactive] }, ...] } } }. A cell is striped when ANY of its conditions holds. The face is redrawn whenever a controlling value changes, so
+ * this follows the settings with no timer and no polling.
+ */
+const NODE_GRAPH_FACE_INACTIVE_PARAMS = Object.freeze({
+  spectralSmear: Object.freeze({
+    stereoSpread: { anyOf: [{ when: "diffusion", values: [0] }] },
+    phaseSmoothMs: { anyOf: [{ when: "diffusion", values: [0] }] },
+    diffusionSpeedHz: { anyOf: [{ when: "diffusion", values: [0] }] },
+    monoBassHz: { anyOf: [{ when: "diffusion", values: [0] }, { when: "stereoSpread", values: [0] }] },
+  }),
+  spectralBlur: Object.freeze({
+    monoBassHz: { anyOf: [{ when: "fuzz", values: [0] }, { when: "stereoSpread", values: [0] }] },
+  }),
+  spectralWarble: Object.freeze({
+    monoBassHz: { anyOf: [{ when: "stereoSpread", values: [0] }, { when: "depth", values: [0] }] },
+    rate: { anyOf: [{ when: "depth", values: [0] }] },
+    drunk: { anyOf: [{ when: "depth", values: [0] }] },
+    voices: { anyOf: [{ when: "depth", values: [0] }] },
+  }),
+});
+
 function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
   const spec = nodeGraphModuleFaceSpecForElement(el);
   if (!spec) return;
@@ -1715,6 +1738,23 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       nodeGraphGlGraphDrawSeedWidget(batch, {
         host: cell(0, w), value: cell(0, wd.w), dice: cell(wd.w, bw), plus: cell(wd.w + bw, bw), minus: cell(wd.w + bw * 2, bw),
       }, text, z);
+    }
+  }
+  // Not-applicable parameters: striped (the same 135deg stripes as a jack-owned cell, in grey) while any of their conditions holds.
+  const inactiveRules = NODE_GRAPH_FACE_INACTIVE_PARAMS[el?.dataset?.nodeType];
+  if (inactiveRules) {
+    for (const wd of widgets) {
+      const rule = wd.type === "cell" && wd.param ? inactiveRules[wd.param] : null;
+      if (!rule) continue;
+      const inactive = rule.anyOf.some((cond) => {
+        const input = nodeGraphModuleFaceInput(el, cond.when);
+        const value = nodeGraphModuleFaceValue(input);
+        return input && cond.values.some((v) => Math.abs(value - v) < 1e-9);
+      });
+      if (!inactive) continue;
+      const gap = wd.row.kind === "cells" && wd.x > 0 ? Math.max(hairFace, NODE_GRAPH_FACE_CELL_GAP_PX) : 0;
+      const top = wd.y + Math.max(hairFace, NODE_GRAPH_FACE_CELL_GAP_PX);
+      nodeGraphModuleFaceDrawOwnedStripes(batch, ox + (wd.x + gap) * z, oy + top * z, (wd.w - gap) * z, (wd.h - (top - wd.y)) * z, z, "rgba(150, 160, 180, 0.22)");
     }
   }
   // Debug overlay (D): a "cpu" tag in the corner of every cell whose parameter

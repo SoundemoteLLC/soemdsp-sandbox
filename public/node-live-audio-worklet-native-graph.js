@@ -663,6 +663,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "blurHz") return P.NATIVE_GRAPH_PARAM_WIDTH;
     if (k === "blurCents") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
     if (k === "diffusion") return P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT;
+    if (k === "diffusionSpeedHz") return P.NATIVE_GRAPH_PARAM_LFO_RATE;
+    if (k === "monoBassHz") return P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED;
+    if (k === "hopMode") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_PAN;
     if (k === "phaseSmoothMs") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
     if (k === "amplitudeSmoothMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
@@ -6335,6 +6339,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("blurHz", P.NATIVE_GRAPH_PARAM_WIDTH, cont("blurHz", 100));
       push("blurCents", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("blurCents", 0));
       push("diffusion", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusion", 1));
+      push("diffusionSpeedHz", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("diffusionSpeedHz", 30));
+      push("monoBassHz", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("monoBassHz", 120));
+      push("hopMode", P.NATIVE_GRAPH_PARAM_MODE, disc("hopMode", 0));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("stereoSpread", P.NATIVE_GRAPH_PARAM_PAN, cont("stereoSpread", 1));
       push("phaseSmoothMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("phaseSmoothMs", 10));
       push("amplitudeSmoothMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("amplitudeSmoothMs", 0));

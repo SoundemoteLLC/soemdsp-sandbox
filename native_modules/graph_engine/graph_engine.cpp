@@ -902,7 +902,9 @@ extern "C" int soemdsp_spectral_smear_create();
 extern "C" void soemdsp_spectral_smear_destroy(int h);
 extern "C" double soemdsp_spectral_smear_sample(int h, double l, double r, double seconds, double hz, double diffusion, double mix, double rate);
 extern "C" void soemdsp_spectral_smear_set_smoothing(int h, double phaseMs, double amplitudeMs);
-extern "C" void soemdsp_spectral_smear_set_stereo_spread(int h, double amount);
+extern "C" void soemdsp_spectral_smear_set_stereo(int h, double spread, double monoBassHz, double diffusionSpeedHz);
+extern "C" void soemdsp_spectral_smear_set_seed(int h, double seed);
+extern "C" int soemdsp_spectral_smear_set_overlap(int h, int overlap);
 extern "C" double soemdsp_spectral_smear_right(int h);
 extern "C" void soemdsp_spectral_smear_set_amplitude_smooth(int h, double ms);
 extern "C" void soemdsp_spectral_smear_set_blur_cents(int h, double cents);
@@ -5153,6 +5155,10 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.pan, 1, false);            // stereo spread (ratio)
     init_control(n.offsetMs, 10, false);      // phase smooth (ms)
     init_control(n.diffusionSize, 0, false);  // amplitude smooth (ms)
+    init_control(n.lfoRate, 30, false);       // diffusion speed (Hz)
+    init_control(n.lfoBaseSpeed, 120, false); // mono bass (Hz)
+    init_control(n.mode, 0, true);            // hop: 0 Normal (overlap 4), 1 Smooth (overlap 8)
+    init_control(n.seed, 0, true);            // seed (discrete)
     init_control(n.mix, 1, false);
   }
   if (typeId == kTypeSpectralFreeze) {
@@ -16442,7 +16448,9 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
     } else if (node.typeId == kTypeSpectralSmear) {
       soemdsp_spectral_smear_set_fft_size(node.nativeHandle, (int)control_audio(g, node.stages, f));
       soemdsp_spectral_smear_set_smoothing(node.nativeHandle, control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionSize, f));
-      soemdsp_spectral_smear_set_stereo_spread(node.nativeHandle, control_audio(g, node.pan, f));
+      soemdsp_spectral_smear_set_stereo(node.nativeHandle, control_audio(g, node.pan, f), control_audio(g, node.lfoBaseSpeed, f), control_audio(g, node.lfoRate, f));
+      soemdsp_spectral_smear_set_seed(node.nativeHandle, control_audio(g, node.seed, f));
+      soemdsp_spectral_smear_set_overlap(node.nativeHandle, control_audio(g, node.mode, f) >= 0.5 ? 8 : 4);
       soemdsp_spectral_smear_set_blur_cents(node.nativeHandle, control_audio(g, node.frequency, f));
       y = soemdsp_spectral_smear_sample(node.nativeHandle, left, right, control_audio(g, node.timeNumerator, f),
         control_audio(g, node.width, f), control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);

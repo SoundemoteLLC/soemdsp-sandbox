@@ -7,7 +7,7 @@ const x = (await WebAssembly.instantiate(fs.readFileSync(new URL("../native_modu
   { env: { emo_process_block() {} } })).instance.exports;
 const N = 128, rate = 48000;
 // slots: 22 fft size, 30 Cloud fuzz (cents), 51 Cloud grain (dB), 1 stereo spread, 10 mono bass (Hz; Cloud and Warble), 48 seed, 13 warble depth (cents), 57 rate (Hz), 47 drunk, 10 mono bass (Hz, Warble), 52 time smear (s), 10 blur (cents),
-// 42 diffusion, 41 amplitude smooth (ms), 31 frequency blur (Hz), 1 stereo spread, 55 phase smooth (ms), 32 voices, 40 mix
+// 42 diffusion, 41 amplitude smooth (ms), 31 frequency blur (Hz), 1 stereo spread, 55 phase smooth (ms), 32 voices, 57 diffusion speed (Hz, Smear), 46 mono bass (Hz, Smear), 21 hop (Smear), 40 mix
 const modules = [
   {
     name: "spectral_blur", type: 272,
@@ -23,8 +23,8 @@ const modules = [
   },
   {
     name: "spectral_smear", type: 282,
-    specs: [[[22, 4096], [52, 2], [31, 100], [10, 0], [42, 1], [1, 1], [55, 10], [41, 0]], [[22, 512], [52, 0.46], [31, 490.89], [10, 150], [42, 0.402], [1, 0.3], [55, 30], [41, 20], [40, 0.7]]],
-    sync: (ref, p) => { x.soemdsp_spectral_smear_set_smoothing(ref, p(55, 10), p(41, 0)); x.soemdsp_spectral_smear_set_stereo_spread(ref, p(1, 1)); x.soemdsp_spectral_smear_set_blur_cents(ref, p(10, 0)); },
+    specs: [[[22, 4096], [52, 2], [31, 100], [10, 0], [42, 1], [1, 1], [55, 10], [41, 0]], [[22, 512], [52, 0.46], [31, 490.89], [10, 150], [42, 0.402], [57, 12], [46, 200], [21, 1], [48, 7], [1, 0.3], [55, 30], [41, 20], [40, 0.7]]],
+    sync: (ref, p) => { x.soemdsp_spectral_smear_set_smoothing(ref, p(55, 10), p(41, 0)); x.soemdsp_spectral_smear_set_stereo(ref, p(1, 1), p(46, 120), p(57, 30)); x.soemdsp_spectral_smear_set_seed(ref, p(48, 0)); x.soemdsp_spectral_smear_set_overlap(ref, p(21, 0) >= 0.5 ? 8 : 4); x.soemdsp_spectral_smear_set_blur_cents(ref, p(10, 0)); },
     sample: (ref, a, z, p) => x.soemdsp_spectral_smear_sample(ref, a, z, p(52, 2), p(31, 100), p(42, 1), p(40, 1), rate),
   },
 ];
