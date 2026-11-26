@@ -535,6 +535,8 @@ function mountNodeGraphModuleFace(article, type) {
   body.append(face);
   layoutNodeGraphModuleFace(article);
   face.addEventListener("pointerdown", (event) => beginNodeGraphModuleFaceGesture(article, face, nodeGraphModuleFaceSpecForElement(article), event));
+  face.addEventListener("pointermove", (event) => nodeGraphModuleFaceHoverCursor(article, face, event));
+  face.addEventListener("pointerleave", () => { face.style.cursor = ""; });
   face.addEventListener("contextmenu", (event) => openNodeGraphModuleFaceParamOptions(article, face, event));
   if (typeof mountSabrinaPresetBrowser === "function") mountSabrinaPresetBrowser(article, type);
   if (typeof mountPulseTrainPresetBrowser === "function") mountPulseTrainPresetBrowser(article, type);
@@ -791,6 +793,25 @@ function nodeGraphModuleFaceBandBarX(wd, t) {
   const xMin = wd.x;
   const xMax = wd.x + wd.w - hw;
   return Math.max(xMin, Math.min(xMax, Math.round(wd.x + t * wd.w - hw * 0.5)));
+}
+
+/**
+ * Mouse hover over a range (band) widget: |- over the min handle, -| over the max handle, nothing special
+ * between them (that keeps the face's own cursor). Touch has no cursor. Kept while a drag holds the button.
+ */
+function nodeGraphModuleFaceHoverCursor(article, face, event) {
+  if (event.pointerType !== "mouse" || event.buttons) return;
+  const spec = nodeGraphModuleFaceSpecForElement(article);
+  const p = spec ? nodeGraphModuleFaceLocalPoint(face, event) : null;
+  const wd = p ? nodeGraphModuleFaceWidgetAt(spec, face, p.x, p.y) : null;
+  let cursor = "";
+  if (wd && wd.type === "band") {
+    const { tl, th } = nodeGraphModuleFaceBandEnds(article, wd);
+    const mode = nodeGraphModuleFaceBandMode((p.x - wd.x) / Math.max(1, wd.w), tl, th, wd.w);
+    if (mode === "lo") cursor = "var(--node-range-min-cursor)";
+    else if (mode === "hi") cursor = "var(--node-range-max-cursor)";
+  }
+  if (face.style.cursor !== cursor) face.style.cursor = cursor;
 }
 
 /** Which end a band press at u (0..1) grabs: inside the span moves both. */

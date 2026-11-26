@@ -1068,7 +1068,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "padExtra",
     ]),
     colors: Object.freeze(["strokeColor", "dotColor", "backgroundColor"]),
-    toggles: Object.freeze([]),
+    toggles: Object.freeze(["skipDiscontinuities"]),
     choices: Object.freeze([]),
   }),
   // BLIT: same line drawer as SinCos / DSF. Phase dot is the face's Dot Off / On.

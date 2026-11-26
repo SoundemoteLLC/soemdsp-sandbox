@@ -11,6 +11,8 @@
 // Line HBS drives the sine; the cosine follows it at a fixed hue offset and
 // brightness ratio (default HBS(212.6, 0.562, 1) = the original #3d7eff).
 const nodeGraphSinCosFaceDisplaySettingsDefaults = Object.freeze({
+  // Skip discontinuity (display only): break the line at a jump instead of drawing a vertical wall. Off by default.
+  skipDiscontinuities: false,
   lineHue: 0,
   lineBrightness: 0.544,
   lineSaturation: 1,
@@ -42,6 +44,9 @@ function normalizeNodeGraphSinCosFaceSettings(settings = {}) {
     : (Object.prototype.hasOwnProperty.call(source, "phaseDot") ? Number(source.phaseDot) < 1 : false);
   if (legacyOff) look.dotThickness = 0;
   delete look.showDot;
+  look.skipDiscontinuities = typeof nodeGraphDisplaySettingsToggleIsOn === "function"
+    ? nodeGraphDisplaySettingsToggleIsOn(source.skipDiscontinuities ?? false)
+    : source.skipDiscontinuities === true;
   return look;
 }
 
@@ -623,6 +628,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     look.strokePaint, look.dotPaint, look.backgroundPaint, strokeW, dotW,
     String(Number(look.padExtra) || 0),
     String(nodeGraphLineSmoothingPx(look, 1)),
+    look.skipDiscontinuities ? "skip" : "join",
   ].join("|");
   const livePlaying = typeof nodeGraphRoundShapeLivePlaying === "function"
     ? nodeGraphRoundShapeLivePlaying()
@@ -692,6 +698,15 @@ function drawNodeGraphSinCosDisplayInner(section) {
     ? nodeGraphLineSmoothingPx(look, 1)
     : Math.max(0, Number(look.lineSmoothing) || 1);
   const polylines = [];
+  // Skip discontinuity: a jump of more than a quarter of the plot height between neighbouring samples cannot come from a
+  // smooth curve at this sample density, so the line breaks there instead of drawing the connecting wall.
+  const jumpPx = innerH * 0.25;
+  const pushRun = (raw, color) => {
+    const pts = typeof nodeGraphGlLinesAdaptPoints === "function"
+      ? nodeGraphGlLinesAdaptPoints(raw, Math.max(64, Math.ceil(innerW * 4 * (raw.length / 2) / (samples + 1))))
+      : raw;
+    polylines.push({ points: pts, color, width: strokeW });
+  };
   const pushPoly = (kind, color) => {
     const raw = new Float32Array((samples + 1) * 2);
     for (let i = 0; i <= samples; i += 1) {
@@ -699,10 +714,16 @@ function drawNodeGraphSinCosDisplayInner(section) {
       raw[i * 2] = mapX(phase);
       raw[i * 2 + 1] = mapY(sampleKind(phase, kind));
     }
-    const pts = typeof nodeGraphGlLinesAdaptPoints === "function"
-      ? nodeGraphGlLinesAdaptPoints(raw, Math.max(64, Math.ceil(innerW * 4)))
-      : raw;
-    polylines.push({ points: pts, color, width: strokeW });
+    if (!look.skipDiscontinuities) {
+      pushRun(raw, color);
+      return;
+    }
+    let start = 0;
+    for (let i = 1; i <= samples + 1; i += 1) {
+      if (i <= samples && Math.abs(raw[i * 2 + 1] - raw[(i - 1) * 2 + 1]) <= jumpPx) continue;
+      if (i - start >= 2) pushRun(raw.subarray(start * 2, i * 2), color);
+      start = i;
+    }
   };
   if (drawSin) pushPoly("sin", look.strokePaint);
   if (drawCos) pushPoly("cos", nodeGraphSinCosCosPaint(look));

@@ -1345,6 +1345,8 @@ const nodeGraphModuleDefinitions = (
         defaultValue: "1",
         displayChoices: true,
         divideChoicesVisibly: true,
+        // Starts hidden on spawn; the parameter menu's Show brings it back (HP-04 round).
+        hidden: true,
         key: "method",
         label: "Method",
         linearSmoothing: false,
