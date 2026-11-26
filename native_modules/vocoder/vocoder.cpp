@@ -106,6 +106,41 @@ extern "C" double soemdsp_vocoder_sample(int h, double modL, double modR,
   return left;
 }
 extern "C" double soemdsp_vocoder_right(int h) { auto* s = state(h); return s ? s->right : 0; }
+// Display tap (read-only): the band envelopes that drive the synth filters.
+// layout 0 = sounding bank, 1 = incoming bank while a Bands change warms and
+// crossfades (count 0 otherwise). Level is pi/2 x the rectified envelope, the
+// same calibration the audio uses, so a unit sine in one band reads 1 (0 dBFS).
+// Hz is the synthesis centre (Formant Shift applied), where that energy sounds.
+static const soemdsp_vocoder::FilterBankCore* display_bank(State* s, int layout) {
+  if (!s) return nullptr;
+  if (layout == 0) return &s->bank[s->current];
+  return s->switching ? &s->bank[1 - s->current] : nullptr;
+}
+extern "C" int soemdsp_vocoder_display_count(int h, int layout) {
+  const auto* b = display_bank(state(h), layout);
+  return b && b->lastRate > 0 ? b->count : 0;
+}
+extern "C" double soemdsp_vocoder_display_hz(int h, int layout, int band) {
+  const auto* b = display_bank(state(h), layout);
+  if (!b || b->lastRate <= 0 || band < 0 || band >= b->count || b->count < 2) return 0;
+  using namespace soemdsp_maths;
+  const double low = 40, high = b->lastRate * 0.45;
+  const double hz = low * dsp_exp(dsp_ln(high / low) * band / (b->count - 1));
+  return hz * dsp_exp(b->lastShift * (0.6931471805599453 / 12));
+}
+extern "C" double soemdsp_vocoder_display_level(int h, int layout, int band) {
+  const auto* b = display_bank(state(h), layout);
+  if (!b || band < 0 || band >= b->count) return 0;
+  const auto& e = b->bands[band].envelope;
+  return (e[0] > e[1] ? e[0] : e[1]) * (soemdsp_maths::kPi * 0.5);
+}
+// Crossfade weight of the incoming bank: 0 while warming, then the same
+// smoothstep the audio uses.
+extern "C" double soemdsp_vocoder_display_weight(int h) {
+  auto* s = state(h);
+  if (!s || !s->switching || s->warm > 0) return 0;
+  return s->fade * s->fade * (3 - 2 * s->fade);
+}
 extern "C" int soemdsp_vocoder_latency() { return kLatency; }
 extern "C" int soemdsp_vocoder_version() { return 2; }
 extern "C" const char* soemdsp_vocoder_metadata_json() { return metadata; }

@@ -15,9 +15,9 @@ for (const [snake, type, next, order] of cases) {
   const start = definitions.indexOf(`\n  ${type}: {`), end = definitions.indexOf(`\n  ${next}: {`, start);
   assert.ok(start >= 0 && end > start);
   const def = vm.runInNewContext(`({${definitions.slice(start, end)}}).${type}`);
-  assert.deepEqual(JSON.parse(JSON.stringify(def.parameters)), metadata.parameters, `${type} C++ metadata/UI agreement`);
+  assert.deepEqual(JSON.parse(JSON.stringify(def.parameters.filter((p) => !p.displayOnly))), metadata.parameters, `${type} C++ metadata/UI agreement`);
   assert.deepEqual(Array.from(def.outputs), metadata.outputs);
-  assert.equal(def.displayType, "scope1dTrace");
+  assert.equal(def.displayType, "spectralStyle");
   const defaults = Object.fromEntries(metadata.parameters.map(p => [p.key, Number(p.defaultValue)]));
   modules[type] = { x, prefix, defaults, order,
     create: x[prefix + "create"], destroy: x[prefix + "destroy"], reset: x[prefix + "reset"],

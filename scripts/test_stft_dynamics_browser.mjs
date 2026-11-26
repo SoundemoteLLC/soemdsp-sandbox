@@ -70,7 +70,7 @@ try {
       await page.screenshot({ path: path.join(os.tmpdir(), "stft-" + key + "-" + viewport.width + ".png"), timeout: 15000 });
     }
   }
-  assert.ok(reports.every(r => r.width > 0 && r.height > 0 && r.renderer === "scope1dTrace"));
+  assert.ok(reports.every(r => r.width > 0 && r.height > 0 && r.renderer === "spectralStyle"));
   assert.ok(reports.filter(r => r.type === "stftGate").every(r => Number(r.knee) === 0), "hard knee persists through the normal control path");
   assert.ok(reports.filter(r => r.type === "stftGate").every(r => Number(r.hold) === 5000 && Number(r.holdMax) === 5000), "Hold accepts 5000 ms and expands its UI range");
   assert.deepEqual(errors, []); console.log(JSON.stringify({ reports, errors }));

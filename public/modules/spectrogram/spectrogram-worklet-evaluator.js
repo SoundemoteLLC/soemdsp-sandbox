@@ -4,7 +4,7 @@
 // Data: dataPorts → main thread → nodeGraphDataBus → spectrogram-display.js
 //
 // Display protocol (spectrogramHopMeta / drawNodeGraphSpectrogramItem):
-//   Spectrum     — Float32 linear mag bins (half FFT, DC..Nyquist) — last hop
+//   Spectrum     — Float32 linear |X[k]| bins (half FFT, DC..Nyquist) — last hop
 //   SpectrumBatch— concatenated hop columns this quantum (smooth scroll)
 //   FftSize      — [fftSize, halfN, spectrumBins, hopSize, sampleRate,
 //                   hopSerial, batchColumns, windowSum]
@@ -32,7 +32,6 @@ NodeLiveAudioProcessor.prototype.createSpectrogramState = function createSpectro
   return {
     fftReal: null,
     fftImag: null,
-    emaBins: null,
     spectrumOut: null,
     batchScratch: null,
     windowSize: 0,
@@ -48,7 +47,8 @@ NodeLiveAudioProcessor.prototype.createSpectrogramState = function createSpectro
 // Spectrogram get Spectrum / SpectrumBatch columns. 1D Spectrum gets
 // SpectrumRaw (last-hop |X[k]|, no EMA), SpectrumGain ([window sum]) and,
 // with Bass detail on, SpectrumLowRaw + SpectrumLowMeta (long-window FFT).
-const SPECTROGRAM_ANALYSIS_TYPES = new Set(["spectrogram", "spectrum1d", "circularSpectrogram"]);
+// Spectrum Circle (videoFeedback) gets the 1D Spectrum posts from its input A.
+const SPECTROGRAM_ANALYSIS_TYPES = new Set(["spectrogram", "spectrum1d", "circularSpectrogram", "videoFeedback"]);
 
 // Display analysis only. setPlan must not call create*State (DSP door).
 // Without this map, postModuleScopeSnapshot never emits Spectrum.
@@ -101,11 +101,11 @@ NodeLiveAudioProcessor.prototype.spectrogramResolveFftSize = function spectrogra
 };
 
 NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectrogramCollectDisplayData(nodeId, state, dataPorts) {
-  const bufKey = `${nodeId}:In`;
-  const buf = this.visualInputBuffers.get(bufKey);
+  const node = this.nodes.get(nodeId);
+  const nodeType = String(node?.type || "");
+  const buf = this.visualInputBuffers.get(`${nodeId}:${nodeType === "videoFeedback" ? "A" : "In"}`);
   if (!buf?.buffer?.length) return;
 
-  const node = this.nodes.get(nodeId);
   const params = node?.params || {};
 
   const winSize = this.spectrogramResolveFftSize(params);
@@ -148,17 +148,16 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
   const start = (writeIdx - freshCount + capacity) % capacity;
 
   const geometry = { winSize, windowKind, hopSize, fftLen, halfN, writeRate };
-  if (String(node?.type || "") === "spectrum1d") {
+  if (nodeType === "spectrum1d" || nodeType === "videoFeedback") {
     this.spectrumLineCollect(nodeId, state, dataPorts, buf, start, freshCount, capacity, geometry, params);
     return;
   }
   this.spectrogramCollectColumns(nodeId, state, dataPorts, buf, start, freshCount, capacity, geometry);
 };
 
-// Spectrogram / Circular Spectrogram: every hop becomes a waterfall column.
-// The EMA and log10(1 + mag x 100) compression are the spectrogram faces look
-// only; 1D Spectrum never goes through this path.
-const SPECTROGRAM_COLUMN_EMA_OLD = 0.35;
+// Spectrogram / Circular Spectrogram: every hop becomes a waterfall column of
+// honest linear magnitudes |X[k]| (no smoothing, no compression). The shader
+// turns them into dBFS against the window's full scale (FftSize[7] / 2).
 NodeLiveAudioProcessor.prototype.spectrogramCollectColumns = function spectrogramCollectColumns(
   nodeId, state, dataPorts, buf, start, freshCount, capacity, g,
 ) {
@@ -177,7 +176,6 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectColumns = function spectrogra
     state.analysis = nodeGraphSpectralWindow(winSize, windowKind);
     state.accumulator = new Float32Array(winSize);
     state.accumCount = 0;
-    state.emaBins = new Float32Array(halfN);
     state.spectrumOut = new Float32Array(halfN);
     state.batchScratch = null;
   }
@@ -199,9 +197,7 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectColumns = function spectrogra
     nodeGraphSpectralFftInPlace(state.fftReal, state.fftImag);
     const col = new Float32Array(halfN);
     for (let j = 0; j < halfN; j++) {
-      const mag = Math.sqrt(state.fftReal[j] * state.fftReal[j] + state.fftImag[j] * state.fftImag[j]);
-      state.emaBins[j] = SPECTROGRAM_COLUMN_EMA_OLD * state.emaBins[j] + (1 - SPECTROGRAM_COLUMN_EMA_OLD) * mag;
-      col[j] = Math.max(0, Math.log10(1 + state.emaBins[j] * 100));
+      col[j] = Math.sqrt(state.fftReal[j] * state.fftReal[j] + state.fftImag[j] * state.fftImag[j]);
     }
     if (hopColumns.length >= maxBatchCols) hopColumns.shift();
     hopColumns.push(col);

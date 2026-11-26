@@ -1,6 +1,7 @@
 // Spectrum Circle: FFT of audio In, drawn as a mirrored ring of rays that start
 // at the centre (video-feedback-gl.js). Display Settings own the analyzer
-// (FFT size, window, dB floor, bands) and the gradient; Min / Max Freq,
+// (FFT size, window, dB floor and ceiling, bands; the FFT itself is the
+// shared worklet analysis of input A) and the gradient; Min / Max Freq,
 // Curve, Decay / Size / Inner / Twist / Bright / Smooth are face params, read
 // through their parameter definitions (no limits here).
 
@@ -17,6 +18,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_DEFAULTS = Object.freeze({
   fftSize: 2048,
   window: 1,
   spectrumDbFloor: -72,
+  spectrumDbCeiling: 0,
   spectrumCircleBands: 64,
   spectrumCircleRayWidth: 0.6,
   spectrumCircleColorLevel: "on",
@@ -46,12 +48,14 @@ function normalizeNodeGraphVideoFeedbackSettings(settings = {}) {
   );
   const hue = Number(source.backgroundHue);
   const floor = source.spectrumDbFloor == null ? d.spectrumDbFloor : Number(source.spectrumDbFloor);
+  const ceiling = source.spectrumDbCeiling == null ? d.spectrumDbCeiling : Number(source.spectrumDbCeiling);
   const width = source.spectrumCircleRayWidth == null ? d.spectrumCircleRayWidth : Number(source.spectrumCircleRayWidth);
   const legacyRadius = source.spectrumCircleColorBy === "radius";
   return {
     fftSize: source.fftSize == null ? d.fftSize : nodeGraphSpectrogramSnapFftSize(source.fftSize),
     window: Number(nodeGraphVideoFeedbackChoice("window", source.window, d.window)),
-    spectrumDbFloor: Number.isFinite(floor) ? Math.max(-180, Math.min(-0.1, floor)) : d.spectrumDbFloor,
+    spectrumDbFloor: Number.isFinite(floor) ? Math.max(-180, Math.min(48, floor)) : d.spectrumDbFloor,
+    spectrumDbCeiling: Number.isFinite(ceiling) ? Math.max(-180, Math.min(48, ceiling)) : d.spectrumDbCeiling,
     spectrumCircleBands: Number(nodeGraphVideoFeedbackChoice("spectrumCircleBands", source.spectrumCircleBands, d.spectrumCircleBands)),
     spectrumCircleRayWidth: Number.isFinite(width) ? Math.max(0, Math.min(1, width)) : d.spectrumCircleRayWidth,
     spectrumCircleColorLevel: nodeGraphVideoFeedbackChoice("spectrumCircleColorLevel", source.spectrumCircleColorLevel, legacyRadius ? "off" : d.spectrumCircleColorLevel),
@@ -101,6 +105,7 @@ function buildNodeGraphVideoFeedbackDisplaySettingsBodyHtml() {
       ${nodeGraphDisplaySettingsBuildChoiceRowHtml("fftSize")}
       ${nodeGraphDisplaySettingsBuildChoiceRowHtml("window")}
       ${nodeGraphDisplaySettingsBuildStepperRowHtml("spectrumDbFloor", type)}
+      ${nodeGraphDisplaySettingsBuildStepperRowHtml("spectrumDbCeiling", type)}
       ${nodeGraphDisplaySettingsBuildChoiceRowHtml("spectrumCircleBands")}
       ${nodeGraphDisplaySettingsBuildStepperRowHtml("spectrumCircleRayWidth", type)}
       ${nodeGraphDisplaySettingsBuildSwitchRowHtml("spectrumCircleSymmetric")}
@@ -119,65 +124,49 @@ function buildNodeGraphVideoFeedbackDisplaySettingsBodyHtml() {
   `;
 }
 
-function nodeGraphVideoFeedbackWindow(n, kind) {
-  const w = new Float64Array(n);
-  const denom = Math.max(1, n - 1);
-  for (let i = 0; i < n; i += 1) {
-    const x = (2 * Math.PI * i) / denom;
-    if (kind === 0) w[i] = 1;
-    else if (kind === 1) w[i] = 0.5 * (1 - Math.cos(x));
-    else if (kind === 2) w[i] = 0.54 - 0.46 * Math.cos(x);
-    else if (kind === 3) w[i] = 0.42 - 0.5 * Math.cos(x) + 0.08 * Math.cos(2 * x);
-    else w[i] = 0.35875 - 0.48829 * Math.cos(x) + 0.14128 * Math.cos(2 * x) - 0.01168 * Math.cos(3 * x);
-  }
-  return w;
-}
-
-// Slot u (0..1 around the half circle, bass first) -> Hz on the chosen axis.
 /** Slot position u (0..1) → Hz through the shared Curve and the Freq params. */
 function nodeGraphVideoFeedbackSlotHz(u, view, sampleRate) {
   const band = spectrogramResolveViewBand(view.minFreq, view.maxFreq, sampleRate);
   return nodeGraphFrequencyCurveHz(u, view.frequencyCurve, band.minFreq, band.maxFreq);
 }
 
-function nodeGraphVideoFeedbackSpectrumState(canvas, n, windowKind) {
-  let st = canvas._videoFeedbackSpectrum;
-  if (st && st.n === n && st.windowKind === windowKind) return st;
-  const win = nodeGraphVideoFeedbackWindow(n, windowKind);
-  let sum = 0;
-  for (let i = 0; i < n; i += 1) sum += win[i];
-  st = {
-    n,
-    windowKind,
-    win,
-    // Full-scale sine peak = 0 dBFS.
-    gain: Math.max(1e-9, sum / 2),
-    real: new Float64Array(n),
-    imag: new Float64Array(n),
-    mag: new Float32Array(n / 2),
-    smooth: new Float32Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE),
-    layoutKey: "",
-    lo: new Int32Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE),
-    hi: new Int32Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE),
-    center: new Float32Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE),
-  };
-  canvas._videoFeedbackSpectrum = st;
-  return st;
-}
-
 /**
- * One level 0..1 per slot (band, or texel when Continuous), smoothed over time.
+ * One level 0..1 per slot (band, or texel when Continuous) from the shared
+ * worklet analysis of input A (SpectrumRaw / SpectrumGain / FftSize, the same
+ * core as 1D Spectrum). Smooth steps only when a new analysis arrives.
  * view: { minFreq, maxFreq, frequencyCurve } from the module parameters.
  */
-function nodeGraphVideoFeedbackSpectrumLevels(canvas, ring, settings, view, smooth) {
-  const n = settings.fftSize;
-  const st = nodeGraphVideoFeedbackSpectrumState(canvas, n, settings.window);
-  const bins = n / 2;
+function nodeGraphVideoFeedbackSpectrumLevels(canvas, nodeId, settings, view, smooth) {
+  const bus = (port) => {
+    if (typeof nodeGraphDataBus === "undefined") return null;
+    const v = nodeGraphDataBus.get(nodeGraphDataBusKey(nodeId, port));
+    return v instanceof Float32Array ? v : null;
+  };
+  const raw = bus("SpectrumRaw");
+  const gain = bus("SpectrumGain");
+  const meta = bus("FftSize");
   const count = settings.spectrumCircleBands > 0 ? settings.spectrumCircleBands : NODE_GRAPH_VIDEO_FEEDBACK_WAVE;
-  const sampleRate = ring ? nodeGraphScopeSampleRate(ring) : nodeGraphMvp?.sampleRate || 44100;
-  const layoutKey = `${count}|${view.frequencyCurve}|${view.minFreq}|${view.maxFreq}|${sampleRate}`;
+  let st = canvas._videoFeedbackSpectrum;
+  if (!st) {
+    st = canvas._videoFeedbackSpectrum = {
+      smooth: new Float32Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE),
+      layoutKey: "",
+      serial: -1,
+      lo: new Int32Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE),
+      hi: new Int32Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE),
+      center: new Float32Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE),
+    };
+  }
+  const serial = meta && meta.length >= 6 ? meta[5] : -1;
+  if (!raw || !(raw.length > 1) || serial === st.serial) return { values: st.smooth, count };
+  st.serial = serial;
+  const bins = raw.length;
+  const fftLen = meta[0] > 0 ? meta[0] : bins * 2;
+  const sampleRate = meta[4] > 0 ? meta[4] : (nodeGraphMvp?.sampleRate || 44100);
+  const fullMag = Math.max(1e-9, (gain ? gain[0] : bins) / 2);
+  const layoutKey = `${count}|${view.frequencyCurve}|${view.minFreq}|${view.maxFreq}|${sampleRate}|${bins}|${fftLen}`;
   if (st.layoutKey !== layoutKey) {
-    const binHz = sampleRate / n;
+    const binHz = sampleRate / fftLen;
     for (let j = 0; j < count; j += 1) {
       const f0 = nodeGraphVideoFeedbackSlotHz(j / count, view, sampleRate) / binHz;
       const f1 = nodeGraphVideoFeedbackSlotHz((j + 1) / count, view, sampleRate) / binHz;
@@ -187,35 +176,23 @@ function nodeGraphVideoFeedbackSpectrumLevels(canvas, ring, settings, view, smoo
     }
     st.layoutKey = layoutKey;
   }
-  st.real.fill(0);
-  st.imag.fill(0);
-  const available = nodeGraphVideoGraphAudioCount(ring);
-  const take = Math.min(available, n);
-  const src0 = available - take;
-  const dst0 = n - take;
-  for (let i = 0; i < take; i += 1) {
-    st.real[dst0 + i] = (Number(ring[src0 + i]) || 0) * st.win[dst0 + i];
-  }
-  nodeGraphSpectralFftInPlace(st.real, st.imag);
-  for (let k = 0; k < bins; k += 1) {
-    st.mag[k] = Math.hypot(st.real[k], st.imag[k]) / st.gain;
-  }
   const floor = settings.spectrumDbFloor;
+  const span = Math.max(0.1, settings.spectrumDbCeiling - floor);
   const attack = 1 - 0.97 * smooth;
   for (let j = 0; j < count; j += 1) {
     let mag;
     if (st.hi[j] > st.lo[j]) {
       // Wide slot: peak of its bins, so a pure tone keeps its full height.
       mag = 0;
-      for (let k = st.lo[j]; k <= st.hi[j]; k += 1) mag = Math.max(mag, st.mag[k]);
+      for (let k = st.lo[j]; k <= st.hi[j]; k += 1) mag = Math.max(mag, raw[k]);
     } else {
       const c = st.center[j];
       const k0 = Math.floor(c);
       const k1 = Math.min(bins - 1, k0 + 1);
-      mag = st.mag[k0] + (st.mag[k1] - st.mag[k0]) * (c - k0);
+      mag = raw[k0] + (raw[k1] - raw[k0]) * (c - k0);
     }
-    const db = 20 * Math.log10(mag + 1e-12);
-    const v = Math.max(0, Math.min(1, (db - floor) / -floor));
+    const db = 20 * Math.log10(Math.max(0, mag) / fullMag + 1e-12);
+    const v = Math.max(0, Math.min(1, (db - floor) / span));
     st.smooth[j] += (v - st.smooth[j]) * attack;
   }
   return { values: st.smooth, count };
@@ -305,7 +282,7 @@ function drawNodeGraphVideoFeedbackFaceItem(_renderer, item) {
     const smooth = param("smooth");
     // VG-6: block mode for the spectrum (A), control mode for spin (B).
     const view = { minFreq: param("minFreq"), maxFreq: param("maxFreq"), frequencyCurve: param("frequencyCurve") };
-    const levels = nodeGraphVideoFeedbackSpectrumLevels(canvas, nodeGraphVideoGraphAudioBlock(nodeId, "A"), settings, view, smooth);
+    const levels = nodeGraphVideoFeedbackSpectrumLevels(canvas, nodeId, settings, view, smooth);
     nodeGraphVideoFeedbackGlStep(host, {
       nodeId,
       decay: param("decay"),

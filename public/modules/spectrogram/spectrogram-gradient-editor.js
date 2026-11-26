@@ -251,7 +251,16 @@
     },
   ]);
 
+  // Cold fire: the spectral display family default (docs/SPECTRAL_DISPLAY_VISION.md).
+  // Deep indigo floor, teal mids, warm gold into white at the ceiling.
+  const COLD_FIRE_COLORS = Object.freeze(["#05030f", "#140c3d", "#1f2a6b", "#14627a", "#22a39a", "#7cc38f", "#e2b54e", "#f7d98f", "#fff8ea"]);
+
   const PRESETS = Object.freeze([
+    {
+      id: "coldFire",
+      label: "cold fire",
+      colors: COLD_FIRE_COLORS,
+    },
     {
       // Inspired-by cool-to-warm: dark blue, teal, green, gold, near-white.
       // Designed in OKLCH with OKLab L rising linearly from 0 to 1.
@@ -1391,6 +1400,11 @@
       channels: "color",
       defaultStops: "spectrogram",
     }),
+    // Spectral processor faces (shared style renderer).
+    spectralStyle: Object.freeze({
+      channels: "color",
+      defaultStops: "coldFire",
+    }),
     spectrogramBurn: Object.freeze({
       channels: "color",
       defaultStops: "spectrogram",
@@ -1524,6 +1538,9 @@
     }
     if (kind === "spectrogram") {
       return DEFAULT_STOPS.map((s) => ({ t: s.t, color: s.color }));
+    }
+    if (kind === "coldFire") {
+      return colorsToStops(COLD_FIRE_COLORS);
     }
     if (kind === "matrix") {
       return DEFAULT_MATRIX_STOPS.map((s) => ({ t: s.t, color: s.color }));
@@ -1764,6 +1781,7 @@
   global.MATRIX_DEFAULT_GRADIENT_STOPS = DEFAULT_MATRIX_STOPS;
   global.CRT_AMBER_DEFAULT_GRADIENT_STOPS = DEFAULT_CRT_AMBER_STOPS;
   global.SHARED_GRADIENT_PRESETS = PRESETS;
+  global.SPECTRAL_COLD_FIRE_GRADIENT_STOPS = colorsToStops(COLD_FIRE_COLORS);
   // Number Readout LED ghost default: references the "p1 green" preset (no copied stops).
   global.NUMBER_READOUT_LED_DEFAULT_GRADIENT_STOPS = colorsToStops(
     (PRESETS.find((p) => p.id === "green") || {}).colors,

@@ -256,6 +256,9 @@ NodeLiveAudioProcessor.prototype._setPlanImpl = function _setPlanImpl(plan, mess
     if (typeof this.syncSpectrogramDisplayAnalysis === "function") {
       this.syncSpectrogramDisplayAnalysis(ids, sessionRestarted);
     }
+    if (typeof this.syncSpectralDisplayStates === "function") {
+      this.syncSpectralDisplayStates(ids, sessionRestarted);
+    }
 
     // Efficient: drop any leftover JS smoother state (C++ owns the chase).
     if (efficientProduct && this.smoothers?.size) {

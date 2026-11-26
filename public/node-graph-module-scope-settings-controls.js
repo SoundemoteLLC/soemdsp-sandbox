@@ -355,7 +355,8 @@ const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
   spectralGainRangeDb: { min: 1, max: 160, taper: "linear", step: 1 },
   spectralGainBoostDb: { min: 0, max: 48, taper: "linear", step: 1 },
   spectrumCircleRayWidth: { min: 0, max: 1, taper: "linear", step: 0.01 },
-  spectrumDbFloor: { min: -180, max: -0.1, taper: "linear", step: 1 },
+  spectrumDbFloor: { min: -180, max: 48, taper: "linear", step: 1 },
+  spectrumDbCeiling: { min: -180, max: 48, taper: "linear", step: 1 },
   timeMs: { min: 0.1, max: 10000, taper: "log", step: 0.025 },
   windowCycles: { min: 0.05, max: 100, taper: "log", step: 0.025 },
   windowBeats: { min: 0.05, max: 100, taper: "log", step: 0.025 },
@@ -752,7 +753,8 @@ const nodeGraphPulseFaceValueClamps = Object.freeze({
 const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   videoFeedbackFace: Object.freeze({
     spectrumCircleRayWidth: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.6), 0, 1),
-    spectrumDbFloor: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, -72), -180, -0.1),
+    spectrumDbFloor: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, -72), -180, 48),
+    spectrumDbCeiling: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), -180, 48),
   }),
   // Spectrogram: History (s) 0…30 (waterfall scroll rate; longer = slower).
   spectrogramBurn: Object.freeze({

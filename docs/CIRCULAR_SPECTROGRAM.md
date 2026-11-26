@@ -26,6 +26,12 @@ map through one helper, `nodeGraphFrequencyCurveHz` in
 as `hzForCurve`). Curve is a live shader uniform, so turning it remaps the whole
 history at once. It works with Reverse Frequency. Mel / Bark are gone.
 
+## Level
+
+Columns are honest linear |X[k]| per hop (no smoothing, no compression); the
+shared shader turns them into dBFS against the window's full scale, so a
+full-scale tone paints the Ceiling colour. Spectrogram uses the same path.
+
 ## Sweep Retention (Both Head Modes)
 
 - Afterglow: older-sweep intensity beneath the current sweep, from 0 to 1;

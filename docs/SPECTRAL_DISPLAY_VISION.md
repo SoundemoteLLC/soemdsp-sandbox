@@ -4,7 +4,7 @@
 |-------|-------|
 | **Author** | Misty (for Argi) |
 | **Date** | 2026-11-25 |
-| **Status** | Design only. One-shot vision / handoff for a single implementation pass. Do not treat this commit as a start on code. |
+| **Status** | Implemented 2026-11-25. See "Implementation notes" at the end. Listening acceptance by Argi open. |
 | **Repo** | `C:\Users\argit\Documents\_PROGRAMMING\soemdsp-sandbox` |
 | **Companion** | `docs/SPECTRAL_DISPLAY_UPGRADE_PLAN.md` — inventory, accuracy rules (honest dB, log mapping, low-end, peak/smooth, no fake clipping), and the shared style-menu keys. **Read that plan. Do not copy it into this file.** This document supersedes only the *delivery model*: ship a shared foundation and a bunch of module faces in one pass, not a one-module proof of concept first. |
 
@@ -300,3 +300,18 @@ Shared, then per-face tests named in §2. Prefer new `scripts/test_*_display.mjs
 - **Do not push** unless Argi lifts the standing hold.
 
 Listening acceptance by Argi — especially Vocoder bars, Blur particles, and 1D honesty — is the real finish line. If a face looks clever but lies about the sound, it is not done.
+
+---
+
+## Implementation notes (2026-11-25)
+
+- **Analysis core:** `public/lib/spectral-analysis.js` (FFT, windows, full scale, `nodeGraphFrequencyCurveHz`). Worklet, Spectrum Circle and the scope Spectrum mode all use it; Spectrum Circle's main-thread FFT is gone (it gets `SpectrumRaw` from the worklet analysis of input A).
+- **Taps (read-only, no audio change):** Vocoder `soemdsp_vocoder_display_*` (band centres with Formant Shift, pi/2 x envelope so a unit sine reads 0 dBFS, incoming bank + DSP crossfade weight). STFT Gate / Contrast `*_display_power / _gain / _rate / _frames` (bin power in their own Threshold units, gain dB).
+- **Fallback, documented:** Blur, Freeze, Delay, Warp and Cross Synthesis rewrite their spectra in place, so there is no stable array to point at. Their faces use the shared core on the module output (scope ring) and the captured inputs (In / Voice / Synth) at display rate: a 2048 Hann, at most 30 analyses per second of audio, driven by audio blocks (no timer; no audio, no posts). Cost does not depend on the module FFT Size.
+- **Renderer:** `public/lib/spectral-display-styles.js` on the shared GL line batch; styles curve, bars, particles, mirrorBars, miniWaterfall, overlay, bandGain. Face glue and per-module defaults: `public/modules/spectralDisplay/spectral-display-face.js` (displayType `spectralStyle`). Gradient: new "cold fire" preset in the shared gradient editor.
+- **Defaults:** Vocoder bars, Gate / Contrast band gain, Blur particles, Freeze / Warp / Cross overlay, Delay waterfall. Each processor has a display-only Curve knob (`displayOnly: true`, not in C++ metadata) and Display Settings for style, Floor / Ceiling, bars, peak caps, particles, history rows and gain spans.
+- **Spectrogram / Circular:** columns are linear |X| per hop (no EMA, no `log10(1+x)`); the shader grades |X| / full scale to dBFS.
+- **1D Spectrum:** peak caps default to Hold.
+- **Tests:** `scripts/test_spectral_display.mjs` (40 checks), `scripts/test_spectrum1d.mjs`; existing processor tests updated for the new face type.
+- **Not done:** scope Spectrum mode still pools to 160 linear bars at a fixed −100..0 dB.
+

@@ -7609,12 +7609,18 @@ const nodeGraphModuleDefinitions = (
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
-    displayType: "scope1dTrace",
+    displayType: "spectralStyle",
+    displayHeightGu: 3,
+    // Display capture of the inputs the spectral face draws as ghosts.
+    bufferedInputs: ["In"],
+    visualSink: true,
+    visualInputs: [{ key: "spectralWarpIn", label: "In", port: "In" }],
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["warp", "Warp"], ["pivotHz", "Pivot"]], h: 40 },
       { kind: "cells", params: [["pitchSemitones", "Pitch"], ["shiftHz", "Shift"], ["stereoShiftHz", "Stereo"]], h: 40 },
       { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Gain"]], h: 40 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -7732,7 +7738,22 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "dB",
         "tooltip": "Explicit final gain in dB. No hidden amplitude normalization, limiter or clipping. Mapped spectral regions can overlap and add in level."
-      }
+      },
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        modulation: false,
+        parameterOutput: false,
+        // Face-only: never sent to native, not part of the C++ metadata.
+        displayOnly: true,
+        step: "any",
+        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+      },
     ],
   },
   spectralCrossSynthesis: {
@@ -7740,13 +7761,19 @@ const nodeGraphModuleDefinitions = (
     inputs: ["Voice L", "Voice R", "Synth L", "Synth R"],
     outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
     bypassMap: [{ out: "Mono", in: "Synth L" }, { out: "Left", in: "Synth L" }, { out: "Right", in: "Synth R" }],
-    displayType: "scope1dTrace",
+    displayType: "spectralStyle",
+    displayHeightGu: 3,
+    // Display capture of the inputs the spectral face draws as ghosts.
+    bufferedInputs: ["Voice L", "Synth L"],
+    visualSink: true,
+    visualInputs: [{ key: "spectralCrossSynthesisVoiceL", label: "Voice", port: "Voice L" }, { key: "spectralCrossSynthesisSynthL", label: "Synth", port: "Synth L" }],
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["amount", "Transfer"], ["widthHz", "Envelope Width"]], h: 40 },
       { kind: "cells", params: [["formantShift", "Formant Shift"]], h: 40 },
       { kind: "cells", params: [["attackMs", "Attack"], ["releaseMs", "Release"]], h: 40 },
       { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Output Gain"]], h: 40 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -7888,7 +7915,22 @@ const nodeGraphModuleDefinitions = (
         "modulation": false,
         "parameterOutput": false,
         "tooltip": "Under construction. Reserved for retaining Synth attacks alongside the transferred envelope. Currently inactive: changing this value does nothing."
-      }
+      },
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        modulation: false,
+        parameterOutput: false,
+        // Face-only: never sent to native, not part of the C++ metadata.
+        displayOnly: true,
+        step: "any",
+        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+      },
     ],
   },
   dispersion: {
@@ -8349,13 +8391,19 @@ const nodeGraphModuleDefinitions = (
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right", "Error"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Error"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
-    displayType: "scope1dTrace",
+    displayType: "spectralStyle",
+    displayHeightGu: 3,
+    // Display capture of the inputs the spectral face draws as ghosts.
+    bufferedInputs: ["In"],
+    visualSink: true,
+    visualInputs: [{ key: "spectralDelayIn", label: "In", port: "In" }],
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["baseDelayMs", "Base Delay"], ["spreadMs", "Delay Spread"]], h: 40 },
       { kind: "cells", params: [["pivotHz", "Frequency Pivot"], ["curve", "Delay Curve"]], h: 40 },
       { kind: "cells", params: [["feedbackTiltDb", "Feedback Tilt"], ["crossfeed", "Stereo Crossfeed"]], h: 40 },
       { kind: "cells", params: [["feedback", "Feedback"], ["mix", "Mix"]], h: 40 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters:
     [
@@ -8489,7 +8537,22 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "unit": "%",
         "tooltip": "Dry/wet mix. Dry is aligned to FFT Size latency, not to the additional band delays. Left and Right spectral histories remain independent; no mono downmix or stereo crossfeed."
-      }
+      },
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        modulation: false,
+        parameterOutput: false,
+        // Face-only: never sent to native, not part of the C++ metadata.
+        displayOnly: true,
+        step: "any",
+        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+      },
     ],
   },
   spectralFreeze: {
@@ -8497,13 +8560,19 @@ const nodeGraphModuleDefinitions = (
     inputs: ["In", "Left", "Right", "Freeze", "Recapture"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right", "Held"], outputAliases: { Out: "Mono" }, digitalOutputs: ["Held"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
-    displayType: "scope1dTrace",
+    displayType: "spectralStyle",
+    displayHeightGu: 3,
+    // Display capture of the inputs the spectral face draws as ghosts.
+    bufferedInputs: ["In"],
+    visualSink: true,
+    visualInputs: [{ key: "spectralFreezeIn", label: "In", port: "In" }],
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["freeze", "Freeze", "button", { onLabel: "Frozen" }], ["recapture", "Recapture", "button", { action: "increment" }]], h: 26 },
       { kind: "cells", params: [["captureBlendMs", "Capture Blend"], ["refreshHz", "Refresh Rate"]], h: 40 },
       { kind: "cells", params: [["decaySeconds", "Decay"], ["diffusion", "Diffusion"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["mix", "Mix"]], h: 40 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -8656,7 +8725,22 @@ const nodeGraphModuleDefinitions = (
         "unit": "%",
         "step": "any",
         "tooltip": "Live/held blend aligned to the selected FFT Size. Capture/release has a separate 20 ms handoff; Capture Blend controls replacement of held states. Held reports an active ready capture."
-      }
+      },
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        modulation: false,
+        parameterOutput: false,
+        // Face-only: never sent to native, not part of the C++ metadata.
+        displayOnly: true,
+        step: "any",
+        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+      },
     ],
   },
   spectralBlur: {
@@ -8664,7 +8748,12 @@ const nodeGraphModuleDefinitions = (
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right"], outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
-    displayType: "scope1dTrace",
+    displayType: "spectralStyle",
+    displayHeightGu: 3,
+    // Display capture of the inputs the spectral face draws as ghosts.
+    bufferedInputs: ["In"],
+    visualSink: true,
+    visualInputs: [{ key: "spectralBlurIn", label: "In", port: "In" }],
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["smearSeconds", "Time Smear"], ["blurHz", "Frequency Blur"]], h: 40 },
@@ -8676,6 +8765,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["swarmFuzz", "Fuzz"], ["swarmVoices", "Voices"]], h: 40 },
       { kind: "cells", params: [["swarmSeed", "Seed", "horizontal"]], h: 26 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -8900,7 +8990,22 @@ const nodeGraphModuleDefinitions = (
         "unit": "%",
         "step": "any",
         "tooltip": "Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay. Turn off Time Smear, Frequency Blur, Diffusion, Amplitude Smooth, Swarm, Level and Drift for neutral reconstruction."
-      }
+      },
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        modulation: false,
+        parameterOutput: false,
+        // Face-only: never sent to native, not part of the C++ metadata.
+        displayOnly: true,
+        step: "any",
+        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+      },
     ],
   },
   stftContrast: {
@@ -8908,13 +9013,15 @@ const nodeGraphModuleDefinitions = (
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right"], outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
-    displayType: "scope1dTrace",
+    displayType: "spectralStyle",
+    displayHeightGu: 3,
     face: [
       { kind: "cells", params: [["contrast","Contrast"],["scale","Scale"]], h: 40 },
       { kind: "cells", params: [["thresholdDb","Threshold"],["ratio","Ratio"]], h: 40 },
       { kind: "cells", params: [["attackMs","Attack"],["releaseMs","Release"]], h: 40 },
       { kind: "cells", params: [["maxBoostDb","Max Boost"],["gainDb","Output Gain"]], h: 40 },
       { kind: "cells", params: [["mix","Mix","horizontal"]], h: 26 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -9014,7 +9121,22 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "step": "any",
         "tooltip": "Dry/wet blend with both paths aligned to the fixed 1024-sample delay. Contrast 0, Ratio 1 and Output Gain 0 are neutral."
-      }
+      },
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        modulation: false,
+        parameterOutput: false,
+        // Face-only: never sent to native, not part of the C++ metadata.
+        displayOnly: true,
+        step: "any",
+        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+      },
     ],
   },
   stftGate: {
@@ -9023,13 +9145,15 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Mono", "Left", "Right", "Ready"], outputAliases: { Out: "Mono" },
     digitalOutputs: ["Ready"],
     bypassMap: [{ out: "Mono", in: "In" }, { out: "Left", in: "Left" }, { out: "Right", in: "Right" }],
-    displayType: "scope1dTrace",
+    displayType: "spectralStyle",
+    displayHeightGu: 3,
     face: [
       { kind: "cells", params: [["profileMode","Noise Profile","horizontal"]], h: 26 },
       { kind: "cells", params: [["thresholdDb","Threshold"],["marginDb","Margin"]], h: 40 },
       { kind: "cells", params: [["depthDb","Depth"],["kneeDb","Knee"]], h: 40 },
       { kind: "cells", params: [["attackMs","Attack"],["holdMs","Hold"],["releaseMs","Release"]], h: 40 },
       { kind: "cells", params: [["smooth","Smooth"],["mix","Mix"]], h: 40 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -9160,7 +9284,22 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "step": "any",
         "tooltip": "Dry/wet blend aligned to the fixed 1024-sample delay. Stereo channels share gain decisions to preserve their image."
-      }
+      },
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        modulation: false,
+        parameterOutput: false,
+        // Face-only: never sent to native, not part of the C++ metadata.
+        displayOnly: true,
+        step: "any",
+        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+      },
     ],
   },
   vocoder: {
@@ -9171,13 +9310,15 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["bands", "Bands", "horizontal"]], h: 26 },
       { kind: "cells", params: [["bandWidth", "Band Width"], ["followerMs", "Follower"]], h: 40 },
       { kind: "cells", params: [["formantShift", "Formant Shift"], ["mix", "Mix"]], h: 40 },
+      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     inputs: ["Voice L", "Voice R", "Synth L", "Synth R"],
     inputAliases: { "Mod L": "Voice L", "Mod R": "Voice R", "Car L": "Synth L", "Car R": "Synth R" },
     outputs: ["Mono", "Left", "Right"],
     outputAliases: { Out: "Mono" },
     bypassMap: [{ out: "Mono", in: "Voice L" }, { out: "Left", in: "Voice L" }, { out: "Right", in: "Voice R" }],
-    displayType: "scope1dTrace",
+    displayType: "spectralStyle",
+    displayHeightGu: 3,
     parameters: [
       { key: "bands", label: "Bands", defaultValue: "32", min: "5", mid: "32", max: "100", step: "1", linearSmoothing: false,
         tooltip: "Number of logarithmic IIR bands from 40 Hz to 90% of Nyquist. Changes warm a new layout for 20 ms, then crossfade for 20 ms. Rapid edits queue the latest count. More bands use more CPU and can change level; no automatic gain compensation. Native capacity is 100." },
@@ -9189,6 +9330,21 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Moves the synth filter centers relative to the analysis bands without changing synth pitch. Bands approaching the output Nyquist limit fade out rather than wrap." },
       { key: "mix", label: "Mix", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "any",
         tooltip: "Dry voice to vocoded synth. Both paths include the 128-sample resampling reference delay; IIR phase and ringing remain frequency dependent." },
+      {
+        key: "frequencyCurve",
+        label: "Curve",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        modulation: false,
+        parameterOutput: false,
+        // Face-only: never sent to native, not part of the C++ metadata.
+        displayOnly: true,
+        step: "any",
+        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+      },
     ],
   },
   convolutionResonator: {

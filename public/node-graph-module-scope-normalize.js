@@ -451,7 +451,7 @@ const nodeGraphSpectrumLineSettingsDefaults = Object.freeze({
   spectrumBarWidth: 0.8,
   spectrumMinBarPx: 2,
   spectrumMinGapPx: 1,
-  spectrumPeakHold: "off",
+  spectrumPeakHold: "hold", // peak caps on: rise instantly, hold 0.5 s, fall at Peak decay
   spectrumPeakDecay: 12,
   dot1Color: "#4fd1ff",
   backgroundColor: "#05070a",

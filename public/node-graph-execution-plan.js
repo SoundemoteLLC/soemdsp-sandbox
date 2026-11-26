@@ -879,6 +879,7 @@ displayType === "scope1dTrace" ||
     displayType === "videoscopeBurn" ||
     displayType === "spectrogramBurn" ||
     displayType === "spectrumLine" ||
+    displayType === "spectralStyle" ||
     displayType === "phosphorLight" ||
     displayType === "matrixFace" ||
     displayType === "matrixWaterfallFace" ||

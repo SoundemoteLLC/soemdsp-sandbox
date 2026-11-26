@@ -124,13 +124,25 @@ function nodeGraphBuildLivePlanForPatch(patch) {
 function nodeGraphInjectSpectrogramWorkletParams(node, params) {
   if (
     !node
-    || (node.type !== "spectrogram" && node.type !== "spectrum1d" && node.type !== "circularSpectrogram")
+    || (node.type !== "spectrogram" && node.type !== "spectrum1d" && node.type !== "circularSpectrogram" && node.type !== "videoFeedback")
     || !params
     || typeof params !== "object"
   ) {
     return;
   }
   const p = node.params && typeof node.params === "object" ? node.params : {};
+  // Spectrum Circle: its own FFT size / window, one window (no bass detail).
+  if (node.type === "videoFeedback") {
+    const vf = typeof normalizeNodeGraphVideoFeedbackSettings === "function"
+      ? normalizeNodeGraphVideoFeedbackSettings(node.traceDisplaySettings || {})
+      : { fftSize: 2048, window: 1 };
+    params.fftSize = vf.fftSize;
+    params.window = vf.window;
+    params.overlap = 2;
+    params.freqOverlap = 0;
+    params.bassDetail = 0;
+    return;
+  }
   if (typeof normalizeNodeGraphSpectrogramSettings === "function") {
     const safe = node.type === "spectrum1d" && typeof normalizeNodeGraphSpectrumLineSettings === "function"
       ? normalizeNodeGraphSpectrumLineSettings(node.traceDisplaySettings || {}, node)

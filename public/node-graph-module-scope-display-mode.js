@@ -238,6 +238,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "spectrogramBurn",
     "videoscopeBurn",
     "spectrumLine",
+    "spectralStyle",
     // Hypersaw / Hypersaw2 / RobinSupersaw face — line thickness only.
     "hypersawBurn",
     "ensembleCloud",

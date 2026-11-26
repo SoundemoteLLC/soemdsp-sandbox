@@ -32,7 +32,9 @@ freq fields are gone.
 
 - Ray width: continuous fraction of an angular band slot, 0..1. Zero hides
   discrete rays, one fills the slot. Continuous Bands does not use this value.
-- dB floor: continuous dBFS, -180..-0.1. Fractional entries are preserved.
+- dB floor / dB ceiling: continuous dBFS, -180..+48 (ceiling default 0, a full-scale sine).
+  The spectrum comes from the shared worklet analysis of input A (same core as
+  1D Spectrum); there is no main-thread FFT. Smooth steps only on new analyses.
   This change is local to Spectrum Circle; other spectrum controls are untouched.
 - Bands: integer-density presets or Continuous. These are visual choices, not
   a power-of-two GPU or FFT requirement. Mirrored mode uses the selected count

@@ -120,7 +120,7 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     }, id));
     await page.screenshot({ path: path.join(os.tmpdir(), `spectral-blur-${width}.png`), timeout: 15000 });
   }
-  assert.ok(reports.every(r => r.renderer === 'scope1dTrace' && r.seconds === 's' && r.hz === 'Hz' && r.peak > 0));
+  assert.ok(reports.every(r => r.renderer === 'spectralStyle' && r.seconds === 's' && r.hz === 'Hz' && r.peak > 0));
   assert.ok(reports.every(r => Number(r.phaseMs) === 10 && Number(r.amplitudeMs) === 20));
   assert.ok(reports.every(r => Number(r.fftSize) === 1024));
   assert.deepEqual(errors, []);

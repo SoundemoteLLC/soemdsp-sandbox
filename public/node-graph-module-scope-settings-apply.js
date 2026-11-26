@@ -447,6 +447,10 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     node.traceDisplaySettings = normalizeNodeGraphScope2dSettings(settings);
     return node.traceDisplaySettings;
   }
+  if (displayType === "spectralStyle") {
+    node.traceDisplaySettings = normalizeNodeGraphSpectralStyleSettings(settings, node);
+    return node.traceDisplaySettings;
+  }
   if (displayType === "spectrumLine") {
     node.traceDisplaySettings = normalizeNodeGraphSpectrumLineSettings(settings, node);
     syncNodeGraphSpectrumLineDisplaySettingsToParams(node, node.traceDisplaySettings);

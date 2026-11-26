@@ -244,6 +244,14 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "spectrumMinBarPx",
     "spectrumMinGapPx",
     "spectrumPeakDecay",
+    "spectralFloorDb",
+    "spectralCeilingDb",
+    "spectralBarCount",
+    "spectralPeakDecay",
+    "spectralParticles",
+    "spectralHistory",
+    "spectralGainRangeDb",
+    "spectralGainBoostDb",
     "pill",
     "squircle",
     "lightThickness",
@@ -305,6 +313,8 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "spectrumBassDetail",
     "spectrumDrawStyle",
     "spectrumPeakHold",
+    "spectralStyle",
+    "spectralPeakHold",
     "shape",
     "outerPlate",
     "lightBlend",
@@ -760,7 +770,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze([]),
   }),
   videoFeedbackFace: Object.freeze({
-    fields: Object.freeze(["spectrumDbFloor", "spectrumCircleRayWidth"]),
+    fields: Object.freeze(["spectrumDbFloor", "spectrumDbCeiling", "spectrumCircleRayWidth"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([
@@ -870,6 +880,14 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     colors: Object.freeze([]),
     toggles: Object.freeze(["pauseOnSilence"]),
     choices: Object.freeze(["fftSize", "window", "overlap", "freqOverlap"]),
+  }),
+  // Spectral processor faces (shared style renderer). Styles offered per
+  // module (nodeGraphSpectralStyleOptionsForNode); gradient via the shared editor.
+  spectralStyle: Object.freeze({
+    fields: Object.freeze(["spectralFloorDb", "spectralCeilingDb", "spectralBarCount", "spectralPeakDecay", "spectralParticles", "spectralHistory", "spectralGainRangeDb", "spectralGainBoostDb"]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze(["spectralStyle", "spectralPeakHold"]),
   }),
   // 1D Spectrum: same FFT analysis choices as Spectrogram (shared keys) + its
   // own axis / dB / draw / peak choices. Colors on the shared color row.
@@ -1290,6 +1308,14 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "spectrumMinBarPx",
       "spectrumMinGapPx",
       "spectrumPeakDecay",
+      "spectralFloorDb",
+      "spectralCeilingDb",
+      "spectralBarCount",
+      "spectralPeakDecay",
+      "spectralParticles",
+      "spectralHistory",
+      "spectralGainRangeDb",
+      "spectralGainBoostDb",
       "spectrumSmoothMs",
       "spectrumBarCount",
       "spectrumBarWidth",
@@ -1390,6 +1416,8 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "spectrumBassDetail",
       "spectrumDrawStyle",
       "spectrumPeakHold",
+      "spectralStyle",
+      "spectralPeakHold",
       "stereoBlend",
       "cornerShape",
       "polarity",
@@ -1452,7 +1480,11 @@ function nodeGraphTraceDisplaySettingsRoot() {
 const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
   spectrumDbFloor: Object.freeze({
     label: "dB floor", inputmode: "decimal", id: "nodeTraceDisplaySpectrumDbFloor",
-    title: "Spectrum Circle's minimum visible level in dBFS. Continuous from -180 to -0.1 dBFS.",
+    title: "Spectrum Circle's level at the inner end of a ray, in dBFS. Continuous from -180 to +48.",
+  }),
+  spectrumDbCeiling: Object.freeze({
+    label: "dB ceiling", inputmode: "decimal", id: "nodeTraceDisplaySpectrumDbCeiling",
+    title: "Spectrum Circle's level at a full-length ray, in dBFS. A full-scale sine reads 0 dBFS.",
   }),
   spectrumCircleRayWidth: Object.freeze({
     label: "Ray width", inputmode: "decimal", id: "nodeTraceDisplaySpectrumCircleRayWidth",
@@ -1598,6 +1630,38 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
   spectrumSmoothMs: Object.freeze({
     label: "Smooth (ms)", inputmode: "decimal",
     title: "Time constant for live spectrum height smoothing, independent of peak hold. 0 = off. Applies to Filled, Line, and Bars. Display only; does not smooth the audio.",
+  }),
+  spectralFloorDb: Object.freeze({
+    label: "Floor (dB)", inputmode: "decimal",
+    title: "Level at the bottom of the display. Gate and Contrast use their own bin-power dBFS, the same units as their Threshold.",
+  }),
+  spectralCeilingDb: Object.freeze({
+    label: "Ceiling (dB)", inputmode: "decimal",
+    title: "Level at the top of the display. A full-scale sine reads 0 dBFS. Anything louder is marked with a bright cap along the top edge, never drawn as a fake clip.",
+  }),
+  spectralBarCount: Object.freeze({
+    label: "Max bars", inputmode: "numeric",
+    title: "Bar count for Bars, Mirror bars and Band gain. Fewer bars appear when the display is too narrow for whole-pixel bars and gaps. Vocoder bars follow its real bands.",
+  }),
+  spectralPeakDecay: Object.freeze({
+    label: "Peak fall (dB/s)", inputmode: "decimal",
+    title: "How fast held peak caps fall, in dB per second over the Floor to Ceiling span. Peaks only move when new audio data arrives.",
+  }),
+  spectralParticles: Object.freeze({
+    label: "Particles", inputmode: "numeric",
+    title: "Most particles drawn by the Particles style at once. Lower it on a phone.",
+  }),
+  spectralHistory: Object.freeze({
+    label: "History rows", inputmode: "numeric",
+    title: "Rows kept by the Waterfall style. Each new analysis writes one row at the top; older rows recede downward.",
+  }),
+  spectralGainRangeDb: Object.freeze({
+    label: "Cut span (dB)", inputmode: "decimal",
+    title: "Band gain style: how much cut reaches the bottom of the display.",
+  }),
+  spectralGainBoostDb: Object.freeze({
+    label: "Boost span (dB)", inputmode: "decimal",
+    title: "Band gain style: how much boost reaches the top. Zero puts the zero line at the top (Gate only cuts).",
   }),
   spectrumPeakDecay: Object.freeze({
     label: "Peak decay (dB/s)", inputmode: "decimal",
@@ -3042,6 +3106,24 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
       Object.freeze({ value: "linear", label: "Linear" }),
     ]),
   }),
+  spectralStyle: Object.freeze({
+    label: "Style",
+    aria: "Spectral display style",
+    id: "nodeTraceDisplaySpectralStyle",
+    title: "How the spectrum is drawn. Only styles this module has data for are listed. Switching style never changes the audio.",
+    options: Object.freeze(NODE_GRAPH_SPECTRAL_STYLES.map((s) => Object.freeze({ value: s.value, label: s.label }))),
+  }),
+  spectralPeakHold: Object.freeze({
+    label: "Peak caps",
+    aria: "Spectral display peak caps",
+    id: "nodeTraceDisplaySpectralPeakHold",
+    title: "Hold keeps each peak for 0.5 s, then falls at Peak fall. Fall drops straight away. Off hides the caps.",
+    options: Object.freeze([
+      Object.freeze({ value: "hold", label: "Hold, then fall" }),
+      Object.freeze({ value: "fall", label: "Fall" }),
+      Object.freeze({ value: "off", label: "Off" }),
+    ]),
+  }),
   spectrumBassDetail: Object.freeze({
     label: "Bass detail",
     aria: "1D Spectrum bass detail",
@@ -3127,6 +3209,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   lcdDot: "LCD Dot",
   spectrogramBurn: "Spectrogram",
   spectrumLine: "1D Spectrum",
+  spectralStyle: "Spectral",
   rgbShapeFace: "Shape",
   rgbPictureFace: "Picture",
   imageBurnFace: "Image Ghost",

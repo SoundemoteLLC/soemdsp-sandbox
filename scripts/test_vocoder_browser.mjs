@@ -84,7 +84,7 @@ try {
     }, ids.vocoder));
     await page.screenshot({ path: path.join(os.tmpdir(), `vocoder-${viewport.width}.png`), timeout: 15000 });
   }
-  assert.ok(reports.every(r => r.width > 0 && r.height > 0 && r.scope === "scope1dTrace"));
+  assert.ok(reports.every(r => r.width > 0 && r.height > 0 && r.scope === "spectralStyle"));
   assert.ok(reports.every(r => r.bands === 100 && r.bandLimit === 100 && r.sameWorklet && r.peak > 0.00001),
     "100 bands remain live without replacing the AudioWorklet");
   assert.deepEqual(errors, []);

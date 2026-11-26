@@ -15,7 +15,7 @@ try{
  await page.waitForFunction(()=>document.body.dataset.nodeBootFinished==='interface-ready',null,{timeout:60000});await page.waitForTimeout(500);
  const result=await page.evaluate(async()=>{
   const check=(yes,message)=>{if(!yes)throw Error(message);};
-  const encodeDb=db=>Math.log10(1+100*Math.pow(10,db/20));
+  const encodeDb=db=>Math.pow(10,db/20); // linear |X|, full scale 1
   check(Math.abs(spectrogramGrade01(encodeDb(-40),-80,0,1)-.5)<1e-6,'level midpoint');
   check(Math.abs(spectrogramGrade01(encodeDb(-72),-80,0,1)-.075)<1e-6,'soft floor knee');
   check(Math.abs(spectrogramGrade01(encodeDb(-8),-80,0,1)-.925)<1e-6,'soft ceiling knee');

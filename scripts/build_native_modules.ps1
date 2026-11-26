@@ -66,16 +66,16 @@ $modules = @(
     "soemdsp_spectral_blur_version", "soemdsp_spectral_blur_metadata_json", "soemdsp_spectral_blur_metadata_json_size", "soemdsp_spectral_blur_set_smoothing", "soemdsp_spectral_blur_set_stereo_spread", "soemdsp_spectral_blur_set_swarm", "soemdsp_spectral_blur_set_cloud", "soemdsp_spectral_blur_set_fft_size", "soemdsp_spectral_blur_fft_size", "soemdsp_spectral_blur_latency_for_handle"
   ) }
   @{ Name = "stft_contrast"; Simd = $false; Exports = @(
-    "soemdsp_stft_contrast_create", "soemdsp_stft_contrast_destroy", "soemdsp_stft_contrast_reset", "soemdsp_stft_contrast_sample", "soemdsp_stft_contrast_right", "soemdsp_stft_contrast_latency", "soemdsp_stft_contrast_version", "soemdsp_stft_contrast_metadata_json", "soemdsp_stft_contrast_metadata_json_size"
+    "soemdsp_stft_contrast_create", "soemdsp_stft_contrast_destroy", "soemdsp_stft_contrast_reset", "soemdsp_stft_contrast_sample", "soemdsp_stft_contrast_right", "soemdsp_stft_contrast_latency", "soemdsp_stft_contrast_version", "soemdsp_stft_contrast_metadata_json", "soemdsp_stft_contrast_metadata_json_size", "soemdsp_stft_contrast_display_bins", "soemdsp_stft_contrast_display_size", "soemdsp_stft_contrast_display_power", "soemdsp_stft_contrast_display_gain", "soemdsp_stft_contrast_display_rate", "soemdsp_stft_contrast_display_frames"
   ) }
   @{ Name = "stft_gate"; Simd = $false; Exports = @(
-    "soemdsp_stft_gate_create", "soemdsp_stft_gate_destroy", "soemdsp_stft_gate_reset", "soemdsp_stft_gate_sample", "soemdsp_stft_gate_right", "soemdsp_stft_gate_latency", "soemdsp_stft_gate_version", "soemdsp_stft_gate_metadata_json", "soemdsp_stft_gate_metadata_json_size", "soemdsp_stft_gate_ready", "soemdsp_stft_gate_profile_frames", "soemdsp_stft_gate_set_knee", "soemdsp_stft_gate_set_hold"
+    "soemdsp_stft_gate_create", "soemdsp_stft_gate_destroy", "soemdsp_stft_gate_reset", "soemdsp_stft_gate_sample", "soemdsp_stft_gate_right", "soemdsp_stft_gate_latency", "soemdsp_stft_gate_version", "soemdsp_stft_gate_metadata_json", "soemdsp_stft_gate_metadata_json_size", "soemdsp_stft_gate_ready", "soemdsp_stft_gate_profile_frames", "soemdsp_stft_gate_set_knee", "soemdsp_stft_gate_set_hold", "soemdsp_stft_gate_display_bins", "soemdsp_stft_gate_display_size", "soemdsp_stft_gate_display_power", "soemdsp_stft_gate_display_gain", "soemdsp_stft_gate_display_rate", "soemdsp_stft_gate_display_frames"
   ) }
   @{ Name = "vocoder"; Simd = $false; Exports = @(
     "soemdsp_vocoder_create", "soemdsp_vocoder_destroy", "soemdsp_vocoder_reset",
     "soemdsp_vocoder_sample", "soemdsp_vocoder_right", "soemdsp_vocoder_latency",
     "soemdsp_vocoder_version", "soemdsp_vocoder_metadata_json", "soemdsp_vocoder_metadata_json_size",
-    "soemdsp_vocoder_set_bands", "soemdsp_vocoder_bands"
+    "soemdsp_vocoder_set_bands", "soemdsp_vocoder_bands", "soemdsp_vocoder_display_count", "soemdsp_vocoder_display_hz", "soemdsp_vocoder_display_level", "soemdsp_vocoder_display_weight"
   ) }
   @{ Name = "convolution_resonator"; Simd = $false; Exports = @(
     "soemdsp_convolution_resonator_create", "soemdsp_convolution_resonator_destroy",

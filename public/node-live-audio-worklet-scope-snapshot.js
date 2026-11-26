@@ -241,6 +241,13 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
         this.spectrogramCollectDisplayData(nodeId, state, dataPorts);
       } catch (_e) { /* keep audio; face keeps last hop */ }
     }
+    // Spectral processor faces (Vocoder, Gate, Contrast, Blur, Freeze, Delay,
+    // Warp, Cross Synthesis): read-only taps + shared-core analysis.
+    for (const [nodeId, state] of this.spectralDisplayStates || []) {
+      try {
+        this.spectralDisplayCollect(nodeId, state, dataPorts);
+      } catch (_e) { /* keep audio; face keeps last data */ }
+    }
     // Pull Yellow Graph planes from native WASM for face relay.
     if (typeof this.syncNativeYellowGraphPublish === "function") {
       try { this.syncNativeYellowGraphPublish(); } catch (_e) { /* keep prior publish */ }

@@ -626,6 +626,9 @@ if (type === "portalFace") {
   if (type === "spectrumLine") {
     return normalizeNodeGraphSpectrumLineSettings(nodeGraphSpectrumLineSettingsDefaults);
   }
+  if (type === "spectralStyle") {
+    return normalizeNodeGraphSpectralStyleSettings({}, nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId()));
+  }
   if (type === "spectrogramBurn") {
     return normalizeNodeGraphSpectrogramSettings(nodeGraphSpectrogramSettingsDefaults);
   }
@@ -731,6 +734,9 @@ function normalizeNodeGraphDisplaySettingsForFormType(settings, type = nodeGraph
   if (type === "spectrumLine") {
     const node = nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId());
     return normalizeNodeGraphSpectrumLineSettings(settings, node);
+  }
+  if (type === "spectralStyle") {
+    return normalizeNodeGraphSpectralStyleSettings(settings, nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId()));
   }
   if (type === "spectrogramBurn") {
     const node = nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId());
@@ -1268,6 +1274,9 @@ if (settingsSchema === "portalFace") {
   }
   if (settingsSchema === "spectrumLine") {
     return normalizeNodeGraphSpectrumLineSettings(node.traceDisplaySettings || {}, node);
+  }
+  if (settingsSchema === "spectralStyle") {
+    return normalizeNodeGraphSpectralStyleSettings(node.traceDisplaySettings || {}, node);
   }
   if (settingsSchema === "spectrogramBurn") {
     const merged = { ...(node.traceDisplaySettings || {}) };

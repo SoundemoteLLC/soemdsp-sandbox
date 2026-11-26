@@ -12,7 +12,7 @@
 //   • Circular Spectrogram reuses the ring, meta and LUT with a second
 //     fragment shader (FS_POLAR): angle → column age, radius → frequency.
 //   • Shader per pixel: ring lookup → Curve row→Hz → bilinear
-//     bin lerp → undo log10(1+mag·100) → dBFS → soft floor/ceiling → interpolated LUT.
+//     bin lerp → |X| / full scale → dBFS → soft floor/ceiling → interpolated LUT.
 //   • Moving-head circular ink has a clean current revolution and a separate
 //     older-sweep layer whose afterglow lifetime is measured in turns.
 //
@@ -62,9 +62,8 @@ float binAt(float rowV, float b) {
   return dot(v, pick);
 }
 
-float powPos(float x, float e) { return x <= 0.0 ? 0.0 : pow(x, e); }
 
-// Worklet stores c = log10(1 + ema·100). Recover linear mag, then dBFS.
+// Worklet stores honest linear |X[k]|; grade01 turns it into dBFS.
 // Soft knees occupy the outer 20% of the range; the middle stays linear.
 float spectrogramSoftLevel(float v) {
   v = clamp(v, 0.0, 1.0);
@@ -96,8 +95,7 @@ float hzForCurve(float u, float curve, float lo, float hi) {
 }
 
 float grade01(float x, float floorDb, float ceilingDb) {
-  float ema = max(0.0, (powPos(10.0, x) - 1.0) / 100.0);
-  float amp = ema / max(uFullMag, 1e-9);
+  float amp = max(0.0, x) / max(uFullMag, 1e-9);
   float db = 20.0 * log(max(amp, 1e-12)) / LN10;
   return spectrogramSoftLevel((db - floorDb) / max(ceilingDb - floorDb, 0.01));
 }
@@ -902,13 +900,12 @@ void main() {
     releaseGpu(ring);
   }
 
-  // JS twin of grade01 (smoke + 1D-style dBFS checks). x is log10(1+ema·100).
+  // JS twin of grade01 (smoke + dBFS checks). x is the linear |X[k]|.
   const SPECTROGRAM_GRADE_WINDOW_DB = 80;
   function spectrogramGrade01(x, floorDb, ceilingDb, fullMag) {
     const floor = Number.isFinite(Number(floorDb)) ? Number(floorDb) : -80;
     const ceiling = Number.isFinite(Number(ceilingDb)) ? Number(ceilingDb) : 0;
-    const ema = Math.max(0, (Math.pow(10, Number(x)) - 1) / 100);
-    const db = 20 * Math.log10(Math.max(ema / Math.max(Number(fullMag) || 0, 1e-9), 1e-12));
+    const db = 20 * Math.log10(Math.max(Math.max(0, Number(x)) / Math.max(Number(fullMag) || 0, 1e-9), 1e-12));
     const v = Math.min(1, Math.max(0, (db - floor) / Math.max(ceiling - floor, 0.01)));
     const knee = 0.2;
     const edge = Math.min(v, 1 - v);

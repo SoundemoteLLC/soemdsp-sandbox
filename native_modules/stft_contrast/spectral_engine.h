@@ -197,6 +197,15 @@ template<bool Gate> struct Engine {
     return result;
   }
 };
+// Display tap (read-only), shared by STFT Gate and STFT Contrast: per-bin input
+// power (one-sided, Parseval-normalized, the same units as Threshold) and the
+// per-bin gain in dB the audio applies. bins = size / 2 + 1, bin k is at
+// k * rate / size. frames counts analysis hops (changes when new data exists).
+template<class E> inline const double* display_power(E* s) { return s ? s->power : nullptr; }
+template<class E> inline const double* display_gain(E* s) { return s ? s->binGain : nullptr; }
+template<class E> inline double display_rate(E* s) { return s && s->lastRate > 0 ? s->lastRate : 0; }
+template<class E> inline double display_frames(E* s) { return s ? (double)(s->samples / hopSize) : 0; }
+
 template<bool Gate> struct Pool {
   static constexpr int capacity = 64;
   static inline Engine<Gate>* items[capacity]{};

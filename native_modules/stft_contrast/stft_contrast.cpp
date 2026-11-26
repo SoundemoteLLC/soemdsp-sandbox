@@ -140,3 +140,9 @@ extern "C" int soemdsp_stft_contrast_latency() { return soemdsp_spectral::size; 
 extern "C" int soemdsp_stft_contrast_version() { return 1; }
 extern "C" const char* soemdsp_stft_contrast_metadata_json() { return metadata; }
 extern "C" int soemdsp_stft_contrast_metadata_json_size() { return sizeof(metadata) - 1; }
+extern "C" int soemdsp_stft_contrast_display_bins() { return soemdsp_spectral::bins; }
+extern "C" double soemdsp_stft_contrast_display_size() { return soemdsp_spectral::size; }
+extern "C" const double* soemdsp_stft_contrast_display_power(int h) { return soemdsp_spectral::display_power(Pool::get(h)); }
+extern "C" const double* soemdsp_stft_contrast_display_gain(int h) { return soemdsp_spectral::display_gain(Pool::get(h)); }
+extern "C" double soemdsp_stft_contrast_display_rate(int h) { return soemdsp_spectral::display_rate(Pool::get(h)); }
+extern "C" double soemdsp_stft_contrast_display_frames(int h) { return soemdsp_spectral::display_frames(Pool::get(h)); }
