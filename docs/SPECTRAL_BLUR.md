@@ -1,7 +1,7 @@
 # Spectral Blur
 
 Native listening proof on `codex/convolution-resonator`, 2026-11-18.
-Module Browser: Space. Native type 272, `spectral_blur` version 6 (adds Swarm, Rate, Drift and Seed, then the Cloud character; see below).
+Module Browser: Space. Native type 272, `spectral_blur` version 7 (adds Swarm, Rate, Drift and Seed, the Cloud character and Pitch Blur; see below).
 
 ## Controls
 
@@ -13,7 +13,14 @@ Module Browser: Space. Native type 272, `spectral_blur` version 6 (adds Swarm, R
   Zero follows each frame. This softens attacks and extends spectral energy;
   amplitude tails decay more slowly than the power time constant. It is not
   a freeze or delay line, and very short impulses may become quiet clouds.
-- Frequency Blur: power-spreading neighborhood half-width in Hz, default 100 Hz.
+- Frequency Blur: power-spreading neighborhood half-width in Hz, default 100 Hz. The same Hz at every pitch.
+  Its kernel is now triangular (two box passes over the power spectrum, no hard edges) and each frame is power-matched
+  to its source. The old hard box edge (a sinc ripple on every partial) was the likely source of the metallic tone.
+  The width is the same number of Hz everywhere, so it is a narrower musical interval on a high partial: that is the
+  second suspect for the metallic sound, and why Pitch Blur exists.
+- Pitch Blur: default 0, in cents (0..1200). Extra half-width on top of Frequency Blur that is the same musical
+  interval at every pitch (bin k widens by k*(2^(c/1200)-1) bins). Same triangular kernel, same power match.
+  Needs a listening pass: Argi to confirm whether Pitch Blur removes the metallic tone.
   Fractional bin widths interpolate between adjacent box kernels. Zero leaves
   bins separate; broad settings make harmonic material more noise-like.
 - Diffusion: phase excursion amount from coherent to phase-diffused synthesis,
@@ -138,6 +145,13 @@ in `patches/demo_patches/spectral_blur_swarm.json` (keyboard -> pulse train -> S
 Swarm preset: Time Smear 0, Frequency Blur 0, Diffusion 0, Stereo Spread 0, Amplitude Smooth 0, Mix 1,
 Phase Smooth 10 ms (only Diffusion uses it), FFT Size 4096 (the module default; try 2048 for tighter
 transients), Swarm 120 degrees, Level 3 dB, Rate 5 Hz, Drift 0.6 Hz, Seed 1.
+
+## Display
+
+Spectral Blur face styles are Particles (default), Overlay and Waterfall only. Parameters that do nothing in the
+current Character (Swarm, Rate, Drift in Cloud; Fuzz and Voices in Warble) are drawn with grey stripes on the face
+(`NODE_GRAPH_FACE_INACTIVE_PARAMS`, re-evaluated every redraw, so it follows a Character change). Level and Seed
+work in both.
 
 ## Cloud preset
 

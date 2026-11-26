@@ -6,7 +6,7 @@ const latency = x.soemdsp_spectral_blur_latency();
 assert.equal(latency, 4096);
 const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer,
   x.soemdsp_spectral_blur_metadata_json(), x.soemdsp_spectral_blur_metadata_json_size())));
-assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'swarm', 'swarmLevel', 'swarmRate', 'swarmDrift', 'swarmSeed', 'swarmCharacter', 'swarmFuzz', 'swarmVoices', 'mix']);
+assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'blurCents', 'diffusion', 'stereoSpread', 'phaseSmoothMs', 'amplitudeSmoothMs', 'swarm', 'swarmLevel', 'swarmRate', 'swarmDrift', 'swarmSeed', 'swarmCharacter', 'swarmFuzz', 'swarmVoices', 'mix']);
 assert.equal(meta.parameters.find(p => p.key === 'swarmCharacter').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmFuzz').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmFuzz').unit, '\u00a2');
@@ -18,7 +18,7 @@ assert.equal(meta.parameters.find(p => p.key === 'swarm').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmDrift').defaultValue, '0');
 assert.equal(meta.parameters.find(p => p.key === 'swarmSeed').kind, 'seed');
 assert.equal(meta.parameters.find(p => p.key === 'swarmRate').unit, 'Hz');
-assert.equal(x.soemdsp_spectral_blur_version(), 6);
+assert.equal(x.soemdsp_spectral_blur_version(), 7);
 assert.equal(meta.parameters.find(p => p.key === 'smearSeconds').unit, 's');
 assert.equal(meta.parameters.find(p => p.key === 'blurHz').unit, 'Hz');
 assert.ok(meta.parameters.every(p => p.tooltip));
@@ -384,4 +384,41 @@ x.soemdsp_spectral_blur_destroy(h);
     assert.ok(Math.max(lowCost, highCost) < warble * 12 + 100, 'Cloud at its worst case stays bounded');
   }
   console.log('Cloud: dry at Fuzz 0, cents-wide at every pitch, in place, level-preserving, deterministic, linked stereo, crossfaded hop switch, finite.');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Pitch Blur (cents) next to Frequency Blur (Hz): a smooth, level-preserving kernel whose cents width is the same at every pitch.
+{
+  const sr = 48000, settle = 20000, m = 24576;
+  const sine = f0 => i => { const v = 0.1 * Math.sin(2 * Math.PI * f0 * i / sr); return [v, v]; };
+  const run = (f0, hz, cents) => {
+    const h = x.soemdsp_spectral_blur_create(); x.soemdsp_spectral_blur_set_stereo_spread(h, 0); x.soemdsp_spectral_blur_set_smoothing(h, 10, 0);
+    x.soemdsp_spectral_blur_set_blur_cents(h, cents);
+    const out = render(h, settle + m, sr, [0, hz, 0, 1], sine(f0))[0].slice(settle); x.soemdsp_spectral_blur_destroy(h); return out;
+  };
+  const rms = a => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
+  const spreadCents = (out, f0) => {
+    let num = 0, den = 0;
+    for (let c = -900; c <= 900; c += 10) {
+      const f = f0 * 2 ** (c / 1200); let re = 0, im = 0;
+      for (let i = 0; i < out.length; ++i) { const ph = 2 * Math.PI * f * i / sr; re += out[i] * Math.cos(ph); im += out[i] * Math.sin(ph); }
+      const p = re * re + im * im; num += p * c * c; den += p;
+    }
+    return Math.sqrt(num / den);
+  };
+  const dry = run(1000, 0, 0);
+  for (const [hz, cents] of [[100, 0], [0, 200], [100, 200]]) {
+    const wet = run(1000, hz, cents);
+    assert.ok(wet.every(Number.isFinite), 'Pitch Blur output is finite');
+    assert.ok(rms(wet) / rms(dry) > 0.2 && rms(wet) / rms(dry) < 1.25, `blur only loses the level a spread partial inherently loses, never gains (${hz} Hz, ${cents} cents: ${rms(wet) / rms(dry)})`);
+  }
+  // A blurred partial keeps its coherent line; what the blur takes is level, set by the kernel width in Hz. Frequency Blur is the same Hz at every
+  // pitch (same loss), Pitch Blur is the same interval, so its width in Hz grows with pitch (more loss up high).
+  const lvl = (f0, hz, cents) => rms(run(f0, hz, cents)) / rms(run(f0, 0, 0));
+  const cLow = lvl(700, 0, 300), cHigh = lvl(2800, 0, 300), hLow = lvl(700, 100, 0), hHigh = lvl(2800, 100, 0);
+  console.log(`Level kept with Pitch Blur 300 cents: 700 Hz ${cLow.toFixed(2)}, 2.8 kHz ${cHigh.toFixed(2)}. Frequency Blur 100 Hz: 700 Hz ${hLow.toFixed(2)}, 2.8 kHz ${hHigh.toFixed(2)}.`);
+  assert.ok(cLow < 0.9 && cHigh < 0.9, 'Pitch Blur does something at both pitches');
+  assert.ok(cHigh < cLow - 0.1, `Pitch Blur widens with pitch in Hz (${cLow} vs ${cHigh})`);
+  assert.ok(Math.abs(hHigh - hLow) < 0.15, `Frequency Blur is the same width in Hz at every pitch (${hLow} vs ${hHigh})`);
+  console.log('Pitch Blur: smooth kernel, power-matched per frame, cents scale with pitch and Hz does not.');
 }

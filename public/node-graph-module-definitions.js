@@ -1388,10 +1388,11 @@ const nodeGraphModuleDefinitions = (
         key: "amp",
         label: "Amplitude",
         max: "1",
-        mid: "0.5",
-        min: "0",
+        mid: "0",
+        min: "-1",
         nonlinearSlider: false,
-        step: "any"
+        step: "any",
+        tooltip: "Output level. Negative values invert the signal at that size (the display shows the same)."
       },
     ]
   },
@@ -8758,7 +8759,8 @@ const nodeGraphModuleDefinitions = (
     visualInputs: [{ key: "spectralBlurIn", label: "In", port: "In" }],
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["smearSeconds", "Time Smear"], ["blurHz", "Frequency Blur"]], h: 40 },
+      { kind: "cells", params: [["smearSeconds", "Time Smear", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["blurHz", "Frequency Blur"], ["blurCents", "Pitch Blur"]], h: 40 },
       { kind: "cells", params: [["diffusion", "Diffusion"], ["stereoSpread", "Stereo Spread"]], h: 40 },
       { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
       { kind: "choices", param: "swarmCharacter", labels: ["Warble", "Cloud"], h: 26 },
@@ -8833,7 +8835,19 @@ const nodeGraphModuleDefinitions = (
         "unit": "Hz",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "Power-spreading neighborhood half-width in Hz. Zero leaves bins separate. Higher values spread harmonics into surrounding frequencies. FFT Size sets the frequency resolution."
+        "tooltip": "Power-spreading neighborhood half-width in Hz, the same number of Hz at every pitch (so a high partial gets a narrower musical interval than a low one; Pitch Blur is the constant-interval version). Smooth triangular kernel, level preserving. Zero leaves bins separate. FFT Size sets the frequency resolution."
+      },
+      {
+        "key": "blurCents",
+        "label": "Pitch Blur",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "100",
+        "max": "1200",
+        "unit": "¢",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Power-spreading half-width in cents, added to Frequency Blur: the same musical interval at every pitch, so a bass note and a high note are smeared by the same relative amount. Smooth triangular kernel, level preserving. Zero is off."
       },
       {
         "key": "diffusion",

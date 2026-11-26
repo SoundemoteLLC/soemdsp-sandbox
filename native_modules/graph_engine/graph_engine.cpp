@@ -893,6 +893,7 @@ extern "C" void soemdsp_spectral_blur_set_smoothing(int h, double phaseMs, doubl
 extern "C" void soemdsp_spectral_blur_set_stereo_spread(int h, double amount);
 extern "C" void soemdsp_spectral_blur_set_swarm(int h, double phaseDegrees, double levelDb, double rateHz, double driftHz, double seed);
 extern "C" void soemdsp_spectral_blur_set_cloud(int h, double character, double fuzzCents, double voices);
+extern "C" void soemdsp_spectral_blur_set_blur_cents(int h, double cents);
 extern "C" int soemdsp_spectral_blur_set_fft_size(int h, int length);
 extern "C" int soemdsp_stft_contrast_create();
 extern "C" void soemdsp_stft_contrast_destroy(int handle);
@@ -5109,6 +5110,7 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.pan, 1, false);
     init_control(n.timeNumerator, 2, false);
     init_control(n.width, 100, false);
+    init_control(n.frequency, 0, false);    // pitch blur (cents)
     init_control(n.diffusionAmount, 1, false);
     init_control(n.mix, 1, false);
     init_control(n.offsetMs, 10, false);
@@ -16397,6 +16399,7 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
         control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionSize, f));
       soemdsp_spectral_blur_set_swarm(node.nativeHandle, control_audio(g, node.shape, f), control_audio(g, node.amplitude, f),
         control_audio(g, node.lfoRate, f), control_audio(g, node.lfoVariation, f), control_audio(g, node.seed, f));
+      soemdsp_spectral_blur_set_blur_cents(node.nativeHandle, control_audio(g, node.frequency, f));
       soemdsp_spectral_blur_set_cloud(node.nativeHandle, control_audio(g, node.mode, f), control_audio(g, node.center, f),
         control_audio(g, node.oversample, f));
       y = soemdsp_spectral_blur_sample(node.nativeHandle, left, right,
