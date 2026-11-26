@@ -36,8 +36,11 @@ them with grey stripes (`NODE_GRAPH_FACE_INACTIVE_PARAMS` in `node-graph-module-
 ## Measured behaviour and known limits (`scripts/test_spectral_smear.mjs`)
 
 - Neutral reconstruction about 4e-8 at 44.1, 48 and 96 kHz in both hops; every FFT size reconstructs at its own delay.
-- Level at Hop Normal: within about 1 dB over the tested grid (worst 0.98 dB). **At Hop Smooth a very wide Pitch Blur (1200 cents) loses up to
-  about 3.4 dB; the cause was not found** (neutral is exact and Diffusion is matched), so the test allows 3.6 dB there and this is the open item.
+- Level within the plan's 1 dB in both Hop modes over the tested grid (worst 0.98 dB at Normal, 1.04 dB at Smooth, with 0.05 dB of slack in the test).
+  **The Hop Smooth loss was real and had a cause:** smeared or spread energy has no live phase holding the frames together, so it forms short bursts that
+  do not overlap-add in amplitude the way a steady partial does; its level falls as 1 / overlap, and Smooth has twice the overlap, so it lost about 3 dB
+  more than Normal. Each bin now gets `1 / sqrt(live + (1 - live)(4 / overlap))` (live = the blend weight `c`), which is 1 for live input and at Normal.
+  The Diffusion makeup uses a measured kappa of 0.39 (the Phase Smooth lag keeps consecutive frames partly coherent, so the loss is about the same at both hops).
 - Peak over dry on a saw: with Diffusion up to about +7.9 dB (random phase raises the crest factor); Blur without Diffusion copies each partial's
   phase into its neighbours, so a saw becomes a band-limited pulse train (peaks to +24 dB) which is what Diffusion exists to break up.
 - Not metallic: at the FFT-bin centres of a 2-6 kHz noise band the worst peak over the floor is 6.2 dB at Speed 30 against 12.5 dB at Speed 2.

@@ -191,9 +191,11 @@ struct Core {
     if (engine == kSmear) {
       // Mono Bass: the side walk is scaled by a raised-cosine ramp from 0 at MonoBass / sqrt(2) to 1 at MonoBass sqrt(2) (0 = off).
       // Level: frames whose diffused phases have decorrelated add in power; each bin is given back what that loses, 1 / sqrt(rho^2 + (1 - rho^2) kappa), with
-      // rho = sinc(Diffusion jitter) the per-hop correlation and kappa = (1 / overlap) / 0.514 the incoherent share left once the window-pass match below
-      // has restored the 0.514 it measures. It is 1 at Diffusion 0 and only restores a loss, so it cannot boost.
-      const double kappa = (1.0 / overlap) * 1.9444444444444444;
+      // rho = sinc(Diffusion jitter) the per-hop correlation. Pure incoherence would give kappa = (1 / overlap) / 0.514 (the window-pass match restores 0.514),
+      // but the walk is smoothed by Phase Smooth, so consecutive frames stay partly coherent: MEASURED at Hop Normal and Smooth with the default 10 ms the
+      // loss to restore is the same at both (about 4 dB at full diffusion), so kappa is the measured constant 0.39. It is 1 at Diffusion 0 and only
+      // restores a loss, so it cannot boost.
+      const double kappa = 0.39;
       bandMakeup[0] = bandMakeup[bins - 1] = 1.0f; smearRamp[0] = smearRamp[bins - 1] = 1.0f;
       const double stepAngle = (diffusion < 0 ? -diffusion : diffusion) * jitter;
       const double rho = stepAngle < 1e-9 ? 1.0 : (stepAngle >= 3.141592653589793 ? 0.0 : soemdsp_maths::dsp_sin(stepAngle) / stepAngle);
@@ -391,6 +393,7 @@ struct Core {
       blurPower(c, radius, centsRatio);
       for (int k = 0; k < bins; ++k) {
         const bool edge = k == 0 || k == bins - 1;
+        double liveWeight = 1.0; // Smear: how much of this bin is live input (1) rather than smeared or spread energy (0)
         if (engine == kSmear) {
           // Live versus smeared phase: where the input is really present (c = 1) the phase is the input's; smeared tails and spread energy (c -> 0)
           // continue the bin's held phase advance instead of taking noise-floor phase, so tails neither crackle nor freeze into steady tones.
@@ -413,13 +416,18 @@ struct Core {
             }
             double nr = cr + weight * (ar - cr), ni = ci + weight * (ai - ci);
             const double nn = nr * nr + ni * ni; if (nn > 1e-30) { const double inv = 1.0 / __builtin_sqrt(nn); nr *= inv; ni *= inv; } else { nr = ar; ni = ai; } // safety: opposite vectors cancel; take the input's
-            phaseR[c][k] = nr; phaseI[c][k] = ni;
-          } else { phaseR[c][k] = cr; phaseI[c][k] = ci; }
+            phaseR[c][k] = nr; phaseI[c][k] = ni; liveWeight = weight;
+          } else { phaseR[c][k] = cr; phaseI[c][k] = ci; liveWeight = 0.0; }
           prevR[c][k] = a; prevI[c][k] = b;
         }
         const double targetMagnitude = __builtin_sqrt((blurred[k] > 0 ? blurred[k] : 0) / (edge ? 1 : 2));
         magnitudeState[c][k] = targetMagnitude + amplitudePole * (magnitudeState[c][k] - targetMagnitude);
-        double magnitude = magnitudeState[c][k] * (engine == kSmear ? bandMakeup[k] : 1.0f);
+        // Smeared and spread energy has no live phase to hold the frames together, so it forms short bursts that do NOT overlap-add in amplitude the way a
+        // steady partial does: its level then falls as 1 / overlap (power) while the live share keeps its coherence. The synthesis-window match restores
+        // the share a Hann-shaped grain passes; this gives back the part that scales with the overlap, relative to the 4x reference: the incoherent share
+        // (1 - live) is raised by sqrt(overlap / 4). It is 1 for live input and at Hop Normal, so a steady partial and the 4x level are untouched.
+        const double spreadMakeup = engine == kSmear ? 1.0 / __builtin_sqrt(liveWeight + (1.0 - liveWeight) * (4.0 / overlap)) : 1.0;
+        double magnitude = magnitudeState[c][k] * (engine == kSmear ? bandMakeup[k] : 1.0f) * spreadMakeup;
         double sn = 0, cs = 1;
         if (!edge && diffusion > 0) {
           const double phase = smoothOffset[k] + (c == 0 ? -0.5 : 0.5) * stereoSpread * (engine == kSmear ? smearRamp[k] : 1.0f) * smoothSideOffset[k];

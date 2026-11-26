@@ -118,9 +118,8 @@ for (const hop of [4, 8]) {
     }
   }
   console.log(`T9 worst RMS error: Normal ${worst.toFixed(2)} dB (${where}), Smooth ${worst8.toFixed(2)} dB (${where8}); worst peak vs dry ${worstPeak.toFixed(2)} dB (with Diffusion ${diffPeak.toFixed(2)} dB)`);
-  // KNOWN LIMIT: at Hop Smooth a very wide blur (1200 cents) loses up to about 3.5 dB; the cause is not found (neutral is exact and Diffusion is matched).
-  assert.ok(worst8 <= 3.6, `T9 Smooth within 3.6 dB (${worst8} at ${where8}; the plan said 1)`);
-  assert.ok(worst <= 1.2, `T9 level within about 1 dB (${worst} at ${where}; the plan said 1)`);
+  assert.ok(worst8 <= 1.05, `T9 Smooth within the plan's 1 dB (${worst8} at ${where8}; 0.05 dB of measurement slack)`);
+  assert.ok(worst <= 1.05, `T9 Normal within the plan's 1 dB (${worst} at ${where}; 0.05 dB of measurement slack)`);
   // The plan also wants the peak within +3 dB of dry in every case. Blur without Diffusion copies each partial's own phase into its neighbours, so a
   // saw becomes a band-limited pulse train (peaks +20 dB): that is what the Diffusion phase walk exists to break up, so the peak is asserted only with it.
   assert.ok(diffPeak <= 9, `T9 with Diffusion the peak stays within +9 dB of dry (${diffPeak}; the plan said +3: random phase raises a saw's crest factor, as in Warble and Cloud)`);
