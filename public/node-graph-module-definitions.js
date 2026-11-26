@@ -8399,8 +8399,9 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["smearSeconds", "Time Smear", "horizontal"]], h: 26 },
-      { kind: "cells", params: [["blurCents", "Blur"], ["diffusion", "Diffusion"]], h: 40 },
-      { kind: "cells", params: [["amplitudeSmoothMs", "Amplitude Smooth", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["blurHz", "Frequency Blur"], ["blurCents", "Pitch Blur"]], h: 40 },
+      { kind: "cells", params: [["diffusion", "Diffusion"], ["stereoSpread", "Stereo Spread"]], h: 40 },
+      { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
@@ -8458,8 +8459,21 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "Spectral power averaging time constant in seconds. Zero follows each frame; longer values soften attacks and leave slowly decaying spectral clouds. Not a delay or freeze."
       },
       {
+        "key": "blurHz",
+        "label": "Frequency Blur",
+        "kind": "frequency",
+        "defaultValue": "100",
+        "min": "0",
+        "mid": "200",
+        "max": "4000",
+        "unit": "Hz",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Power-spreading neighborhood half-width in Hz, the same number of Hz at every pitch (so a high partial gets a narrower musical interval than a low one; Pitch Blur is the constant-interval version). Smooth triangular kernel, level preserving. Zero leaves bins separate. FFT Size sets the frequency resolution."
+      },
+      {
         "key": "blurCents",
-        "label": "Blur",
+        "label": "Pitch Blur",
         "defaultValue": "0",
         "min": "0",
         "mid": "100",
@@ -8467,7 +8481,7 @@ const nodeGraphModuleDefinitions = (
         "unit": "¢",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "Power-spreading half-width in cents: the same musical interval at every pitch, so a bass note and a high note are smeared by the same relative amount. Smooth triangular kernel, level preserving. Zero leaves bins separate."
+        "tooltip": "Power-spreading half-width in cents, added to Frequency Blur: the same musical interval at every pitch, so a bass note and a high note are smeared by the same relative amount. Smooth triangular kernel, level preserving. Zero is off."
       },
       {
         "key": "diffusion",
@@ -8479,6 +8493,30 @@ const nodeGraphModuleDefinitions = (
         "unit": "×",
         "step": "any",
         "tooltip": "Phase excursion amount, from coherent phase to full diffusion. Rotates each bin without complex-spectrum crossfade cancellations. Stereo Spread controls channel decorrelation; no makeup gain."
+      },
+      {
+        "key": "stereoSpread",
+        "label": "Stereo Spread",
+        "defaultValue": "1",
+        "min": "0",
+        "mid": "0.5",
+        "max": "1",
+        "unit": "×",
+        "step": "any",
+        "tooltip": "Opposite-channel phase diffusion spread. Zero links the phase motion; higher values give mono input a stereo wash. Does not crossfeed audio. Requires Diffusion above zero; mono summing can change tone through phase cancellation."
+      },
+      {
+        "key": "phaseSmoothMs",
+        "label": "Phase Smooth",
+        "kind": "time",
+        "defaultValue": "10",
+        "min": "0",
+        "mid": "10",
+        "max": "200",
+        "unit": "ms",
+        "step": "any",
+        "nonlinearSlider": true,
+        "tooltip": "Time constant for smoothing the unwrapped phase-diffusion trajectory. Zero keeps raw phase motion. Does not smooth spectral magnitudes or reduce their contrast. Updates at the STFT hop rate."
       },
       {
         "key": "amplitudeSmoothMs",
@@ -8892,7 +8930,8 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["fuzz", "Fuzz"], ["wander", "Wander"]], h: 40 },
-      { kind: "cells", params: [["seed", "Seed", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["voices", "Voices", "horizontal"]], h: 26 },
+      { kind: "seed", param: "seed", h: 28 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
@@ -8946,7 +8985,7 @@ const nodeGraphModuleDefinitions = (
         "unit": "¢",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "How far each voice detunes every partial, in cents at its peak, the same musical interval at every pitch. A smooth chorus, not noise. Zero is dry. The detune reaches at most 32 bins from a partial."
+        "tooltip": "How far each voice detunes every partial, in cents at its peak, the same musical interval at every pitch. A smooth chorus, not noise. Zero is dry."
       },
       {
         "key": "wander",
@@ -8962,17 +9001,30 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "How fast each partial's detune wanders, in Hz. A fraction of a Hz is a slow, lush chorus beat; a few Hz makes the detune itself shimmer; higher is fuzz and eventually metallic FM. Updates at the STFT hop rate."
       },
       {
+        "key": "voices",
+        "label": "Voices",
+        "defaultValue": "3",
+        "min": "2",
+        "mid": "3",
+        "max": "4",
+        "step": "1",
+        "linearSmoothing": false,
+        "tooltip": "Detune voices: independent wandering detune streams of the one analysis, averaged. More voices is a denser, smoother fur. Four is the most the engine holds."
+      },
+      {
         "key": "seed",
         "label": "Seed",
         "kind": "seed",
-        "defaultValue": "1",
+        "defaultValue": "0",
         "min": "0",
-        "mid": "1",
+        "mid": "0",
         "max": "16777215",
+        "maxDigits": 0,
         "step": "1",
+        "nonlinearSlider": false,
         "linearSmoothing": false,
         "smoothingType": "none",
-        "tooltip": "Seed for the voices. Same Seed, input and settings give the same sound."
+        "tooltip": "Detune seed. Same Seed = same output; new modules get their own."
       },
       {
         "key": "mix",
@@ -9016,7 +9068,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["swarm", "Swarm"], ["rate", "Rate"]], h: 40 },
-      { kind: "cells", params: [["seed", "Seed", "horizontal"]], h: 26 },
+      { kind: "seed", param: "seed", h: 28 },
       { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
@@ -9088,14 +9140,16 @@ const nodeGraphModuleDefinitions = (
         "key": "seed",
         "label": "Seed",
         "kind": "seed",
-        "defaultValue": "1",
+        "defaultValue": "0",
         "min": "0",
-        "mid": "1",
+        "mid": "0",
         "max": "16777215",
+        "maxDigits": 0,
         "step": "1",
+        "nonlinearSlider": false,
         "linearSmoothing": false,
         "smoothingType": "none",
-        "tooltip": "Seed for the wobble. Same Seed, input and settings give the same sound."
+        "tooltip": "Wobble seed. Same Seed = same output; new modules get their own."
       },
       {
         "key": "mix",

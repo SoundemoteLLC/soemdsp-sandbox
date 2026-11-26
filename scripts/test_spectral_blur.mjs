@@ -8,7 +8,7 @@ const P = 'soemdsp_spectral_blur_';
 const f = (name, ...args) => x[P + name](...args);
 assert.equal(f('latency'), 4096);
 const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer, f('metadata_json'), f('metadata_json_size'))));
-assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'fuzz', 'wander', 'seed', 'mix']);
+assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'fuzz', 'wander', 'voices', 'seed', 'mix']);
 assert.equal(meta.targetType, 'spectralBlur');
 assert.equal(meta.parameters.find(p => p.key === 'fuzz').unit, '¢');
 assert.equal(meta.parameters.find(p => p.key === 'wander').unit, 'Hz');
@@ -27,7 +27,7 @@ const render = (h, n, input) => {
 };
 const energy = (a, lo = 0, hi = a.length) => a.slice(lo, hi).reduce((e, v) => e + v * v, 0);
 const rms = a => Math.sqrt(energy(a) / a.length);
-const fresh = (fuzz, wander = 0.5, seed = 1) => { const h = f('create'); assert.ok(h); f('set_cloud', h, fuzz, wander, seed); return h; };
+const fresh = (fuzz, wander = 0.5, seed = 1, voices = 3) => { const h = f('create'); assert.ok(h); f('set_cloud', h, fuzz, wander, voices, seed); return h; };
 const sine = f0 => i => { const v = 0.1 * Math.sin(2 * Math.PI * f0 * i / sr); return [v, v]; };
 const settle = 20000, m = 24576;
 const run = (fuzz, wander, f0, seed = 1) => { const h = fresh(fuzz, wander, seed); const out = render(h, settle + m, sine(f0))[0].slice(settle); f('destroy', h); return out; };
@@ -112,12 +112,12 @@ const spreadCents = (out, f0) => {
 {
   const h = fresh(0); let seed = 5; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
   for (let i = 0; i < 60000; ++i) {
-    if (i % 64 === 0) { f('set_cloud', h, rnd() * 400, rnd() * 30, Math.floor(rnd() * 1e6)); f('set_fft_size', h, [512, 1024, 2048, 4096][Math.floor(rnd() * 4)]); }
+    if (i % 64 === 0) { f('set_cloud', h, rnd() * 400, rnd() * 30, 1 + Math.floor(rnd() * 6), Math.floor(rnd() * 1e6)); f('set_fft_size', h, [512, 1024, 2048, 4096][Math.floor(rnd() * 4)]); }
     const burst = i % 9000 < 300 ? 8 : 0.1;
     const l = f('sample', h, burst * Math.sin(i * 0.2), -burst * Math.sin(i * 0.31), rnd(), sr);
     assert.ok(Number.isFinite(l) && Number.isFinite(f('right', h)), 'finite under rapid edits');
   }
-  f('set_cloud', h, NaN, NaN, NaN);
+  f('set_cloud', h, NaN, NaN, NaN, NaN);
   assert.equal(f('sample', h, NaN, 0, 1, sr), 0);
   f('destroy', h);
   const time = f0 => { const hh = fresh(200); f('set_fft_size', hh, 16384); render(hh, 20000, sine(f0)); const t0 = performance.now(); render(hh, sr, sine(f0)); const dt = performance.now() - t0; f('destroy', hh); return dt; };

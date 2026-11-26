@@ -7,12 +7,12 @@ const x = (await WebAssembly.instantiate(fs.readFileSync(new URL("../native_modu
   { env: { emo_process_block() {} } })).instance.exports;
 const N = 128, rate = 48000;
 // slots: 22 fft size, 30 fuzz (cents), 46 wander (Hz), 48 seed, 13 swarm (degrees), 57 rate (Hz), 52 time smear (s), 10 blur (cents),
-// 42 diffusion, 41 amplitude smooth (ms), 40 mix
+// 42 diffusion, 41 amplitude smooth (ms), 31 frequency blur (Hz), 1 stereo spread, 55 phase smooth (ms), 32 voices, 40 mix
 const modules = [
   {
     name: "spectral_blur", type: 272,
-    specs: [[[22, 4096]], [[22, 2048], [30, 80], [46, 0.7], [48, 5], [40, 0.8]], [[22, 512], [30, 0], [48, 1]]],
-    sync: (ref, p) => x.soemdsp_spectral_blur_set_cloud(ref, p(30, 50), p(46, 0.5), p(48, 1)),
+    specs: [[[22, 4096]], [[22, 2048], [30, 80], [46, 0.7], [32, 4], [48, 5], [40, 0.8]], [[22, 512], [30, 0], [32, 2], [48, 1]]],
+    sync: (ref, p) => x.soemdsp_spectral_blur_set_cloud(ref, p(30, 50), p(46, 0.5), p(32, 3), p(48, 0)),
     sample: (ref, a, z, p) => x.soemdsp_spectral_blur_sample(ref, a, z, p(40, 1), rate),
   },
   {
@@ -23,9 +23,9 @@ const modules = [
   },
   {
     name: "spectral_smear", type: 282,
-    specs: [[[22, 4096], [52, 2], [10, 0], [42, 1], [41, 0]], [[22, 512], [52, 0.46], [10, 150], [42, 0.402], [41, 20], [40, 0.7]]],
-    sync: (ref, p) => { x.soemdsp_spectral_smear_set_amplitude_smooth(ref, p(41, 0)); x.soemdsp_spectral_smear_set_blur_cents(ref, p(10, 0)); },
-    sample: (ref, a, z, p) => x.soemdsp_spectral_smear_sample(ref, a, z, p(52, 2), p(42, 1), p(40, 1), rate),
+    specs: [[[22, 4096], [52, 2], [31, 100], [10, 0], [42, 1], [1, 1], [55, 10], [41, 0]], [[22, 512], [52, 0.46], [31, 490.89], [10, 150], [42, 0.402], [1, 0.3], [55, 30], [41, 20], [40, 0.7]]],
+    sync: (ref, p) => { x.soemdsp_spectral_smear_set_smoothing(ref, p(55, 10), p(41, 0)); x.soemdsp_spectral_smear_set_stereo_spread(ref, p(1, 1)); x.soemdsp_spectral_smear_set_blur_cents(ref, p(10, 0)); },
+    sample: (ref, a, z, p) => x.soemdsp_spectral_smear_sample(ref, a, z, p(52, 2), p(31, 100), p(42, 1), p(40, 1), rate),
   },
 ];
 for (const mod of modules) for (const params of mod.specs) for (const sides of [[0], [1], [2], [1, 2], [0, 1, 2]]) {

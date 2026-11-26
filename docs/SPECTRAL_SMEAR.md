@@ -15,15 +15,13 @@ Module Browser: Space. Native type 282, `spectral_smear`.
   Zero follows each frame. This softens attacks and extends spectral energy;
   amplitude tails decay more slowly than the power time constant. It is not
   a freeze or delay line, and very short impulses may become quiet clouds.
-- Blur: power-spreading half-width in CENTS (0..1200, default 0): the same musical interval at every pitch (bin k widens by
-  k*(2^(c/1200)-1) bins), so a bass note and a high note are smeared by the same relative amount. The kernel is
-  triangular (two box passes over the power spectrum, no hard edges) and each frame is power-matched to its source.
-  There is no Hz version any more: a constant number of Hz is a different musical interval at every pitch, which sounds
-  metallic. Zero leaves bins separate.
-- Diffusion: phase excursion from coherent to phase-diffused synthesis, a fixed 2 Hz Brownian phase walk scaled by the
-  control (unitless, `×`, default 1). Rotation preserves each bin's magnitude. Phase Smooth is fixed at 10 ms and the two
-  channels share the walk (no Stereo Spread: the module is stereo-linked).
-- Amplitude Smooth: symmetric lag on each bin's magnitude in ms (0..200, default 0), applied after Time Smear.
+- Frequency Blur: power-spreading half-width in Hz (default 100). The same Hz at every pitch.
+- Pitch Blur: half-width in cents (default 0), added to Frequency Blur: the same musical interval at every pitch (bin k widens
+  by k*(2^(c/1200)-1) bins). Both use a triangular kernel (two box passes, no hard edges), power-matched per frame.
+- Diffusion: phase excursion from coherent to phase-diffused synthesis (a fixed 2 Hz Brownian walk scaled by the control, `×`, default 1).
+- Stereo Spread (`×`, default 1): opposite-channel diffusion offsets; 0 links the channels.
+- Phase Smooth (ms, default 10): smoothing of the diffusion walk (only Diffusion uses it).
+- Amplitude Smooth: symmetric lag on each bin's magnitude in ms (default 0), applied after Time Smear.
 - Mix: dry/wet aligned to the selected FFT size, default fully wet. No limiter or saturation.
 
 ## DSP And State

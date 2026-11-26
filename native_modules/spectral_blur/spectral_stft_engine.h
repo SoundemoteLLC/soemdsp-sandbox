@@ -170,7 +170,7 @@ struct Core {
       // Cloud = a continuous, slowly wandering detune of every partial, per voice, in cents (a chorus that is not made of oscillators).
       // Per voice, a mean-reverting random state (the Wander parameter sets how fast it wanders, Fuzz how many cents it reaches) lives at knots
       // every kCloudKnot bins (about two Hann main lobes) and is interpolated across the spectrum, so a whole partial moves together. A source bin
-      // is moved to bin k + delta (delta = k * (2^(c/1200) - 1) bins, linear interpolation between the two neighbours, capped at kCloudCapBins)
+      // is moved to bin k + delta (delta = k * (2^(c/1200) - 1) bins, linear interpolation between the two neighbours)
       // and its phase is rotated by the frequency offset ACCUMULATED hop after hop (2 pi delta hop / N per hop), so the moved partial is a
       // continuous sinusoid at the detuned frequency, not a train of phase jumps: smooth beating, no hop-rate buzz. Level wanders the same way
       // (+-Level dB, smooth across bins and time). The voices share nothing but the one analysis and are averaged (1/L each). Left and Right
@@ -205,8 +205,6 @@ struct Core {
           const double u = cloudDetune[v][n] + (cloudDetune[v][n + 1] - cloudDetune[v][n]) * along;
           const double lv = cloudLevelState[v][n] + (cloudLevelState[v][n + 1] - cloudLevelState[v][n]) * along;
           double delta = pk * (soemdsp_maths::dsp_exp(cloudFuzz * u * centsToRatio) - 1.0);
-          if (delta > kCloudCapBins) delta = kCloudCapBins;
-          if (delta < -kCloudCapBins) delta = -kCloudCapBins;
           double t = k + delta;
           if (t < 2.0 || t > bins - 3.0 - 1e-9) { t = k; delta = 0; } // too near DC / Nyquist for the four-bin move: stays where it is
           const int t0 = (int)t;

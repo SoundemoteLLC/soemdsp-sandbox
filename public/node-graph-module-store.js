@@ -151,6 +151,8 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
 const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   // Shipped as Formant Voice (was BLIT Formant; the parked "formantFilter" placeholder).
   "formantFilter",
+  // Shipped as the real Spectral Smear (the old Spectral Blur); a saved underconstructionsort must not keep it parked.
+  "spectralSmear",
   "screenSpaceShader",
   // Shipped as picture effects (📺 in, 📺 out): Chroma Color (also what RGBA / HSLA was for) and Bloom & Glow.
   "chromaColor",

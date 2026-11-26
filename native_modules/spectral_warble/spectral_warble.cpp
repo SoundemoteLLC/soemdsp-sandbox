@@ -11,7 +11,7 @@ const char metadata[] = R"json({"module":"spectral_warble","targetType":"spectra
 {"key":"fftSize","label":"FFT Size","kind":"choice","choices":["512","1024","2048","4096","8192","16384"],"choiceKeys":["512","1024","2048","4096","8192","16384"],"choiceIds":[512,1024,2048,4096,8192,16384],"defaultValue":"4096","min":"0","mid":"2.5","max":"5","step":"1","unit":"samples","linearSmoothing":false,"displayChoices":true,"divideChoicesVisibly":false,"tooltip":"Analysis window and processing delay in samples. At 48 kHz: 512 = 10.67 ms, 4096 = 85.33 ms, 8192 = 170.67 ms, 16384 = 341.33 ms. Smaller is tighter; larger resolves lower frequencies and costs more memory and peak CPU. Edits warm and crossfade, but intentionally change delay. Plugin-host compensation is not yet verified."},
 {"key":"swarm","label":"Swarm","defaultValue":"0","min":"0","mid":"45","max":"180","unit":"\u00b0","step":"any","tooltip":"Peak phase wobble of each partial, in degrees, a fuzzy buzz that stays in place in time. Zero is off and leaves the sound unchanged. It is not a smear: transients keep their time plus the FFT window delay."},
 {"key":"rate","label":"Rate","kind":"frequency","defaultValue":"5","min":"0","mid":"5","max":"1000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"How fast the wobble moves. Updates at the STFT hop rate (about 47 Hz at 4096 and 48 kHz), so it is not audio-rate modulation. No effect while Swarm is zero."},
-{"key":"seed","label":"Seed","kind":"seed","defaultValue":"1","min":"0","mid":"1","max":"16777215","step":"1","linearSmoothing":false,"smoothingType":"none","tooltip":"Seed for the wobble. Same Seed, input and settings give the same sound."},
+{"key":"seed","label":"Seed","kind":"seed","defaultValue":"0","min":"0","mid":"0","max":"16777215","maxDigits":0,"step":"1","nonlinearSlider":false,"linearSmoothing":false,"smoothingType":"none","tooltip":"Wobble seed. Same Seed = same output; new modules get their own."},
 {"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay."}]})json";
 }
 
@@ -50,6 +50,7 @@ extern "C" void soemdsp_spectral_warble_set_warble(int h, double phaseDegrees, d
     const unsigned int sd = __builtin_isfinite(seed) && seed > 0 ? (seed >= 4294967295.0 ? 4294967295u : (unsigned int)seed) : 0u;
     for (auto& core : s->cores) {
       core.swarm = __builtin_isfinite(phaseDegrees) ? phaseDegrees : 0;
+      // A negative Rate would make the one-pole coefficient exceed 1 and the filter blow up, so it is treated as 0; nothing else is limited.
       core.swarmRate = __builtin_isfinite(rateHz) && rateHz > 0 ? rateHz : 0;
       if (sd != core.swarmSeed) { core.swarmSeed = sd; core.seedSwarm(); core.seedCloud(); }
     }
