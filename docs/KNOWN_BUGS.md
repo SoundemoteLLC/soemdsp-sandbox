@@ -42,7 +42,7 @@ These four reports probably share a root cause: text in the GL text and label re
 
 - **Reported:** 2026-11-25, by Argi
 - **Symptoms:** Keyboard key color highlighting (blue, gold, and the other highlight colors) doesn't work, or works only sometimes, on any click, including Shift-click and Ctrl-click.
-- **Notes:** None yet.
+- **Notes:** Argi suspects this regressed when timer polling (`setInterval`) was converted to event-driven updates, so the keyboard likely lost a refresh a timer used to drive. Check MasterBot's conversion commits `958808b4`, `9eb8b7ca`, `cb686247`, and `9ab21898` first. In Argi's words, the keyboard "doesn't really update properly" and isn't highlighting at the moment.
 
 ### Refresh does not save camera view or patch-view visibility
 
