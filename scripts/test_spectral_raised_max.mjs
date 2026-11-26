@@ -64,14 +64,13 @@ const modules = {
   const c1200 = spreadHz(smear({ cents: 1200 })[0]), c3000 = spreadHz(smear({ cents: 3000 })[0]);
   console.log(`A Smear: Pitch Blur spreads ${c1200.toFixed(0)} Hz at 1200 cents, ${c3000.toFixed(0)} Hz at 3000`);
   assert.ok(c3000 > c1200 * 1.1, `Smear Pitch Blur 3000 is wider than 1200 (${c3000} vs ${c1200})`);
-  // Time Smear 40 s: the tail time constant of a noise-free burst is about 40 s (energy ratio between two windows 20 s apart)
-  const burst = i => i < 2 * sr ? sine(1760)(i) : 0;
-  const tail = smear({ smear: 40 }, 62 * sr, burst)[0]; // already without the first second
-  const e = (t, d) => { let a = 0; for (let i = Math.round(t * sr); i < Math.round((t + d) * sr); ++i) a += tail[i] * tail[i]; return a / d; };
-  const tau = 20 / Math.log(e(10, 1) / e(30, 1));
+  // Time Smear 40 s: the tail time constant of a burst, as the slope of log energy over every second of the tail, averaged over three seeds
+  // (a tail is a noise-like band, so one pair of windows scatters by 25 %)
+  const tails = [1, 2, 3].map(seed => { const h = s.soemdsp_spectral_smear_create(); s.soemdsp_spectral_smear_set_seed(h, seed); s.soemdsp_spectral_smear_set_stereo(h, 0, 0, 30); const o = new Float64Array(62 * sr); for (let i = 0; i < o.length; ++i) { const v = i < 2 * sr ? sine(1760)(i) : 0; o[i] = s.soemdsp_spectral_smear_sample(h, v, v, 40, 0, 1, 1, sr); } s.soemdsp_spectral_smear_destroy(h); return o; });
+  const fitTau = o => { const xs = [], ys = []; for (let t = 10; t < 60; ++t) { let e = 0; for (let i = t * sr + 4096; i < (t + 1) * sr + 4096; ++i) e += o[i] * o[i]; xs.push(t + 0.5); ys.push(Math.log(e / sr)); } const mx = mean(xs), my = mean(ys); let sxy = 0, sxx = 0; for (let i = 0; i < xs.length; ++i) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; } return -sxx / sxy; };
+  const tau = mean(tails.map(fitTau));
   console.log(`A Smear: Time Smear 40 s gives a tail time constant of ${tau.toFixed(1)} s`);
-  assert.ok(tau > 30 && tau < 52, `Smear Time Smear 40 s is used (${tau})`);
-  // (at hop N/4 the phase walk is already fully random above about 12 Hz, so 800 is compared with an unsaturated 2 Hz)
+  assert.ok(tau > 34 && tau < 46, `Smear Time Smear 40 s is used (${tau})`);
   const sp8 = smear({ diff: 1, speed: 800 }), sp2 = smear({ diff: 1, speed: 2 });
   assert.ok(spreadHz(sp8[0]) > spreadHz(sp2[0]) * 1.2, `Smear Diffusion Speed 800 Hz is used (wider than 2 Hz: ${spreadHz(sp8[0])} vs ${spreadHz(sp2[0])})`);
   // Stereo Spread 1.5 differs from 1 (it is used as given, above 1)

@@ -79,14 +79,21 @@ for (const length of [512, 1024, 2048, 4096, 8192, 16384]) {
   // the worst at least 3 dB below the glassy Speed 2 setting.
   assert.ok(a.mean < 3 && a.worst < b.worst - 3, `T2 no steady tone grid at Speed 30 (${a.worst} dB worst, Speed 2: ${b.worst} dB)`);
 }
-// ---- T6: Time Smear is honest: the tail of a noise band decays with about the Time Smear time constant (band energy after the input stops), in both hops.
-// (A pure sine is a poor probe: its smeared tail beats by several dB in the unmodified module too.)
-for (const hop of [4, 8]) {
-  const band = noiseBand(2000, 6000), o = run({ smear: 1, hop }, 8 * sr, i => i < 2 * sr ? band(i) : [0, 0])[0];
-  const e = (t, d) => energy(o, Math.round(t * sr) + 4096, Math.round((t + d) * sr) + 4096) / d;
-  const tau = 1.0 / Math.log(e(2.2, 0.4) / e(3.2, 0.4));
-  console.log(`T6 hop ${hop}: tail time constant ${tau.toFixed(2)} s for Time Smear 1 s`);
-  assert.ok(Math.abs(tau - 1) < 0.25, `T6 the tail follows Time Smear (hop ${hop}: ${tau}; the plan said +-15 %)`);
+// ---- T6: Time Smear is honest across its range, at both hops: the tail of a sine burst decays with a time constant equal to the setting.
+// The tail is a noise-like band once Diffusion is in play, so its energy in one second scatters by about 15 %; two windows give a time constant that wanders by
+// 25 % (this was once mistaken for a regression at 40 s). The time constant is the slope of log energy over every second of the tail, averaged over three seeds.
+{
+  const tauOf = (smear, hop, seed, t0, t1) => {
+    const [h, c] = make({ smear, hop, seed, diff: 1 }); const burst = i => i < 2 * sr ? sine(1760)(i) : [0, 0], o = render(h, c, (t1 + 2) * sr, burst)[0]; f('destroy', h);
+    const xs = [], ys = []; for (let t = t0; t < t1; t += 1) { xs.push(t + 0.5); ys.push(Math.log(energy(o, Math.round((t + 0) * sr) + 4096, Math.round((t + 1) * sr) + 4096) / sr)); }
+    const mx = mean(xs), my = mean(ys); let sxy = 0, sxx = 0; for (let i = 0; i < xs.length; ++i) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; }
+    return -sxx / sxy;
+  };
+  for (const hop of [4, 8]) for (const [smear, t0, t1] of [[1, 2.3, 6], [5, 4, 30], [20, 6, 50], [40, 10, 60]]) {
+    const tau = mean([1, 2, 3].map(seed => tauOf(smear, hop, seed, t0, t1)));
+    console.log(`T6 hop ${hop}: Time Smear ${smear} s gives a tail time constant of ${tau.toFixed(1)} s`);
+    assert.ok(Math.abs(tau / smear - 1) < 0.15, `T6 the tail follows Time Smear (hop ${hop}, ${smear} s: ${tau})`);
+  }
 }
 // ---- T3 / T4: tails do not crackle and do not freeze into steady tones (reported)
 {
