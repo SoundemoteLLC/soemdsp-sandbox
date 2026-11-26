@@ -23,8 +23,8 @@ const modules = [
   },
   {
     name: "spectral_smear", type: 282,
-    specs: [[[22, 4096], [52, 2], [31, 100], [10, 0], [42, 1], [1, 1], [55, 10], [41, 0]], [[22, 512], [52, 0.46], [31, 490.89], [10, 150], [42, 0.402], [57, 12], [46, 200], [21, 1], [48, 7], [1, 0.3], [55, 30], [41, 20], [40, 0.7]]],
-    sync: (ref, p) => { x.soemdsp_spectral_smear_set_smoothing(ref, p(55, 10), p(41, 0)); x.soemdsp_spectral_smear_set_stereo(ref, p(1, 1), p(46, 120), p(57, 30)); x.soemdsp_spectral_smear_set_seed(ref, p(48, 0)); x.soemdsp_spectral_smear_set_overlap(ref, p(21, 0) >= 0.5 ? 8 : 4); x.soemdsp_spectral_smear_set_blur_cents(ref, p(10, 0)); },
+    specs: [[[22, 4096], [52, 2], [31, 100], [10, 0], [42, 1], [1, 1], [55, 10], [41, 0]], [[22, 512], [52, 0.46], [31, 490.89], [10, 150], [42, 0.402], [57, 12], [46, 200], [21, 8], [48, 7], [1, 0.3], [55, 30], [41, 20], [40, 0.7]]],
+    sync: (ref, p) => { x.soemdsp_spectral_smear_set_smoothing(ref, p(55, 10), p(41, 0)); x.soemdsp_spectral_smear_set_stereo(ref, p(1, 1), p(46, 120), p(57, 30)); x.soemdsp_spectral_smear_set_seed(ref, p(48, 0)); x.soemdsp_spectral_smear_set_overlap(ref, p(21, 4)); x.soemdsp_spectral_smear_set_blur_cents(ref, p(10, 0)); },
     sample: (ref, a, z, p) => x.soemdsp_spectral_smear_sample(ref, a, z, p(52, 2), p(31, 100), p(42, 1), p(40, 1), rate),
   },
 ];

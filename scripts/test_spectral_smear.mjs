@@ -13,7 +13,7 @@ assert.equal(meta.targetType, 'spectralSmear');
 const param = k => meta.parameters.find(p => p.key === k);
 assert.equal(param('blurCents').unit, '¢'); assert.equal(param('diffusionSpeedHz').unit, 'Hz'); assert.equal(param('seed').kind, 'seed');
 assert.deepEqual(param('hopMode').choiceIds, [4, 8]);
-assert.deepEqual(['smearSeconds', 'blurHz', 'blurCents', 'diffusion', 'diffusionSpeedHz', 'hopMode', 'stereoSpread', 'monoBassHz', 'phaseSmoothMs', 'amplitudeSmoothMs'].map(k => param(k).defaultValue), ['2', '100', '0', '1', '30', '0', '1', '120', '10', '0']);
+assert.deepEqual(['smearSeconds', 'blurHz', 'blurCents', 'diffusion', 'diffusionSpeedHz', 'hopMode', 'stereoSpread', 'monoBassHz', 'phaseSmoothMs', 'amplitudeSmoothMs'].map(k => param(k).defaultValue), ['2', '100', '0', '1', '30', '4', '1', '120', '10', '0']);
 assert.ok(meta.parameters.every(p => p.tooltip));
 
 // sample(h, l, r, seconds, frequency blur Hz, diffusion, mix, rate)

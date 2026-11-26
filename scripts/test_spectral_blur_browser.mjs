@@ -35,6 +35,8 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     if (length && length !== this.testBlurSize) {
       this.testBlurSize = length; this.port.postMessage({ type: 'test-blur-size', length });
     }
+    ${mod.type === 'spectralSmear' ? `const ov = this.nativeGraph.soemdsp_spectral_smear_overlap(h);
+    if (ov && ov !== this.testOverlap) { this.testOverlap = ov; this.port.postMessage({ type: 'test-overlap', overlap: ov }); }` : ''}
   }
   return result;
 };`;
@@ -67,13 +69,20 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function(...args) {
     await page.evaluate(() => setNodeGraphLiveOutputEnabled(true));
     await page.waitForFunction(() => nodeGraphMvp.live.node && nodeGraphMvp.live.outputLevelSmooth > 0.00001, null, { timeout: 60000 });
     await page.evaluate(() => {
-      window.testBlurSizes = [];
-      nodeGraphMvp.live.node.port.addEventListener('message', e => { if (e.data?.type === 'test-blur-size') window.testBlurSizes.push(e.data.length); });
+      window.testBlurSizes = []; window.testOverlaps = [];
+      nodeGraphMvp.live.node.port.addEventListener('message', e => { if (e.data?.type === 'test-blur-size') window.testBlurSizes.push(e.data.length); if (e.data?.type === 'test-overlap') window.testOverlaps.push(e.data.overlap); });
       nodeGraphMvp.live.node.port.start();
     });
     for (const size of [512, 2048, 4096, 8192, 16384, 1024]) {
       await page.evaluate(({ id, size }) => updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'fftSize'), String(size)), { id, size });
       await page.waitForFunction(size => window.testBlurSizes.includes(size), size, { timeout: 15000 });
+    }
+    if (mod.type === 'spectralSmear') {
+      // Hop: flipping the choice at runtime reaches the native module (overlap 4 <-> 8), more than once, and the delay stays the FFT size
+      for (const [value, overlap] of [['1', 8], ['0', 4], ['1', 8], ['0', 4]]) {
+        await page.evaluate(({ id, value }) => updateNodeSliderCurrentValue(nodeGraphSliderForParameter(id, 'hopMode'), value), { id, value });
+        await page.waitForFunction(o => window.testOverlaps.at(-1) === o, overlap, { timeout: 15000 });
+      }
     }
     const state = await page.evaluate(({ id, keys }) => {
       const n = nodeGraphPatchNode(id);

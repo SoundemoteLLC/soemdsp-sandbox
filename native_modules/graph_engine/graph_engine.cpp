@@ -5157,7 +5157,7 @@ static void init_node_defaults(Node& n, int typeId) {
     init_control(n.diffusionSize, 0, false);  // amplitude smooth (ms)
     init_control(n.lfoRate, 30, false);       // diffusion speed (Hz)
     init_control(n.lfoBaseSpeed, 120, false); // mono bass (Hz)
-    init_control(n.mode, 0, true);            // hop: 0 Normal (overlap 4), 1 Smooth (overlap 8)
+    init_control(n.mode, 4, true);            // hop: the overlap itself, 4 Normal / 8 Smooth (the choice ids)
     init_control(n.seed, 0, true);            // seed (discrete)
     init_control(n.mix, 1, false);
   }
@@ -16450,7 +16450,7 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
       soemdsp_spectral_smear_set_smoothing(node.nativeHandle, control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionSize, f));
       soemdsp_spectral_smear_set_stereo(node.nativeHandle, control_audio(g, node.pan, f), control_audio(g, node.lfoBaseSpeed, f), control_audio(g, node.lfoRate, f));
       soemdsp_spectral_smear_set_seed(node.nativeHandle, control_audio(g, node.seed, f));
-      soemdsp_spectral_smear_set_overlap(node.nativeHandle, control_audio(g, node.mode, f) >= 0.5 ? 8 : 4);
+      soemdsp_spectral_smear_set_overlap(node.nativeHandle, (int)control_audio(g, node.mode, f));
       soemdsp_spectral_smear_set_blur_cents(node.nativeHandle, control_audio(g, node.frequency, f));
       y = soemdsp_spectral_smear_sample(node.nativeHandle, left, right, control_audio(g, node.timeNumerator, f),
         control_audio(g, node.width, f), control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);

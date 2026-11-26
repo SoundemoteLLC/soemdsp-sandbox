@@ -8519,14 +8519,14 @@ const nodeGraphModuleDefinitions = (
           "Smooth"
         ],
         "choiceKeys": [
-          "normal",
-          "smooth"
+          "4",
+          "8"
         ],
         "choiceIds": [
           4,
           8
         ],
-        "defaultValue": "0",
+        "defaultValue": "4",
         "min": "0",
         "mid": "0",
         "max": "1",

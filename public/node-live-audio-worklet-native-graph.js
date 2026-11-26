@@ -6341,7 +6341,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("diffusion", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusion", 1));
       push("diffusionSpeedHz", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("diffusionSpeedHz", 30));
       push("monoBassHz", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("monoBassHz", 120));
-      push("hopMode", P.NATIVE_GRAPH_PARAM_MODE, disc("hopMode", 0));
+      push("hopMode", P.NATIVE_GRAPH_PARAM_MODE, disc("hopMode", 4));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("stereoSpread", P.NATIVE_GRAPH_PARAM_PAN, cont("stereoSpread", 1));
       push("phaseSmoothMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("phaseSmoothMs", 10));
