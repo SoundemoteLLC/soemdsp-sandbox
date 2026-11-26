@@ -337,6 +337,27 @@
     return { ...gradient, origin: baseSliders(patch) };
   }
 
+  /**
+   * D-G1 (Argi t449u): deleting modules drops their params from every gradient (origin, params and stop offsets), in the same commit as
+   * the delete, so no dangling refs are saved. Gradients themselves stay, even when nothing is left in them. Pure: returns a new list.
+   */
+  function dropNodes(gradients, nodeIds) {
+    const gone = nodeIds instanceof Set ? nodeIds : new Set(nodeIds || []);
+    if (!Array.isArray(gradients) || !gone.size) return gradients;
+    return gradients.map((gradient) => {
+      if (!plain(gradient)) return gradient;
+      const origin = {};
+      for (const [nodeId, row] of Object.entries(gradient.origin || {})) if (!gone.has(nodeId)) origin[nodeId] = row;
+      const stops = (gradient.stops || []).map((stop) => {
+        const offsets = {};
+        for (const [nodeId, row] of Object.entries(stop.offsets || {})) if (!gone.has(nodeId)) offsets[nodeId] = row;
+        return { ...stop, offsets };
+      });
+      const params = (gradient.params || []).filter((entry) => !gone.has(entry.nodeId));
+      return { ...gradient, origin, params, stops };
+    });
+  }
+
   /** Tell the engine and the autosave that a gradient changed (a position or stop edit). Events only. */
   function notifyChanged(status) {
     if (typeof root.markNodeGraphRenderPending === "function") root.markNodeGraphRenderPending();
@@ -350,6 +371,7 @@
     snapshotIntoGradient,
     setStart,
     dropAllZeroParams,
+    dropNodes,
     isDiscrete,
     holdsStill: (type) => HOLDS_STILL.has(type),
   };

@@ -1781,6 +1781,13 @@ function setNodeGraphPatchDefaultsVisible(visible) {
     if (typeof syncNodeGraphSettingsView === "function") {
       syncNodeGraphSettingsView();
     }
+    // Gradients page (HP-04): bind once, render on open.
+    if (typeof bindNodeGraphGradientPage === "function") {
+      bindNodeGraphGradientPage();
+    }
+    if (typeof renderNodeGraphGradientPage === "function") {
+      renderNodeGraphGradientPage();
+    }
     syncNodeGraphReadyPanelChrome();
   }
   if (typeof rememberNodeGraphWorkspaceWindowState === "function") {

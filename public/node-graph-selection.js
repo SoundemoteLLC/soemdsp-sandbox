@@ -88,6 +88,10 @@ function setNodeGraphSelection(selection) {
   if (typeof nodeGraphViewportCullSyncSelection === "function") {
     nodeGraphViewportCullSyncSelection();
   }
+  // Gradients page "Touching selected" filter follows the selection (an event, no polling).
+  if (typeof nodeGraphGradientPageSelectionChanged === "function") {
+    nodeGraphGradientPageSelectionChanged();
+  }
 }
 
 function clearNodeGraphSelection() {

@@ -1015,6 +1015,10 @@ function cloneNodeGraphPatch(patch) {
     timing: normalizeNodeGraphPatchTiming(patch.timing),
     uiItems: normalizeNodeGraphPatchUiItems(patch.uiItems),
     drawings: normalizeNodeGraphPatchDrawings(patch.drawings),
+    // Gradients ride every clone (edits commit clones); omitted when there are none, as in serialize.
+    ...(typeof nodeGraphNormalizeGradients === "function" && nodeGraphNormalizeGradients(patch.gradients).length
+      ? { gradients: nodeGraphNormalizeGradients(patch.gradients) }
+      : {}),
     view: normalizeNodeGraphPatchView(patch.view),
     visual: normalizeNodeGraphPatchVisual(patch.visual),
     windows: normalizeNodeGraphPatchWindows(patch.windows),

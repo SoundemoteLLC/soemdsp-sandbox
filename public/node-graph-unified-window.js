@@ -98,7 +98,7 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     key: "patchDefaults",
     elementId: "nodePatchDefaultsPanel",
     workspaceKey: "patchDefaults",
-    label: "Ready",
+    label: "Gradients",
     icon: "🧹",
     showInNav: true,
   }),

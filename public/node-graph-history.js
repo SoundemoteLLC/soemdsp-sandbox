@@ -205,6 +205,10 @@ function applyNodeGraphHistorySnapshot(snapshot, status) {
     skipValidate: true,
     status,
   });
+  // Gradients page: undo / redo restores patch.gradients; show it.
+  if (typeof renderNodeGraphGradientPage === "function") {
+    renderNodeGraphGradientPage();
+  }
   scheduleNodeGraphHistoryAutosave();
 }
 

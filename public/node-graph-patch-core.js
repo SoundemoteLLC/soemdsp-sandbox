@@ -2553,6 +2553,10 @@ function performNodeGraphDeleteSelection(selection = nodeGraphMvp.selected) {
             !removableNodeIds.has(connection.sourceNode) &&
             !removableNodeIds.has(connection.destinationNode),
         ),
+        // D-G1: the deleted modules' params leave every gradient in this same commit (one undo step).
+        ...(Array.isArray(patch.gradients) && typeof NodeGraphGradients !== "undefined"
+          ? { gradients: NodeGraphGradients.dropNodes(patch.gradients, removableNodeIds) }
+          : {}),
       };
       // Clear Show metaparameter → deleted child (and shell mx_* params / MOD).
       if (typeof nodeGraphMetamodulePruneOrphanExposedParams === "function") {

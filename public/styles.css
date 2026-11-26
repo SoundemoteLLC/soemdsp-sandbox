@@ -107,6 +107,9 @@
   --node-default-cursor: var(--node-dot-cursor);
   --node-slider-dot-cursor: url("./cursors/slider-drag-dot.svg") 8 8, crosshair;
   --node-adjust-cursor: var(--node-slider-dot-cursor);
+  /* Range (min / max) slider ends: |- over the min handle, -| over the max handle; the vertical bar is the hotspot. */
+  --node-range-min-cursor: url("./cursors/range-min.svg") 4 8, crosshair;
+  --node-range-max-cursor: url("./cursors/range-max.svg") 11 8, crosshair;
   --node-module-roundness-ratio: 0.11;
   --node-module-corner-shape: squircle;
   --node-module-frame-radius: calc(var(--node-grid-size, 28px) * 2 * var(--node-module-roundness-ratio, 0.11));
@@ -5556,6 +5559,180 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   min-height: 0;
   padding: 0;
   overflow: auto;
+}
+
+/* Gradients page (HP-04): the top of the 🧹 panel. Phone-first: 44 px rows, no hover-only affordances. */
+.node-gradients-section {
+  padding: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.node-gradients-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.node-gradient-top,
+.node-gradient-filter,
+.node-gradient-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.node-gradient-top {
+  justify-content: space-between;
+}
+
+#nodeGradientsBody .node-gradient-button {
+  min-height: 44px;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+
+#nodeGradientsBody .node-gradient-button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+#nodeGradientsBody .node-gradient-button:disabled {
+  opacity: 0.4;
+}
+
+.node-gradient-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.node-gradient-card.is-disabled .node-gradient-strip {
+  filter: grayscale(0.85) brightness(0.6);
+}
+
+.node-gradient-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.node-gradient-name {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+.node-gradient-name-input {
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+  font: inherit;
+}
+
+/* The strip: 44 px tall, full width, 28 px handles, a white playhead. The only pointer-drag target on the page. */
+.node-gradient-strip {
+  position: relative;
+  height: 44px;
+  margin: 14px 14px 14px;
+  border-radius: 6px;
+  touch-action: none;
+  cursor: var(--node-adjust-cursor, default);
+}
+
+.node-gradient-playhead {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+#nodeGradientsBody .node-gradient-handle {
+  position: absolute;
+  top: 8px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin-left: -14px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  touch-action: none;
+  cursor: var(--node-adjust-cursor, default);
+}
+
+#nodeGradientsBody .node-gradient-handle.is-selected {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.node-gradient-handle-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Number labels staggered on alternate stops so neighbours never collide. */
+.node-gradient-handle-label.is-high {
+  bottom: calc(100% + 10px);
+}
+
+.node-gradient-handle-label.is-low {
+  top: calc(100% + 10px);
+}
+
+.node-gradient-params {
+  display: flex;
+  flex-direction: column;
+}
+
+.node-gradient-param {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.node-gradient-param-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.node-gradient-hint {
+  margin: 4px 2px;
+  color: rgba(200, 205, 212, 0.72);
+  font-size: 12px;
+}
+
+.node-patch-defaults-ready-title {
+  padding: 8px 8px 0;
+  color: rgba(200, 205, 212, 0.72);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .node-patch-defaults-actions {
