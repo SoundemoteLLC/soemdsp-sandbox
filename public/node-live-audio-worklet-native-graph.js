@@ -6374,6 +6374,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("voices", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("voices", 3));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
     if (type === "spectralWarble") {
@@ -6386,6 +6387,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("monoBassHz", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("monoBassHz", 120));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
     if (type === "spectralSmear") {
@@ -6402,6 +6404,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("phaseSmoothMs", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("phaseSmoothMs", 10));
       push("amplitudeSmoothMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("amplitudeSmoothMs", 0));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
     if (type === "stftContrast") {
