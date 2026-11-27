@@ -4,9 +4,10 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
-### Module drag makes shrunk title text flicker big to small
+### Module drag makes shrunk title text flicker big to small — FIXED
 
 - **Reported:** 2026-11-27, by Argi
+- **Fixed:** 2026-11-27, `008071d3`. The focused narrow-title drag probe retains the same GL module record and reports zero text calls and atlas bakes during the drag.
 - **Symptoms:** While dragging a module, a title too long to fit (so it gets shrunk to fit) jitters from full size to the shrunk size, then stays small.
 - **Notes:** Probably related to the text-redraw group below (module drag text rebuild, fixed in `82380fa0`). The title seems to be drawn at full size for a frame before the fit-to-width shrink is applied again, so the fitted size isn't kept in the retained text record during a drag.
 

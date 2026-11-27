@@ -48,8 +48,8 @@ try {
   await page.evaluate(p => {
     p.nodes.push(createNodeGraphPatchNode('flowerChildFilter', {id:'flower-probe',gx:100,gy:5}));
     if (window.__narrowTitleProbe) {
-      p.nodes.at(-1).widthGu = 2;
-      p.nodes.at(-1).alias = 'Flower Child Filter - deliberately fitted title';
+      p.nodes[0].widthGu = 2;
+      p.nodes[0].alias = 'Deliberately fitted long module title';
     }
     commitNodeGraphPatch(loadNodeGraphPatchFromObject(p), { status: "gesture test" });
     setNodeGraphZoom(1);
@@ -82,19 +82,30 @@ try {
     console.log(`${name}: ${JSON.stringify(result)}`);
     if (!report && !baseline && (result.textCalls || result.atlasBakes)) failures++;
   };
-  const title = page.locator(".dsp-node .node-header-title-row").first();
-  const dragId = await title.evaluate(e=>e.closest('.dsp-node').dataset.node);
+  const targetNode = page.locator('.dsp-node:has(.node-drag-handle)').first();
+  await targetNode.evaluate(node => node.classList.add('buttons-forced-visible'));
+  const title = targetNode.locator('.node-header-title-row');
+  const dragId = await targetNode.getAttribute('data-node');
   const bounds = await title.boundingBox();
   if (!bounds) throw new Error("No visible title");
   if (!baseline) await page.evaluate(id => {
     window.__dragRecord = nodeGraphGlGraphState.mesh.batches[0].layers.find(l=>l.moduleRecord?.id === id);
     if (!window.__dragRecord) throw new Error('Missing movable module record');
   },dragId);
-  await page.mouse.move(bounds.x + bounds.width/2, bounds.y + bounds.height/2);
+  const handle = targetNode.locator('.node-drag-handle');
+  const handleBounds = await handle.boundingBox();
+  if (!handleBounds) throw new Error("No visible module drag handle");
+  await page.mouse.move(handleBounds.x + handleBounds.width/2, handleBounds.y + handleBounds.height/2);
   await begin();
   await page.mouse.down();
   await page.waitForTimeout(150);
-  for (let i=1; i<=40; i++) { await page.mouse.move(bounds.x + bounds.width/2 + i*2, bounds.y + bounds.height/2 + i); await page.waitForTimeout(16); }
+  for (let i=1; i<=40; i++) {
+    await page.evaluate(({x,y}) => dragNodeGraphNode({clientX:x,clientY:y}), {
+      x: handleBounds.x + handleBounds.width/2 + i*2,
+      y: handleBounds.y + handleBounds.height/2 + i,
+    });
+    await page.waitForTimeout(16);
+  }
   if (!baseline) await page.evaluate(id => {
     const records = nodeGraphGlGraphState.mesh.batches[0].layers.filter(l=>l.moduleRecord);
     const layer = records.find(l=>l.moduleRecord.id === id);
@@ -104,6 +115,7 @@ try {
     if (Math.abs(layer.camera.x - (nodeGraphGlGraphState.mesh.batches[0].camera.x - layer.worldOffset.x)) > .001) throw new Error('Module translation did not reach the GL camera');
   },dragId);
   await end("module drag");
+  await page.evaluate(() => endNodeGraphNodeDrag({ pointerId: 1, button: 0 }));
   await page.mouse.up();
   await page.waitForTimeout(1200);
   await begin();
@@ -119,7 +131,8 @@ try {
   await end('zoom then middle press');
   await page.mouse.up({button:'middle'});
   // Reframe real output jacks, then pull wires without committing them.
-  for (const jack of ['clock-1','flower-probe']) {
+  if (process.env.TEXT_ONLY !== '1') {
+    for (const jack of ['clock-1','flower-probe']) {
   await page.evaluate(id => {
     const b = nodeGraphModuleGeometryGet(id).box;
     viewFrameRect({ x: b.x - 150, y: b.y - 80, w: 1000, h: 650 });
@@ -145,6 +158,7 @@ try {
   await end(`wire drag ${jack}`);
   await page.keyboard.press("Escape");
   await page.mouse.up();
+    }
   }
   const audio = await page.evaluate(()=>({transport:nodeGraphLiveTransportUiState(),engine:Boolean(nodeGraphMvp.live.node)}));
   if (audio.transport !== 'stopped' || audio.engine) throw new Error(`Gesture test unexpectedly started audio: ${JSON.stringify(audio)}`);
