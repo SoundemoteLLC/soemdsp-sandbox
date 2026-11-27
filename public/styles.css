@@ -5762,7 +5762,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 }
 #nodeGradientsBody .node-gradient-handle:active { transform:translateY(-50%); }
 #nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-param-chips,
-#nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-curve-chart { display:none; }
+#nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-curve-chart,
+#nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-curves { display:none; }
 
 .node-gradient-editing {
   margin: 4px 2px 0;
