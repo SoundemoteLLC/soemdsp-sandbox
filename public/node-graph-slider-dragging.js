@@ -433,7 +433,13 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
     && nodeGraphGradientModuleInterceptSlider(slider, domain, { commit: true, interaction: "typed" }))
     || (typeof nodeGraphGradientMaybeInterceptSlider === "function"
     && nodeGraphGradientMaybeInterceptSlider(slider, domain, { commit: true, interaction: "typed" }))) {
-    slider.value = String(typeof nodeSliderThumbDisplayValue === "function" ? nodeSliderThumbDisplayValue(slider, domain) : domain);
+    if (slider.dataset.gradientPendingCaptured === "1") {
+      syncNodeSliderReadout(slider);
+      return;
+    }
+    const accepted = Number(slider.dataset.domainValue);
+    const shown = Number.isFinite(accepted) ? accepted : domain;
+    slider.value = String(typeof nodeSliderThumbDisplayValue === "function" ? nodeSliderThumbDisplayValue(slider, shown) : shown);
     syncNodeSliderReadout(slider);
     markNodeGraphRenderPending();
     scheduleNodeGraphLiveParameterSync();
@@ -633,6 +639,10 @@ function setNodeSliderValue(slider, value, options = {}) {
     || (typeof pitchMutatorMaybeInterceptSlider === "function"
     && pitchMutatorMaybeInterceptSlider(slider, value, { ...options, commit: false }));
   if (intercepted) {
+    if (slider.dataset.gradientPendingCaptured === "1") {
+      if (typeof syncNodeSliderReadout === "function") syncNodeSliderReadout(slider);
+      return;
+    }
     if (options.interaction === "drag") {
       scheduleNodeSliderReadoutUpdate(slider, Number(slider.dataset.domainValue));
     } else if (typeof syncNodeSliderReadout === "function") {

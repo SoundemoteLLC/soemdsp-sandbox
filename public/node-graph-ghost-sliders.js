@@ -157,6 +157,8 @@ function nodeGraphGhostSliderRefreshOffsetKeys() {
 /** Could nodeGraphParameterGhostSignal return non-null for this slider? */
 function nodeGraphGhostSliderIsCandidate(map, entry) {
   const mapKey = nodeGraphGhostSliderMapKey(entry.node, entry.key);
+  if (typeof nodeGraphGradientPagePendingDomainValue === "function"
+    && Number.isFinite(nodeGraphGradientPagePendingDomainValue(entry.node, entry.key))) return true;
   if (nodeGraphGhostSliderTargets(map).has(mapKey) || nodeGraphGhostSliderOffsetKeys.has(mapKey)) {
     return true;
   }
@@ -493,6 +495,15 @@ function nodeGraphParameterGhostSignal(node, key, sliderHint = null) {
     return null;
   }
   const metadata = nodeGraphReadPatchParameterMetadata(patchNode, key) || {};
+  const pendingDomain = typeof nodeGraphGradientPagePendingDomainValue === "function"
+    ? nodeGraphGradientPagePendingDomainValue(patchNode.id, key)
+    : null;
+  if (Number.isFinite(pendingDomain)) {
+    const unit = typeof nodeGraphParamDomainToUnit === "function"
+      ? nodeGraphParamDomainToUnit(pendingDomain, metadata)
+      : nodeGraphParameterValueToNormalizedSignal(pendingDomain, metadata);
+    return { signal: nodeGraphNormalizedParameterSignalBounds(unit, metadata), effectiveDomain: pendingDomain };
+  }
   const targetSlider = sliderHint && sliderHint.isConnected
     ? sliderHint
     : nodeGraphSliderForParameter(node, key);
@@ -629,7 +640,8 @@ function nodeGraphGhostSliderClearEntry(slider, readout) {
 function syncNodeGraphGhostSliders() {
   const mods = nodeGraphMvp?.patch?.modulations;
   const offsetKeys = nodeGraphGhostSliderRefreshOffsetKeys();
-  if (!mods?.length && !offsetKeys.size) {
+  const hasPending = typeof nodeGraphGradientPageHasPendingValues === "function" && nodeGraphGradientPageHasPendingValues();
+  if (!mods?.length && !offsetKeys.size && !hasPending) {
     if (!nodeGraphGhostSliderHadAny) {
       return;
     }
