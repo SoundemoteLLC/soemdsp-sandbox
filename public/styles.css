@@ -5898,11 +5898,6 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 }
 
 .dsp-node .node-gradient-module-face { position:relative; }
-.dsp-node .node-gradient-module-snapshot {
-  position:absolute; z-index:2; top:3px; right:3px; min-height:16px; padding:1px 4px;
-  border:1px solid #536175; border-radius:2px; background:#171b23; color:#dfe8f7;
-  font:9px/1 ui-monospace,monospace; cursor:var(--node-adjust-cursor,default);
-}
 
 .node-gradient-curve-row {
   display: grid;

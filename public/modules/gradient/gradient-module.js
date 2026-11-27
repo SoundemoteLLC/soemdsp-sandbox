@@ -213,19 +213,6 @@ function createNodeGraphGradientModuleFace(nodeId, type = NODE_GRAPH_GRADIENT_MO
   section.dataset.nodeType = String(type || NODE_GRAPH_GRADIENT_MODULE_TYPE);
   section.dataset.parameterVisual = "true";
   section.append(nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-gradient-module-canvas"));
-  const snapshot = document.createElement("button");
-  snapshot.type = "button";
-  snapshot.className = "node-gradient-module-snapshot";
-  snapshot.textContent = "Snapshot";
-  snapshot.setAttribute("aria-label", "Snapshot gradient at playhead");
-  snapshot.addEventListener("pointerdown", (event) => event.stopPropagation());
-  snapshot.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
-    if (typeof nodeGraphGradientPageSnapshot === "function") nodeGraphGradientPageSnapshot(node?.gradientId || "", id);
-  });
-  section.append(snapshot);
   nodeGraphInstallDrawingFacePump(section, {
     clockKey: (el) => `gradient:${el.dataset?.node || ""}`,
     forceKey: "_gradientForceDraw",

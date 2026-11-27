@@ -149,115 +149,6 @@ function nodeGraphGradientPageSyncModulePlayhead(nodeId, position) {
   if (typeof syncNodeSliderReadout === "function") syncNodeSliderReadout(slider);
 }
 
-function nodeGraphGradientPageSnapshotPending(gradient) {
-  const patch = nodeGraphMvp?.patch;
-  if (!patch || !gradient) return gradient;
-  const pending = nodeGraphGradientPagePendingMap(gradient.id) || new Map();
-  const params = gradient.params.map((entry) => ({ ...entry }));
-  const known = new Set(params.map((entry) => `${entry.nodeId}\u0000${entry.key}`));
-  const origin = Object.fromEntries(Object.entries(gradient.origin || {}).map(([id, row]) => [id, { ...row }]));
-  for (const [mapKey, entry] of pending) {
-    if (known.has(mapKey)) continue;
-    const [nodeId, key] = mapKey.split("\u0000");
-    if (!origin[nodeId]) origin[nodeId] = {};
-    const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-    const meta = node && NodeGraphGradients.metaFor(node, key);
-    const base = node && Number(node.params?.[key]);
-    const baseSlider = Number.isFinite(base) && meta ? NodeGraphGradients.toSlider(meta, base) : Number(entry.originSlider);
-    if (!Number.isFinite(baseSlider)) continue;
-    origin[nodeId][key] = baseSlider;
-    params.push({ nodeId, key });
-    known.add(mapKey);
-  }
-  const stops = gradient.stops.map((stop) => {
-    const offsets = Object.fromEntries(Object.entries(stop.offsets || {}).map(([id, row]) => [id, { ...row }]));
-    for (const { nodeId, key } of params) {
-      if (pending.has(`${nodeId}\u0000${key}`)) continue;
-      (offsets[nodeId] || (offsets[nodeId] = {}))[key] = nodeGraphGradientPageOffsetAt(gradient, nodeId, key);
-    }
-    return { ...stop, offsets };
-  });
-  const pos = Math.max(0, Math.min(1, Number(gradient.position) || 0));
-  let at = stops.findIndex((stop) => Math.abs(stop.pos - pos) < 1e-9);
-  if (at < 0) {
-    const used = new Set(stops.map((stop) => stop.id));
-    let n = stops.length + 1;
-    while (used.has(`s${n}`)) n += 1;
-    stops.push({ id: `s${n}`, pos, offsets: {} });
-    stops.sort((a, b) => a.pos - b.pos);
-    at = stops.findIndex((stop) => Math.abs(stop.pos - pos) < 1e-9);
-  }
-  const target = stops[at];
-  const offsets = Object.fromEntries(Object.entries(target.offsets || {}).map(([id, row]) => [id, { ...row }]));
-  for (const [mapKey, entry] of pending) {
-    const [nodeId, key] = mapKey.split("\u0000");
-    const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-    const meta = node && NodeGraphGradients.metaFor(node, key);
-    const originSlider = Number(origin[nodeId]?.[key]);
-    const targetSlider = meta ? NodeGraphGradients.toSlider(meta, Number(entry.value)) : Number(entry.slider);
-    if (!Number.isFinite(originSlider) || !Number.isFinite(targetSlider)) continue;
-    (offsets[nodeId] || (offsets[nodeId] = {}))[key] = targetSlider - originSlider;
-  }
-  stops[at] = { ...target, offsets };
-  return { ...gradient, origin, params, stops };
-}
-
-function nodeGraphGradientPageSnapshotCurrentCurve(gradient) {
-  const pos = Math.max(0, Math.min(1, Number(gradient.position) || 0));
-  const stops = gradient.stops.map((stop) => ({ ...stop, offsets: { ...(stop.offsets || {}) } }));
-  const offsets = {};
-  for (const { nodeId, key } of gradient.params) {
-    (offsets[nodeId] || (offsets[nodeId] = {}))[key] = nodeGraphGradientPageOffsetAt(gradient, nodeId, key);
-  }
-  let at = stops.findIndex((stop) => Math.abs(stop.pos - pos) < 1e-9);
-  if (at < 0) {
-    const ids = new Set(stops.map((stop) => stop.id));
-    let n = stops.length;
-    while (ids.has(`s${n + 1}`)) n += 1;
-    stops.push({ id: `s${n + 1}`, pos, offsets });
-    stops.sort((a, b) => a.pos - b.pos);
-    at = stops.findIndex((stop) => Math.abs(stop.pos - pos) < 1e-9);
-  } else {
-    stops[at] = { ...stops[at], offsets };
-  }
-  return { ...gradient, stops };
-}
-
-function nodeGraphGradientPageSnapshot(gradientId = "", moduleNodeId = "") {
-  const patch = nodeGraphMvp?.patch;
-  if (!patch) return;
-  let gradient = nodeGraphGradientPageActiveGradient(gradientId);
-  if (!gradient) {
-    const created = NodeGraphGradients.createGradientFromSnapshot(patch);
-    nodeGraphGradientPageState.activeGradientId = created.id;
-    const moduleNode = patch.nodes.find((node) => node.id === moduleNodeId);
-    if (moduleNode) {
-      moduleNode.gradientId = created.id;
-      moduleNode.params = { ...(moduleNode.params || {}), playhead: created.position };
-      nodeGraphGradientPageSyncModulePlayhead(moduleNodeId, created.position);
-    }
-    nodeGraphGradientPageCommit([...nodeGraphGradientPageGradients(), created], `${created.name} started`);
-    return;
-  }
-  nodeGraphGradientPageState.activeGradientId = gradient.id;
-  const moduleNode = patch.nodes.find((node) => node.id === moduleNodeId);
-  if (moduleNode) {
-    moduleNode.gradientId = gradient.id;
-    moduleNode.params = { ...(moduleNode.params || {}), playhead: gradient.position };
-    nodeGraphGradientPageSyncModulePlayhead(moduleNodeId, gradient.position);
-  }
-  let next;
-  if (nodeGraphGradientPageState.editMode) {
-    next = nodeGraphGradientPageSnapshotCurrentCurve(gradient);
-    nodeGraphGradientPageClearPending(gradient.id);
-  } else {
-    next = NodeGraphGradients.snapshotIntoGradient(patch, gradient, gradient.position);
-  }
-  const target = next.stops.reduce((best, stop) => Math.abs(stop.pos - next.position) < Math.abs(best.pos - next.position) ? stop : best, next.stops[0]);
-  if (target) nodeGraphGradientPageState.selectedStop.set(gradient.id, target.id);
-  nodeGraphGradientPageCommit(nodeGraphGradientPageReplace(gradient.id, () => next), `${gradient.name} snapshot`);
-}
-
 /** Replace patch.gradients (normalized), tell the engine, repaint sliders and this page. One undo step unless told otherwise. */
 function nodeGraphGradientPageCommit(next, status, options = {}) {
   const patch = nodeGraphMvp?.patch;
@@ -489,8 +380,6 @@ function nodeGraphGradientPageCard(gradient) {
     chip.dataset.nodeId = nodeId; chip.dataset.paramKey = key; chip.style.setProperty("--curve-color", nodeGraphCurveColor(index));
     chips.append(chip);
   });
-  const addParam = nodeGraphGradientPageButton("+ Param", "snapshot", gradient.id);
-  chips.append(addParam);
   card.append(chips);
   const graph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   graph.classList.add("node-gradient-curve-chart");
@@ -526,7 +415,6 @@ function nodeGraphGradientPageCard(gradient) {
   buttons.className = "node-gradient-buttons";
   const selected = nodeGraphGradientPageState.selectedStop.get(gradient.id);
   buttons.append(
-    nodeGraphGradientPageButton("Snapshot", "snapshot", gradient.id),
     nodeGraphGradientPageButton("Duplicate", "duplicateStop", gradient.id, { disabled: true }),
     nodeGraphGradientPageButton("Delete stop", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 }),
     nodeGraphGradientPageButton(nodeGraphGradientPageState.renaming === gradient.id ? "Done" : "Rename", "rename", gradient.id),
@@ -604,8 +492,7 @@ function renderNodeGraphGradientPage() {
   edit.setAttribute("aria-label", "Gradient edit mode");
   top.append(filter,
     nodeGraphGradientPageButton("New Gradient", "newGradient", ""),
-    edit,
-    nodeGraphGradientPageButton("Snapshot", "snapshot", nodeGraphGradientPageActiveGradient()?.id || ""));
+    edit);
   top.append(nodeGraphGradientPageButton(nodeGraphGradientPageState.showGraphs ? "Hide graphs" : "Show graphs", "toggleGraphs", "", { pressed: nodeGraphGradientPageState.showGraphs }));
   fragment.append(top);
   const gradients = nodeGraphGradientPageGradients();
@@ -615,7 +502,7 @@ function renderNodeGraphGradientPage() {
   if (!gradients.length) {
     const p = document.createElement("p");
     p.className = "node-gradient-hint";
-    p.textContent = "Snapshot starts a gradient from the sliders as they are now.";
+    p.textContent = "New Gradient starts from the current slider values.";
     fragment.append(p);
   } else if (!shown.length) {
     const p = document.createElement("p");
@@ -734,10 +621,6 @@ function nodeGraphGradientPageAction(action, gradientId, button) {
     }
     nodeGraphGradientEditSyncOutlines();
     renderNodeGraphGradientPage();
-    return;
-  }
-  if (action === "snapshot") {
-    nodeGraphGradientPageSnapshot(gradientId);
     return;
   }
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === gradientId);

@@ -1316,7 +1316,7 @@ function nodeGraphBindGradientResetGesture(surface) {
       || surface.dataset.gradientResetGestureBound === "1") return;
   surface.dataset.gradientResetGestureBound = "1";
   surface.addEventListener("mousedown", (event) => {
-    if (event.button !== 0 || event.target?.closest?.(".node-gradient-module-snapshot")) return;
+    if (event.button !== 0) return;
     const now = performance.now();
     const last = surface._gradientResetPointer;
     if (last && now - last.time < 400 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 6) {

@@ -1,6 +1,6 @@
 // HP-04 / Stage A3, HP-22: the Gradients page (its own 🌈 page; the 🧹 page keeps only the Ready controls). Real page on its own server.py port (never 8765 / 8766 / 8080) unless
 // SANDBOX_URL is set; runs on index.html and perform.html.
-// Create from a snapshot, move sliders on two modules, snapshot: both register. Dragging the playhead glides the effective value while
+// Create a gradient, move sliders on two modules: both register. Dragging the playhead glides the effective value while
 // the saved base never changes, and the release is exactly one undo step. Rename, Delete stop, Set start, On / Off and tap-to-add each
 // record one step. Deleting a module drops its params from the gradient in the same step (D-G1). Save / load round trips the gradient.
 import assert from "node:assert/strict";
@@ -114,12 +114,6 @@ try {
       out.unsnappedMoveCreatesAllParamsStop = Boolean(halfStop) && Math.abs(Number(halfStop.offsets?.[b]?.floorDb) - bBefore) < 1e-6
         && Math.abs(Number(halfStop.offsets?.[a]?.frequency) - (bent.targetSlider - Number(g().origin?.[a]?.frequency))) < 1e-6;
       out.allJoinedControlsGold = g().params.every(({ nodeId, key }) => nodeGraphSliderForParameter(nodeId, key)?.closest("label")?.querySelector(".node-slider-readout")?.classList.contains("is-gradient-edit"));
-      steps();
-      nodeGraphGradientPageSetPlayhead(g(), 0.75);
-      btn("Snapshot", card).click();
-      const explicitStop = g().stops.find((stop) => Math.abs(stop.pos - 0.75) < 1e-9);
-      out.snapshotSteps = steps();
-      out.snapshotAtPlayhead = Boolean(explicitStop) && g().position === 0.75;
       nodeGraphGradientPageSetPlayhead(g(), 0.5 + 1 / 127);
       const snappedStop = g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9);
       const beforeSnapEdit = Number(snappedStop.offsets?.[a]?.frequency) || 0;
@@ -313,9 +307,8 @@ try {
     ok(r.migratedPositions, "legacy 0..127 positions migrate to normalized 0..1 values");
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(r.firstMoveCreatesEndStop && r.newParamsJoinLive, "first move creates stop 1 and later untracked parameters join live with their start values preserved");
-    ok(r.editHeld && r.allJoinedControlsGold, "Edit keeps base params and slider thumbs held while every joined parameter gets the gold outline");
+    ok(r.editHeld && r.allJoinedControlsGold, "Edit keeps base params and slider thumbs held while every joined parameter gets its curve color outline");
     ok(r.unsnappedMoveCreatesAllParamsStop, "an unsnapped move creates a stop for all params without moving untouched curves");
-    ok(r.snapshotSteps === 1 && r.snapshotAtPlayhead, "Snapshot explicitly drops a stop at the playhead without advancing");
     ok(r.editOffDiscards, "turning Edit off clears edit state without changing base values");
     ok(r.playheadSnapAndLiveEdit && r.playheadSnapReleases, "playhead snaps within two steps, live edits the snapped stop, and releases beyond the threshold");
     ok(r.rows.length === 3, "one row per joined parameter");
@@ -335,7 +328,7 @@ try {
     ok(r.displayValue, "displays read the gradient's moved value");
     ok(r.toggleSteps === 1 && r.disabledEffIsBase, "Off removes the gradient's effect, one step");
     ok(r.name === "Bright sweep" && r.renameSteps === 1, "Rename");
-    ok(r.stopsAfterTap === 4 && r.positionAfterTap === 0.2 && r.tapSteps === 1 && r.stopsAfterDelete === 3 && r.deleteStopSteps === 1, "empty bar click moves the playhead without adding a stop; Delete stop removes a selected stop");
+    ok(r.stopsAfterTap === 3 && r.positionAfterTap === 0.2 && r.tapSteps === 1 && r.stopsAfterDelete === 2 && r.deleteStopSteps === 1, "empty bar click moves the playhead without adding a stop; Delete stop removes a selected stop");
     ok(r.setStartSteps === 1, "Set start");
     ok(r.deleteDrops, "deleting a module drops its params in the same undo step (D-G1)");
     ok(r.roundTrip, "save / load round trip");
@@ -345,7 +338,7 @@ try {
     console.log(`ok   ${where}${r.visible ? "" : " (panel hidden in perform mode: data checks only)"}`);
     await page.close();
   }
-  console.log("Gradients page: create, snapshot, drag (one undo step), buttons, D-G1 delete, save / load pass on index.html and perform.html.");
+  console.log("Gradients page: create, live stop editing, drag (one undo step), buttons, D-G1 delete, save / load pass on index.html and perform.html.");
 } finally {
   await browser?.close();
   server?.kill();
