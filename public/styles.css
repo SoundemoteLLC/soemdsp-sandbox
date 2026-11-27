@@ -5761,8 +5761,10 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   background:#ddd; line-height:0;
 }
 #nodeGradientsBody .node-gradient-handle:active { transform:translateY(-50%); }
-#nodeGradientsBody .node-gradient-card { gap:5px; }
-#nodeGradientsBody .node-gradient-strip { margin:0 7px 12px; }
+#nodeGradientsBody .node-gradient-card { gap:2px; }
+#nodeGradientsBody .node-gradient-strip { margin:0 7px 8px; }
+#nodeGradientsBody .node-gradient-handle-label.is-high,
+#nodeGradientsBody .node-gradient-handle-label.is-low { top:calc(100% + 2px); }
 #nodeGradientsBody .node-gradient-playhead-control { display:flex; width:100%; margin:0; padding:0; }
 #nodeGradientsBody .node-gradient-playhead-control input[type=range] { display:block; width:100%; min-width:0; height:24px; margin:0; padding:0; }
 #nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-param-chips,
