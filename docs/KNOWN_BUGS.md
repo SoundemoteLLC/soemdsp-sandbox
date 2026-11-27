@@ -4,11 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
-### Input regressions after PASTE-9 (release blockers)
+### Input regressions after PASTE-9 (middle pan, drag-in, snake wire selection) — FIXED
 
 - **Reported:** 2026-11-27, by Argi (via Badger)
 - **Symptoms:** (1) Middle mouse no longer pans or zooms, though WASDQE still works. (2) No module can be dragged in from anywhere. (3) Snake select can't select a wire.
-- **Notes:** Step 0 of PASTE-10. `167b8490` only adds left-button guards to title dblclick and the GL title hit; the GL guard returns early, so a middle press on a title is swallowed, but that can't explain the global failures. Stronger leads are in `fdfda54f`: `node-graph-wires.js` now returns early from a document pointermove when `state.wireDragging || state.portMovePointer` (check whether a stale value blocks snake select), the new grid-keyboard GL pointer hook calls `stopPropagation` and `setPointerCapture`, and `nodeGraphGlGraphPresent` now has the gesture and retain-plates path.
+- **Fixed:** 2026-11-27, `f5d9f05f`. `4efc7120` removed both duplicate Magnifier script includes, but workspace event binding still registered `beginNodeGraphMagnifier` without a guard. That ReferenceError aborted the workspace binder before pan, placement, and marquee listeners were attached. Restored one include in each page and improved binding diagnostics to print the message and stack.
+- **Verification:** `test_event_binding_boot.mjs` reports no binding errors; `test_paste10_pointer_recovery.mjs` performs a real middle drag, wheel zoom, and MIDI store drag-in; `test_gradient_drag_grip.mjs` verifies Gradient and Mutator drag-in; `test_selection_snake.mjs` now finds and crosses a real on-screen wire with the mouse and checks wire selection (no programmatic fallback).
 
 ### Module drag makes shrunk title text flicker big to small — FIXED
 
