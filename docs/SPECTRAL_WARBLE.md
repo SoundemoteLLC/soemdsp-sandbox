@@ -32,12 +32,18 @@ Swarm (degrees), Level and Drift are gone. There is no level modulation of any k
 - A partial uses its own knot (its peak's), never a blend of two: two independent motions blended would cancel part of the wobble.
 - Stereo: `w_c = cos(pi S/2) mid + sin(pi S/2) side_c`; the voices sit at pan `S (2v/(L-1) - 1)` with constant-power gains; Mono
   Bass ramps S from 0 to full over one octave. No crossfeed: left is built from the left input only.
-- Level: each frame is matched to its source power per channel, then the synthesis-window pass is matched. No makeup gain.
+- Level: no automatic leveling (`docs/SPECTRAL_NO_LEVELING_PLAN.md`). The voices' constant-power pan gains are averaged to 1 per ear, a fixed
+  gain from Spread and Voices, so identical voices (Depth 0) sum to exactly the input. Past that the voices go out as they sum, beating
+  included. Amplitude (0..1, a signed gain after Mix) sets the output level.
 
 ## Known limits (measured, not hidden)
 
-- A partial that sweeps hundreds of cents several times per window is no longer a steady grain, so the overlap-add loses level:
-  about 1 dB at Depth 25 / Rate 4 on an 880 Hz saw, up to about 6 dB at Depth 200 / Rate 20 (reported by test T9). This is NOT the cause of the old
+- Level against dry is reported by test T9, not asserted. With no leveling, voices that drift apart cancel part of each other: the
+  musical grid's worst is 7.8 dB under dry (880 Hz saw, Depth 25, Rate 4, 4 voices, Spread 0), the full grid's 13.4 dB (Depth 200 / Rate 20).
+  At the defaults: about -3.6 dB RMS on a 110 Hz saw, -4.9 dB on pink noise, and a 1.0 sine at 220 Hz peaks at 2.05 (+6.2 dBFS) where the
+  voices line up (`scripts/test_spectral_no_leveling.mjs`).
+- A partial that sweeps hundreds of cents several times per window is no longer a steady grain, so the overlap-add loses level on top of that
+  (with the old per-frame match this alone was about 1 dB at Depth 25 / Rate 4, about 6 dB at Depth 200 / Rate 20). This is NOT the cause of the old
   Smear Hop Smooth loss (non-overlapping bursts of spread energy): doubling Warble's overlap to 16 left the 6 dB unchanged, and the loss grows with the
   partial's frequency (an 880 Hz saw loses more than a 110 Hz one), which points at the grain model itself (a rigid, constant-frequency lobe per frame
   cannot follow a frequency that moves by many bins inside one window), not at the overlap-add. It stays a documented limit.

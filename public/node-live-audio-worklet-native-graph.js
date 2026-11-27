@@ -670,6 +670,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "voices") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+    if (k === "amplitude") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
   }
   if (t === "spectralWarble") {
     if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
@@ -681,6 +682,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "monoBassHz") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+    if (k === "amplitude") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
   }
   if (t === "spectralSmear") {
     if (k === "fftSize") return P.NATIVE_GRAPH_PARAM_STAGES;
@@ -696,6 +698,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "phaseSmoothMs") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
     if (k === "amplitudeSmoothMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
+    if (k === "amplitude") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
   }
   if(t==="dispersion") {
     const ids={frequency:10,stages:22,spreadOct:31,curve:13,direction:21,stereoOct:1,mix:40,filterMode:11,tuningMode:54,lowFreq:30,highFreq:59,freqShape:42,lowQ:20,highQ:50,qShape:47,outputGainDb:90};

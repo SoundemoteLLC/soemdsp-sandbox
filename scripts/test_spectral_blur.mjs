@@ -153,7 +153,7 @@ const settle = sr; // one second of warm-up, then measure
     const d = 10 * Math.log10(line / sk); assert.ok(d < 3, `T7 line at f0 ${sgn > 0 ? '+' : '-'} ${k} * frame rate: ${d.toFixed(1)} dB above the skirt`);
   }
 }
-// T8: level match, per channel; T8b: Grain never boosts; T8c: peak over dry reported
+// T8: level against dry and T8c peak over dry, REPORTED only (no automatic leveling, docs/SPECTRAL_NO_LEVELING_PLAN.md); T8b: Grain never boosts
 {
   let worst = 0, worstPeak = -99, where = '';
   for (const f0 of [110, 880]) {
@@ -164,16 +164,15 @@ const settle = sr; // one second of warm-up, then measure
     }
   }
   console.log(`T8 worst RMS error ${worst.toFixed(2)} dB (${where}); T8c worst peak vs dry ${worstPeak.toFixed(2)} dB`);
-  assert.ok(worst <= 1.0, `T8 level within 1 dB (${worst} at ${where})`);
-  // The plan allows +6 dB and says to REPORT a larger value rather than hide it with a limiter: random phase raises the crest factor of a saw (dry crest 1.7)
-  // to about that of noise (3-4) at matched RMS. Measured worst case is logged above and goes in the final report; 9 dB is only a sanity bound.
-  assert.ok(worstPeak <= 9, `T8c peak over dry (${worstPeak})`);
-  // T8b: the flicker gain has unity mean power and Grain never raises the output
+  // T8b: the flicker gain has unity mean power (a fixed normalisation of Grain, asserted below), so Grain only redistributes level on average. What
+  // one render does against Grain 0 is REPORTED: the per-frame power match that used to pin it to 0.1 dB is gone (no automatic leveling).
+  let grainUp = -99, grainDown = 99;
   for (const f0 of [110, 880]) for (const fuzz of [50, 1200]) for (const voices of [1, 4]) for (const spread of [0, 1]) {
     const input = saw(f0, 0.25), g0 = run({ fuzz, voices, grain: 0, spread }, 6 * sr, input);
     for (const grain of [1, 3, 6]) { const o = run({ fuzz, voices, grain, spread }, 6 * sr, input);
-      for (const c of [0, 1]) { assert.ok(rms(o[c], settle) <= rms(g0[c], settle) * 10 ** (0.1 / 20) + 1e-9, `T8b Grain ${grain} does not raise RMS`); assert.ok(peak(o[c], settle) <= peak(g0[c], settle) * 10 ** (0.75 / 20) + 1e-9, `T8b Grain ${grain} does not raise the peak (a peak is an extreme statistic, so 0.75 dB rather than the plan's 0.5 dB)`); } }
+      for (const c of [0, 1]) { const d = 20 * Math.log10(rms(o[c], settle) / rms(g0[c], settle)); grainUp = Math.max(grainUp, d); grainDown = Math.min(grainDown, d); } }
   }
+  console.log(`T8b Grain against Grain 0: RMS ${grainDown.toFixed(2)} to +${grainUp.toFixed(2)} dB (reported)`);
   for (const g of [0.5, 1, 3, 6, 12]) { const X = g * Math.LN10 / 10, norm = 1 / Math.sqrt((1 - Math.exp(-X)) / X); let m = 0; const n = 1e6; for (let i = 0; i < n; ++i) m += (norm * 10 ** (-g * ((i + 0.5) / n) / 20)) ** 2; assert.ok(Math.abs(m / n - 1) < 0.002, `T8b unity mean power at Grain ${g}`); }
 }
 // T9: stereo
@@ -202,11 +201,12 @@ const settle = sr; // one second of warm-up, then measure
   const left = run({ spread: 0, fuzz: 100 }, 3 * sr, i => [sine(1000)(i)[0], 0]);
   assert.ok(rms(left[1], settle) < 1e-4 * rms(left[0], settle), `T9e no crossfeed (${rms(left[1], settle)})`);
 }
-// T10: in place; T11: deterministic, Seed, Voices; T12: cost; T14: robust
+// T10: in place; T11: deterministic, Seed, Voices; T12: cost; T14: robust. The T10 energy bound is only "not silent, not blown up": with no
+// leveling, voices whose phases are sprayed apart sum below the impulse's energy.
 {
   const h = make({ fuzz: 300, voices: 4, spread: 1 }), imp = render(h, 4096 * 6, i => [i === 0 ? 1 : 0, 0]); f('destroy', h);
   const e = imp[0].reduce((s, v) => s + v * v, 0), tail = imp[0].slice(4096 * 2 + 64).reduce((s, v) => s + v * v, 0);
-  assert.ok(e > 0.2 && e < 4 && tail < e * 1e-6, `T10 in place (energy ${e}, tail ${tail})`);
+  assert.ok(e > 0.01 && e < 4 && tail < e * 1e-6, `T10 in place (energy ${e}, tail ${tail})`);
   const a = run({ seed: 5, spread: 1 }, 3 * sr, saw(220)), b = run({ seed: 5, spread: 1 }, 3 * sr, saw(220)), c = run({ seed: 6, spread: 1 }, 3 * sr, saw(220)), d = run({ seed: 5, spread: 1, voices: 1 }, 3 * sr, saw(220));
   let same = true, dSeed = 0, dVoices = 0; for (let i = 0; i < a[0].length; ++i) { if (a[0][i] !== b[0][i] || a[1][i] !== b[1][i]) same = false; dSeed += (a[0][i] - c[0][i]) ** 2; dVoices += (a[0][i] - d[0][i]) ** 2; }
   assert.ok(same && dSeed > 0 && dVoices > 0, 'T11 deterministic, Seed and Voices change it');

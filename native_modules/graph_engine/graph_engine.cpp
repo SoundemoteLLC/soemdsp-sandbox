@@ -16560,6 +16560,13 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
         control_audio(g, node.mix, f), g.sampleRate);
       yr = soemdsp_stft_contrast_right(node.nativeHandle);
     }
+    if (node.typeId == kTypeSpectralBlur || node.typeId == kTypeSpectralWarble || node.typeId == kTypeSpectralSmear) {
+      // Amplitude: the module's output level, after Mix, one signed multiply (HP-24 rule: negative inverts, no clamp). Its Control is smoothed like
+      // the module's other params. No leveling, limiter or clipping anywhere in these modules: overs past 0 dBFS are the user's to set.
+      const double amp = soemdsp_signed_gain(control_audio(g, node.amplitude, f), 1.0);
+      y *= amp;
+      yr *= amp;
+    }
     node.buf[kPortMono][f] = stereo_route_out(route.outMono, y, y, yr);
     node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, y, y, yr);
     node.buf[kPortRight][f] = stereo_route_out(route.outRight, y, y, yr);

@@ -1,4 +1,5 @@
-// Spectral Smear acceptance tests (docs/SPECTRAL_SMEAR_FIX_PLAN.md section 6): the wash, without metallic ringing, with matched level.
+// Spectral Smear acceptance tests (docs/SPECTRAL_SMEAR_FIX_PLAN.md section 6): the wash, without metallic ringing. No automatic leveling
+// (docs/SPECTRAL_NO_LEVELING_PLAN.md): level against dry is reported, not asserted.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const compiled = await WebAssembly.compile(fs.readFileSync(new URL('../native_modules/spectral_smear/spectral_smear.wasm', import.meta.url)));
@@ -114,7 +115,7 @@ for (const length of [512, 1024, 2048, 4096, 8192, 16384]) {
   const rc = pc[0].cents / pc[1].cents, rh = ph[0].hz / ph[1].hz;
   assert.ok(rc > 0.7 && rc < 1.4, `T7 Pitch Blur is the same width in cents (ratio ${rc})`); assert.ok(rh > 0.7 && rh < 1.4, `T7 Frequency Blur is the same width in Hz (ratio ${rh})`);
 }
-// ---- T9 / T18: level, peaks and no boost, both hops
+// ---- T9 / T18: level and peaks REPORTED, crest asserted, both hops
 // Peaks. Spread energy used to copy its source bin's phase, so a blurred saw became a pulse train (+24 dB over dry). Now the non-live share of every bin takes the
 // full phase walk. What remains is statistics: a diffused or blurred wash is noise-like, and noise has a crest factor of about 4.6, where a saw has 1.7, so against
 // a SAW the peak is up by the crest ratio (up to +8 dB) whatever phases are chosen. The honest checks are therefore: against pink noise (equal crest) the peak
@@ -135,34 +136,7 @@ const grid = [{ hz: 100 }, { hz: 1000 }, { cents: 300 }, { cents: 1200 }, { diff
     }
   }
   console.log(`T9 over dry at most ${over.toFixed(2)} dB, under dry at most ${under.toFixed(2)} dB (${whereUnder}); pink-noise peak at most ${pinkPeak.toFixed(2)} dB over dry (${pinkWhere}); crest factor of a washed saw at most ${crestWorst.toFixed(2)}`);
-  assert.ok(over <= 0.75, `T9 nothing is boosted above dry beyond the model's error (${over} dB)`);
-  assert.ok(under >= -1.3, `T9 the loss stays within 1.3 dB (${under} at ${whereUnder}; the plan said 1)`);
-  assert.ok(pinkPeak <= 3, `T9 peak within the plan's 3 dB on pink noise (${pinkPeak} at ${pinkWhere})`);
   assert.ok(crestWorst <= 5.5, `T9 a washed saw is no peakier than noise (crest ${crestWorst}); a pulse train has about 15`);
-}
-// ---- Phase Smooth sweep: the level makeup follows the lagged walk and the hop (both hops, the full range)
-{
-  let over = -99, under4 = 0, under8 = 0, where8 = '';
-  for (const f0 of [110, 880]) {
-    const input = saw(f0), dryRms = rms(run({}, 5 * sr, input)[0], sr);
-    for (const phase of [0, 2, 5, 10, 30, 100, 200]) for (const o of [{ diff: 1, speed: 30 }, { diff: 1, speed: 5 }, { cents: 600 }]) for (const hop of [4, 8]) {
-      const d = 20 * Math.log10(rms(run({ ...o, phase, hop }, 5 * sr, input)[0], sr) / dryRms); over = Math.max(over, d);
-      if (hop === 4) under4 = Math.min(under4, d); else if (d < under8) { under8 = d; where8 = `${f0}/${JSON.stringify(o)}/Phase Smooth ${phase}`; }
-    }
-  }
-  console.log(`Phase Smooth sweep: over dry at most ${over.toFixed(2)} dB; under at most ${under4.toFixed(2)} dB at Normal and ${under8.toFixed(2)} dB at Smooth (${where8})`);
-  assert.ok(over <= 0.75 && under4 >= -1.0, `the Normal hop stays within the plan's 1 dB over the whole Phase Smooth range (over ${over}, under ${under4})`);
-  assert.ok(under8 >= -1.3, `the Smooth hop loses at most 1.3 dB (${under8} at ${where8}; the plan said 1)`);
-}
-// ---- the makeup never boosts, also at raised maxima: it is 1 for live input and bounded by what fully independent frames lose
-{
-  for (const hop of [4, 8]) {
-    const input = saw(220), dryRms = rms(run({}, 5 * sr, input)[0], sr);
-    for (const o of [{ hz: 20000 }, { cents: 3000 }, { diff: 1, speed: 800 }, { diff: 1.5, speed: 200, spread: 1.5, cents: 1200 }, { smear: 40, diff: 1 }]) {
-      const d = 20 * Math.log10(rms(run({ ...o, hop }, 5 * sr, input)[0], sr) / dryRms);
-      assert.ok(d <= 0.75, `no boost at a raised maximum (${JSON.stringify(o)} hop ${hop}: ${d.toFixed(2)} dB)`);
-    }
-  }
 }
 // ---- T10: stereo
 {
@@ -228,4 +202,4 @@ const grid = [{ hz: 100 }, { hz: 1000 }, { cents: 300 }, { cents: 1200 }, { diff
   for (const [k, v] of Object.entries(want)) { assert.equal(Number(demo[k]), v, `demo patch ${k}`); assert.ok(new RegExp(`"key": "${k}"[\\s\\S]{0,300}?"defaultValue": "${v}"`).test(smearDef), `definition default ${k}`); assert.ok(new RegExp(`"${k}"[^\\n]*,\\s*(cont|disc)\\("${k}", ${v}\\)`).test(wk), `worklet fallback ${k}`); }
   assert.ok(/init_control\(n\.lfoRate, 30/.test(gi) && /init_control\(n\.lfoBaseSpeed, 120/.test(gi) && /init_control\(n\.pan, 1/.test(gi) && /init_control\(n\.width, 100/.test(gi), 'graph engine init defaults');
 }
-console.log('Smear: neutral, level, stereo, seed, hop switch and defaults pass.');
+console.log('Smear: neutral, crest, stereo, seed, hop switch and defaults pass.');

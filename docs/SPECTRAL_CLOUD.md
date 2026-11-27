@@ -9,7 +9,7 @@ See [SPECTRAL_SMEAR.md](SPECTRAL_SMEAR.md) and [SPECTRAL_WARBLE.md](SPECTRAL_WAR
 
 - FFT Size: 512..16384 samples, default 4096.
 - Fuzz: cents (0..1200, default 100). The half-width of the cloud around every partial. 0 is dry (with Grain 0).
-- Grain: dB (0..6, default 1). A fast per-bin level flicker that only ever dips bins, normalised to unity mean power, so it never boosts.
+- Grain: dB (0..6, default 1). A fast per-bin level flicker that only ever dips bins, normalised to unity mean power, so on average it leaves the level alone (one render scatters by about 0.15 dB).
 - Stereo Spread: x (0..1, default 1). 0 = identical channels; 1 = independent fur in each ear (phase only, no crossfeed).
 - Mono Bass: Hz (0..1000, default 0). Below it the cloud is identical in both ears (one-octave ramp). 0 = off.
 - Voices: 1..4, default 3. Independent cloud layers.
@@ -24,19 +24,22 @@ Wander is gone (slow wandering is Warble's job). There is no Level.
   phase is fully random each hop (Paulstretch). Above that, the cents-wide magnitude kernel (`blurPower`, triangular, power-matched) supplies the
   width, so a high harmonic is as wide in cents as a low one.
 - Stereo: Left rotates by `walk - a`, Right by `walk + a`, `a = Spread(k) side / 2` with its own unwrapped side walk per voice and bin.
-- Level: the frame is matched to its source power; frames whose phases have decorrelated add in power, so each bin is given the statistical
-  makeup `1 / sqrt(rho^2 + (1 - rho^2) 0.243)` (rho = sin(step)/step), and the synthesis-window pass is matched. No limiter, no clamp.
+- Level: no automatic leveling (`docs/SPECTRAL_NO_LEVELING_PLAN.md`). The voices go out as they sum, so beating and partial cancellation
+  between them stay audible. One fixed per-bin gain remains, from Fuzz alone: frames whose phases have decorrelated add in power, so each bin
+  gets `1 / sqrt(rho^2 + (1 - rho^2) 0.243)` (rho = sin(step)/step); it never reads the signal. Amplitude (0..1, a signed gain after Mix)
+  sets the output level. No limiter, no clamp.
 - Three RNG streams per voice (walk, side, grain) from Seed + voice: changing Grain or Spread never changes the main walks.
 
 ## Measured behaviour (see `scripts/test_spectral_blur.mjs`)
 
 - A band, not lines: flatness 0.95 over +-50 cents of an 880 Hz sine; -10 dB half-width 61 / 105 / 302 cents at Fuzz 50 / 100 / 300.
-- Level within 1 dB over the whole plan grid (worst 0.98 dB).
-- Peak over dry: up to +7.8 dB on a saw (random phase raises the crest factor); reported, not hidden (the plan allowed +6 dB).
+- Level against dry, reported, not asserted (no leveling): at the defaults about -8 dB RMS on a 110 Hz saw and -7 dB on pink noise; over the T8
+  grid the worst is 9.8 dB under dry (110 Hz saw, Fuzz 50, 4 voices, Grain 6, Spread 1). A 1.0 sine at 220 Hz peaks at 1.67 (+4.4 dBFS) at the
+  defaults (`scripts/test_spectral_no_leveling.mjs`).
+- Peak over dry: up to +4.4 dB on a saw over the T8 grid (random phase raises the crest factor); reported.
 - Cost at 16384, 4 voices, stereo: about 123 ms per audio second in the JS harness (the previous Cloud engine was about 120 ms).
 - Deviations from the plan's test thresholds: the phase-coherence test uses non-overlapping frames (at 87.5 % overlap even white noise
-  reads 0.98); the centroid test allows 0.35 Fuzz of scatter (a noise band's centroid cannot be steadier through a 43 ms window); the
-  Grain peak bound is 0.75 dB (a peak is an extreme statistic).
+  reads 0.98); the centroid test allows 0.35 Fuzz of scatter (a noise band's centroid cannot be steadier through a 43 ms window).
 
 ## Display and preset
 

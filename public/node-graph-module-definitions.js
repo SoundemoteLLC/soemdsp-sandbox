@@ -8445,7 +8445,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
       { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
-      { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amp"]], h: 40 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
@@ -8512,7 +8512,7 @@ const nodeGraphModuleDefinitions = (
         "unit": "Hz",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "Power-spreading neighborhood half-width in Hz, the same number of Hz at every pitch (so a high partial gets a narrower musical interval than a low one; Pitch Blur is the constant-interval version). Smooth triangular kernel; the level stays matched. Zero leaves bins separate. FFT Size sets the frequency resolution."
+        "tooltip": "Power-spreading neighborhood half-width in Hz, the same number of Hz at every pitch (so a high partial gets a narrower musical interval than a low one; Pitch Blur is the constant-interval version). Smooth triangular kernel; it moves power between bins without adding any. Zero leaves bins separate. FFT Size sets the frequency resolution."
       },
       {
         "key": "blurCents",
@@ -8524,7 +8524,7 @@ const nodeGraphModuleDefinitions = (
         "unit": "¢",
         "step": "any",
         "nonlinearSlider": true,
-        "tooltip": "Power-spreading half-width in cents, added to Frequency Blur: the same musical interval at every pitch, so a bass note and a high note are smeared by the same relative amount. Smooth triangular kernel, the level stays matched. Zero is off."
+        "tooltip": "Power-spreading half-width in cents, added to Frequency Blur: the same musical interval at every pitch, so a bass note and a high note are smeared by the same relative amount. Smooth triangular kernel; it moves power between bins without adding any. Zero is off."
       },
       {
         "key": "diffusion",
@@ -8575,7 +8575,7 @@ const nodeGraphModuleDefinitions = (
         "smoothingType": "none",
         "displayChoices": true,
         "divideChoicesVisibly": true,
-        "tooltip": "How finely the sound is processed in time. Normal is the standard quality; Smooth makes twice as many analysis frames, which gives softer, less grainy motion in tails and diffusion, at about double the CPU. It does not change the delay or the level. Switching is glitch-free."
+        "tooltip": "How finely the sound is processed in time. Normal is the standard quality; Smooth makes twice as many analysis frames, which gives softer, less grainy motion in tails and diffusion, at about double the CPU. It does not change the delay. Switching is glitch-free."
       },
       {
         "key": "stereoSpread",
@@ -8652,6 +8652,10 @@ const nodeGraphModuleDefinitions = (
         "unit": "%",
         "step": "any",
         "tooltip": "Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay."
+      },
+      {
+        ...nodeGraphOutputAmplitudeParam,
+        tooltip: "Output level after Mix, a signed gain (negative inverts). No automatic leveling, limiter or clipping: overs past 0 dB are possible.",
       },
       {
         key: "frequencyCurve",
@@ -9044,7 +9048,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["voices", "Voices", "horizontal"]], h: 26 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
-      { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amp"]], h: 40 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
@@ -9108,7 +9112,7 @@ const nodeGraphModuleDefinitions = (
         "max": "6",
         "unit": "dB",
         "step": "any",
-        "tooltip": "Fast random level flicker on every frequency bin, in dB. It only ever dips bins, then the level is matched, so it never makes the sound louder. 0 is a smooth, hissy cloud; a few dB makes the fur rougher and more textured."
+        "tooltip": "Fast random level flicker on every frequency bin, in dB. It only ever dips bins, scaled to unity mean power, so on average it leaves the level alone. 0 is a smooth, hissy cloud; a few dB makes the fur rougher and more textured."
       },
       {
         "key": "stereoSpread",
@@ -9172,6 +9176,10 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay."
       },
       {
+        ...nodeGraphOutputAmplitudeParam,
+        tooltip: "Output level after Mix, a signed gain (negative inverts). No automatic leveling, limiter or clipping: overs past 0 dB are possible.",
+      },
+      {
         key: "frequencyCurve",
         label: "Curve",
         defaultValue: "1",
@@ -9205,7 +9213,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["drunk", "Drunk"], ["voices", "Voices"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
-      { kind: "cells", params: [["mix", "Mix", "horizontal"]], h: 26 },
+      { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amp"]], h: 40 },
       { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
@@ -9293,7 +9301,7 @@ const nodeGraphModuleDefinitions = (
         "max": "4",
         "step": "1",
         "linearSmoothing": false,
-        "tooltip": "How many independently wobbling copies sing each partial. More voices make a thicker chorus that gently beats; the level stays matched. Costs CPU per voice."
+        "tooltip": "How many independently wobbling copies sing each partial. More voices make a thicker chorus that gently beats; the beating is heard as is (no leveling). Costs CPU per voice."
       },
       {
         "key": "stereoSpread",
@@ -9304,7 +9312,7 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "unit": "×",
         "step": "any",
-        "tooltip": "How differently the two ears wobble, and how wide the voices are spread. 0 = identical channels; 1 = each ear has its own motion and the voices fan out left to right. The level per channel stays matched."
+        "tooltip": "How differently the two ears wobble, and how wide the voices are spread. 0 = identical channels; 1 = each ear has its own motion and the voices fan out left to right. The voices' pan gains average to 1 per ear."
       },
       {
         "key": "monoBassHz",
@@ -9344,6 +9352,10 @@ const nodeGraphModuleDefinitions = (
         "unit": "%",
         "step": "any",
         "tooltip": "Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay."
+      },
+      {
+        ...nodeGraphOutputAmplitudeParam,
+        tooltip: "Output level after Mix, a signed gain (negative inverts). No automatic leveling, limiter or clipping: overs past 0 dB are possible.",
       },
       {
         key: "frequencyCurve",

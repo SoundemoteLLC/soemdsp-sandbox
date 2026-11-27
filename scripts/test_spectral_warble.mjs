@@ -57,9 +57,9 @@ const track = (sig, f0, bw = 100, skip = 0.5) => {
 };
 const secs = 8, N = secs * sr;
 
-// T1: dry at Depth 0 (any Rate, Drunk, Voices, Spread, Mono Bass, Seed). The fan gains are the same for every voice at every frequency above Mono
-// Bass, so they cancel in the power match; between bass and treble they differ (a small stereo tilt when the voices are identical), so the
-// full-feature case uses a tonal input above the Mono Bass corner.
+// T1: dry at Depth 0 (any Rate, Drunk, Voices, Spread, Mono Bass, Seed). The fan gains average to 1 per ear at every frequency above Mono Bass
+// (a fixed normalisation from Spread and Voices, not a level match), so identical voices sum to the input; between bass and treble they differ
+// (a small stereo tilt when the voices are identical), so the full-feature case uses a tonal input above the Mono Bass corner.
 {
   const broadband = i => [0.1 * Math.sin(i * 0.13) + (i % 173 === 0 ? 0.1 : 0), -0.03 * Math.cos(i * 0.07)];
   const tonal = i => [0.1 * Math.sin(i * 0.13) + 0.05 * Math.sin(i * 0.37), -0.03 * Math.cos(i * 0.21)];
@@ -146,9 +146,8 @@ for (const drunk of [0, 0.5, 1]) { let acc = 0; for (let seed = 1; seed <= 24; +
   const one = fluct({ voices: 1 }), three = fluct({ voices: 3 });
   assert.ok(three >= 0.1 && three > one, `T8 voices beat against each other (${one.toFixed(3)} -> ${three.toFixed(3)})`);
 }
-// T9: level, no boost. Within +-1 dB for Depth up to 25 and Rate up to 4 (the musical range); the plan's full grid (Depth up to 200, Rate up to 20)
-// is measured and REPORTED: a partial that sweeps hundreds of cents several times per window is no longer a steady grain, and the
-// overlap-add of such grains loses level. There is no makeup gain to hide it.
+// T9: level, REPORTED only (docs/SPECTRAL_NO_LEVELING_PLAN.md): there is no automatic leveling, so the RMS against dry and the peak against dry are
+// what the warble does to the sound. Nothing here is asserted; the user sets the level with Amplitude.
 {
   const grid = (depths, rates) => {
     let worst = 0, worstPeak = -99, where = '';
@@ -166,10 +165,6 @@ for (const drunk of [0, 0.5, 1]) { let acc = 0; for (let seed = 1; seed <= 24; +
   };
   const musical = grid([25], [0.5, 4]);
   console.log(`T9 musical grid: worst RMS error ${musical.worst.toFixed(2)} dB (${musical.where}), worst peak vs dry ${musical.worstPeak.toFixed(2)} dB`);
-  assert.ok(musical.worst <= 1.1, `T9 RMS within 1.1 dB (${musical.worst} at ${musical.where}); measured worst is about 1.0 dB, the plan said 1`);
-  // A saw has its harmonics phase-aligned (crest factor 1.7); detuning them makes the phases wander, so at the same RMS the peak rises by up to the
-  // crest of random-phase partials (about 5 dB). That is the sound, not a gain, so the bound is +6 dB (the plan said +3).
-  assert.ok(musical.worstPeak <= 6.5, `T9 peak within dry + 6 dB (${musical.worstPeak})`);
   const full = grid([100, 200], [0.5, 20]);
   console.log(`T9 plan grid (reported, not asserted): worst RMS error ${full.worst.toFixed(2)} dB (${full.where}), worst peak vs dry ${full.worstPeak.toFixed(2)} dB`);
 }
@@ -187,9 +182,8 @@ for (const drunk of [0, 0.5, 1]) { let acc = 0; for (let seed = 1; seed <= 24; +
   const dB = 20 * Math.log10(sum(s1) / sum(s0));
   // two fully uncorrelated channels sum to exactly -3.01 dB, so the lower bound has a little room
   assert.ok(dB > -3.5 && dB < 0.5, `T10c mono sum level ${dB.toFixed(2)} dB`);
-  // T10d: the fan widens without a loudness change
-  const input = saw(880), d1 = run({ spread: 1, voices: 1 }, 6 * sr, input), d3 = run({ spread: 1, voices: 3 }, 6 * sr, input), dry = run({ depth: 0 }, 6 * sr, input);
-  for (const c of [0, 1]) assert.ok(Math.abs(20 * Math.log10(rms(d3[c], sr) / rms(dry[0], sr))) <= 1.1, 'T10d each channel keeps its level (within 1.1 dB, as T9)');
+  // T10d: the fan widens
+  const input = saw(880), d1 = run({ spread: 1, voices: 1 }, 6 * sr, input), d3 = run({ spread: 1, voices: 3 }, 6 * sr, input);
   assert.ok(corr(d3[0].slice(sr), d3[1].slice(sr)) < corr(d1[0].slice(sr), d1[1].slice(sr)) + 1e-9, 'T10d voices fan the stage wider');
   // T10e: Mono Bass
   // (the correlation of one pair of random trajectories scatters, so it is the mean over four seeds)
@@ -209,11 +203,12 @@ for (const drunk of [0, 0.5, 1]) { let acc = 0; for (let seed = 1; seed <= 24; +
   let reseeds = true; for (let i = 0; i < a[0].length; ++i) if (a[0][i] !== again[0][i]) reseeds = false;
   assert.ok(reseeds, 'T11 a reset reseeds');
 }
-// T12: in place
+// T12: in place (everything lands inside the window; the energy bound is only "not silent, not blown up": with no leveling, voices whose
+// phases wander apart sum below the impulse's energy)
 {
   const h = make({ depth: 100, voices: 3, spread: 1 }), imp = render(h, 4096 * 6, i => [i === 0 ? 1 : 0, 0]); f('destroy', h);
   const e = imp[0].reduce((s, v) => s + v * v, 0), tail = imp[0].slice(4096 * 2 + 64).reduce((s, v) => s + v * v, 0);
-  assert.ok(e > 0.2 && e < 4 && tail < e * 1e-6, `T12 in place (energy ${e}, tail ${tail})`);
+  assert.ok(e > 0.01 && e < 4 && tail < e * 1e-6, `T12 in place (energy ${e}, tail ${tail})`);
 }
 // T13: cost does not depend on pitch; Voices 4, Spread 1, N 16384
 {

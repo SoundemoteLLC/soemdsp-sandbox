@@ -1,5 +1,9 @@
 # Spectral Cloud: Fix Plan (was Spectral Blur)
 
+> **2026-11-27, `docs/SPECTRAL_NO_LEVELING_PLAN.md`:** every automatic level match this plan describes (the per-frame power match, the
+> synthesis-window match, Smear's per-bin makeup) is deleted, and the level checks are reported, not asserted. The module sets its level with
+> Amplitude (0..1, signed, after Mix). The level targets below are history.
+
 | | |
 |---|---|
 | **Status** | Plan only. Nothing here is built yet. Hand this to the outside coding AI. |

@@ -11,9 +11,6 @@ constexpr int size = 16384, bins = size / 2 + 1, capacity = 64;
 constexpr double twoPi = 6.283185307179586;
 // Cloud: up to 4 voices; each source bin may be sprayed at most this many bins away so a high bin cannot fan across the spectrum (a cost / fan-out guard).
 constexpr int kMaxVoices = 4;
-// Smear: the share of power left when overlapping diffused frames are independent (see the level note in frame()); fitted over Phase Smooth and both hops.
-constexpr double kSmearMakeupPower = 1.1; // see the level note in frame()
-constexpr int kMaxOverlap = 16; // the largest overlap the Smear level model tabulates
 // Warble: a motion knot every 2 bins (every harmonic gets its own motion even at FFT 2048) and a +-2 bin peak search.
 constexpr int kWarbleKnot = 2, kWarbleLobe = 2, kWarbleKnots = bins / kWarbleKnot + 3;
 // Which engine a module uses. Smear: 4x overlap time/frequency smear. Warble: per-partial pitch wobble. Cloud: the cloud (8x overlap).
@@ -57,10 +54,8 @@ struct Core {
   int cloudVoices = 3;
   unsigned int cloudRng[kMaxVoices], cloudSideRng[kMaxVoices], cloudGrainRng[kMaxVoices];
   double cloudSide[kMaxVoices][bins];
-  float bandMakeup[bins]; // per bin: amplitude makeup for the overlap-add of frames whose phases have decorrelated (Cloud and Smear)
-  float smearRamp[bins];
-  double smearCorr[kMaxOverlap], smearDenominator = 1; // overlap-add weight autocorrelation of the squared window at lags of whole hops, and 1 + 2 sum of it
-  double smearVar[kMaxOverlap]; // per hop: variance of the Phase-Smooth-lagged walk over m hops for a unit step variance // per bin: the Mono Bass ramp on Smear's side walk
+  float bandMakeup[bins]; // Cloud, per bin: a fixed gain from the walk step (a parameter), not from the signal
+  float smearRamp[bins]; // Smear, per bin: the Mono Bass ramp on the side walk
   int overlap = 4; // frames per window: hop = N / overlap (Smear: Normal 4 / Smooth 8; Warble and Cloud 8)
   double diffusionSpeed = 30; // Hz: the phase-diffusion half-width per bin (Smear)
   // Warble: per voice and knot, three unit-variance motion generators (0 = mid, 1 = left side, 2 = right side): a sine phase and two cascaded
@@ -81,13 +76,6 @@ struct Core {
       const int index = i < windowSize ? (i < windowSize / 2 ? i : windowSize - i) * (size / windowSize) : 0;
       window[i] = i >= windowSize ? 0 : i == windowSize / 2 ? 1 : 0.5f - 0.5f * fft.twRe[index];
       for (int c = 0; c < 2; ++c) input[c][i] = ola[c][i] = 0;
-    }
-    {
-      // How strongly overlapping frames weigh each other: the autocorrelation of the squared (analysis x synthesis) window at lags of m hops.
-      const int hopLen = windowSize / overlap; double c0 = 0; smearDenominator = 1;
-      for (int i = 0; i < windowSize; ++i) c0 += (double)window[i] * window[i] * window[i] * window[i];
-      for (int m = 0; m < kMaxOverlap; ++m) smearCorr[m] = 0;
-      for (int m = 1; m < overlap && m < kMaxOverlap; ++m) { double a = 0; for (int i = 0; i + m * hopLen < windowSize; ++i) a += (double)window[i] * window[i] * window[i + m * hopLen] * window[i + m * hopLen]; smearCorr[m] = c0 > 0 ? a / c0 : 0; smearDenominator += 2 * smearCorr[m]; }
     }
     for (int k = 0; k < bins; ++k) {
       offset[k] = smoothOffset[k] = 0;
@@ -202,16 +190,8 @@ struct Core {
     }
     if (engine == kSmear) {
       // Mono Bass: the side walk is scaled by a raised-cosine ramp from 0 at MonoBass / sqrt(2) to 1 at MonoBass sqrt(2) (0 = off).
-      bandMakeup[0] = bandMakeup[bins - 1] = 1.0f; smearRamp[0] = smearRamp[bins - 1] = 1.0f;
-      // Variance of the Phase-Smooth-lagged walk (a one-pole with pole p on a random walk) over m hops, per unit step variance:
-      // sum_{k<m} (1 - p^(k+1))^2 + (1 - p^m)^2 p^2 / (1 - p^2).
-      for (int m = 1; m < overlap && m < kMaxOverlap; ++m) {
-        double sum = 0, pk = 1; for (int k = 0; k < m; ++k) { pk *= phasePole; sum += (1 - pk) * (1 - pk); }
-        double pm = 1; for (int k = 0; k < m; ++k) pm *= phasePole;
-        smearVar[m] = sum + (phasePole < 1 ? (1 - pm) * (1 - pm) * phasePole * phasePole / (1 - phasePole * phasePole) : 0);
-      }
+      smearRamp[0] = smearRamp[bins - 1] = 1.0f;
       for (int k = 1; k < bins - 1; ++k) {
-        bandMakeup[k] = 1.0f;
         double ramp = 1.0;
         if (monoBassHz > 0) {
           const double hz = k * rate / size;
@@ -231,7 +211,7 @@ struct Core {
       // its FWHM is 2 df. At a step of pi the phase is fully random each hop (Paulstretch). Above that the cents-wide magnitude kernel
       // (blurPower, below) supplies the width. Stereo: Left rotates by walk - a and Right by walk + a, a = Spread(k) side / 2, with no crossfeed.
       // Grain is an attenuation-only flicker, 10^(-Grain uG / 20) with uG in [0, 1], normalised to unity mean power, so it can only
-      // redistribute level (the per-frame power match then holds the frame to its source).
+      // redistribute level.
       const int voices = cloudVoices; // the setter guarantees 1..kMaxVoices
       const double ratio = cloudFuzz > 0 ? soemdsp_maths::dsp_exp(cloudFuzz * 0.6931471805599453 / 1200.0) - 1.0 : 0.0;
       const double grainX = cloudGrain * 0.2302585092994046; // Grain ln(10) / 10
@@ -249,10 +229,9 @@ struct Core {
           double sn, cs; soemdsp_maths::dsp_sin_cos(wrapTurns(3.141592653589793 * t), &sn, &cs);
           ramp = 0.5 - 0.5 * cs;
         }
-        // Frames whose phases are independent add in POWER where coherent ones add in amplitude (at 8x overlap the power falls from 1 toward
-        // 1/8, of which the synthesis-window pass match below measures and restores 0.514). A uniform step of +-s per hop correlates successive frames by
-        // rho = sin(s) / s (0 once the phase is fully random), so the OLA part left over is 1 / sqrt(rho^2 + (1 - rho^2) 0.243) per bin, applied after the
-        // frame's power match; it is a statistic of the walk, not a measurement.
+        // Frames whose phases are independent add in POWER where coherent ones add in amplitude. A uniform step of +-s per hop correlates successive
+        // frames by rho = sin(s) / s (0 once the phase is fully random); this fixed per-bin gain, 1 / sqrt(rho^2 + (1 - rho^2) 0.243), comes from Fuzz
+        // (the step), never from the signal. No signal-dependent leveling anywhere: the user sets level with Amplitude.
         { const double rho = step >= 3.141592653589793 ? 0.0 : (step < 1e-9 ? 1.0 : soemdsp_maths::dsp_sin(step) / step); bandMakeup[k] = (float)(1.0 / __builtin_sqrt(rho * rho + (1.0 - rho * rho) * 0.243)); }
         const double spreadK = stereoSpread * ramp;
         for (int v = 0; v < voices; ++v) {
@@ -330,6 +309,12 @@ struct Core {
           double ps, pc; soemdsp_maths::dsp_sin_cos(wrapTurns(0.7853981633974483 * (1.0 + pan)), &ps, &pc);
           fanL[v][n] = (float)(1.4142135623730951 * pc); fanR[v][n] = (float)(1.4142135623730951 * ps);
         }
+        // The voices' pan gains averaged to 1 per ear, so identical voices (Depth 0) sum to exactly the input. A fixed gain from Spread and Voices,
+        // never from the signal (the per-frame level match that used to do this is gone).
+        double sumL = 0, sumR = 0;
+        for (int v = 0; v < voices; ++v) { sumL += fanL[v][n]; sumR += fanR[v][n]; }
+        const double normL = sumL > 1e-12 ? voices / sumL : 1.0, normR = sumR > 1e-12 ? voices / sumR : 1.0; // safety: a zero sum (no voices) keeps the gains
+        for (int v = 0; v < voices; ++v) { fanL[v][n] *= normL; fanR[v][n] *= normR; }
       }
       for (int c = 0; c < channels; ++c) {
         for (int k = 0; k < bins; ++k) {
@@ -370,12 +355,8 @@ struct Core {
       }
     }
     for (int c = 0; c < 2; ++c) {
-      // Cloud: how much of the analysis frame's energy the synthesis window passes (windowed / unwindowed), measured on the source frame
-      // so the moved spectrum can be held to the same figure below.
-      double srcEnergy = 0, srcWindowed = 0;
       for (int i = 0; i < size; ++i) {
         re[c][i] = input[c][(position + 1 + i) % size] * window[i]; im[c][i] = 0;
-        { const double e = (double)re[c][i] * re[c][i]; srcEnergy += e; srcWindowed += e * window[i] * window[i]; }
       }
       transform(size, re[c], im[c], false);
       for (int k = 0; k < bins; ++k) {
@@ -433,32 +414,7 @@ struct Core {
         const double targetMagnitude = __builtin_sqrt((blurred[k] > 0 ? blurred[k] : 0) / (edge ? 1 : 2));
         magnitudeState[c][k] = targetMagnitude + amplitudePole * (magnitudeState[c][k] - targetMagnitude);
         const double diffusionHere = engine == kSmear ? diffusion * liveWeight + (1.0 - liveWeight) : diffusion;
-        // Level. A bin whose phase takes the diffusion walk adds to the next frame's in POWER rather than amplitude, which at 8x or 4x overlap loses level
-        // that the synthesis-window match does not restore. Each bin is given back only that loss: 1 / sqrt(rho^2 + (1 - rho^2) kappa), where rho is the
-        // correlation between consecutive frames. The walk's per-hop step is uniform +-jitter (variance jitter^2 / 3), scaled by diffusionHere, and Phase Smooth is a
-        // one-pole lag with pole p on it, which leaves an increment variance of sigma^2 (1 - p) / (1 + p); with Gaussian increments rho = exp(-variance / 2).
-        // kappa is the share of the power that stays when the frames are independent. It is 1 for live input without Diffusion (rho = 1), and the factor never
-        // exceeds 1 / sqrt(kappa), so it restores a loss and cannot boost.
-        double bandGain = 1.0;
-        if (engine == kSmear) {
-          // The frames overlap in time; their phases agree to the degree the walk has not moved between them. Between frames m hops apart the walk differs by an
-          // angle of variance v Var_m (v = diffusionHere^2 jitter^2 / 3 per hop, Var_m the lagged-walk variance above), so their coherence is exp(-v Var_m / 2).
-          // The power that survives the overlap-add, against the fully coherent sum, is (1 + 2 sum_m C_m rho_m) / (1 + 2 sum_m C_m), with C_m the window
-          // autocorrelation. Each bin is given 1 / sqrt of that: only what decorrelation loses, which is 1 when the walk is still (Diffusion 0 on live input).
-          const double v = diffusionHere * diffusionHere * jitter * jitter / 3.0;
-          double numerator = 1.0;
-          for (int m = 1; m < overlap && m < kMaxOverlap; ++m) numerator += 2.0 * smearCorr[m] * soemdsp_maths::dsp_exp(-0.5 * v * smearVar[m]);
-          bandGain = 1.0 / __builtin_sqrt(numerator / smearDenominator);
-          // Smeared or spread energy has no live phase to tie one frame to the next, so even when its walk is slow (frames nominally coherent) it forms short
-          // bursts that do not add in amplitude: its level then falls as 1 / overlap, which the model above does not see. Relative to the 4x reference (where it is
-          // already restored), that part is given back in proportion to how coherent the walk is, so it vanishes when the walk already decorrelates the frames.
-          const double coherent1 = overlap > 1 ? soemdsp_maths::dsp_exp(-0.5 * v * smearVar[1]) : 1.0;
-          bandGain *= 1.0 / __builtin_sqrt(1.0 - (1.0 - liveWeight) * coherent1 * coherent1 * (1.0 - 4.0 / overlap));
-          // The window-pass match leaves the modelled loss slightly under-restored when the frames are fully independent (measured: the loss to restore is about 1.2x the
-          // model's in dB); raising the makeup to that power keeps it 1 for coherent bins and scales only what is restored.
-          bandGain = soemdsp_maths::pow_pos(bandGain, kSmearMakeupPower);
-        }
-        double magnitude = magnitudeState[c][k] * bandGain;
+        const double magnitude = magnitudeState[c][k];
         double sn = 0, cs = 1;
         // Smeared or spread energy has no phase of its own to keep: left to copy its source bin's phase it adds up with the other spread bins into a pulse train
         // (a saw blurred without Diffusion peaks +24 dB). So the share of a bin that is not live input always takes the full phase walk, whatever Diffusion is;
@@ -482,10 +438,8 @@ struct Core {
         const int voices = warble ? warbleVoices : cloudVoices; // the setters guarantee 1..kMaxVoices
         for (int k = 0; k < bins; ++k) accRe[k] = accIm[k] = 0;
         accRe[0] = specRe[0]; accRe[bins - 1] = specRe[bins - 1]; // DC and Nyquist stay where they are
-        double sourcePower = specRe[0] * specRe[0] + specRe[bins - 1] * specRe[bins - 1];
         for (int k = 1; k < bins - 1; ++k) {
           const double xr = specRe[k], xi = specIm[k];
-          sourcePower += 2 * (xr * xr + xi * xi);
           if (cloud) { // accumulated in place: no target bin, no move
             for (int v = 0; v < voices; ++v) {
               const double rr = xr * mvCos[cc][v][k] - xi * mvSin[cc][v][k], ri = xr * mvSin[cc][v][k] + xi * mvCos[cc][v][k], g = mvGain[0][v][k];
@@ -510,33 +464,18 @@ struct Core {
             }
           }
         }
-        // One normalisation per frame keeps the frame's power equal to the power it came from, so Fuzz changes the character and not the level
-        // (the voices average to exactly the source at Fuzz 0; a wide spray is power-preserving). It is a level match, not a clip.
-        double accPower = accRe[0] * accRe[0] + accRe[bins - 1] * accRe[bins - 1];
-        for (int k = 1; k < bins - 1; ++k) {
-          accPower += 2 * (accRe[k] * accRe[k] + accIm[k] * accIm[k]);
-        }
-        const double normal = accPower > 1e-30 && sourcePower > 0 ? __builtin_sqrt(sourcePower / accPower) : 1.0;
+        // The voices go out as they sum: no per-frame level match (beating and partial cancellation between voices stay audible).
         for (int k = 0; k < bins; ++k) {
           const bool edge = k == 0 || k == bins - 1;
           const double mk = cloud ? bandMakeup[k] : 1.0;
-          re[c][k] = (float)(accRe[k] * normal * mk);
-          im[c][k] = edge ? 0 : (float)(accIm[k] * normal * mk);
+          re[c][k] = (float)(accRe[k] * mk);
+          im[c][k] = edge ? 0 : (float)(accIm[k] * mk);
           if (!edge) { re[c][size - k] = re[c][k]; im[c][size - k] = -im[c][k]; }
         }
       }
       transform(size, re[c], im[c], true);
-      float frameGain = olaGain;
-      {
-        // A moved or diffused partial is not exactly a Hann-shaped grain any more, so the synthesis window passes a different share of it. Hold that share
-        // to the source frame's (identical at Fuzz 0, so a dry Cloud is untouched): a level match per frame, not a clip.
-        double synEnergy = 0, synWindowed = 0;
-        for (int i = 0; i < size; ++i) { const double e = (double)re[c][i] * re[c][i]; synEnergy += e; synWindowed += e * window[i] * window[i]; }
-        if (srcEnergy > 1e-24 && synEnergy > 1e-24 && synWindowed > 1e-24 && srcWindowed > 1e-24)
-          frameGain = (float)(olaGain * __builtin_sqrt((srcWindowed / srcEnergy) / (synWindowed / synEnergy)));
-      }
       for (int i = 0; i < size; ++i)
-        ola[c][(position + 1 + i) % size] += re[c][i] * window[i] * frameGain;
+        ola[c][(position + 1 + i) % size] += re[c][i] * window[i] * olaGain; // the constant OLA window gain; no per-frame match
     }
     return true;
   }
