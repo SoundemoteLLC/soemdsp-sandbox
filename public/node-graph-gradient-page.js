@@ -18,6 +18,7 @@ const nodeGraphGradientPageState = {
   editing: null,
 };
 let nodeGraphGradientPageColorDirty = false;
+let nodeGraphGradientPageGraphResizeObserver = null;
 
 function nodeGraphGradientSelectedParam(gradient) {
   const params = gradient?.params || [];
@@ -320,7 +321,6 @@ function nodeGraphGradientPageCard(gradient) {
   playheadSlider.setAttribute("aria-label", `${gradient.name} playhead`);
   playheadSlider.style.setProperty("--gradient-playhead-progress", `${(gradient.position * 100).toFixed(3)}%`);
   playheadControl.append(playheadSlider); card.append(playheadControl);
-  nodeGraphGradientPageDrawGraph(card, gradient);
   if (selectedParam) card.append(nodeGraphGradientPageCurveControls(gradient, selectedParam.nodeId, selectedParam.key));
   const selectedStop = gradient.stops.find((s) => s.id === nodeGraphGradientPageState.selectedStop.get(gradient.id)) || gradient.stops[0];
   if (selectedStop) card.append(nodeGraphGradientPageColorControls(gradient, selectedStop.id));
@@ -409,7 +409,29 @@ function renderNodeGraphGradientPage() {
   }
   for (const g of shown) fragment.append(nodeGraphGradientPageCard(g));
   host.replaceChildren(fragment);
-  for (const g of shown) nodeGraphGradientPageUpdateLive(g);
+  if (typeof ResizeObserver === "function") {
+    if (!nodeGraphGradientPageGraphResizeObserver) {
+      nodeGraphGradientPageGraphResizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const svg = entry.target;
+          if (!svg.isConnected) continue;
+          const card = svg.closest(".node-gradient-card");
+          const gradient = nodeGraphGradientPageGradients().find((item) => item.id === svg.dataset.gradientGraph);
+          if (card && gradient) nodeGraphGradientPageDrawGraph(card, gradient);
+        }
+      });
+    }
+    nodeGraphGradientPageGraphResizeObserver.disconnect();
+  }
+  for (const g of shown) {
+    const card = host.querySelector(`.node-gradient-card[data-gradient-id="${CSS.escape(g.id)}"]`);
+    if (!card) continue;
+    nodeGraphGradientPageDrawGraph(card, g);
+    nodeGraphGradientPageUpdateLive(g);
+    if (card?.querySelector("[data-gradient-graph]") && nodeGraphGradientPageGraphResizeObserver) {
+      nodeGraphGradientPageGraphResizeObserver.observe(card.querySelector("[data-gradient-graph]"));
+    }
+  }
   const rename = host.querySelector("[data-gradient-rename-input]");
   if (rename) {
     rename.focus();

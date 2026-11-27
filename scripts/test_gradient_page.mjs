@@ -95,14 +95,23 @@ try {
       let box = point?.getBoundingClientRect();
       const sx = box ? box.left + box.width / 2 : 0, sy = box ? box.top + box.height / 2 : 0;
       const stopId = g().stops[0].id, firstParam = g().params[0], secondParam = g().params[1];
-      const pointGeometry = point ? ["x", "y", "width", "height", "rx", "stroke-width"].map((key) => point.getAttribute(key)) : [];
+      const pointGeometry = point ? {
+        attrs: ["x", "y", "width", "height", "rx", "stroke-width"].map((key) => point.getAttribute(key)),
+        bounds: point.getBoundingClientRect(),
+      } : null;
       const startPos = g().stops.find((s) => s.id === stopId).pos;
       const startOther = Number(g().stops.find((s) => s.id === stopId).offsets?.[secondParam.nodeId]?.[secondParam.key]) || 0;
       nodeGraphGradientPagePointerDown({ target: point, currentTarget: host, pointerId: 77, button: 0, clientX: sx, clientY: sy, preventDefault() {} });
       out.graphCapture = host.__testCapturedPointer === 77 && nodeGraphGradientPageState.drag?.graph === true;
       const pressedPoint = document.querySelector('[data-gradient-graph] [data-curve-point="0"]');
-      const pressedGeometry = pressedPoint ? ["x", "y", "width", "height", "rx", "stroke-width"].map((key) => pressedPoint.getAttribute(key)) : [];
-      out.graphPointDoesNotResizeOnPress = pointGeometry.length > 0 && pointGeometry.every((value, index) => value === pressedGeometry[index]);
+      const pressedBounds = pressedPoint?.getBoundingClientRect();
+      out.graphPinPressBounds = [pointGeometry?.bounds.width, pointGeometry?.bounds.height, pressedBounds?.width, pressedBounds?.height];
+      out.graphPointDoesNotResizeOnPress = Boolean(pointGeometry && pressedPoint && pressedBounds)
+        && pointGeometry.attrs.every((value, index) => value === ["x", "y", "width", "height", "rx", "stroke-width"].map((key) => pressedPoint.getAttribute(key))[index])
+        && Math.abs(pointGeometry.bounds.width - pointGeometry.bounds.height) < 0.1
+        && Math.abs(pressedBounds.width - pressedBounds.height) < 0.1
+        && Math.abs(pointGeometry.bounds.width - pressedBounds.width) < 0.1
+        && Math.abs(pointGeometry.bounds.height - pressedBounds.height) < 0.1;
       nodeGraphGradientPagePointerMove({ pointerId: 77, clientX: sx + 24, clientY: sy });
       nodeGraphGradientPagePointerUp({ pointerId: 77, type: "pointerup" });
       const movedXStop = g().stops.find((s) => s.id === stopId);
@@ -120,7 +129,12 @@ try {
         && (Number(movedYStop.offsets?.[firstParam.nodeId]?.[firstParam.key]) || 0) < beforeVerticalValue
         && (Number(movedYStop.offsets?.[secondParam.nodeId]?.[secondParam.key]) || 0) === startOther;
       const points = [...document.querySelectorAll("[data-gradient-graph] [data-curve-point]")];
-      out.graphPointsStaySquare = points.length > 0 && points.every((el) => el.localName === "rect" && el.getAttribute("width") === "12" && el.getAttribute("height") === "12" && el.getAttribute("rx") === "2" && el.getAttribute("stroke-width") === "1");
+      out.graphPinBounds = points.map((el) => { const bounds = el.getBoundingClientRect(); return [bounds.width, bounds.height]; });
+      out.graphPointsStaySquare = points.length > 0 && points.every((el) => {
+        const bounds = el.getBoundingClientRect();
+        return el.localName === "rect" && el.getAttribute("width") === "12" && el.getAttribute("height") === "12"
+          && el.getAttribute("rx") === "2" && el.getAttribute("stroke-width") === "1" && Math.abs(bounds.width - bounds.height) < 0.1;
+      });
       steps();
       const colorInput = document.querySelector("#nodeGradientsBody .node-gradient-native-color-picker");
       const colorHandle = document.querySelector("#nodeGradientsBody .node-gradient-handle");

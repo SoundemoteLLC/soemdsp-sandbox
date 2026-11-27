@@ -3,8 +3,15 @@
   const NS = "http://www.w3.org/2000/svg";
   function render(svg, { series = [], guides = [], playhead = null } = {}) {
     if (!svg) return;
+    // SVGSVGElement.clientWidth/clientHeight are zero in some browsers. Derive the drawing
+    // viewport from the rendered box and remove its CSS border; using the outer bounds makes
+    // preserveAspectRatio="none" scale X and Y differently, stretching square pins vertically.
     const rect = svg.getBoundingClientRect();
-    const width = Math.max(1, rect.width || 320), height = Math.max(1, rect.height || 120);
+    const style = getComputedStyle(svg);
+    const borderX = (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.borderRightWidth) || 0);
+    const borderY = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+    const width = Math.max(1, svg.clientWidth || rect.width - borderX || 320);
+    const height = Math.max(1, svg.clientHeight || rect.height - borderY || 120);
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("preserveAspectRatio", "none");
     const x = (v) => 8 + Math.max(0, Math.min(1, v)) * (width - 16);
