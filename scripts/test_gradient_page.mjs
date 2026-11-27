@@ -114,15 +114,16 @@ try {
       out.unsnappedMoveCreatesAllParamsStop = Boolean(halfStop) && Math.abs(Number(halfStop.offsets?.[b]?.floorDb) - bBefore) < 1e-6
         && Math.abs(Number(halfStop.offsets?.[a]?.frequency) - (bent.targetSlider - Number(g().origin?.[a]?.frequency))) < 1e-6;
       out.allJoinedControlsGold = g().params.every(({ nodeId, key }) => nodeGraphSliderForParameter(nodeId, key)?.closest("label")?.querySelector(".node-slider-readout")?.classList.contains("is-gradient-edit"));
+      const gradientCard = document.querySelector(card);
       out.paramColorsMatch = g().params.every(({ nodeId, key }) => {
         const readout = nodeGraphSliderForParameter(nodeId, key)?.closest("label")?.querySelector(".node-slider-readout");
-        const chip = [...card.querySelectorAll(".node-gradient-param-chips button")].find((item) => item.dataset.nodeId === nodeId && item.dataset.paramKey === key);
-        const series = [...card.querySelectorAll("[data-curve-series]")].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${nodeId}\u0000${key}`);
+        const chip = [...gradientCard.querySelectorAll(".node-gradient-param-chips button")].find((item) => item.dataset.nodeId === nodeId && item.dataset.paramKey === key);
+        const series = [...gradientCard.querySelectorAll("[data-curve-series]")].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${nodeId}\u0000${key}`);
         const color = readout?.style.getPropertyValue("--gradient-edit-color").trim();
         return Boolean(color) && color === chip?.style.getPropertyValue("--curve-color").trim() && color === series?.getAttribute("stroke");
       });
       const slider = nodeGraphSliderForParameter(a, "frequency");
-      const curveSeries = [...card.querySelectorAll("[data-curve-series]")].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${a}\u0000frequency`);
+      const curveSeries = [...gradientCard.querySelectorAll("[data-curve-series]")].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${a}\u0000frequency`);
       curveSeries?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
       const popover = document.getElementById("nodeParameterMetadataPopover");
       out.curveContextSettings = nodeGraphMvp.metadataEditorTarget === slider?.id && !popover?.hidden
