@@ -1,15 +1,15 @@
-// soemdsp-native-module: stft_gate
-// soemdsp-native-label: STFT Gate
-// soemdsp-native-target: stftGate
+// soemdsp-native-module: spectral_gate
+// soemdsp-native-label: Spectral Gate
+// soemdsp-native-target: spectralGate
 // soemdsp-native-kind: dynamics
-#include "../stft_contrast/spectral_engine.h"
+#include "../spectral_contrast/spectral_engine.h"
 
 namespace {
 using Pool = soemdsp_spectral::Pool<true>;
 const char metadata[] = R"json({
-  "module": "stft_gate",
-  "targetType": "stftGate",
-  "label": "STFT Gate",
+  "module": "spectral_gate",
+  "targetType": "spectralGate",
+  "label": "Spectral Gate",
   "kind": "dynamics",
   "inputs": [
     "In",
@@ -155,12 +155,12 @@ const char metadata[] = R"json({
   ]
 })json";
 }
-extern "C" int soemdsp_stft_gate_create() { return Pool::create(); }
-extern "C" void soemdsp_stft_gate_destroy(int h) { Pool::destroy(h); }
-extern "C" void soemdsp_stft_gate_reset(int h) { if (auto* s = Pool::get(h)) s->reset(false); }
-extern "C" void soemdsp_stft_gate_set_knee(int h, double knee) { if (auto* s = Pool::get(h)) s->gateKnee = knee; }
-extern "C" void soemdsp_stft_gate_set_hold(int h, double milliseconds) { if (auto* s = Pool::get(h)) s->gateHold = milliseconds; }
-extern "C" double soemdsp_stft_gate_sample(int h, double left, double right,
+extern "C" int soemdsp_spectral_gate_create() { return Pool::create(); }
+extern "C" void soemdsp_spectral_gate_destroy(int h) { Pool::destroy(h); }
+extern "C" void soemdsp_spectral_gate_reset(int h) { if (auto* s = Pool::get(h)) s->reset(false); }
+extern "C" void soemdsp_spectral_gate_set_knee(int h, double knee) { if (auto* s = Pool::get(h)) s->gateKnee = knee; }
+extern "C" void soemdsp_spectral_gate_set_hold(int h, double milliseconds) { if (auto* s = Pool::get(h)) s->gateHold = milliseconds; }
+extern "C" double soemdsp_spectral_gate_sample(int h, double left, double right,
 int profileMode, double threshold, double margin, double depth, double attack,
   double release, double smooth, double mix, double rate) {
   auto* s = Pool::get(h); if (!s) return 0;
@@ -171,16 +171,16 @@ int profileMode, double threshold, double margin, double depth, double attack,
   p.hold = s->gateHold;
   return s->tick(left, right, p, rate);
 }
-extern "C" double soemdsp_stft_gate_right(int h) { auto* s = Pool::get(h); return s ? s->right : 0; }
-extern "C" int soemdsp_stft_gate_latency() { return soemdsp_spectral::size; }
-extern "C" int soemdsp_stft_gate_version() { return 3; }
-extern "C" const char* soemdsp_stft_gate_metadata_json() { return metadata; }
-extern "C" int soemdsp_stft_gate_metadata_json_size() { return sizeof(metadata) - 1; }
-extern "C" double soemdsp_stft_gate_ready(int h) { auto* s = Pool::get(h); return s && s->learnedFrames ? 1 : 0; }
-extern "C" double soemdsp_stft_gate_profile_frames(int h) { auto* s = Pool::get(h); return s ? (double)s->learnedFrames : 0; }
-extern "C" int soemdsp_stft_gate_display_bins() { return soemdsp_spectral::bins; }
-extern "C" double soemdsp_stft_gate_display_size() { return soemdsp_spectral::size; }
-extern "C" const double* soemdsp_stft_gate_display_power(int h) { return soemdsp_spectral::display_power(Pool::get(h)); }
-extern "C" const double* soemdsp_stft_gate_display_gain(int h) { return soemdsp_spectral::display_gain(Pool::get(h)); }
-extern "C" double soemdsp_stft_gate_display_rate(int h) { return soemdsp_spectral::display_rate(Pool::get(h)); }
-extern "C" double soemdsp_stft_gate_display_frames(int h) { return soemdsp_spectral::display_frames(Pool::get(h)); }
+extern "C" double soemdsp_spectral_gate_right(int h) { auto* s = Pool::get(h); return s ? s->right : 0; }
+extern "C" int soemdsp_spectral_gate_latency() { return soemdsp_spectral::size; }
+extern "C" int soemdsp_spectral_gate_version() { return 3; }
+extern "C" const char* soemdsp_spectral_gate_metadata_json() { return metadata; }
+extern "C" int soemdsp_spectral_gate_metadata_json_size() { return sizeof(metadata) - 1; }
+extern "C" double soemdsp_spectral_gate_ready(int h) { auto* s = Pool::get(h); return s && s->learnedFrames ? 1 : 0; }
+extern "C" double soemdsp_spectral_gate_profile_frames(int h) { auto* s = Pool::get(h); return s ? (double)s->learnedFrames : 0; }
+extern "C" int soemdsp_spectral_gate_display_bins() { return soemdsp_spectral::bins; }
+extern "C" double soemdsp_spectral_gate_display_size() { return soemdsp_spectral::size; }
+extern "C" const double* soemdsp_spectral_gate_display_power(int h) { return soemdsp_spectral::display_power(Pool::get(h)); }
+extern "C" const double* soemdsp_spectral_gate_display_gain(int h) { return soemdsp_spectral::display_gain(Pool::get(h)); }
+extern "C" double soemdsp_spectral_gate_display_rate(int h) { return soemdsp_spectral::display_rate(Pool::get(h)); }
+extern "C" double soemdsp_spectral_gate_display_frames(int h) { return soemdsp_spectral::display_frames(Pool::get(h)); }

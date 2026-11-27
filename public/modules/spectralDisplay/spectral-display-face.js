@@ -1,5 +1,5 @@
-// Spectral processor faces (displayType "spectralStyle"): Vocoder, STFT Gate,
-// STFT Contrast, Spectral Blur, Freeze, Delay, Warp, Cross Synthesis.
+// Spectral processor faces (displayType "spectralStyle"): Vocoder, Spectral Gate,
+// Spectral Contrast, Spectral Blur, Freeze, Delay, Warp, Cross Synthesis.
 // Data: spectral-display-worklet.js (SpectralHz / SpectralA / ... / SpectralMeta).
 // Drawing: the shared style renderer (public/lib/spectral-display-styles.js).
 // Display Settings own the look (Curve = frequency spacing, style, Floor /
@@ -9,8 +9,8 @@
 // Per module: allowed styles (first is the spawn default) and display defaults.
 const NODE_GRAPH_SPECTRAL_FACE_MODULES = Object.freeze({
   vocoder: Object.freeze({ styles: ["bars", "curve", "mirrorBars", "particles", "miniWaterfall"], floorDb: -72, ceilingDb: 0 }),
-  stftGate: Object.freeze({ styles: ["bandGain", "bars", "overlay", "curve"], floorDb: -110, ceilingDb: -10, boostDb: 0, rangeDb: 60 }),
-  stftContrast: Object.freeze({ styles: ["bandGain", "bars", "overlay", "curve"], floorDb: -110, ceilingDb: -10, boostDb: 18, rangeDb: 24 }),
+  spectralGate: Object.freeze({ styles: ["bandGain", "bars", "overlay", "curve"], floorDb: -110, ceilingDb: -10, boostDb: 0, rangeDb: 60 }),
+  spectralContrast: Object.freeze({ styles: ["bandGain", "bars", "overlay", "curve"], floorDb: -110, ceilingDb: -10, boostDb: 18, rangeDb: 24 }),
   spectralBlur: Object.freeze({ styles: ["particles", "overlay", "miniWaterfall"], floorDb: -90, ceilingDb: 0 }),
   spectralWarble: Object.freeze({ styles: ["miniWaterfall", "overlay", "particles"], floorDb: -90, ceilingDb: 0 }),
   spectralSmear: Object.freeze({ styles: ["particles", "overlay", "miniWaterfall"], floorDb: -90, ceilingDb: 0 }),

@@ -150,7 +150,7 @@ Updates follow audio hops or the module's own band-rate posts. Thru / dry-wet au
 
 **Acceptance.** Spawn is a particle field that follows the wet spectrum, not a waveform. Motion is hop-driven. A narrow sine is a tight cluster; Frequency Blur visibly widens it. Style can switch to curve without changing audio. Particles stay cheap enough on a phone (cap particle count in defs). Mini Canvas matches. Mix / Thru unchanged. Leave Cloud / Swarm *sound* work to the swarm plan.
 
-### 2.7 STFT Gate (`stftGate`) and STFT Contrast (`stftContrast`)
+### 2.7 Spectral Gate (`spectralGate`) and Spectral Contrast (`spectralContrast`)
 
 **Look and feel (Gate).** A rack of shutters. Each band is a slat: shut is a dark, almost-flat door; open is a bright column. On a drum loop you should *see* the pattern — hats flick high slats open, a kick may hold or punch the low doors depending on the threshold, and the hold / attack / release times are visible as slats that linger or snap. Alternate `bandGain` reading: a zero line with reduction hanging down. The face is about which bands are allowed through, not a pretty output waveform.
 
@@ -158,9 +158,9 @@ Updates follow audio hops or the module's own band-rate posts. Thru / dry-wet au
 
 **Default / alternates.** Both default to `bandGain`. Alternates: `bars` of output level, `overlay` (in vs out), `curve`.
 
-**Data tap (read-only).** `native_modules/stft_gate/`, `native_modules/stft_contrast/`, and `process_stft_dynamics`: post per-band gain or gain-reduction, plus optional input / output magnitudes, bin Hz, serial. Attack / Release already on the modules should inform the picture (defs own the visual times; do not invent a hidden smoother that disagrees with the audio).
+**Data tap (read-only).** `native_modules/spectral_gate/`, `native_modules/spectral_contrast/`, and `process_stft_dynamics`: post per-band gain or gain-reduction, plus optional input / output magnitudes, bin Hz, serial. Attack / Release already on the modules should inform the picture (defs own the visual times; do not invent a hidden smoother that disagrees with the audio).
 
-**Files.** The two native modules, `graph_engine.cpp`, worklet native graph, defs (`stftGate` ~9002, `stftContrast` ~8888), shared renderer, settings schema, `scripts/test_stft_gate_display.mjs` and `scripts/test_stft_contrast_display.mjs` (or one shared test with two cases).
+**Files.** The two native modules, `graph_engine.cpp`, worklet native graph, defs (`spectralGate` ~9002, `spectralContrast` ~8888), shared renderer, settings schema, `scripts/test_spectral_gate_display.mjs` and `scripts/test_spectral_contrast_display.mjs` (or one shared test with two cases).
 
 **Acceptance.** You can tell open from shut (Gate) and boost from cut (Contrast) on a known signal without listening. Gain vectors come from the DSP, not a guessed FFT comparison, unless a tap proves impossible — in which case document the fallback. Style switch is visual only. Mini Canvas matches. Audio unchanged.
 
@@ -306,7 +306,7 @@ Listening acceptance by Argi — especially Vocoder bars, Blur particles, and 1D
 ## Implementation notes (2026-11-25)
 
 - **Analysis core:** `public/lib/spectral-analysis.js` (FFT, windows, full scale, `nodeGraphFrequencyCurveHz`). Worklet, Spectrum Circle and the scope Spectrum mode all use it; Spectrum Circle's main-thread FFT is gone (it gets `SpectrumRaw` from the worklet analysis of input A).
-- **Taps (read-only, no audio change):** Vocoder `soemdsp_vocoder_display_*` (band centres with Formant Shift, pi/2 x envelope so a unit sine reads 0 dBFS, incoming bank + DSP crossfade weight). STFT Gate / Contrast `*_display_power / _gain / _rate / _frames` (bin power in their own Threshold units, gain dB).
+- **Taps (read-only, no audio change):** Vocoder `soemdsp_vocoder_display_*` (band centres with Formant Shift, pi/2 x envelope so a unit sine reads 0 dBFS, incoming bank + DSP crossfade weight). Spectral Gate / Contrast `*_display_power / _gain / _rate / _frames` (bin power in their own Threshold units, gain dB).
 - **Fallback, documented:** Blur, Freeze, Delay, Warp and Cross Synthesis rewrite their spectra in place, so there is no stable array to point at. Their faces use the shared core on the module output (scope ring) and the captured inputs (In / Voice / Synth) at display rate: a 2048 Hann, at most 30 analyses per second of audio, driven by audio blocks (no timer; no audio, no posts). Cost does not depend on the module FFT Size.
 - **Renderer:** `public/lib/spectral-display-styles.js` on the shared GL line batch; styles curve, bars, particles, mirrorBars, miniWaterfall, overlay, bandGain. Face glue and per-module defaults: `public/modules/spectralDisplay/spectral-display-face.js` (displayType `spectralStyle`). Gradient: new "cold fire" preset in the shared gradient editor.
 - **Defaults:** Vocoder bars, Gate / Contrast band gain, Blur particles, Freeze / Warp / Cross overlay, Delay waterfall. Each processor has a display-only Curve knob (`displayOnly: true`, not in C++ metadata) and Display Settings for style, Floor / Ceiling, bars, peak caps, particles, history rows and gain spans.

@@ -84,7 +84,7 @@ audition detector and noise independently. This is not a claim of Vocodex parity
 
 ## Phase 5: Optional Post-Processing
 
-- [ ] Audition existing STFT Contrast or conventional dynamics after Vocoder first.
+- [ ] Audition existing Spectral Contrast or conventional dynamics after Vocoder first.
 - [ ] Only integrate a dedicated "enhance"/contrast stage if a separate module
   cannot provide the needed workflow/sound. Specify its transfer law and meters.
 - [ ] Keep saturation, compression, makeup and limiting explicit and bypassable.

@@ -122,13 +122,13 @@ DSP stays as-is except a **read-only** tap of band or bin levels when a display 
 
 ### 7.1 Processor inventory (current faces)
 
-`process_stft_dynamics` in `graph_engine.cpp` (~16379, dispatched ~19636) runs **Spectral Blur**, **STFT Contrast**, and **STFT Gate**. Other spectral processors have their own process functions in the same file. Almost every live one currently shows a generic **1D oscilloscope trace** (`displayType: "scope1dTrace"`) — a waveform, not bands. That is the gap.
+`process_stft_dynamics` in `graph_engine.cpp` (~16379, dispatched ~19636) runs **Spectral Blur**, **Spectral Contrast**, and **Spectral Gate**. Other spectral processors have their own process functions in the same file. Almost every live one currently shows a generic **1D oscilloscope trace** (`displayType: "scope1dTrace"`) — a waveform, not bands. That is the gap.
 
 | Module | Type / native | Engine | Current face | Notes |
 |--------|----------------|--------|--------------|-------|
 | Spectral Blur | `spectralBlur` (272), `native_modules/spectral_blur/spectral_blur.cpp` | `process_stft_dynamics` | `scope1dTrace`. Face: FFT size, Time Smear, Frequency Blur, Diffusion, Stereo, smoothers, Swarm / Level / Rate / Drift / Seed, Mix. | Live STFT effect. Swarm/Cloud wants a look that can feel fuzzy, not only a waveform. |
-| STFT Contrast | `stftContrast` (270), `native_modules/stft_contrast/` | `process_stft_dynamics` | `scope1dTrace`. Contrast, Scale, Threshold, Ratio, Attack / Release, boost / gain, Mix. | Stereo-linked spectral dynamics. The interesting picture is per-band gain, not the output wave. |
-| STFT Gate | `stftGate` (271), `native_modules/stft_gate/` | `process_stft_dynamics` | `scope1dTrace`. Hold, knee, profile, threshold, margin, depth, Attack / Release, smooth, Mix. | Same story: which bands are open or shut. |
+| Spectral Contrast | `spectralContrast` (270), `native_modules/spectral_contrast/` | `process_stft_dynamics` | `scope1dTrace`. Contrast, Scale, Threshold, Ratio, Attack / Release, boost / gain, Mix. | Stereo-linked spectral dynamics. The interesting picture is per-band gain, not the output wave. |
+| Spectral Gate | `spectralGate` (271), `native_modules/spectral_gate/` | `process_stft_dynamics` | `scope1dTrace`. Hold, knee, profile, threshold, margin, depth, Attack / Release, smooth, Mix. | Same story: which bands are open or shut. |
 | Spectral Freeze | `spectralFreeze` (273), `native_modules/spectral_freeze/` | own process (~19625) | `scope1dTrace`. | Frozen vs live spectrum is the story. |
 | Spectral Delay | `spectralDelay` (275), `native_modules/spectral_delay/` | own process (~19631) | `scope1dTrace`. FFT size, delay / spread, pivot, curve, feedback, Mix. | Delay-vs-frequency, or a short history of the wet spectrum. |
 | Spectral Warp | `spectralWarp` (279), `native_modules/spectral_warp/` | own process (~19614) | `scope1dTrace`. | Input vs output spectrum shows the warp. |
@@ -145,7 +145,7 @@ DSP stays as-is except a **read-only** tap of band or bin levels when a display 
 
 One WebGL style renderer (new helper, e.g. `public/lib/spectral-display-styles.js` + a shader face), fed by a **band or bin vector** plus optional second vector (input, carrier, or per-band gain). Sources, in order of preference:
 
-1. A read-only tap of the module's own bands (Vocoder IIR envelopes, STFT Gate / Contrast gain, Freeze magnitudes, etc.).
+1. A read-only tap of the module's own bands (Vocoder IIR envelopes, Spectral Gate / Contrast gain, Freeze magnitudes, etc.).
 2. The shared analysis core from §2, on In and/or Out (and a second input when the module has one).
 
 Do not run a second heavy FFT when the DSP already has the bands. Updates follow audio hops or the module's own band-rate posts (`hopSerial` or equivalent) — **events only, no timers or polling**.
@@ -160,7 +160,7 @@ Style is a **Display Settings choice** (`spectralDisplayStyle` or similar), not 
 | `mirrorBars` | Two sets of bars, mirrored: L/R, or In/Out, or Voice/Synth. | Stereo Blur, Vocoder (Voice vs Synth), Cross Synthesis. |
 | `miniWaterfall` | A short scrolling spectrum history in the face (not a full Spectrogram module). | **Spectral Delay** default; also Freeze (frozen plate + live trickle). |
 | `overlay` | Input and output (or two sources) drawn together — two curves, or bars in two colors. | **Spectral Warp** and **Cross Synthesis** defaults. |
-| `bandGain` | Per-band gain or gain-reduction: a zero line, boost up, cut down (or a dim bar for "shut"). | **STFT Gate** and **STFT Contrast** defaults. |
+| `bandGain` | Per-band gain or gain-reduction: a zero line, boost up, cut down (or a dim bar for "shut"). | **Spectral Gate** and **Spectral Contrast** defaults. |
 
 A module may hide styles that make no sense (no `bandGain` on Warp unless it exposes a gain vector). Adding a style later must not require forking a new renderer per module.
 
@@ -169,8 +169,8 @@ A module may hide styles that make no sense (no `bandGain` on Warp unless it exp
 | Module | Default style | Why |
 |--------|---------------|-----|
 | Vocoder | **Bars** | This is the Vocodex picture: one bar per real IIR band, following the Voice envelope that drives the Synth. Curve is the fallback if bars feel too busy at 100 bands. |
-| STFT Gate | **Band gain** | You need to see which bands are open. Bars of output level hide the gate. |
-| STFT Contrast | **Band gain** | Contrast/compression is a per-band gain story; overlay or bars are options. |
+| Spectral Gate | **Band gain** | You need to see which bands are open. Bars of output level hide the gate. |
+| Spectral Contrast | **Band gain** | Contrast/compression is a per-band gain story; overlay or bars are options. |
 | Spectral Blur | **Particles** | Waveform and hard bars fight the cloudy/fuzzy identity (Swarm / Cloud). A filled curve is the sober alternative if particles are not ready in the first style slice. |
 | Spectral Freeze | **Mini waterfall** or a **curve** of the held spectrum with a live-input ghost | The hold is the point; a bouncing output wave is not. |
 | Spectral Delay | **Mini waterfall** | Time-across-frequency is the module. A later specialized "delay vs Hz" curve is welcome but not the first style. |
@@ -202,7 +202,7 @@ Reasons: Argi's reference is Vocodex-style growing bars, and this module already
 4. Tests: new `scripts/test_vocoder_display.mjs` (and a small browser smoke if that is house style). Docs: a short note in a vocoder doc if one exists, otherwise a subsection here or `docs/VOCODER.md` only if the repo already has it.
 5. Leave Convolution Resonator's custom face alone. Leave other agents' dirty files alone. MasterBot's graph / camera / cull files stay off-limits. No server kills, no app restart; Argi Ctrl+F5s. Append `?v=` tags if HTML boot lists must change.
 
-**After the Vocoder style PoC:** STFT Gate and STFT Contrast (`bandGain`, taps from `process_stft_dynamics` / `stft_gate.cpp` / `stft_contrast.cpp`), then Spectral Blur (`particles`, after or with Cloud), then Warp / Cross Synthesis (`overlay`) and Delay / Freeze (`miniWaterfall`).
+**After the Vocoder style PoC:** Spectral Gate and Spectral Contrast (`bandGain`, taps from `process_stft_dynamics` / `spectral_gate.cpp` / `spectral_contrast.cpp`), then Spectral Blur (`particles`, after or with Cloud), then Warp / Cross Synthesis (`overlay`) and Delay / Freeze (`miniWaterfall`).
 
 ### 7.5 Open questions (styles)
 

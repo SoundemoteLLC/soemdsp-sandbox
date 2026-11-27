@@ -86,35 +86,35 @@
       "tracePoints": []
     },
     {
-      "destinationNode": "stftContrast-1",
+      "destinationNode": "spectralContrast-1",
       "destinationPort": "In",
       "sourceNode": "robinSinepulse-1",
       "sourcePort": "Kick",
       "tracePoints": []
     },
     {
-      "destinationNode": "stftContrast-1",
+      "destinationNode": "spectralContrast-1",
       "destinationPort": "Left",
       "sourceNode": "electroHat-1",
       "sourcePort": "Hat L",
       "tracePoints": []
     },
     {
-      "destinationNode": "stftContrast-1",
+      "destinationNode": "spectralContrast-1",
       "destinationPort": "Left",
       "sourceNode": "electroSnare-1",
       "sourcePort": "Snare L",
       "tracePoints": []
     },
     {
-      "destinationNode": "stftContrast-1",
+      "destinationNode": "spectralContrast-1",
       "destinationPort": "Right",
       "sourceNode": "electroHat-1",
       "sourcePort": "Hat R",
       "tracePoints": []
     },
     {
-      "destinationNode": "stftContrast-1",
+      "destinationNode": "spectralContrast-1",
       "destinationPort": "Right",
       "sourceNode": "electroSnare-1",
       "sourcePort": "Snare R",
@@ -123,14 +123,14 @@
     {
       "destinationNode": "softClipper-1",
       "destinationPort": "Left",
-      "sourceNode": "stftContrast-1",
+      "sourceNode": "spectralContrast-1",
       "sourcePort": "Left",
       "tracePoints": []
     },
     {
       "destinationNode": "softClipper-1",
       "destinationPort": "Right",
-      "sourceNode": "stftContrast-1",
+      "sourceNode": "spectralContrast-1",
       "sourcePort": "Right",
       "tracePoints": []
     },
@@ -3225,7 +3225,7 @@
     {
       "gx": 24,
       "gy": -9,
-      "id": "stftContrast-1",
+      "id": "spectralContrast-1",
       "paramMeta": {
         "contrast": {
           "alias": "",
@@ -3545,7 +3545,7 @@
         "gainDb": 21.117756791548288,
         "mix": 0.935182956563642
       },
-      "type": "stftContrast",
+      "type": "spectralContrast",
       "widthGu": 7,
       "traceDisplaySettings": {
         "backgroundHue": 0,

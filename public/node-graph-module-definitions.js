@@ -208,7 +208,7 @@ const nodeGraphNodeLabels = Object.freeze({
   waveguide: "Waveguide",
   phaser: "Phaser",
   vocoder: "Vocoder",
-  stftContrast: "STFT Contrast",
+  spectralContrast: "Spectral Contrast",
   spectralBlur: "Spectral Cloud",
   spectralWarble: "Spectral Warble",
   spectralFreeze: "Spectral Freeze",
@@ -220,7 +220,7 @@ const nodeGraphNodeLabels = Object.freeze({
   spectralPrism: "Spectral Prism",
   spectralSmear: "Spectral Smear",
   earlyReflectionConvolution: "Early Reflection Convolution",
-  stftGate: "STFT Gate",
+  spectralGate: "Spectral Gate",
   flanger: "Flanger",
   chorus: "Chorus",
   ensemble: "Ensemble",
@@ -9261,7 +9261,7 @@ const nodeGraphModuleDefinitions = (
       },
     ],
   },
-  stftContrast: {
+  spectralContrast: {
     planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right"], outputAliases: { Out: "Mono" },
@@ -9376,7 +9376,7 @@ const nodeGraphModuleDefinitions = (
       },
     ],
   },
-  stftGate: {
+  spectralGate: {
     planRole: "processor", planFreeRun: true, defaultWidthGu: 7,
     inputs: ["In", "Left", "Right"], inputLabels: { In: "Mono" }, inputAliases: { Mono: "In" },
     outputs: ["Mono", "Left", "Right", "Ready"], outputAliases: { Out: "Mono" },

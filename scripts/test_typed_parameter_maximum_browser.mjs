@@ -13,7 +13,7 @@ try {
   await page.waitForFunction(() => typeof showNodeGraphModule === "function" && document.body.dataset.nodeBootFinished === "interface-ready", null, { timeout: 60000 });
   const ids = await page.evaluate(() => {
     const options = { record: false, autosaveWorkingPatch: false, skipLivePlan: true };
-    const gate = showNodeGraphModule("stftGate", { x: 50, y: 50 }, options);
+    const gate = showNodeGraphModule("spectralGate", { x: 50, y: 50 }, options);
     const osc = showNodeGraphModule("polyBlep", { x: 450, y: 50 }, options);
     return { gate, osc };
   });

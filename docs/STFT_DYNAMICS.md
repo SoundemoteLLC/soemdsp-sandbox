@@ -1,4 +1,4 @@
-# STFT Contrast And STFT Gate
+# Spectral Contrast And Spectral Gate
 
 Feature tracking and proposed modules: [STFT_ROADMAP.md](STFT_ROADMAP.md).
 Standalone IIR Vocoder development: [VOCODER_ROADMAP.md](VOCODER_ROADMAP.md).
@@ -21,7 +21,7 @@ No JavaScript DSP or drawing fallback was added. Vocoder is unchanged.
   no allocation inside audio processing. Finite-but-unrepresentable float FFT
   input and non-finite state recover locally; there is no audio level clipper.
 
-## STFT Contrast
+## Spectral Contrast
 
 32 overlapping logarithmic analysis regions cover 40 Hz through Nyquist.
 One-sided Parseval-normalized bin power is distributed between neighboring
@@ -48,7 +48,7 @@ Ratio 1 to hear relative contrast alone. Compare narrow and broad Scale. For
 neutral reference use Contrast 0, Ratio 1, Output Gain 0; Mix 0 has the same
 fixed delay. This is not a Soundgoodizer/Maximus clone.
 
-## STFT Gate
+## Spectral Gate
 
 Each bin has a variable Knee around its threshold (default 6 dB, preserving
 the original behavior). Knee 0 hard-switches at the threshold; positive values

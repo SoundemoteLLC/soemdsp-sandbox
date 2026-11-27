@@ -22,7 +22,7 @@ design/listening proof. Check items only after implementation and verification.
 
 Implementation details: [STFT_DYNAMICS.md](STFT_DYNAMICS.md).
 
-### STFT Contrast
+### Spectral Contrast
 
 - [x] Contrast, Scale, Threshold, Ratio, Attack, Release, Max Boost, Output Gain, Mix.
 - [x] Relative contrast over 32 log-frequency regions; separate downward compression.
@@ -45,7 +45,7 @@ Proposed controls and tools, in priority order:
 - Decision: upward-compression/expansion modes merit a distinct dynamics recipe;
   do not quietly change what the existing Ratio means.
 
-### STFT Gate
+### Spectral Gate
 
 - [x] Manual / Learn / Use Profile, Ready output, Threshold, Margin, Depth, Knee.
 - [x] Attack, retriggerable per-bin Hold, Release, neighboring-bin Smooth, Mix.

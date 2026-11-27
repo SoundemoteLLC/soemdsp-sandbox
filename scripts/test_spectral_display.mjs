@@ -50,14 +50,14 @@ const wasm = async (name) => (await WebAssembly.instantiate(
   ok('Vocoder: a Bands change shows the incoming bank with the DSP crossfade weight', sawIncoming && sawWeight);
   ok('Vocoder: after the crossfade the new layout is the sounding bank', x.soemdsp_vocoder_display_count(h, 0) === 48);
 }
-for (const [name, prefix] of [['stft_gate', 'soemdsp_stft_gate'], ['stft_contrast', 'soemdsp_stft_contrast']]) {
+for (const [name, prefix] of [['spectral_gate', 'soemdsp_spectral_gate'], ['spectral_contrast', 'soemdsp_spectral_contrast']]) {
   const x = await wasm(name);
   const f = (k) => x[`${prefix}_${k}`];
   const h = f('create')();
   ok(`${name}: no frames before audio`, f('display_frames')(h) === 0);
   for (let i = 0; i < SR / 4; i += 1) {
     const v = sine(2000, 0.5)(i);
-    if (name === 'stft_gate') f('sample')(h, v, v, 0, -60, 3, 60, 5, 100, 0.5, 1, SR);
+    if (name === 'spectral_gate') f('sample')(h, v, v, 0, -60, 3, 60, 5, 100, 0.5, 1, SR);
     else f('sample')(h, v, v, -0.35, 1, -24, 2, 10, 100, 18, 0, 1, SR);
   }
   const bins = f('display_bins')();

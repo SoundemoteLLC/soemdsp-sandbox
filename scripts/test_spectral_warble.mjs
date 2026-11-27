@@ -251,7 +251,7 @@ for (const drunk of [0, 0.5, 1]) { let acc = 0; for (let seed = 1; seed <= 24; +
   const defs = read('../public/node-graph-module-definitions.js');
   const worklet = read('../public/node-live-audio-worklet-native-graph.js');
   const engine = read('../native_modules/graph_engine/graph_engine.cpp');
-  const warbleDef = defs.slice(defs.indexOf('  spectralWarble: {'), defs.indexOf('  stftContrast: {'));
+  const warbleDef = defs.slice(defs.indexOf('  spectralWarble: {'), defs.indexOf('  spectralContrast: {'));
   const wk = worklet.slice(worklet.indexOf('if (type === "spectralWarble") {'), worklet.indexOf('if (type === "spectralSmear") {'));
   const gi = engine.slice(engine.indexOf('if (typeId == kTypeSpectralWarble) {'), engine.indexOf('if (typeId == kTypeSpectralSmear) {'));
   const demo = JSON.parse(fs.readFileSync(new URL('../patches/demo_patches/spectral_warble.json', import.meta.url), 'utf8')).nodes.find(n => n.type === 'spectralWarble').params;

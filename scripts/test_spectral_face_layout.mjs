@@ -17,7 +17,7 @@ let chromium;
 try { ({ chromium } = await import("playwright")); } catch { ({ chromium } = createRequire(path.join(root, "package.json"))("playwright")); }
 
 const SPECTRAL = ["spectralBlur", "spectralWarble", "spectralSmear", "spectralWarp", "spectralCrossSynthesis", "spectralDelay",
-  "spectralFreeze", "stftContrast", "stftGate", "spectralPrism"];
+  "spectralFreeze", "spectralContrast", "spectralGate", "spectralPrism"];
 const SEEDED = ["spectralBlur", "spectralWarble", "spectralSmear", "spectralPrism"];
 
 let server = null;
@@ -96,7 +96,7 @@ try {
       await wait(100);
     }
     return out;
-  }, ["spectralSmear", "stftContrast", "spectralPrism"]);
+  }, ["spectralSmear", "spectralContrast", "spectralPrism"]);
   for (const [type, c] of Object.entries(curve)) {
     assert.ok(c.field && c.label === "Curve", `${type}: Display Settings has a Curve field ${JSON.stringify(c)}`);
     assert.ok(c.before === 1 && c.stored < 1 && c.normalized === c.stored, `${type}: the Curve field sets the display spacing ${JSON.stringify(c)}`);

@@ -2,7 +2,7 @@
 // renderer (public/lib/spectral-display-styles.js). Display only, no DSP.
 //
 // Two sources, both read-only:
-//   • Native taps: Vocoder band envelopes, STFT Gate / Contrast per-bin power
+//   • Native taps: Vocoder band envelopes, Spectral Gate / Contrast per-bin power
 //     and gain (the arrays the audio itself uses; *_display_* exports).
 //   • Shared analysis core (public/lib/spectral-analysis.js) on the module's
 //     own output (scope ring `${id}:Mono`) and input (buffered visual input).
@@ -19,8 +19,8 @@
 const SPECTRAL_DISPLAY_SOURCES = Object.freeze({
   spectralPrism: Object.freeze({ tap: "prism" }),
   vocoder: Object.freeze({ tap: "vocoder" }),
-  stftGate: Object.freeze({ tap: "stft", prefix: "soemdsp_stft_gate" }),
-  stftContrast: Object.freeze({ tap: "stft", prefix: "soemdsp_stft_contrast" }),
+  spectralGate: Object.freeze({ tap: "stft", prefix: "soemdsp_spectral_gate" }),
+  spectralContrast: Object.freeze({ tap: "stft", prefix: "soemdsp_spectral_contrast" }),
   spectralBlur: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),
   spectralWarble: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),
   spectralSmear: Object.freeze({ lanes: Object.freeze([["A", "out"], ["B", "In"]]) }),
@@ -90,7 +90,7 @@ NodeLiveAudioProcessor.prototype.spectralDisplayVocoder = function spectralDispl
   dataPorts.push([nodeId, "SpectralMeta", new Float32Array([state.serial, incoming ? native.soemdsp_vocoder_display_weight(h) : 0, 0])]);
 };
 
-/** STFT Gate / Contrast: input bin power and the gain the audio applies. */
+/** Spectral Gate / Contrast: input bin power and the gain the audio applies. */
 NodeLiveAudioProcessor.prototype.spectralDisplayStft = function spectralDisplayStft(nodeId, state, dataPorts, prefix) {
   const native = this.nativeGraph;
   const fn = (name) => native?.[`${prefix}_${name}`];

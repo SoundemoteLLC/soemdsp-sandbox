@@ -918,21 +918,21 @@ extern "C" double soemdsp_spectral_smear_right(int h);
 extern "C" void soemdsp_spectral_smear_set_amplitude_smooth(int h, double ms);
 extern "C" void soemdsp_spectral_smear_set_blur_cents(int h, double cents);
 extern "C" int soemdsp_spectral_smear_set_fft_size(int h, int length);
-extern "C" int soemdsp_stft_contrast_create();
-extern "C" void soemdsp_stft_contrast_destroy(int handle);
-extern "C" double soemdsp_stft_contrast_sample(int h, double l, double r, double contrast,
+extern "C" int soemdsp_spectral_contrast_create();
+extern "C" void soemdsp_spectral_contrast_destroy(int handle);
+extern "C" double soemdsp_spectral_contrast_sample(int h, double l, double r, double contrast,
   double scale, double threshold, double ratio, double attack, double release,
   double boost, double gain, double mix, double rate);
-extern "C" double soemdsp_stft_contrast_right(int handle);
-extern "C" int soemdsp_stft_gate_create();
-extern "C" void soemdsp_stft_gate_destroy(int handle);
-extern "C" void soemdsp_stft_gate_set_knee(int handle, double knee);
-extern "C" void soemdsp_stft_gate_set_hold(int handle, double milliseconds);
-extern "C" double soemdsp_stft_gate_sample(int h, double l, double r, int profile,
+extern "C" double soemdsp_spectral_contrast_right(int handle);
+extern "C" int soemdsp_spectral_gate_create();
+extern "C" void soemdsp_spectral_gate_destroy(int handle);
+extern "C" void soemdsp_spectral_gate_set_knee(int handle, double knee);
+extern "C" void soemdsp_spectral_gate_set_hold(int handle, double milliseconds);
+extern "C" double soemdsp_spectral_gate_sample(int h, double l, double r, int profile,
   double threshold, double margin, double depth, double attack, double release,
   double smooth, double mix, double rate);
-extern "C" double soemdsp_stft_gate_right(int handle);
-extern "C" double soemdsp_stft_gate_ready(int handle);
+extern "C" double soemdsp_spectral_gate_right(int handle);
+extern "C" double soemdsp_spectral_gate_ready(int handle);
 extern "C" void soemdsp_noise_conv_reverb_destroy(int handle);
 extern "C" void soemdsp_noise_conv_reverb_reset(int handle);
 extern "C" void soemdsp_noise_conv_reverb_set_seed(int handle, double seed);
@@ -2701,8 +2701,8 @@ static const int kTypeEarlyReflectionConvolution = 274;
 static const int kTypeSpectralDelay = 275;
 static const int kTypeMaterialResonator = 276;
 static const int kTypeDispersion = 277;
-static const int kTypeStftContrast = 270;
-static const int kTypeStftGate = 271;
+static const int kTypeSpectralContrast = 270;
+static const int kTypeSpectralGate = 271;
 
 static const int kPortMono = 0;
 static const int kPortLeft = 1;
@@ -3427,10 +3427,10 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_dispersion_destroy(handle);
   } else if (kind == kTypeEarlyReflectionConvolution) {
     soemdsp_early_reflection_convolution_destroy(handle);
-  } else if (kind == kTypeStftContrast) {
-    soemdsp_stft_contrast_destroy(handle);
-  } else if (kind == kTypeStftGate) {
-    soemdsp_stft_gate_destroy(handle);
+  } else if (kind == kTypeSpectralContrast) {
+    soemdsp_spectral_contrast_destroy(handle);
+  } else if (kind == kTypeSpectralGate) {
+    soemdsp_spectral_gate_destroy(handle);
   } else if (kind == kTypeVelvetNoise) {
     soemdsp_velvet_noise_destroy(handle);
   } else if (kind == kTypeSoftpopOscillator) {
@@ -5261,8 +5261,8 @@ static void init_node_defaults(Node& n, int typeId) {
   if(typeId==kTypeDispersion){init_control(n.frequency,300,false);init_control(n.stages,50,true);init_control(n.width,2,false);init_control(n.shape,0,false);init_control(n.mode,0,true);init_control(n.pan,0,false);init_control(n.mix,1,false);
    init_control(n.waveform,1,true);init_control(n.timingMode,1,true);init_control(n.center,15,false);init_control(n.lpfFrequency,8000,false);init_control(n.diffusionAmount,0,false);init_control(n.resonance,1,false);init_control(n.feedback,1,false);init_control(n.lfoVariation,0,false);init_control(n.gainDb,0,false);
   }
-  if (typeId == kTypeStftContrast || typeId == kTypeStftGate) {
-    const bool gate = typeId == kTypeStftGate;
+  if (typeId == kTypeSpectralContrast || typeId == kTypeSpectralGate) {
+    const bool gate = typeId == kTypeSpectralGate;
     init_control(n.shape, gate ? 0.5 : -0.35, false);
     init_control(n.width, gate ? 3 : 1, false);
     init_control(n.center, gate ? -60 : -24, false);
@@ -6111,8 +6111,8 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeSpectralDelay) return soemdsp_spectral_delay_create();
   if(typeId==kTypeMaterialResonator)return soemdsp_material_resonator_create();
   if(typeId==kTypeDispersion)return soemdsp_dispersion_create();
-  if (typeId == kTypeStftContrast) return soemdsp_stft_contrast_create();
-  if (typeId == kTypeStftGate) return soemdsp_stft_gate_create();
+  if (typeId == kTypeSpectralContrast) return soemdsp_spectral_contrast_create();
+  if (typeId == kTypeSpectralGate) return soemdsp_spectral_gate_create();
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
   if (typeId == kTypeSoftpopFilter) return soemdsp_softpop_filter_create();
   if (typeId == kTypeSoftpop2) return soemdsp_softpop2_create();
@@ -16508,7 +16508,7 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
   using namespace soemdsp::routing;
   const StereoRoute route = stereo_route(probe_stereo_route_wiring(g, node));
   mix_node_inputs(g, node, frames);
-  const bool gate = node.typeId == kTypeStftGate;
+  const bool gate = node.typeId == kTypeSpectralGate;
   for (int f = 0; f < frames; ++f) {
     control_frame(g, node, f);
     const double m = g.mixMono[f], l = g.mixLeft[f], r = g.mixRight[f];
@@ -16542,23 +16542,23 @@ static void process_stft_dynamics(Circuit& g, Node& node, int frames) {
         control_audio(g, node.width, f), control_audio(g, node.diffusionAmount, f), control_audio(g, node.mix, f), g.sampleRate);
       yr = soemdsp_spectral_smear_right(node.nativeHandle);
     } else if (gate) {
-      soemdsp_stft_gate_set_knee(node.nativeHandle, control_audio(g, node.resonance, f));
-      soemdsp_stft_gate_set_hold(node.nativeHandle, control_audio(g, node.diffusionSize, f));
-      y = soemdsp_stft_gate_sample(node.nativeHandle, left, right,
+      soemdsp_spectral_gate_set_knee(node.nativeHandle, control_audio(g, node.resonance, f));
+      soemdsp_spectral_gate_set_hold(node.nativeHandle, control_audio(g, node.diffusionSize, f));
+      y = soemdsp_spectral_gate_sample(node.nativeHandle, left, right,
         (int)control_audio(g, node.mode, f), control_audio(g, node.center, f),
         control_audio(g, node.width, f), control_audio(g, node.feedback, f),
         control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionAmount, f),
         control_audio(g, node.shape, f), control_audio(g, node.mix, f), g.sampleRate);
-      yr = soemdsp_stft_gate_right(node.nativeHandle);
-      node.buf[kPortPhase01][f] = soemdsp_stft_gate_ready(node.nativeHandle);
+      yr = soemdsp_spectral_gate_right(node.nativeHandle);
+      node.buf[kPortPhase01][f] = soemdsp_spectral_gate_ready(node.nativeHandle);
     } else {
-      y = soemdsp_stft_contrast_sample(node.nativeHandle, left, right,
+      y = soemdsp_spectral_contrast_sample(node.nativeHandle, left, right,
         control_audio(g, node.shape, f), control_audio(g, node.width, f),
         control_audio(g, node.center, f), control_audio(g, node.resonance, f),
         control_audio(g, node.offsetMs, f), control_audio(g, node.diffusionAmount, f),
         control_audio(g, node.feedback, f), control_audio(g, node.level, f),
         control_audio(g, node.mix, f), g.sampleRate);
-      yr = soemdsp_stft_contrast_right(node.nativeHandle);
+      yr = soemdsp_spectral_contrast_right(node.nativeHandle);
     }
     if (node.typeId == kTypeSpectralBlur || node.typeId == kTypeSpectralWarble || node.typeId == kTypeSpectralSmear) {
       // Amplitude: the module's output level, after Mix, one signed multiply (HP-24 rule: negative inverts, no clamp). Its Control is smoothed like
@@ -18160,7 +18160,7 @@ static bool type_needs_native(int typeId) {
     || typeId == kTypeSpectralDelay
     || typeId == kTypeMaterialResonator
     || typeId == kTypeDispersion
-    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralWarble || typeId == kTypeSpectralSmear || typeId == kTypeSpectralFreeze
+    || typeId == kTypeSpectralContrast || typeId == kTypeSpectralGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralWarble || typeId == kTypeSpectralSmear || typeId == kTypeSpectralFreeze
     || typeId == kTypeSampleHold
     || typeId == kTypeMinMax
     || typeId == kTypeClock
@@ -18325,7 +18325,7 @@ static bool type_needs_native(int typeId) {
 // (limited by memory, not by a slot count).
 static bool type_uses_pool(int typeId) {
   if (typeId == kTypeSpectralPrism || typeId == kTypeSpectralWarp || typeId == kTypeSpectralCrossSynthesis || typeId == kTypeDispersion || typeId == kTypeMaterialResonator || typeId == kTypeSpectralDelay || typeId == kTypeEarlyReflectionConvolution || typeId == kTypeConvolutionResonator || typeId == kTypeVocoder
-    || typeId == kTypeStftContrast || typeId == kTypeStftGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralWarble || typeId == kTypeSpectralSmear || typeId == kTypeSpectralFreeze) return true;
+    || typeId == kTypeSpectralContrast || typeId == kTypeSpectralGate || typeId == kTypeSpectralBlur || typeId == kTypeSpectralWarble || typeId == kTypeSpectralSmear || typeId == kTypeSpectralFreeze) return true;
   return typeId == kTypeVelvetNoise || typeId == kTypeVelvetReverb || typeId == kTypeNoiseConvReverb
     || typeId == kTypeSoemReverb || is_sabrina_type(typeId)
     || typeId == kTypeSampleDelay || typeId == kTypeExponentialDelay || typeId == kTypeDelayEffect
@@ -19938,7 +19938,7 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if(node.typeId==kTypeMaterialResonator){process_material_resonator(g,node,frames);return;}
     if(node.typeId==kTypeDispersion){process_dispersion(g,node,frames);return;}
-    if (node.typeId == kTypeStftContrast || node.typeId == kTypeStftGate || node.typeId == kTypeSpectralBlur
+    if (node.typeId == kTypeSpectralContrast || node.typeId == kTypeSpectralGate || node.typeId == kTypeSpectralBlur
         || node.typeId == kTypeSpectralWarble || node.typeId == kTypeSpectralSmear) {
       process_stft_dynamics(g, node, frames);
       return;

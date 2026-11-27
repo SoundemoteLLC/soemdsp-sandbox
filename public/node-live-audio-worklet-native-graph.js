@@ -308,8 +308,8 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   spectralPrism: 283,
   pitchMutator: 280,
   gradient: 286,
-  stftContrast: 270,
-  stftGate: 271,
+  spectralContrast: 270,
+  spectralGate: 271,
 });
 
 // Param IDs — keep in sync with graph_engine.cpp kParam*.
@@ -650,7 +650,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "tailCurve") return P.NATIVE_GRAPH_PARAM_SATURATE;
     if (k === "precision") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
   }
-  if (t === "stftContrast") {
+  if (t === "spectralContrast") {
     if (k === "contrast") return P.NATIVE_GRAPH_PARAM_SHAPE;
     if (k === "scale") return P.NATIVE_GRAPH_PARAM_WIDTH;
     if (k === "thresholdDb") return P.NATIVE_GRAPH_PARAM_CENTER;
@@ -741,7 +741,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "stereoSpread") return P.NATIVE_GRAPH_PARAM_PAN;
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
   }
-  if (t === "stftGate") {
+  if (t === "spectralGate") {
     if (k === "holdMs") return P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE;
     if (k === "kneeDb") return P.NATIVE_GRAPH_PARAM_RESONANCE;
     if (k === "profileMode") return P.NATIVE_GRAPH_PARAM_MODE;
@@ -1048,7 +1048,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "unit" || p === "0-1" || p === "0\u20131" || p === "0\u20261") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01; // (Pitch In + Pitch knob) / 127
     if (p === "velocity") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
-  if (t === "stftGate" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
+  if (t === "spectralGate" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "spectralFreeze" && p === "held") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "earlyReflectionConvolution" && p === "ready") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   if (t === "earlyReflectionConvolution" && p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_IS_IDLE;
@@ -6407,7 +6407,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
-    if (type === "stftContrast") {
+    if (type === "spectralContrast") {
       push("contrast", P.NATIVE_GRAPH_PARAM_SHAPE, cont("contrast", -0.35));
       push("scale", P.NATIVE_GRAPH_PARAM_WIDTH, cont("scale", 1));
       push("thresholdDb", P.NATIVE_GRAPH_PARAM_CENTER, cont("thresholdDb", -24));
@@ -6419,7 +6419,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
       continue;
     }
-    if (type === "stftGate") {
+    if (type === "spectralGate") {
       push("holdMs", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("holdMs", 0));
       push("kneeDb", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("kneeDb", 6));
       push("profileMode", P.NATIVE_GRAPH_PARAM_MODE, disc("profileMode", 0));

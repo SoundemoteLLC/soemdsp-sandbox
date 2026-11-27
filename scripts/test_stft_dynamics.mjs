@@ -4,8 +4,8 @@ import vm from "node:vm";
 const root = new URL("../", import.meta.url), sr = 48000;
 const definitions = fs.readFileSync(new URL("public/node-graph-module-definitions.js", root), "utf8");
 const cases = [
-  ["stft_contrast", "stftContrast", "stftGate", ["contrast", "scale", "thresholdDb", "ratio", "attackMs", "releaseMs", "maxBoostDb", "gainDb", "mix"]],
-  ["stft_gate", "stftGate", "vocoder", ["profileMode", "thresholdDb", "marginDb", "depthDb", "attackMs", "releaseMs", "smooth", "mix"]],
+  ["spectral_contrast", "spectralContrast", "spectralGate", ["contrast", "scale", "thresholdDb", "ratio", "attackMs", "releaseMs", "maxBoostDb", "gainDb", "mix"]],
+  ["spectral_gate", "spectralGate", "vocoder", ["profileMode", "thresholdDb", "marginDb", "depthDb", "attackMs", "releaseMs", "smooth", "mix"]],
 ];
 const modules = {};
 for (const [snake, type, next, order] of cases) {
@@ -23,7 +23,7 @@ for (const [snake, type, next, order] of cases) {
     create: x[prefix + "create"], destroy: x[prefix + "destroy"], reset: x[prefix + "reset"],
     tick(h, l, r, p = {}, rate = sr) {
       const params = { ...defaults, ...p };
-      if (type === "stftGate") {
+      if (type === "spectralGate") {
         x[prefix + "set_knee"](h, params.kneeDb);
         x[prefix + "set_hold"](h, params.holdMs);
       }
@@ -31,7 +31,7 @@ for (const [snake, type, next, order] of cases) {
     }, right: x[prefix + "right"] };
   assert.equal(x[prefix + "latency"](), 1024);
 }
-const c = modules.stftContrast, g = modules.stftGate;
+const c = modules.spectralContrast, g = modules.spectralGate;
 const neutral = { contrast: 0, ratio: 1, gainDb: 0 };
 const tone = (hz, i) => Math.sin(2 * Math.PI * hz * i / sr);
 function render(m, p, signal, length = 16384, h = m.create()) {
@@ -139,17 +139,17 @@ console.log("Gate Hold: zero default, timed opening/expiry at 44.1/48/96 kHz, re
 let seed = 1;
 function noise() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed / 0x100000000 - 0.5) * 0.01; }
 const gh = g.create();
-assert.equal(g.x.soemdsp_stft_gate_ready(gh), 0);
+assert.equal(g.x.soemdsp_spectral_gate_ready(gh), 0);
 for (let i = 0; i < sr; ++i) { const v = noise(); g.tick(gh, v, v, { profileMode: 1 }); }
-assert.equal(g.x.soemdsp_stft_gate_ready(gh), 1);
-const frames = g.x.soemdsp_stft_gate_profile_frames(gh);
+assert.equal(g.x.soemdsp_spectral_gate_ready(gh), 1);
+const frames = g.x.soemdsp_spectral_gate_profile_frames(gh);
 assert.ok(frames > 100);
 let inputPower = 0, outputPower = 0;
 for (let i = 0; i < sr; ++i) {
   const v = noise(), y = g.tick(gh, v, v, { profileMode: 2, marginDb: 9, attackMs: 0, releaseMs: 0 });
   if (i > 4096) { inputPower += v * v; outputPower += y * y; }
 }
-assert.equal(g.x.soemdsp_stft_gate_profile_frames(gh), frames, "Use Profile freezes learning");
+assert.equal(g.x.soemdsp_spectral_gate_profile_frames(gh), frames, "Use Profile freezes learning");
 const noiseReductionDb = 10 * Math.log10(outputPower / inputPower);
 assert.ok(noiseReductionDb < -12, `learned broadband noise reduction: ${noiseReductionDb}`);
 let wantedPower = 0;
@@ -159,16 +159,16 @@ for (let i = 0; i < sr / 2; ++i) {
   if (i > 4096) wantedPower += y * y;
 }
 assert.ok(Math.sqrt(wantedPower / (sr / 2 - 4097)) > 0.15, "wanted tone survives learned gate");
-g.reset(gh); assert.equal(g.x.soemdsp_stft_gate_ready(gh), 1, "signal reset retains a frozen profile");
+g.reset(gh); assert.equal(g.x.soemdsp_spectral_gate_ready(gh), 1, "signal reset retains a frozen profile");
 g.tick(gh, 0, 0, { profileMode: 1 });
-assert.equal(g.x.soemdsp_stft_gate_ready(gh), 0, "a new Learn clears the old profile");
+assert.equal(g.x.soemdsp_spectral_gate_ready(gh), 0, "a new Learn clears the old profile");
 for (let i = 0; i < 512; ++i) g.tick(gh, 0.01, 0.01, { profileMode: 1 });
-assert.equal(g.x.soemdsp_stft_gate_ready(gh), 0, "Learn waits for a full fresh window");
+assert.equal(g.x.soemdsp_spectral_gate_ready(gh), 0, "Learn waits for a full fresh window");
 for (let i = 0; i < 1024; ++i) g.tick(gh, 0.01, 0.01, { profileMode: 1 });
-assert.equal(g.x.soemdsp_stft_gate_ready(gh), 1);
+assert.equal(g.x.soemdsp_spectral_gate_ready(gh), 1);
 g.tick(gh, 0, 0, { profileMode: 2 }); g.reset(gh);
 g.tick(gh, 0, 0, { profileMode: 2 }, 44100);
-assert.equal(g.x.soemdsp_stft_gate_ready(gh), 0, "sample-rate change invalidates even a retained profile");
+assert.equal(g.x.soemdsp_spectral_gate_ready(gh), 0, "sample-rate change invalidates even a retained profile");
 g.destroy(gh);
 for (const m of [c, g]) {
   for (const rate of [8000, 44100, 96000]) {

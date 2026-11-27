@@ -197,7 +197,7 @@ template<bool Gate> struct Engine {
     return result;
   }
 };
-// Display tap (read-only), shared by STFT Gate and STFT Contrast: per-bin input
+// Display tap (read-only), shared by Spectral Gate and Spectral Contrast: per-bin input
 // power (one-sided, Parseval-normalized, the same units as Threshold) and the
 // per-bin gain in dB the audio applies. bins = size / 2 + 1, bin k is at
 // k * rate / size. frames counts analysis hops (changes when new data exists).

@@ -1163,15 +1163,15 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Native STFT ensemble warble: every partial wobbles in pitch on its own (Depth in cents, Rate, Drunk), sung by several voices spread in stereo. A lush, organic chorus with no noise and no smear. Processing delay follows FFT Size.",
     notes: ["spectral", "STFT", "warble", "chorus", "ensemble", "vibrato", "stereo", "native"],
   },
-  stftContrast: {
+  spectralContrast: {
     browserEmoji: "🌊",
-    category: "dynamics", label: "STFT Contrast",
+    category: "dynamics", label: "Spectral Contrast",
     description: "Stereo-linked spectral contrast and compression across overlapping logarithmic regions. Reveal quiet detail or emphasize spectral peaks, with explicit boost limits and no hidden limiter.",
     notes: ["STFT", "spectral", "contrast", "compressor", "native"],
   },
-  stftGate: {
+  spectralGate: {
     browserEmoji: "🌊",
-    category: "dynamics", label: "STFT Gate",
+    category: "dynamics", label: "Spectral Gate",
     description: "Stereo-linked spectral gate with manual thresholds or an engine-session learned noise profile. Learn a noise-only passage, then Use Profile; Ready reports profile availability.",
     notes: ["STFT", "spectral", "gate", "denoise", "native"],
   },
@@ -4056,13 +4056,13 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     source: "native_modules/spectral_smear/spectral_smear.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_smear/spectral_smear.cpp",
   },
-  stftContrast: {
-    source: "native_modules/stft_contrast/stft_contrast.cpp",
-    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/stft_contrast/stft_contrast.cpp",
+  spectralContrast: {
+    source: "native_modules/spectral_contrast/spectral_contrast.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_contrast/spectral_contrast.cpp",
   },
-  stftGate: {
-    source: "native_modules/stft_gate/stft_gate.cpp",
-    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/stft_gate/stft_gate.cpp",
+  spectralGate: {
+    source: "native_modules/spectral_gate/spectral_gate.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/spectral_gate/spectral_gate.cpp",
   },
   pumpCurve: {
     source: "native_modules/pump_curve/pump_curve.cpp",

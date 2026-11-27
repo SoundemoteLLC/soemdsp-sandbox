@@ -10,8 +10,8 @@ Fix everything below in one pass after testing is complete.
 3. Circular Spectrogram - tested
 4. Spectrum Circle - tested
 5. Vocoder - tested (needs rework)
-6. STFT Gate - tested
-7. STFT Contrast - tested
+6. Spectral Gate - tested
+7. Spectral Contrast - tested
 8. Spectral Blur (particle face + Cloud mode sound) - tested
 9. Spectral Freeze - tested
 10. Spectral Delay - tested (face needs redesign)
@@ -54,7 +54,7 @@ Main problem: the face is a generic bar-based spectral display, not a picture of
 - Bar count must come from the Vocoder's own Bands parameter (one bar per real band at its real centre), not from a separate Display Settings bar count. Remove the display bar-count setting for the Vocoder face.
 - Width (band width / Q) must be visible: bars get wider or narrower as Width changes, drawn at each band's true bandwidth on the frequency axis.
 - In general the face should show the vocoder's settings and state (bands, widths, envelopes), driven by the native band tap, not a re-binned spectrum.
-## 6. STFT Gate
+## 6. Spectral Gate
 
 Working, with changes:
 
@@ -64,7 +64,7 @@ Working, with changes:
 - Wrong settings set: it uses the generic "Spectral" Display Settings, which include a Particles setting that does nothing here. Each module should only show settings its styles use; remove irrelevant ones (no dead settings).
 - Band gain bars not pixel perfect: bar widths/gaps are uneven, which makes it hard to read. Snap bars to whole pixels with even gaps at every zoom.
 - Band gain is unreadable: there's a centre line (colour from gradient, keep) with bars animating above and below it, and it isn't clear what above vs below, bright vs dark, or dim means. Redesign so the meaning is obvious: e.g. one clear encoding (bar height = gain reduction in dB from the top line, or input level vs gate threshold), a single consistent use of brightness, and a short real description in the docked tips panel. Document the encoding.
-## 7. STFT Contrast
+## 7. Spectral Contrast
 
 Looks good. Changes:
 
@@ -75,7 +75,7 @@ Looks good. Changes:
 All processor faces use the same generic "Spectral" Display Settings, which makes every one clunky and shows dead options (e.g. Particles on Gate). Direction from Argi:
 
 - Give each module its own face design and its own Display Settings, containing only what that face uses.
-- Only STFT Contrast is limited to a single style (Overlay); other modules may keep several styles where it makes sense. Wherever a module has only one style, put the effort into options tailored to making that style look great.
+- Only Spectral Contrast is limited to a single style (Overlay); other modules may keep several styles where it makes sense. Wherever a module has only one style, put the effort into options tailored to making that style look great.
 - Shared rendering/analysis code can stay shared underneath; the user-facing settings and look are per module.- Later, Argi will go through each module and likely lock down one style per module; keep the style plumbing easy to restrict per module.
 ## 8. Spectral Blur
 

@@ -17,8 +17,8 @@ try {
   const ids = await page.evaluate(() => {
     const options = { record: false, autosaveWorkingPatch: false, skipLivePlan: true };
     const source = showNodeGraphModule("polyBlep", { x: 20, y: 40 }, options);
-    const contrast = showNodeGraphModule("stftContrast", { x: 260, y: 40 }, options);
-    const gate = showNodeGraphModule("stftGate", { x: 620, y: 40 }, options);
+    const contrast = showNodeGraphModule("spectralContrast", { x: 260, y: 40 }, options);
+    const gate = showNodeGraphModule("spectralGate", { x: 620, y: 40 }, options);
     if (!source || !contrast || !gate) throw new Error("STFT modules must be spawnable in the default product");
     const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
     patch.nodes = patch.nodes.filter(n => [source, contrast, gate].includes(n.id) || n.type === "output");
@@ -71,8 +71,8 @@ try {
     }
   }
   assert.ok(reports.every(r => r.width > 0 && r.height > 0 && r.renderer === "spectralStyle"));
-  assert.ok(reports.filter(r => r.type === "stftGate").every(r => Number(r.knee) === 0), "hard knee persists through the normal control path");
-  assert.ok(reports.filter(r => r.type === "stftGate").every(r => Number(r.hold) === 5000 && Number(r.holdMax) === 5000), "Hold accepts 5000 ms and expands its UI range");
+  assert.ok(reports.filter(r => r.type === "spectralGate").every(r => Number(r.knee) === 0), "hard knee persists through the normal control path");
+  assert.ok(reports.filter(r => r.type === "spectralGate").every(r => Number(r.hold) === 5000 && Number(r.holdMax) === 5000), "Hold accepts 5000 ms and expands its UI range");
   assert.deepEqual(errors, []); console.log(JSON.stringify({ reports, errors }));
   await page.evaluate(() => setNodeGraphLiveOutputEnabled(false));
 } finally { await browser.close(); }

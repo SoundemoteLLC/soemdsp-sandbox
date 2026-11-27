@@ -1,15 +1,15 @@
-// soemdsp-native-module: stft_contrast
-// soemdsp-native-label: STFT Contrast
-// soemdsp-native-target: stftContrast
+// soemdsp-native-module: spectral_contrast
+// soemdsp-native-label: Spectral Contrast
+// soemdsp-native-target: spectralContrast
 // soemdsp-native-kind: dynamics
 #include "spectral_engine.h"
 
 namespace {
 using Pool = soemdsp_spectral::Pool<false>;
 const char metadata[] = R"json({
-  "module": "stft_contrast",
-  "targetType": "stftContrast",
-  "label": "STFT Contrast",
+  "module": "spectral_contrast",
+  "targetType": "spectralContrast",
+  "label": "Spectral Contrast",
   "kind": "dynamics",
   "inputs": [
     "In",
@@ -123,10 +123,10 @@ const char metadata[] = R"json({
   ]
 })json";
 }
-extern "C" int soemdsp_stft_contrast_create() { return Pool::create(); }
-extern "C" void soemdsp_stft_contrast_destroy(int h) { Pool::destroy(h); }
-extern "C" void soemdsp_stft_contrast_reset(int h) { if (auto* s = Pool::get(h)) s->reset(false); }
-extern "C" double soemdsp_stft_contrast_sample(int h, double left, double right,
+extern "C" int soemdsp_spectral_contrast_create() { return Pool::create(); }
+extern "C" void soemdsp_spectral_contrast_destroy(int h) { Pool::destroy(h); }
+extern "C" void soemdsp_spectral_contrast_reset(int h) { if (auto* s = Pool::get(h)) s->reset(false); }
+extern "C" double soemdsp_spectral_contrast_sample(int h, double left, double right,
 double contrast, double scale, double threshold, double ratio,
   double attack, double release, double boost, double gain, double mix, double rate) {
   auto* s = Pool::get(h); if (!s) return 0;
@@ -135,14 +135,14 @@ double contrast, double scale, double threshold, double ratio,
   p.attack = attack; p.release = release; p.boost = boost; p.gain = gain; p.mix = mix;
   return s->tick(left, right, p, rate);
 }
-extern "C" double soemdsp_stft_contrast_right(int h) { auto* s = Pool::get(h); return s ? s->right : 0; }
-extern "C" int soemdsp_stft_contrast_latency() { return soemdsp_spectral::size; }
-extern "C" int soemdsp_stft_contrast_version() { return 1; }
-extern "C" const char* soemdsp_stft_contrast_metadata_json() { return metadata; }
-extern "C" int soemdsp_stft_contrast_metadata_json_size() { return sizeof(metadata) - 1; }
-extern "C" int soemdsp_stft_contrast_display_bins() { return soemdsp_spectral::bins; }
-extern "C" double soemdsp_stft_contrast_display_size() { return soemdsp_spectral::size; }
-extern "C" const double* soemdsp_stft_contrast_display_power(int h) { return soemdsp_spectral::display_power(Pool::get(h)); }
-extern "C" const double* soemdsp_stft_contrast_display_gain(int h) { return soemdsp_spectral::display_gain(Pool::get(h)); }
-extern "C" double soemdsp_stft_contrast_display_rate(int h) { return soemdsp_spectral::display_rate(Pool::get(h)); }
-extern "C" double soemdsp_stft_contrast_display_frames(int h) { return soemdsp_spectral::display_frames(Pool::get(h)); }
+extern "C" double soemdsp_spectral_contrast_right(int h) { auto* s = Pool::get(h); return s ? s->right : 0; }
+extern "C" int soemdsp_spectral_contrast_latency() { return soemdsp_spectral::size; }
+extern "C" int soemdsp_spectral_contrast_version() { return 1; }
+extern "C" const char* soemdsp_spectral_contrast_metadata_json() { return metadata; }
+extern "C" int soemdsp_spectral_contrast_metadata_json_size() { return sizeof(metadata) - 1; }
+extern "C" int soemdsp_spectral_contrast_display_bins() { return soemdsp_spectral::bins; }
+extern "C" double soemdsp_spectral_contrast_display_size() { return soemdsp_spectral::size; }
+extern "C" const double* soemdsp_spectral_contrast_display_power(int h) { return soemdsp_spectral::display_power(Pool::get(h)); }
+extern "C" const double* soemdsp_spectral_contrast_display_gain(int h) { return soemdsp_spectral::display_gain(Pool::get(h)); }
+extern "C" double soemdsp_spectral_contrast_display_rate(int h) { return soemdsp_spectral::display_rate(Pool::get(h)); }
+extern "C" double soemdsp_spectral_contrast_display_frames(int h) { return soemdsp_spectral::display_frames(Pool::get(h)); }

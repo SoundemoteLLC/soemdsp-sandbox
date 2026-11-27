@@ -79,11 +79,11 @@ $modules = @(
   @{ Name = "spectral_smear"; Simd = $false; Exports = @(
     "soemdsp_spectral_smear_create", "soemdsp_spectral_smear_destroy", "soemdsp_spectral_smear_reset", "soemdsp_spectral_smear_sample", "soemdsp_spectral_smear_right", "soemdsp_spectral_smear_latency", "soemdsp_spectral_smear_version", "soemdsp_spectral_smear_metadata_json", "soemdsp_spectral_smear_metadata_json_size", "soemdsp_spectral_smear_set_fft_size", "soemdsp_spectral_smear_fft_size", "soemdsp_spectral_smear_latency_for_handle", "soemdsp_spectral_smear_set_smoothing", "soemdsp_spectral_smear_set_stereo", "soemdsp_spectral_smear_set_seed", "soemdsp_spectral_smear_set_overlap", "soemdsp_spectral_smear_overlap", "soemdsp_spectral_smear_set_blur_cents"
   ) }
-  @{ Name = "stft_contrast"; Simd = $false; Exports = @(
-    "soemdsp_stft_contrast_create", "soemdsp_stft_contrast_destroy", "soemdsp_stft_contrast_reset", "soemdsp_stft_contrast_sample", "soemdsp_stft_contrast_right", "soemdsp_stft_contrast_latency", "soemdsp_stft_contrast_version", "soemdsp_stft_contrast_metadata_json", "soemdsp_stft_contrast_metadata_json_size", "soemdsp_stft_contrast_display_bins", "soemdsp_stft_contrast_display_size", "soemdsp_stft_contrast_display_power", "soemdsp_stft_contrast_display_gain", "soemdsp_stft_contrast_display_rate", "soemdsp_stft_contrast_display_frames"
+  @{ Name = "spectral_contrast"; Simd = $false; Exports = @(
+    "soemdsp_spectral_contrast_create", "soemdsp_spectral_contrast_destroy", "soemdsp_spectral_contrast_reset", "soemdsp_spectral_contrast_sample", "soemdsp_spectral_contrast_right", "soemdsp_spectral_contrast_latency", "soemdsp_spectral_contrast_version", "soemdsp_spectral_contrast_metadata_json", "soemdsp_spectral_contrast_metadata_json_size", "soemdsp_spectral_contrast_display_bins", "soemdsp_spectral_contrast_display_size", "soemdsp_spectral_contrast_display_power", "soemdsp_spectral_contrast_display_gain", "soemdsp_spectral_contrast_display_rate", "soemdsp_spectral_contrast_display_frames"
   ) }
-  @{ Name = "stft_gate"; Simd = $false; Exports = @(
-    "soemdsp_stft_gate_create", "soemdsp_stft_gate_destroy", "soemdsp_stft_gate_reset", "soemdsp_stft_gate_sample", "soemdsp_stft_gate_right", "soemdsp_stft_gate_latency", "soemdsp_stft_gate_version", "soemdsp_stft_gate_metadata_json", "soemdsp_stft_gate_metadata_json_size", "soemdsp_stft_gate_ready", "soemdsp_stft_gate_profile_frames", "soemdsp_stft_gate_set_knee", "soemdsp_stft_gate_set_hold", "soemdsp_stft_gate_display_bins", "soemdsp_stft_gate_display_size", "soemdsp_stft_gate_display_power", "soemdsp_stft_gate_display_gain", "soemdsp_stft_gate_display_rate", "soemdsp_stft_gate_display_frames"
+  @{ Name = "spectral_gate"; Simd = $false; Exports = @(
+    "soemdsp_spectral_gate_create", "soemdsp_spectral_gate_destroy", "soemdsp_spectral_gate_reset", "soemdsp_spectral_gate_sample", "soemdsp_spectral_gate_right", "soemdsp_spectral_gate_latency", "soemdsp_spectral_gate_version", "soemdsp_spectral_gate_metadata_json", "soemdsp_spectral_gate_metadata_json_size", "soemdsp_spectral_gate_ready", "soemdsp_spectral_gate_profile_frames", "soemdsp_spectral_gate_set_knee", "soemdsp_spectral_gate_set_hold", "soemdsp_spectral_gate_display_bins", "soemdsp_spectral_gate_display_size", "soemdsp_spectral_gate_display_power", "soemdsp_spectral_gate_display_gain", "soemdsp_spectral_gate_display_rate", "soemdsp_spectral_gate_display_frames"
   ) }
   @{ Name = "vocoder"; Simd = $false; Exports = @(
     "soemdsp_vocoder_create", "soemdsp_vocoder_destroy", "soemdsp_vocoder_reset",
@@ -692,7 +692,7 @@ foreach ($module in $modules) {
   # the 48MB default; live audio still loads only the combined binary (512MB).
   if ($module.Name -eq "graph_engine") {
     $clangArgs += "-Wl,--max-memory=134217728"
-  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb", "convolution_resonator", "vocoder", "stft_contrast", "stft_gate", "spectral_delay")) {
+  } elseif ($module.Name -in @("soem_reverb", "delay_effect", "sabrina_reverb", "sample_delay", "exponential_delay", "ping_pong_delay", "lookahead_limiter", "wall_delay", "velvet_noise", "velvet_reverb", "noise_conv_reverb", "convolution_resonator", "vocoder", "spectral_contrast", "spectral_gate", "spectral_delay")) {
     $clangArgs += "-Wl,--max-memory=268435456"
   } else {
     $clangArgs += "-Wl,--max-memory=50331648"
