@@ -29,7 +29,9 @@ try {
     }
   }
   browser = await chromium.launch({ headless: true, channel: "chrome", args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
-  for (const file of ["", "perform.html"]) {
+  const selectedFile = process.env.GRADIENT_TEST_FILE;
+  const files = selectedFile ? [selectedFile === "index.html" ? "" : selectedFile] : ["", "perform.html"];
+  for (const file of files) {
     // Phone width: one column, 44 px rows.
     const page = await browser.newPage({ viewport: { width: 390, height: 860 } });
     const errors = [];
@@ -77,10 +79,64 @@ try {
       commitNodeGraphPatch(p, { status: "test moves" });
       out.clonedKeepsGradients = (cloneNodeGraphPatch(nodeGraphMvp.patch).gradients || []).length === 1;
       steps();
-      btn("Add stop at playhead", card).click();
       const g = () => nodeGraphMvp.patch.gradients[0];
+      btn("Snapshot", card).click();
       out.registered = g().params.map((x) => x.nodeId === a ? "a." + x.key : x.nodeId === b ? "b." + x.key : x.key).sort();
       out.snapshotSteps = steps();
+      const editButton = () => [...document.querySelectorAll("#nodeGradientsBody .node-gradient-top button")].find((x) => x.getAttribute("aria-label") === "Gradient edit mode");
+      editButton().click();
+      nodeGraphGradientPageSetPlayhead(g(), 0.5);
+      const pendingTargets = [];
+      for (const [nodeId, key] of [[a, "frequency"], [b, "floorDb"]]) {
+        const node = nodeGraphPatchNode(nodeId), slider = nodeGraphSliderForParameter(nodeId, key), meta = NodeGraphGradients.metaFor(node, key);
+        const held = Number(slider.dataset.domainValue), base = Number(node.params[key]);
+        const targetSlider = Math.min(0.95, NodeGraphGradients.toSlider(meta, base) + 0.08);
+        const target = NodeGraphGradients.fromSlider(meta, targetSlider);
+        setNodeSliderValue(slider, target, { interaction: "typed" });
+        pendingTargets.push({ nodeId, key, slider, held, heldThumb: Number(slider.value), base, target, targetSlider });
+      }
+      const untracked = nodeGraphPatchNode(a);
+      const untrackedKey = Object.keys(untracked.params).find((key) => key !== "frequency" && typeof untracked.params[key] === "number"
+        && NodeGraphGradients.metaFor(untracked, key) && nodeGraphSliderForParameter(a, key));
+      const untrackedSlider = nodeGraphSliderForParameter(a, untrackedKey), untrackedMeta = NodeGraphGradients.metaFor(untracked, untrackedKey);
+      const untrackedHeld = Number(untrackedSlider.dataset.domainValue), untrackedBase = Number(untracked.params[untrackedKey]);
+      const untrackedSliderTarget = Math.min(0.95, NodeGraphGradients.toSlider(untrackedMeta, untrackedBase) + 0.08);
+      const untrackedTarget = NodeGraphGradients.fromSlider(untrackedMeta, untrackedSliderTarget);
+      setNodeSliderValue(untrackedSlider, untrackedTarget, { interaction: "typed" });
+      pendingTargets.push({ nodeId: a, key: untrackedKey, slider: untrackedSlider, held: untrackedHeld, heldThumb: Number(untrackedSlider.value), base: untrackedBase, target: untrackedTarget, targetSlider: untrackedSliderTarget });
+      out.editPendingHeld = pendingTargets.every(({ nodeId, key, slider, held, heldThumb, base }) => nodeGraphPatchNode(nodeId).params[key] === base
+        && Number(slider.dataset.domainValue) === held && Number(slider.value) === heldThumb);
+      out.pendingGhosts = pendingTargets.every(({ slider }) => slider.closest("label")?.querySelector(".node-slider-readout")?.classList.contains("has-ghost-slider"))
+        && Boolean(document.querySelector("[data-gradient-pending-point]"));
+      btn("Snapshot", card).click();
+      out.pendingCleared = !nodeGraphGradientPageHasPendingValues();
+      out.editSnapshotAtPlayhead = Math.abs(g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9)?.pos - 0.5) < 1e-9;
+      out.pendingSnapshotParams = pendingTargets.every(({ nodeId, key, targetSlider }) => g().params.some((param) => param.nodeId === nodeId && param.key === key)
+        && Math.abs(Number(g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9)?.offsets?.[nodeId]?.[key])
+          - (targetSlider - Number(g().origin?.[nodeId]?.[key]))) < 1e-6);
+      out.snapshotDoesNotAdvance = Math.abs(g().position - 0.5) < 1e-9;
+      steps();
+      // A later unsnapped edit is pending only; switching Edit off discards it without touching the base param.
+      nodeGraphGradientPageSetPlayhead(g(), 0.8);
+      const discard = pendingTargets[0], discardBase = Number(nodeGraphPatchNode(discard.nodeId).params[discard.key]);
+      const discardMeta = NodeGraphGradients.metaFor(nodeGraphPatchNode(discard.nodeId), discard.key);
+      setNodeSliderValue(discard.slider, NodeGraphGradients.fromSlider(discardMeta, Math.min(0.9, NodeGraphGradients.toSlider(discardMeta, discardBase) + 0.04)), { interaction: "typed" });
+      editButton().click();
+      out.editOffDiscards = !nodeGraphGradientPageHasPendingValues() && Number(nodeGraphPatchNode(discard.nodeId).params[discard.key]) === discardBase;
+      editButton().click();
+      nodeGraphGradientPageSetPlayhead(g(), 0.5 + 1 / 127);
+      const snappedStop = g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9);
+      const beforeSnapEdit = Number(snappedStop.offsets?.[discard.nodeId]?.[discard.key]) || 0;
+      const snapMeta = NodeGraphGradients.metaFor(nodeGraphPatchNode(discard.nodeId), discard.key);
+      setNodeSliderValue(discard.slider, NodeGraphGradients.fromSlider(snapMeta, Math.min(0.92, NodeGraphGradients.toSlider(snapMeta, discardBase) + 0.03)), { interaction: "typed" });
+      out.playheadSnapAndLiveEdit = Math.abs(g().position - 0.5) < 1e-9
+        && nodeGraphGradientPageState.snappedStops.get(g().id) === snappedStop?.id
+        && (Number(snappedStop.offsets?.[discard.nodeId]?.[discard.key]) || 0) !== beforeSnapEdit
+        && !nodeGraphGradientPageHasPendingValues();
+      nodeGraphGradientPageSetPlayhead(g(), 0.5 + 4 / 127);
+      out.playheadSnapReleases = Math.abs(g().position - (0.5 + 4 / 127)) < 1e-9 && !nodeGraphGradientPageState.snappedStops.has(g().id);
+      editButton().click();
+      nodeGraphGradientPageSetPlayhead(g(), 0.8);
       out.rows = [...document.querySelectorAll(".node-gradient-param-chips .node-gradient-button:not(.node-gradient-button:last-child)")].map((x) => x.textContent);
       out.graphsHiddenByDefault = Boolean(document.querySelector(".node-gradient-card")?.classList.contains("graphs-hidden"));
       if (out.visible) btn("Show graphs").click();
@@ -163,6 +219,8 @@ try {
       const curve = curveParam ? g().stops.find((s) => s.id === shapeButton.dataset.stopId)?.curves?.[curveParam.nodeId]?.[curveParam.key] : null;
       out.curveStored = curve?.shape === "smoothstep" && Math.abs(curve?.skew - 0.35) < 1e-9;
       out.otherParamLinear = curveParam ? g().params.filter((p) => p !== curveParam).every((p) => !g().stops[0].curves?.[p.nodeId]?.[p.key]) : false;
+      nodeGraphGradientPageSetPlayhead(g(), 0.2);
+      nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), "test playhead baseline");
       h = nodeGraphMvp.historyIndex;
       // Playhead drag: many moves, one release.
       const strip = document.querySelector(".node-gradient-strip");
@@ -257,13 +315,17 @@ try {
     ok(r.created.length === 1 && r.created[0] === "Gradient 1" && r.createSteps === 1, "Snapshot starts Gradient 1 in one step");
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(JSON.stringify(r.registered) === JSON.stringify(["a.frequency", "b.floorDb"]) && r.snapshotSteps === 1, "both moved params register");
-    ok(r.rows.length === 2, "one row per registered param");
+    ok(r.editPendingHeld && r.pendingGhosts, "Edit keeps base params and slider thumbs held while showing pending ghosts and graph points");
+    ok(r.pendingCleared && r.editSnapshotAtPlayhead && r.pendingSnapshotParams && r.snapshotDoesNotAdvance, "Snapshot writes tracked and new params at the playhead, preserves offsets, then clears pending values");
+    ok(r.editOffDiscards, "turning Edit off discards unsnapshotted values");
+    ok(r.playheadSnapAndLiveEdit && r.playheadSnapReleases, "playhead snaps within two steps, live edits the snapped stop, and releases beyond the threshold");
+    ok(r.rows.length === 3, "one row per registered param, including an untracked param added by Snapshot");
     ok(r.graphsHiddenByDefault && r.graphsShowOnDemand, "graphs start hidden and the page toggle shows them");
     ok(r.graphCapture && r.graphHorizontalDrag && r.graphVerticalDrag, "graph point drag keeps pointer capture and separates shared position from selected-param value");
     ok(r.graphPointsStaySquare, "selected and unselected graph points keep the same square shape");
     ok(r.graphPointDoesNotResizeOnPress, "selecting a graph point does not change its pixel-aligned geometry");
     ok(r.doubleClickOpensNativeColorPicker && r.noVisibleColorWidget, "double-clicking a gradient stop opens the native color picker with no visible extra widget");
-    ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
+    if (r.visible) ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
     ok(r.shapeControls && r.curveStored && r.otherParamLinear, "HTML shape and skew controls store a per-param segment curve without changing the other parameter");
     ok(r.curveChart, "selected parameter renders SVG stop points and its shaped curve");
     if (r.visible) ok(r.stripHeight === 24, "the shared stop lane is 24 px tall");
@@ -274,7 +336,7 @@ try {
     ok(r.displayValue, "displays read the gradient's moved value");
     ok(r.toggleSteps === 1 && r.disabledEffIsBase, "Off removes the gradient's effect, one step");
     ok(r.name === "Bright sweep" && r.renameSteps === 1, "Rename");
-    ok(r.stopsAfterTap === 2 && r.positionAfterTap === 0.2 && r.tapSteps === 1 && r.stopsAfterDelete === 1 && r.deleteStopSteps === 1, "empty bar click moves the playhead without adding a stop; Delete stop removes a selected stop");
+    ok(r.stopsAfterTap === 3 && r.positionAfterTap === 0.2 && r.tapSteps === 1 && r.stopsAfterDelete === 2 && r.deleteStopSteps === 1, "empty bar click moves the playhead without adding a stop; Delete stop removes a selected stop");
     ok(r.setStartSteps === 1, "Set start");
     ok(r.deleteDrops, "deleting a module drops its params in the same undo step (D-G1)");
     ok(r.roundTrip, "save / load round trip");

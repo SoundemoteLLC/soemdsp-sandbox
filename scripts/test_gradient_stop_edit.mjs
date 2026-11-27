@@ -143,7 +143,7 @@ try {
     return out; } catch (e) { return { error: String(e), stage: window.__seOut?.stage, out: window.__seOut }; }
   });
   const ok = (cond, msg) => assert.ok(cond, `${msg} ${JSON.stringify(r)}`);
-  ok(r.snapped && r.handleOutlined && r.sliderMarked && r.note, "tapping a stop edits it: playhead snaps, stop and its sliders outlined");
+  ok(r.snapped && r.handleOutlined && r.sliderMarked, "tapping a stop edits it: playhead snaps, stop and its sliders outlined");
   ok(r.stepsDuringMove === 0 && r.stepsOnRelease === 1, "a slider move is one undo step, on release");
   ok(r.baseKept && r.soundsAtTarget && r.offsetWritten, "the move writes the stop's offset; the base stays");
   ok(r.typedSteps === 1 && r.typedBaseKept && r.typedSounds, "a typed value while editing writes the stop, one undo step");
