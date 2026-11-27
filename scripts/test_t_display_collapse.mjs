@@ -18,8 +18,8 @@ assert(
 );
 
 assert(
-  /function nodeGraphLayoutBShellHeightGu\(type, ui = \{\}\) \{[\s\S]*?Math\.min\(ioGu, Math\.max\(1, defaultFaceGu\)\)/.test(sizing),
-  "LayoutB hidden-face shell must cap at the type default face height (lone t)",
+  /function nodeGraphLayoutBShellHeightGu\(type, ui = \{\}, options = \{\}\) \{[\s\S]*?const sliderGu = typeof nodeGraphModuleSliderBodyHeightGu === "function"[\s\S]*?return Math\.max\(0, ioGu - Math\.max\(0, sliderGu\)\) \+ stripGu;/.test(sizing),
+  "LayoutB hidden-face shell only covers IO height beyond the slider rows",
 );
 
 assert(
