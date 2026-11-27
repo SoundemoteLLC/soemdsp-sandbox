@@ -38,7 +38,7 @@ try{
    check(input instanceof HTMLInputElement,key+' must be numeric');input.value=value;
   }
   for(const key of ['spectrumCircleColorLevel','spectrumCircleColorRadius','spectrumCircleSymmetric']){
-   const select=root.querySelector('[data-trace-display-choice="'+key+'"]');check(select,key+' switch');select.value='on';
+   const option=root.querySelector('[data-trace-display-switch-for="'+key+'"] [data-trace-display-switch-option="on"]');check(option,key+' on button');option.click();
   }
   nodeGraphDisplaySettingsSyncSwitches(root);
   markNodeGraphTraceDisplaySettingsDirty(['spectrumDbFloor','spectrumCircleRayWidth','spectrumCircleColorLevel','spectrumCircleColorRadius','spectrumCircleSymmetric']);
@@ -105,11 +105,13 @@ try{
   circularRoot.querySelector('[data-trace-display-field="circularAfterglow"]').value='.35';
   circularRoot.querySelector('[data-trace-display-field="circularHangTurns"]').value='2.5';
   circularRoot.querySelector('[data-trace-display-field="circularSweepFade"]').value='.4';
-  circularRoot.querySelector('[data-trace-display-field="frequencyCurve"]').value='.37';
-  markNodeGraphTraceDisplaySettingsDirty(['reverseFrequency','circularHeadMode','circularAfterglow','circularHangTurns','circularSweepFade','frequencyCurve']);
+  const frequencyCurve=nodeGraphSliderForParameter(circular,'frequencyCurve');
+  check(frequencyCurve,'frequency curve stays a module-face parameter');
+  updateNodeSliderCurrentValue(frequencyCurve,'.37');
+  markNodeGraphTraceDisplaySettingsDirty(['reverseFrequency','circularHeadMode','circularAfterglow','circularHangTurns','circularSweepFade']);
   applyNodeGraphTraceDisplaySettingsForm({persist:'immediate',record:false});
   const circularSettings=spectrogramSettingsForNode(nodeGraphPatchNode(circular));
-  check(circularSettings.reverseFrequency&&circularSettings.frequencyCurve===.37,'reverse and frequency curve persist together');
+  check(circularSettings.reverseFrequency&&nodeGraphPatchNode(circular).params.frequencyCurve===.37,'reverse and module-face frequency curve persist');
   check(circularSettings.circularHeadMode==='moving','moving head persists');
   check(circularSettings.circularAfterglow===.35&&circularSettings.circularHangTurns===2.5,'sweep retention persists independently');
   check(circularSettings.circularSweepFade===.4,'Sweep fade persists');
@@ -117,7 +119,7 @@ try{
   for(const key of ['circularAfterglow','circularHangTurns','circularSweepFade'])
    check(circularRoot.querySelector('[data-trace-display-field="'+key+'"]'),'sweep retention setting '+key);
   const circularControls=nodeGraphTraceDisplayActiveControlsForType('spectrogramBurn');
-  check(circularSettings.frequencyCurve===.37&&!circularControls.choices.includes('freqScale'),'continuous curve persists and replaces named-scale dropdown');
+  check(nodeGraphPatchNode(circular).params.frequencyCurve===.37&&!circularControls.choices.includes('freqScale'),'continuous module-face curve replaces named-scale dropdown');
   check(!circularControls.fields.includes('ghost')&&!circularControls.fields.includes('trail'),'circular retention no longer inherits phosphor controls');
   check(nodeGraphModuleDefinitions.circularSpectrogram.face.some(row=>row.params?.some(pair=>pair[0]==='spinHz')),'Spin replaces History on circular face');
   const spinInput=nodeGraphSliderForParameter(circular,'spinHz'),article=spinInput.closest('.dsp-node');
@@ -144,10 +146,11 @@ try{
   for(const type of ['spectrogram','spectrum1d']) {
    const moduleId=showNodeGraphModule(type,{x:700,y:80},options);
    setNodeGraphNodeSelection([moduleId]);openNodeGraphTraceDisplaySettings(moduleId);
-   const form=nodeGraphTraceDisplaySettingsRoot(),field=form.querySelector('[data-trace-display-field="frequencyCurve"]');
-   check(field,type+' exposes Frequency curve');field.value='.43';
-   markNodeGraphTraceDisplaySettingsDirty(['frequencyCurve']);applyNodeGraphTraceDisplaySettingsForm({persist:'immediate',record:false});
-   check(nodeGraphPatchNode(moduleId).traceDisplaySettings.frequencyCurve===.43,type+' preserves fractional curve');
+    const frequencyCurveInput=nodeGraphSliderForParameter(moduleId,'frequencyCurve');
+    check(frequencyCurveInput,type+' exposes Frequency curve on its face');
+    updateNodeSliderCurrentValue(frequencyCurveInput,'.43');
+    const form=nodeGraphTraceDisplaySettingsRoot();
+    check(nodeGraphPatchNode(moduleId).params.frequencyCurve===.43,type+' preserves fractional face parameter');
    const controls=nodeGraphTraceDisplayActiveControlsForType(type==='spectrogram'?'spectrogramBurn':'spectrumLine');
    check(!controls.choices.includes('freqScale')&&!controls.choices.includes('spectrumAxis'),type+' removes named-scale dropdown');
    if(type==='spectrum1d') {
@@ -167,7 +170,7 @@ try{
   }
   for(const curve of [0,.37,1]) {
    const expected=(20+.5*(20000-20))*(1-curve)+Math.sqrt(20*20000)*curve;
-   check(Math.abs(nodeGraphSpectrumLineTToHz(.5,curve,20,20000)-expected)<1e-6,'1D Spectrum uses the same continuous frequency curve');
+   check(Math.abs(nodeGraphFrequencyCurveHz(.5,curve,20,20000)-expected)<1e-6,'1D Spectrum uses the same continuous frequency curve');
   }
   const smoothA={},smoothB={},zeroHeight=new Float32Array([0]),fullHeight=new Float32Array([1]);
   nodeGraphSpectrumLineSmoothColumns(smoothA,zeroHeight,100,0);nodeGraphSpectrumLineSmoothColumns(smoothB,zeroHeight,100,0);
@@ -275,7 +278,9 @@ try{
   for(const frequencyCurve of [0,.37,1]) {
    spectrogramGlRingPool(ring,spectrum,128);
    spectrogramGlRingWrite(ring,32,{lutRgb:lut,minFreq:20,maxFreq:24000,nyquist:24000,frequencyCurve,floorDb:-80,ceilingDb:0});
-   check(Math.abs(ring.meta[2]-(4+frequencyCurve))<1e-6,'continuous curve is not rounded');
+   // Frequency curve is a live shader uniform, not retained in per-column metadata.
+   ring.frequencyCurve=frequencyCurve;
+   check(ring.frequencyCurve===frequencyCurve,'continuous curve stays unrounded in its live uniform');
    check(spectrogramGlRingPresentPolar(ring,256,256,ctx,256,256,0,[0,0,0],1,{mirror:true,inner:.12,reverseFrequency:true}),'continuous radial mapping shader');
    const g=nodeGraphPictureDevice().gl,pixels=new Uint8Array(256*256*4);g.bindFramebuffer(g.FRAMEBUFFER,null);g.readPixels(0,0,256,256,g.RGBA,g.UNSIGNED_BYTE,pixels);curveImages.push(hash(pixels));
    check(spectrogramGlRingPresent(ring,32,128,ctx,256,256,0,[0,0,0],1),'standard spectrogram continuous mapping shader');
