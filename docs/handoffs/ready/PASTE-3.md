@@ -36,3 +36,10 @@ Do these in order, committing each separately. Skip anything already done (check
 **Out of scope.** Offline render, MIDI-module preview notes, a dedicated preview variation, buffer cache (all HP-16). MIDI boundary: do **not** use `vmNoteOn`.
 
 **Acceptance criteria.** ▶ on another row plays that preset without changing the live patch, its params, or undo history; ▶ on the live row only starts playback; Load (not ▶) asks before replacing a dirty patch and one Ctrl+Z restores the unsaved state; a patch with a sequencer audibly plays in the preview engine; a patch with no source stays silent without errors or spinners; no polling/timers added; hosted site shows ▶ only if the preview engine can run there (else hidden, state which). HP-16 still owns later extras (peaks cache, dedicated preview variation, MIDI-module preview notes, measured bounce).
+
+## Testing scope
+- Test only the modules and files this plan touches, plus their direct dependents.
+- Run each test once. After a fix, re-run only the tests that failed.
+- No full-patch or all-module testing unless Argi explicitly approves it in chat. A plan cannot pre-authorize it.
+- Time box: stop testing at 15 minutes and report what you have.
+- After reporting, stop. Do not start the next plan.

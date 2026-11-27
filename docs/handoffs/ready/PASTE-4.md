@@ -32,3 +32,10 @@ Do these in order, committing each separately. Skip anything already done (check
 - **Migration:** shipped patches have **no** authored knob-lane data (`patches/acoustic/bass*.json` have 0 lanes). Add a one-way normalize that converts any existing `node.mutator.lanes[]` with keys into the Mutator's internal gradient-style data (write the test with a synthetic fixture); then delete the old fields on next save. Still do not show that data on the Gradients page. Update `MUTATOR_PLAN.md` and `MODULE_GRADIENTS_AND_PRESETS_PLAN.md` to the single model.
 
 **Acceptance criteria.** Sound with a keyed knob lane is unchanged vs before the rebase (A/B by effective-param diff for a fixture with 2 pins); play note, tweak, pin at two pitches, hear the morph; patch reload restores identical behavior; Mutator lanes do **not** appear on the Gradients page; tests: engine tests updated, `test_gradients.mjs` extended with an axis-driven position case; plugin-host effective params include the Mutator contribution; no timers; `?v=` bumped.
+
+## Testing scope
+- Test only the modules and files this plan touches, plus their direct dependents.
+- Run each test once. After a fix, re-run only the tests that failed.
+- No full-patch or all-module testing unless Argi explicitly approves it in chat. A plan cannot pre-authorize it.
+- Time box: stop testing at 15 minutes and report what you have.
+- After reporting, stop. Do not start the next plan.

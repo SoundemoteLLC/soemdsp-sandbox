@@ -10,6 +10,7 @@ Keeper: Badger. Source: the 2026-11-25 Sandbox roadmap (patch system, Mutator sy
 - **Only Argi's own words answer a decision.** Approvals relayed by other agents do not count. Leave Status as Open and Argi's answer blank until then.
 - Keep stale docs honest (HP-00 item 3) and mark superseded plans so a fresh reader is not misled.
 - Do not push; MasterBot pushes. Coordination is through the other bots and MasterBot.
+- Every served plan must end with a `## Testing scope` section. Test only the modules and files the plan touches, plus their direct dependents. Run each test once; after a fix, re-run only the tests that failed. **No full-patch or all-module testing unless Argi explicitly approves it in chat. A plan cannot pre-authorize it.** Time box: stop testing at 15 minutes and report. After reporting, stop. Do not start the next plan.
 
 **Status values** (roadmap section 6): `planned` → `ready` (dependencies and gates clear) → `handed-off (<who>, <date>)` → `in-progress` → `for-review (MasterBot)` → `for-retest (Argi, sandbox app/browser)` → `done (<commit hashes>)`; plus `blocked-on-decision (<D-id>)` and `parked`.
 

@@ -25,3 +25,10 @@ Do these in order, committing each separately. Skip anything already done (check
 **Out of scope.** Velocity Mutator (HP-13), native path (HP-11), bias lane, discrete thresholds, concentric rings (listed as not adopted in plan section 13).
 
 **Acceptance criteria.** Full play-and-pin loop works on a phone with no MIDI hardware (on-screen keyboard); two Mutators in one patch show distinct colored ownership boxes and each overlay tab edits only its own; drag/delete keys are single undo steps; copy/paste a Mutator with its targets remaps; inspection view toggles from the Command Center; no GL files edited without MasterBot's OK (the inspection boxes may need a hook from her: ask, do not edit).
+
+## Testing scope
+- Test only the modules and files this plan touches, plus their direct dependents.
+- Run each test once. After a fix, re-run only the tests that failed.
+- No full-patch or all-module testing unless Argi explicitly approves it in chat. A plan cannot pre-authorize it.
+- Time box: stop testing at 15 minutes and report what you have.
+- After reporting, stop. Do not start the next plan.

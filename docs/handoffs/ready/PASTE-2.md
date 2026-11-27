@@ -110,3 +110,10 @@ Folder `<stem>__variations/`, file `<stem>__<name>.json`, where `<stem>` is the 
 **Files.** New `public/node-graph-preset-explorer.js`; uses HP-06's `node-graph-preset-store.js`; entries in `node-graph-unified-window.js` / `node-graph-floating-windows.js` (the `pages` registry entry now points at the Explorer); `index.html`, `perform.html`, `styles.css`.
 
 **Acceptance criteria.** Browse factory + user together; the 3-way switch filters; search filters; open a folder; Save Preset / Save Variation round trip to disk and appear in the list; Load is one confirm + one undo step; Remove/Rename keep preset and variations folder together; hosted build shows no write buttons; Argi's retest list includes "load a patch with gradients (HP-04) and see them restored". `?v=` bumps; no timers.
+
+## Testing scope
+- Test only the modules and files this plan touches, plus their direct dependents.
+- Run each test once. After a fix, re-run only the tests that failed.
+- No full-patch or all-module testing unless Argi explicitly approves it in chat. A plan cannot pre-authorize it.
+- Time box: stop testing at 15 minutes and report what you have.
+- After reporting, stop. Do not start the next plan.

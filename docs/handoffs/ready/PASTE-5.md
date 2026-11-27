@@ -31,3 +31,10 @@ Do S-4 first (B-058: voice parameter modulation misses active and idle voices; p
 5. If the Velocity jack/Gate height is used, a **Voice Velocity** bus (0..1, latched at note-on) next to Voice ƒ / Gate / Trigger / Idle is added only if HP-09 research shows Voice Gate does not carry height.
 
 **Acceptance criteria.** Native and live agree within float tolerance in a smoke test (`scripts/test_mutator_*.mjs`); CPU with 8 mutated params shows no measurable change; a chord C2 + C6 in a Metamodule plays two different cutoffs and two frequencies at once with no sweep on voice reuse; the plugin build renders the same effective values as the browser; offline render includes the offsets.
+
+## Testing scope
+- Test only the modules and files this plan touches, plus their direct dependents.
+- Run each test once. After a fix, re-run only the tests that failed.
+- No full-patch or all-module testing unless Argi explicitly approves it in chat. A plan cannot pre-authorize it.
+- Time box: stop testing at 15 minutes and report what you have.
+- After reporting, stop. Do not start the next plan.

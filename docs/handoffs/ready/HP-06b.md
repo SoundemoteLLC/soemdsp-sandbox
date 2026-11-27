@@ -20,3 +20,10 @@
 **Rules.** The plugin repo has dirty submodules (`libs/clap-libs/clap-wrapper`, `libs/sst/sst-clap-helpers`) and untracked `build_*.log`; do not commit those. Release process is separate (tag `-win` rebuilds only Windows); do not cut a release unless Argi asks.
 
 **Acceptance.** A self-contained regression test or scripted request set that matches HP-06's Python test results on a temp user folder; manual: variation save/list/rename/remove from the Explorer inside the plugin; ▶ and Load work (native engine plays).
+
+## Testing scope
+- Test only the modules and files this plan touches, plus their direct dependents.
+- Run each test once. After a fix, re-run only the tests that failed.
+- No full-patch or all-module testing unless Argi explicitly approves it in chat. A plan cannot pre-authorize it.
+- Time box: stop testing at 15 minutes and report what you have.
+- After reporting, stop. Do not start the next plan.
