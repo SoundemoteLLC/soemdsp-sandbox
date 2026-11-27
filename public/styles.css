@@ -5790,6 +5790,10 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   font-size: 12px;
 }
 
+.node-slider-readout.is-gradient-edit {
+  box-shadow: 0 0 0 1px #f0c56f;
+}
+
 /* PASTE-8: the drag grip (🌈 page cards, Mutator page): the visible handle for dragging a module into the circuit. Static: no hover, no
    animation, the app's move cursor. Six dots read as "drag me" without a tooltip. */
 .node-drag-grip {

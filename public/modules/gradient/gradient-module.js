@@ -194,7 +194,9 @@ function drawNodeGraphGradientModuleFace(section) {
 }
 
 function bindNodeGraphGradientModulePlayheadSurface(section, nodeId) {
-  if (!section || section.dataset.sliderDragBound === "true" || typeof nodeGraphSliderForParameter !== "function") return;
+  if (!section) return;
+  if (typeof nodeGraphBindGradientResetGesture === "function") nodeGraphBindGradientResetGesture(section);
+  if (section.dataset.sliderDragBound === "true" || typeof nodeGraphSliderForParameter !== "function") return;
   const slider = nodeGraphSliderForParameter(nodeId, "playhead");
   if (!slider?.id) return;
   section.dataset.sliderTarget = slider.id;
@@ -285,7 +287,7 @@ function nodeGraphGradientModuleInterceptSlider(slider, domainValue, options = {
   const value = Number(domainValue);
   if (!gradient || !Number.isFinite(value)) return false;
   if (typeof nodeGraphGradientPageSetPlayhead === "function") {
-    nodeGraphGradientPageSetPlayhead(gradient, value);
+    nodeGraphGradientPageSetPlayhead(gradient, value, { bypassSnap: options.bypassGradientSnap === true });
     slider.dataset.domainValue = String(gradient.position);
     slider.value = String(gradient.position);
   } else {

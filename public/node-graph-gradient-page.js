@@ -132,6 +132,14 @@ function nodeGraphGradientPageClearPending(gradientId = "") {
   nodeGraphGradientPageSyncPendingGhosts();
 }
 
+function nodeGraphGradientPageClearEditHolds() {
+  for (const slider of document.querySelectorAll('[data-gradient-edit-held="1"]')) {
+    delete slider.dataset.gradientEditHeld;
+    const held = Number(slider.dataset.domainValue);
+    if (Number.isFinite(held)) slider.value = String(typeof nodeSliderThumbDisplayValue === "function" ? nodeSliderThumbDisplayValue(slider, held) : held);
+  }
+}
+
 function nodeGraphGradientPageSyncModulePlayhead(nodeId, position) {
   const slider = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, "playhead") : null;
   if (!slider || !Number.isFinite(Number(position))) return;
@@ -194,6 +202,27 @@ function nodeGraphGradientPageSnapshotPending(gradient) {
   return { ...gradient, origin, params, stops };
 }
 
+function nodeGraphGradientPageSnapshotCurrentCurve(gradient) {
+  const pos = Math.max(0, Math.min(1, Number(gradient.position) || 0));
+  const stops = gradient.stops.map((stop) => ({ ...stop, offsets: { ...(stop.offsets || {}) } }));
+  const offsets = {};
+  for (const { nodeId, key } of gradient.params) {
+    (offsets[nodeId] || (offsets[nodeId] = {}))[key] = nodeGraphGradientPageOffsetAt(gradient, nodeId, key);
+  }
+  let at = stops.findIndex((stop) => Math.abs(stop.pos - pos) < 1e-9);
+  if (at < 0) {
+    const ids = new Set(stops.map((stop) => stop.id));
+    let n = stops.length;
+    while (ids.has(`s${n + 1}`)) n += 1;
+    stops.push({ id: `s${n + 1}`, pos, offsets });
+    stops.sort((a, b) => a.pos - b.pos);
+    at = stops.findIndex((stop) => Math.abs(stop.pos - pos) < 1e-9);
+  } else {
+    stops[at] = { ...stops[at], offsets };
+  }
+  return { ...gradient, stops };
+}
+
 function nodeGraphGradientPageSnapshot(gradientId = "", moduleNodeId = "") {
   const patch = nodeGraphMvp?.patch;
   if (!patch) return;
@@ -219,11 +248,10 @@ function nodeGraphGradientPageSnapshot(gradientId = "", moduleNodeId = "") {
   }
   let next;
   if (nodeGraphGradientPageState.editMode) {
-    next = nodeGraphGradientPageSnapshotPending(gradient);
+    next = nodeGraphGradientPageSnapshotCurrentCurve(gradient);
     nodeGraphGradientPageClearPending(gradient.id);
   } else {
-    const onlyOrigin = gradient.stops.length === 1 && Math.abs(gradient.stops[0].pos - gradient.position) < 1e-9;
-    next = NodeGraphGradients.snapshotIntoGradient(patch, gradient, onlyOrigin ? 1 : gradient.position);
+    next = NodeGraphGradients.snapshotIntoGradient(patch, gradient, gradient.position);
   }
   const target = next.stops.reduce((best, stop) => Math.abs(stop.pos - next.position) < Math.abs(best.pos - next.position) ? stop : best, next.stops[0]);
   if (target) nodeGraphGradientPageState.selectedStop.set(gradient.id, target.id);
@@ -384,7 +412,7 @@ function nodeGraphGradientPageStrip(gradient) {
   strip.setAttribute("role", "slider");
   strip.setAttribute("aria-label", `${gradient.name} position`);
   strip.setAttribute("aria-valuemin", "0");
-  strip.setAttribute("aria-valuemax", "127");
+  strip.setAttribute("aria-valuemax", "1");
   strip.setAttribute("aria-valuenow", String(gradient.position));
   const stops = [...gradient.stops].sort((a, b) => a.pos - b.pos);
   // One hue per stop, from stop order: a picture of the blend.
@@ -401,17 +429,18 @@ function nodeGraphGradientPageStrip(gradient) {
     handle.className = "node-gradient-handle";
     if (stop.id === selected) handle.classList.add("is-selected");
     if (stop.id === snapped) handle.classList.add("is-snapped");
-    if (nodeGraphGradientEditActive()?.stop.id === stop.id && nodeGraphGradientPageState.editing.gradientId === gradient.id) {
+    if (nodeGraphGradientPageState.editing?.gradientId === gradient.id
+      && nodeGraphGradientEditActive()?.stop.id === stop.id) {
       handle.classList.add("is-editing");
       handle.setAttribute("aria-pressed", "true");
     }
     handle.dataset.stopId = stop.id;
     handle.style.left = `${(stop.pos * 100).toFixed(3)}%`;
     handle.style.backgroundColor = stop.color || nodeGraphGradientPageColorInputDefault(i);
-    handle.setAttribute("aria-label", `Stop ${i + 1} at ${Math.round(stop.pos * 127)}`);
+    handle.setAttribute("aria-label", `Stop ${i} at ${Number(stop.pos).toFixed(3)}`);
     const label = document.createElement("span");
     label.className = `node-gradient-handle-label ${i % 2 ? "is-low" : "is-high"}${stop.id === selected || stop.id === snapped ? " is-selected" : ""}`;
-    label.textContent = String(Math.round(stop.pos * 127));
+    label.textContent = Number(stop.pos).toFixed(3);
     handle.append(label);
     strip.append(handle);
   });
@@ -573,7 +602,10 @@ function renderNodeGraphGradientPage() {
   }
   const edit = nodeGraphGradientPageButton(nodeGraphGradientPageState.editMode ? "Edit On" : "Edit Off", "toggleEdit", "", { pressed: nodeGraphGradientPageState.editMode });
   edit.setAttribute("aria-label", "Gradient edit mode");
-  top.append(filter, edit, nodeGraphGradientPageButton("Snapshot", "snapshot", nodeGraphGradientPageActiveGradient()?.id || ""));
+  top.append(filter,
+    nodeGraphGradientPageButton("New Gradient", "newGradient", ""),
+    edit,
+    nodeGraphGradientPageButton("Snapshot", "snapshot", nodeGraphGradientPageActiveGradient()?.id || ""));
   top.append(nodeGraphGradientPageButton(nodeGraphGradientPageState.showGraphs ? "Hide graphs" : "Show graphs", "toggleGraphs", "", { pressed: nodeGraphGradientPageState.showGraphs }));
   fragment.append(top);
   const gradients = nodeGraphGradientPageGradients();
@@ -641,7 +673,7 @@ function nodeGraphGradientPageUpdateLive(gradient) {
     handle.classList.toggle("is-snapped", stop.id === nodeGraphGradientPageState.snappedStops.get(gradient.id));
     const label = handle.querySelector(".node-gradient-handle-label");
     if (label) {
-      label.textContent = String(Math.round(stop.pos * 127));
+      label.textContent = Number(stop.pos).toFixed(3);
       label.classList.toggle("is-selected", stop.id === highlightedStop);
     }
   }
@@ -679,13 +711,23 @@ function nodeGraphGradientPageAction(action, gradientId, button) {
     return;
   }
   if (action === "newGradient") {
+    nodeGraphGradientPageClearPending();
+    nodeGraphGradientPageClearEditHolds();
     const created = NodeGraphGradients.createGradientFromSnapshot(patch);
+    created.position = 1;
+    nodeGraphGradientPageState.activeGradientId = created.id;
+    nodeGraphGradientPageState.editMode = true;
+    nodeGraphGradientPageState.snappedStops.delete(created.id);
     nodeGraphGradientPageCommit([...nodeGraphGradientPageGradients(), created], `${created.name} started`);
+    nodeGraphGradientEditSyncOutlines();
     return;
   }
   if (action === "toggleEdit") {
     nodeGraphGradientPageState.editMode = !nodeGraphGradientPageState.editMode;
-    if (!nodeGraphGradientPageState.editMode) nodeGraphGradientPageClearPending();
+    if (!nodeGraphGradientPageState.editMode) {
+      nodeGraphGradientPageClearPending();
+      nodeGraphGradientPageClearEditHolds();
+    }
     else {
       const active = nodeGraphGradientPageActiveGradient();
       if (active) nodeGraphGradientPageState.activeGradientId = active.id;
@@ -759,8 +801,8 @@ function nodeGraphGradientPageSnapTarget(gradient, position) {
   let best = null;
   let distance = Infinity;
   for (const stop of gradient?.stops || []) {
-    const d = Math.abs(Number(stop.pos) - position) * 127;
-    if (d <= 2 && d < distance) { best = stop; distance = d; }
+    const d = Math.abs(Number(stop.pos) - position);
+    if (d <= 2 / 127 && d < distance) { best = stop; distance = d; }
   }
   return best;
 }
@@ -769,7 +811,7 @@ function nodeGraphGradientPageSetPlayhead(gradient, position, options = {}) {
   if (!gradient || !Number.isFinite(Number(position))) return Number(position);
   nodeGraphGradientPageState.activeGradientId = gradient.id;
   const raw = Math.max(0, Math.min(1, Number(position)));
-  const snapped = nodeGraphGradientPageSnapTarget(gradient, raw);
+  const snapped = options.bypassSnap ? null : nodeGraphGradientPageSnapTarget(gradient, raw);
   gradient.position = snapped ? snapped.pos : raw;
   if (snapped) nodeGraphGradientPageState.snappedStops.set(gradient.id, snapped.id);
   else nodeGraphGradientPageState.snappedStops.delete(gradient.id);
@@ -1067,6 +1109,10 @@ function nodeGraphGradientEditTargetKeys() {
   const active = nodeGraphGradientEditActive();
   const out = new Set();
   if (active) for (const { nodeId, key } of active.gradient.params) out.add(`${nodeId}\u0000${key}`);
+  else if (nodeGraphGradientPageState.editMode) {
+    const gradient = nodeGraphGradientPageActiveGradient();
+    for (const { nodeId, key } of gradient?.params || []) out.add(`${nodeId}\u0000${key}`);
+  }
   return out;
 }
 
@@ -1095,6 +1141,48 @@ function nodeGraphGradientEditSyncOutlines() {
   nodeGraphGradientEditMarked = next;
   if (typeof nodeGraphGlGraphNoteValueChrome === "function") for (const id of touched) nodeGraphGlGraphNoteValueChrome(id);
   if (touched.size && typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
+}
+
+function nodeGraphGradientPageEnsureLiveEditStop(gradient, node, key, meta, value) {
+  const nodeId = node.id;
+  const mapKey = `${nodeId}\u0000${key}`;
+  const tracked = gradient.params.some((item) => item.nodeId === nodeId && item.key === key);
+  const beforeOffset = tracked ? nodeGraphGradientPageOffsetAt(gradient, nodeId, key) : 0;
+  let stop = gradient.stops.find((item) => Math.abs(item.pos - gradient.position) < 1e-9);
+  if (!stop) {
+    const offsets = {};
+    for (const item of gradient.params) {
+      (offsets[item.nodeId] || (offsets[item.nodeId] = {}))[item.key] = nodeGraphGradientPageOffsetAt(gradient, item.nodeId, item.key);
+    }
+    const ids = new Set(gradient.stops.map((item) => item.id));
+    let n = gradient.stops.length;
+    while (ids.has(`s${n + 1}`)) n += 1;
+    stop = { id: `s${n + 1}`, pos: gradient.position, offsets };
+    gradient.stops.push(stop);
+    gradient.stops.sort((a, b) => a.pos - b.pos);
+  }
+  if (!tracked) {
+    const baseSlider = NodeGraphGradients.toSlider(meta, Number(node.params[key]));
+    if (!Number.isFinite(baseSlider)) return null;
+    (gradient.origin[nodeId] || (gradient.origin[nodeId] = {}))[key] = baseSlider;
+    gradient.params.push({ nodeId, key });
+    for (const item of gradient.stops) (item.offsets[nodeId] || (item.offsets[nodeId] = {}))[key] = 0;
+  }
+  const current = Number(stop.offsets?.[nodeId]?.[key]) || beforeOffset;
+  const target = NodeGraphGradients.toSlider(meta, value);
+  const base = Number(node.params[key]);
+  const sounding = typeof applyNodeGraphParamOffsetsToBase === "function"
+    ? applyNodeGraphParamOffsetsToBase(node, key, base, meta)
+    : base;
+  const offset = NodeGraphGradients.isDiscrete(meta)
+    ? target - Number(gradient.origin?.[nodeId]?.[key])
+    : current + target - NodeGraphGradients.toSlider(meta, sounding);
+  stop.offsets = { ...(stop.offsets || {}) };
+  stop.offsets[nodeId] = { ...(stop.offsets[nodeId] || {}), [key]: Number.isFinite(offset) ? offset : current };
+  nodeGraphGradientPageState.snappedStops.set(gradient.id, stop.id);
+  nodeGraphGradientPageState.selectedStop.set(gradient.id, stop.id);
+  nodeGraphGradientPageState.activeGradientId = gradient.id;
+  return stop;
 }
 
 function nodeGraphGradientEditBegin(gradientId, stopId) {
@@ -1140,28 +1228,31 @@ function nodeGraphGradientMaybeInterceptSlider(slider, domainValue, options = {}
   const mapKey = `${nodeId}\u0000${key}`;
   const tracked = gradient?.params.some((p) => p.nodeId === nodeId && p.key === key);
   if (nodeGraphGradientPageState.editMode && gradient) {
-    if (options.interaction === "commit" && slider.dataset.gradientPendingCaptured === "1") return true;
-    if (!live || live.gradient.id !== gradient.id || !tracked) {
-      nodeGraphGradientPageState.activeGradientId = gradient.id;
-      const base = Number(node.params[key]);
-      const originSlider = Number(gradient.origin?.[nodeId]?.[key]);
-      nodeGraphGradientPagePendingMap(gradient.id, true).set(mapKey, {
-        value,
-        slider: NodeGraphGradients.toSlider(meta, value),
-        originSlider: Number.isFinite(originSlider) ? originSlider : NodeGraphGradients.toSlider(meta, base),
-      });
-      slider.dataset.gradientPendingCaptured = "1";
-      const held = Number(slider.dataset.domainValue);
-      if (Number.isFinite(held)) {
-        const thumb = typeof nodeSliderThumbDisplayValue === "function" ? nodeSliderThumbDisplayValue(slider, held) : held;
-        slider.value = String(thumb);
-        if (typeof syncNodeSliderReadout === "function") syncNodeSliderReadout(slider);
-      }
-      const card = document.querySelector(`.node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"]`);
-      if (card) nodeGraphGradientPageDrawGraph(card, gradient);
-      nodeGraphGradientPageSyncPendingGhosts();
+    if (options.interaction === "commit" && slider.dataset.gradientEditHeld === "1") {
+      delete slider.dataset.gradientEditHeld;
+      nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), `${gradient.name} stop value`);
       return true;
     }
+    const held = Number(slider.dataset.domainValue);
+    const stop = nodeGraphGradientPageEnsureLiveEditStop(gradient, node, key, meta, value);
+    if (!stop) return false;
+    if (!tracked) renderNodeGraphGradientPage();
+    if (slider.dataset.gradientEditHeld !== "1") {
+      slider.dataset.gradientEditHeld = "1";
+      if (Number.isFinite(held)) slider.value = String(typeof nodeSliderThumbDisplayValue === "function" ? nodeSliderThumbDisplayValue(slider, held) : held);
+    }
+    if (options.commit) {
+      delete slider.dataset.gradientEditHeld;
+      nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), `${gradient.name} stop value`);
+    } else {
+      nodeGraphGradientsNotifyChanged(`${gradient.name} stop value`);
+      nodeGraphGradientPageUpdateLive(gradient);
+      const card = document.querySelector(`.node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"]`);
+      if (card) nodeGraphGradientPageDrawGraph(card, gradient);
+      nodeGraphGradientEditSyncOutlines();
+    }
+    nodeGraphGradientPageSyncPendingGhosts();
+    return true;
   }
   if (!live || !tracked) return false;
   delete slider.dataset.gradientPendingCaptured;

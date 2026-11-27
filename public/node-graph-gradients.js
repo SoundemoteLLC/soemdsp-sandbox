@@ -247,6 +247,12 @@
       let id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : "";
       if (!id || usedGradientIds.has(id)) id = uniqueId(usedGradientIds, "g", out.length + 1);
       else usedGradientIds.add(id);
+      // Legacy gradient positions were stored as 0..127 steps. Values above one identify that format;
+      // current 0..1 gradients remain unchanged when they are normalized or loaded again.
+      const rawPosition = finite(raw.position, 0);
+      const rawStops = Array.isArray(raw.stops) ? raw.stops : [];
+      const legacyPositionScale = rawPosition > 1 || rawStops.some((stop) => Number(stop?.pos) > 1);
+      const normalizePosition = (value) => clamp01(finite(value, 0) / (legacyPositionScale ? 127 : 1));
       const origin = {};
       if (plain(raw.origin)) {
         for (const [nodeId, byKey] of Object.entries(raw.origin)) {
@@ -267,7 +273,7 @@
       }
       const usedStopIds = new Set();
       const stops = [];
-      for (const rawStop of Array.isArray(raw.stops) ? raw.stops : []) {
+      for (const rawStop of rawStops) {
         if (!plain(rawStop) || !Number.isFinite(Number(rawStop.pos)) || rawStop.pos === null) continue;
         let stopId = typeof rawStop.id === "string" && rawStop.id.trim() ? rawStop.id.trim() : "";
         if (!stopId || usedStopIds.has(stopId)) stopId = uniqueId(usedStopIds, "s", stops.length + 1);
@@ -296,13 +302,13 @@
           }
         }
         const color = typeof rawStop.color === "string" && /^#[0-9a-f]{6}$/i.test(rawStop.color) ? rawStop.color.toLowerCase() : "";
-        stops.push({ id: stopId, pos: clamp01(Number(rawStop.pos)), offsets, ...(Object.keys(curves).length ? { curves } : {}), ...(color ? { color } : {}) });
+        stops.push({ id: stopId, pos: normalizePosition(Number(rawStop.pos)), offsets, ...(Object.keys(curves).length ? { curves } : {}), ...(color ? { color } : {}) });
       }
       out.push({
         id,
         name: typeof raw.name === "string" && raw.name.trim() ? raw.name : `Gradient ${out.length + 1}`,
         enabled: raw.enabled !== false,
-        position: clamp01(finite(raw.position, 0)),
+        position: normalizePosition(rawPosition),
         origin,
         params,
         stops,

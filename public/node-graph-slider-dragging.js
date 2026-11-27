@@ -433,7 +433,7 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
     && nodeGraphGradientModuleInterceptSlider(slider, domain, { commit: true, interaction: "typed" }))
     || (typeof nodeGraphGradientMaybeInterceptSlider === "function"
     && nodeGraphGradientMaybeInterceptSlider(slider, domain, { commit: true, interaction: "typed" }))) {
-    if (slider.dataset.gradientPendingCaptured === "1") {
+    if (slider.dataset.gradientPendingCaptured === "1" || slider.dataset.gradientEditHeld === "1") {
       syncNodeSliderReadout(slider);
       return;
     }
@@ -557,12 +557,14 @@ function commitNodeSliderDragValue(slider, status = "parameter changed") {
     }
     return;
   }
+  const bypassGradientSnap = slider?.dataset?.gradientBypassSnap === "1";
   if ((typeof nodeGraphGradientModuleInterceptSlider === "function"
-    && nodeGraphGradientModuleInterceptSlider(slider, Number(slider?.dataset?.domainValue), { commit: true, interaction: "commit" }))
+    && nodeGraphGradientModuleInterceptSlider(slider, Number(slider?.dataset?.domainValue), { commit: true, interaction: "commit", bypassGradientSnap }))
     || (typeof nodeGraphGradientMaybeInterceptSlider === "function"
     && nodeGraphGradientMaybeInterceptSlider(slider, Number(slider?.dataset?.domainValue), { commit: true, interaction: "commit" }))) {
     markNodeGraphRenderPending();
     scheduleNodeGraphLiveParameterSync();
+    delete slider.dataset.gradientBypassSnap;
     return;
   }
   if (typeof pitchMutatorMaybeInterceptSlider === "function") {
@@ -593,6 +595,7 @@ function nodeSliderCtrlClickDefaultValue(slider) {
 }
 
 function setNodeSliderValue(slider, value, options = {}) {
+  if (options.bypassGradientSnap === true && slider?.dataset) slider.dataset.gradientBypassSnap = "1";
   const valueSink = nodeSliderValueSink(slider);
   if (valueSink) {
     const domain = normalizeNodeSliderValue(slider, value);
@@ -639,7 +642,7 @@ function setNodeSliderValue(slider, value, options = {}) {
     || (typeof pitchMutatorMaybeInterceptSlider === "function"
     && pitchMutatorMaybeInterceptSlider(slider, value, { ...options, commit: false }));
   if (intercepted) {
-    if (slider.dataset.gradientPendingCaptured === "1") {
+    if (slider.dataset.gradientPendingCaptured === "1" || slider.dataset.gradientEditHeld === "1") {
       if (typeof syncNodeSliderReadout === "function") syncNodeSliderReadout(slider);
       return;
     }
@@ -1296,6 +1299,42 @@ function nodeGraphPointInCircularKnob(host, clientX, clientY) {
   return (dx * dx) + (dy * dy) <= (r * r);
 }
 
+function nodeGraphResetSliderSurface(surface) {
+  const slider = document.getElementById(surface?.dataset?.sliderTarget || "");
+  const reset = nodeSliderCtrlClickDefaultValue(slider);
+  if (!slider || !Number.isFinite(reset)) return false;
+  const nodeId = slider.closest?.(".dsp-node")?.dataset?.node;
+  const node = nodeId && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  const bypassGradientSnap = node?.type === "gradient" && slider.dataset?.param === "playhead";
+  setNodeSliderValue(slider, reset, { interaction: "drag", bypassGradientSnap });
+  commitNodeSliderDragValue(slider, "parameter reset to default");
+  return true;
+}
+
+function nodeGraphBindGradientResetGesture(surface) {
+  if (!surface?.classList?.contains("node-gradient-module-face") || surface.dataset?.sliderTypeIn !== "reset"
+      || surface.dataset.gradientResetGestureBound === "1") return;
+  surface.dataset.gradientResetGestureBound = "1";
+  surface.addEventListener("mousedown", (event) => {
+    if (event.button !== 0 || event.target?.closest?.(".node-gradient-module-snapshot")) return;
+    const now = performance.now();
+    const last = surface._gradientResetPointer;
+    if (last && now - last.time < 400 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 6) {
+      surface._gradientResetPointer = null;
+      if (nodeGraphMvp) nodeGraphMvp.sliderLastPointerDown = null;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      nodeGraphResetSliderSurface(surface);
+      return;
+    }
+    surface._gradientResetPointer = { time: now, x: event.clientX, y: event.clientY };
+  }, true);
+  surface.addEventListener("mousemove", (event) => {
+    const last = surface._gradientResetPointer;
+    if (last && Math.hypot(event.clientX - last.x, event.clientY - last.y) > 2) surface._gradientResetPointer = null;
+  }, true);
+}
+
 /** True if `el` is a surface that drives a range slider via data-slider-target. */
 function nodeSliderIsDragSurface(el) {
   return Boolean(
@@ -1327,8 +1366,32 @@ function bindNodeSliderDragSurface(surface) {
     return false;
   }
   surface.dataset.sliderDragBound = "true";
+  nodeGraphBindGradientResetGesture(surface);
   surface.addEventListener("pointerdown", beginNodeSliderDrag);
   surface.addEventListener("mousedown", beginNodeSliderDrag);
+  surface.addEventListener("click", (event) => {
+    // Some pointer surfaces suppress both pointer-down double-click timing and the browser dblclick event.
+    // Keep a local click pair for this Gradient reset surface, then use the shared reset action.
+    if (!surface.classList.contains("node-gradient-module-face") || surface.dataset?.sliderTypeIn !== "reset") return;
+    const now = performance.now();
+    const lastAt = Number(surface.dataset.gradientResetClickAt);
+    const lastX = Number(surface.dataset.gradientResetClickX);
+    const lastY = Number(surface.dataset.gradientResetClickY);
+    const second = Number.isFinite(lastAt) && now - lastAt < 400
+      && Math.hypot(event.clientX - lastX, event.clientY - lastY) < 6;
+    if (second) {
+      delete surface.dataset.gradientResetClickAt;
+      delete surface.dataset.gradientResetClickX;
+      delete surface.dataset.gradientResetClickY;
+      event.preventDefault();
+      event.stopPropagation();
+      nodeGraphResetSliderSurface(surface);
+    } else {
+      surface.dataset.gradientResetClickAt = String(now);
+      surface.dataset.gradientResetClickX = String(event.clientX);
+      surface.dataset.gradientResetClickY = String(event.clientY);
+    }
+  });
   surface.addEventListener("lostpointercapture", endNodeSliderDrag);
   surface.addEventListener("keydown", stepNodeSliderFromKeyboard);
   return true;
@@ -1633,12 +1696,7 @@ function beginNodeSliderDrag(event) {
     event.preventDefault();
     event.stopPropagation();
     if (surface.dataset?.sliderTypeIn === "reset") {
-      const resetSlider = document.getElementById(surface.dataset.sliderTarget);
-      const reset = nodeSliderCtrlClickDefaultValue(resetSlider);
-      if (resetSlider && Number.isFinite(reset)) {
-        setNodeSliderValue(resetSlider, reset, { interaction: "drag" });
-        commitNodeSliderDragValue(resetSlider, "parameter reset to default");
-      }
+      nodeGraphResetSliderSurface(surface);
       return;
     }
     beginNodeSliderSurfaceEdit(surface);
@@ -1648,12 +1706,7 @@ function beginNodeSliderDrag(event) {
     nodeGraphMvp.sliderLastPointerDown = null;
     event.preventDefault();
     event.stopPropagation();
-    const resetSlider = document.getElementById(surface.dataset.sliderTarget);
-    const reset = nodeSliderCtrlClickDefaultValue(resetSlider);
-    if (resetSlider && Number.isFinite(reset)) {
-      setNodeSliderValue(resetSlider, reset, { interaction: "drag" });
-      commitNodeSliderDragValue(resetSlider, "parameter reset to default");
-    }
+    nodeGraphResetSliderSurface(surface);
     return;
   }
   const slider = document.getElementById(surface.dataset.sliderTarget);
