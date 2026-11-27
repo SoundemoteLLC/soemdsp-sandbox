@@ -996,6 +996,7 @@
         "</div>",
         '<div class="pm-axis-scroll" data-pm="axis">',
           '<div class="pm-axis-inner">',
+            '<div class="pm-plot-wrap"><svg data-pm="plot" aria-label="Pitch Mutator curves"></svg></div>',
             '<div class="pm-kbd">' + kbd + "</div>",
           "</div>",
         "</div>",
@@ -1011,10 +1012,55 @@
     ].join("");
     el.style.setProperty("--pm-visible", String(view.visible));
     el.style.setProperty("--pm-key-count", String(range.max - range.min + 1));
+    drawPlot(el.querySelector("[data-pm=plot]"), node);
     applyAxisView(view);
     root.requestAnimationFrame(() => {
       applyAxisView(view);
+      const plot = el.querySelector("[data-pm=plot]");
+      if (plot) drawPlot(plot, node);
     });
+  }
+
+  function drawPlot(svg, node) {
+    const E = engine();
+    if (!E || !svg) return;
+    const state = node && ensureState(node);
+    const range = midiRange();
+    const count = range.max - range.min + 1;
+    const wrap = svg.parentElement;
+    const width = Math.max(1, wrap?.clientWidth || svg.clientWidth || 128);
+    const height = Math.max(1, wrap?.clientHeight || svg.clientHeight || 80);
+    const x = (note) => ((note - range.min + 0.5) / count) * width;
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("preserveAspectRatio", "none");
+    const parts = [];
+    for (let n = range.min; n <= range.max; n += 1) {
+      if (isBlack(n)) parts.push(`<rect x="${((n - range.min) / count * width).toFixed(2)}" y="0" width="${(width / count + 0.5).toFixed(2)}" height="${height}" fill="#fff" opacity=".045"/>`);
+      if (n % 12 === 0) parts.push(`<line x1="${((n - range.min) / count * width).toFixed(2)}" x2="${((n - range.min) / count * width).toFixed(2)}" y1="0" y2="${height}" stroke="#fff" opacity=".12"/>`);
+    }
+    for (const lane of state?.lanes || []) {
+      const meta = paramMeta(lane.target);
+      const base = E.sliderFromDomain(meta, baseDomain(lane.target));
+      const y = (offset) => (1 - Math.max(0, Math.min(1, base + offset))) * (height - 8) + 4;
+      const keys = (lane.keys || []).slice().sort((a, b) => a.x - b.x);
+      if (keys.length) {
+        let d = `M ${x(keys[0].x).toFixed(2)} ${y(keys[0].offset).toFixed(2)}`;
+        for (let i = 0; i + 1 < keys.length; i += 1) {
+          const a = keys[i], b = keys[i + 1];
+          const steps = Math.max(4, Math.ceil((b.x - a.x) * 2));
+          for (let j = 1; j <= steps; j += 1) {
+            const t = j / steps;
+            const shape = root.nodeGraphSegmentCurve01 ? root.nodeGraphSegmentCurve01(t, a.shape || "rational", a.skew || 0) : t;
+            d += ` L ${x(a.x + (b.x - a.x) * t).toFixed(2)} ${y(a.offset + (b.offset - a.offset) * shape).toFixed(2)}`;
+          }
+        }
+        parts.push(`<path d="${d}" fill="none" stroke="${escapeAttr(node?.color || "#c45a7a")}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`);
+      }
+      for (const key of keys) parts.push(`<circle cx="${x(key.x).toFixed(2)}" cy="${y(key.offset).toFixed(2)}" r="3.5" fill="${escapeAttr(node?.color || "#c45a7a")}" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>`);
+    }
+    const playX = x(soundingNote(node));
+    parts.push(`<line x1="${playX.toFixed(2)}" x2="${playX.toFixed(2)}" y1="0" y2="${height}" stroke="#fff" opacity=".7" vector-effect="non-scaling-stroke"/>`);
+    svg.innerHTML = parts.join("");
   }
 
   function escapeHtml(s) {

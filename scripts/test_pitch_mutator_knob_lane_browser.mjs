@@ -177,7 +177,7 @@ try {
   assert.notEqual(m.lanes[0].keys[0].offset, m.lanes[0].keys[1].offset, "with different offsets");
   assert.equal(await page.locator('#pitchMutatorOverlay [data-pm="curve-shape"]').count(), 6, "the two keyframes expose six HTML shape choices for their one segment");
   assert.equal(await page.locator('#pitchMutatorOverlay [data-pm="curve-skew"]').count(), 1, "the segment exposes one HTML skew slider");
-  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot]").count(), 0, "the Mutator page does not draw a curve plot");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot]").count(), 1, "the Mutator page draws its SVG curve plot");
   await shot("c6-pinned");
 
   // 2. The knob follows the note ---------------------------------------------------------------------------------------------------
@@ -272,7 +272,7 @@ try {
     }
   }
 
-  // 5b. Per-segment shape and skew are plain HTML controls; the Mutator page has no curve plot.
+  // 5b. Per-segment shape and skew controls accompany the SVG curve plot.
   step = "HTML curve controls";
   await page.evaluate(({ kb, pm }) => {
     nodeGraphMvp.patch.connections = nodeGraphMvp.patch.connections.filter((c) => !(c.sourceNode === kb && c.destinationNode === pm));
@@ -289,7 +289,8 @@ try {
   const shapeChoice = page.locator(`#pitchMutatorOverlay [data-pm="curve-shape"][data-lane="${laneId}"][data-x="48"][data-shape="smoothstep"]`);
   assert.equal(await shapeChoice.count(), 1, "the segment has an HTML shape choice");
   assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=curve-skew]").count(), 3, "each of the three segments has an HTML skew slider");
-  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot], #pitchMutatorOverlay .pm-plot-wrap, #pitchMutatorOverlay .pm-pin, #pitchMutatorOverlay .pm-pin-hit").count(), 0, "the Mutator page has no curve rendering or plot pins");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot] path").count(), 1, "the Mutator page draws lane curves in SVG");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot] circle").count(), 4, "the Mutator page shows each lane point");
   await page.setViewportSize({ width: 390, height: 860 });
   const mobileCurve = await page.locator("#pitchMutatorOverlay .pm-curve-segment").first().boundingBox();
   assert.ok(mobileCurve && mobileCurve.x >= 0 && mobileCurve.x + mobileCurve.width <= 390, `curve controls fit the phone viewport ${JSON.stringify(mobileCurve)}`);

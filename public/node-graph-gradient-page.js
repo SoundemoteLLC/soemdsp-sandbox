@@ -156,6 +156,47 @@ function nodeGraphGradientPageCurveControls(gradient, nodeId, key) {
   const stops = [...(gradient.stops || [])].sort((a, b) => a.pos - b.pos);
   const rows = document.createElement("div");
   rows.className = "node-gradient-curves";
+  const chart = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  chart.classList.add("node-gradient-curve-chart");
+  chart.setAttribute("viewBox", "0 0 320 84");
+  chart.setAttribute("preserveAspectRatio", "none");
+  chart.setAttribute("role", "img");
+  chart.setAttribute("aria-label", "Parameter points and curve");
+  chart.dataset.gradientCurveChart = `${gradient.id}:${nodeId}:${key}`;
+  const offsets = stops.map((stop) => nodeGraphGradientPageOffset(stop, nodeId, key));
+  const min = Math.min(0, ...offsets), max = Math.max(0, ...offsets);
+  const span = Math.max(0.1, max - min);
+  const px = (stop) => 10 + stop.pos * 300;
+  const py = (value) => 8 + ((max - value) / span) * 68;
+  const curvePath = document.createElementNS(chart.namespaceURI, "path");
+  let path = "";
+  for (let i = 0; i + 1 < stops.length; i += 1) {
+    const a = stops[i], b = stops[i + 1];
+    const steps = 24;
+    for (let j = 0; j <= steps; j += 1) {
+      if (i && j === 0) continue;
+      const t = j / steps;
+      const shaped = NodeGraphGradients.curveProgress(t, a, nodeId, key);
+      const value = offsets[i] + (offsets[i + 1] - offsets[i]) * shaped;
+      path += `${path ? " L" : "M"}${(px(a) + (px(b) - px(a)) * t).toFixed(2)} ${py(value).toFixed(2)}`;
+    }
+  }
+  curvePath.setAttribute("d", path);
+  curvePath.setAttribute("fill", "none");
+  curvePath.setAttribute("stroke", "currentColor");
+  curvePath.setAttribute("stroke-width", "2");
+  curvePath.setAttribute("vector-effect", "non-scaling-stroke");
+  chart.append(curvePath);
+  stops.forEach((stop, i) => {
+    const point = document.createElementNS(chart.namespaceURI, "circle");
+    point.setAttribute("cx", px(stop).toFixed(2));
+    point.setAttribute("cy", py(offsets[i]).toFixed(2));
+    point.setAttribute("r", "4");
+    point.setAttribute("fill", "currentColor");
+    point.dataset.stopId = stop.id;
+    chart.append(point);
+  });
+  rows.append(chart);
   for (let i = 0; i + 1 < stops.length; i += 1) {
     const stop = stops[i];
     const curve = NodeGraphGradients.curveOf(stop, nodeId, key);
@@ -194,6 +235,10 @@ function nodeGraphGradientPageCurveControls(gradient, nodeId, key) {
     rows.append(row);
   }
   return rows;
+}
+
+function nodeGraphGradientPageOffset(stop, nodeId, key) {
+  return Number(stop?.offsets?.[nodeId]?.[key]) || 0;
 }
 
 function nodeGraphGradientPageFormat(value) {

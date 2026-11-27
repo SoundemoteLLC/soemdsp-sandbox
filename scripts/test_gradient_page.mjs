@@ -92,6 +92,8 @@ try {
         && Boolean(document.querySelector("#nodeGradientsBody .node-gradient-strip")?.style.background);
       const shapeButton = document.querySelector('#nodeGradientsBody [data-gradient-action="curveShape"][data-shape="smoothstep"]');
       out.shapeControls = Boolean(shapeButton && document.querySelector("#nodeGradientsBody [data-gradient-skew]"));
+      const curveChart = document.querySelector("#nodeGradientsBody [data-gradient-curve-chart]");
+      out.curveChart = Boolean(curveChart && curveChart.querySelector("path") && curveChart.querySelectorAll("circle").length === g().stops.length);
       shapeButton?.click();
       const skew = document.querySelector("#nodeGradientsBody [data-gradient-skew]");
       if (skew) {
@@ -200,6 +202,7 @@ try {
     ok(r.rows.length === 2, "one row per registered param");
     ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
     ok(r.shapeControls && r.curveStored && r.otherParamLinear, "HTML shape and skew controls store a per-param segment curve without changing the other parameter");
+    ok(r.curveChart, "selected parameter renders SVG stop points and its shaped curve");
     if (r.visible) ok(r.stripHeight === 44, "the strip is 44 px tall");
     ok(r.stepsDuringDrag === 0 && r.releaseSteps === 1, "a playhead drag is exactly one undo step");
     ok(r.position === 0.8 && (r.glides || !r.visible) && r.baseUnchanged, "dragging glides the effective value; the base never changes");

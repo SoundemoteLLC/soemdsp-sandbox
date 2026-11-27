@@ -5832,6 +5832,18 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   padding: 6px 0;
 }
 
+.node-gradient-curve-chart {
+  display: block;
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 92px;
+  overflow: visible;
+  color: var(--accent, #b58cff);
+  background: rgba(12, 14, 18, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
+}
+
 .node-gradient-curve-shapes {
   display: flex;
   flex-wrap: wrap;
