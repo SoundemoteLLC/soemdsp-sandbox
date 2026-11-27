@@ -1537,6 +1537,13 @@ function copyNodeGraphModule(sourceNode) {
     && nodeGraphModuleTypeIsUniqueInPatch(sourceNode?.type)) {
     return;
   }
+  // PASTE-8: one Gradient module per gradient. Duplicating one that plays a gradient selects it instead of making a second.
+  if (sourceNode?.type === "gradient" && sourceNode.gradientId
+    && (nodeGraphMvp.patch?.gradients || []).some((g) => g.id === sourceNode.gradientId)) {
+    setNodeGraphNodeSelection([sourceNode.id]);
+    if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp("This gradient already has its Gradient module.");
+    return sourceNode.id;
+  }
   // Shell/boundary copy would share children/portals (same ids) — not supported yet.
   if (
     typeof nodeGraphIsContainerShellType === "function"

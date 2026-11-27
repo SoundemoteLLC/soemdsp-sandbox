@@ -228,6 +228,15 @@ function validateNodeGraphPatch(patch) {
   const retiredNodeIds = droppedNodeIds;
   const ids = new Set();
   const uniqueTypesSeen = new Set();
+  // PASTE-8: one Gradient module per gradient. A patch where two share a gradient keeps the first bound and unbinds the rest.
+  const gradientBound = new Set();
+  const gradientUnbindIds = new Set();
+  for (const node of patch.nodes) {
+    const nodeId = String(node?.id || "").trim();
+    if (String(node?.type || "").trim() !== "gradient" || typeof node.gradientId !== "string" || !node.gradientId || droppedNodeIds.has(nodeId)) continue;
+    if (gradientBound.has(node.gradientId)) gradientUnbindIds.add(nodeId);
+    else gradientBound.add(node.gradientId);
+  }
   const nodes = patch.nodes
     .filter((node) => !droppedNodeIds.has(String(node.id || "").trim()))
     .filter((node) => {
@@ -908,7 +917,8 @@ function validateNodeGraphPatch(patch) {
       normalizedNode.ui = ui;
     }
     // Gradient module (HP-23): the gradient it plays.
-    if (type === "gradient" && typeof node.gradientId === "string" && node.gradientId) {
+    if (type === "gradient" && typeof node.gradientId === "string" && node.gradientId
+      && !gradientUnbindIds.has(String(node.id || "").trim())) {
       normalizedNode.gradientId = node.gradientId;
     }
     // Keyboard / Grid Chord Memory slots (MIDI 0..127 → note lists).

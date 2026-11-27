@@ -146,13 +146,27 @@ function nodeGraphGradientModuleInterceptSlider(slider, domainValue, options = {
   return true;
 }
 
-/** Tap a Gradient module's display: play the next gradient of the patch (one undo step). */
+/** Tap a Gradient module's display: play the next gradient of the patch that no other Gradient module plays (one undo step). */
 function nodeGraphGradientModuleCycle(nodeId) {
   const node = nodeGraphPatchNode(nodeId);
   const list = Array.isArray(nodeGraphMvp?.patch?.gradients) ? nodeGraphMvp.patch.gradients : [];
   if (!node || !list.length) return;
+  // PASTE-8: one module per gradient, so a gradient another module already plays is skipped.
+  const taken = new Set((nodeGraphMvp.patch.nodes || [])
+    .filter((n) => n && n.type === NODE_GRAPH_GRADIENT_MODULE_TYPE && n.id !== node.id && n.gradientId)
+    .map((n) => String(n.gradientId)));
   const at = list.findIndex((g) => g.id === node.gradientId);
-  node.gradientId = list[(at + 1) % list.length].id;
+  let next = null;
+  for (let step = 1; step <= list.length && !next; step += 1) {
+    const g = list[(((at + step) % list.length) + list.length) % list.length];
+    if (g.id === node.gradientId) break; // back round to its own: nothing else is free
+    if (!taken.has(g.id)) next = g;
+  }
+  if (!next) {
+    if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp("Every other gradient already has its Gradient module.");
+    return;
+  }
+  node.gradientId = next.id;
   const gradient = nodeGraphGradientModuleGradient(node);
   node.params = { ...(node.params || {}), playhead: Number(gradient?.position) || 0 };
   if (typeof recordNodeGraphHistory === "function") recordNodeGraphHistory();
