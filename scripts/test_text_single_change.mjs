@@ -104,6 +104,7 @@ try {
         window.__ts.wheelEnd = performance.now();
         window.__ts.atlasBakeStart = nodeGraphGlLinesTextAtlasStats().bakes;
         window.__ts.stackRepaintStart = nodeGraphGlGraphState.sharpen?.repaints || 0;
+        window.__ts.atlasInfoStart = nodeGraphGlLinesTextAtlasInfo();
       });
       // Test-side wait for the sharpen job to finish (the app itself does not poll).
       await page.waitForFunction(() => { const s = nodeGraphGlGraphState; return performance.now() - window.__ts.wheelEnd > 600 && !s.sharpen?.want && Math.abs((s.textRecordScale || 0) - nodeGraphGlGraphSharpenScale()) < 1e-3; }, null, { timeout: 30000, polling: 100 }).catch(() => {});
@@ -112,6 +113,7 @@ try {
         window.__ts.run = false;
         window.__ts.atlasBakeEnd = nodeGraphGlLinesTextAtlasStats().bakes;
         window.__ts.stackRepaintEnd = nodeGraphGlGraphState.sharpen?.repaints || 0;
+        window.__ts.atlasInfoEnd = nodeGraphGlLinesTextAtlasInfo();
         return window.__ts;
       });
       const after = r.frames.filter((f) => f.t >= r.wheelEnd);
@@ -129,9 +131,10 @@ try {
       const unchanged = ids.filter((id) => changes[id] === 0);
       const atlasBakeDelta = r.atlasBakeEnd - r.atlasBakeStart;
       const stackRepaintDelta = r.stackRepaintEnd - r.stackRepaintStart;
+      const finalCameraAtlases = r.atlasInfoEnd.filter((atlas) => atlas.cam);
       const hist = {};
       for (const id of ids) hist[changes[id]] = (hist[changes[id]] || 0) + 1;
-      console.log(`${tag}: ${ids.length} stacks, changes per stack ${JSON.stringify(hist)}, ${after.length} frames, atlas bake delta ${atlasBakeDelta}, stack repaint delta ${stackRepaintDelta}, discarded fallback records ${last.discarded - (after[0]?.discarded || 0)}`);
+      console.log(`${tag}: ${ids.length} stacks, changes per stack ${JSON.stringify(hist)}, ${after.length} frames, atlas bake delta ${atlasBakeDelta}, final camera atlas count ${finalCameraAtlases.length}, stack repaint delta ${stackRepaintDelta}, discarded fallback records ${last.discarded - (after[0]?.discarded || 0)}`);
       check(moved.length >= 1, `${tag}: the zoom resharpened some stacks (${moved.length})`);
       check(multi.length === 0 && moved.every((id) => changes[id] === 1), `${tag}: each changed text stack updates exactly once (${multi.slice(0, 4).map((id) => `${id} x${changes[id]}`).join(", ") || "none"})`);
       check(unchanged.every((id) => changes[id] === 0) && stackRepaintDelta === moved.length,

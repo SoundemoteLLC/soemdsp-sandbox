@@ -4,6 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
+### Text sharpens in two visible passes after camera settle — FIXED
+
+- **Reported:** 2026-11-27, by Argi.
+- **Verified:** 2026-11-27, `144f7ce8`. The per-stack browser probe records exactly one visible text-stack transition per changed stack, zero repaint for unchanged stacks, and verifies every stack ends at the settled zoom × device scale with no fallback atlas. One guitar-pluck run: 21/21 changed stacks repainted once; 23 shared glyph-atlas bake completions were counted across 13 final camera atlases.
+- **Notes:** Atlas bakes are shared by font and pixel size, so their raw count is not one-to-one with module text stacks. The visible transition count is the regression criterion.
+
 ### Input regressions after PASTE-9 (middle pan, drag-in, snake wire selection) — FIXED
 
 - **Reported:** 2026-11-27, by Argi (via Badger)
