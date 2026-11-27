@@ -19,7 +19,7 @@
 //   VIEW_W / VIEW_H        window size (default 1600 x 1000)
 //   VIEW_HEADED=1          headed Chrome
 //   SANDBOX_URL=url        use an already running server instead (never 8766 with a test patch)
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -88,6 +88,15 @@ try {
   browser = await chromium.launch({ headless: process.env.VIEW_HEADED !== "1", channel: "chrome" });
   const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: Number(process.env.DPR || 1) });
   const page = await context.newPage();
+  // BASELINE_REF can compare another checkpoint on the same fixture after this fix lands.
+  if (process.argv.includes("--baseline")) {
+    const ref = process.env.BASELINE_REF || "60d52088";
+    const changed = execFileSync("git", ["diff", "--name-only", ref, "--", "public"], { cwd: ROOT, encoding: "utf8" }).trim().split(/\r?\n/).filter(p => p.endsWith(".js"));
+    for (const file of changed) {
+      const body = execFileSync("git", ["show", `${ref}:${file}`], { cwd: ROOT, encoding: "utf8" });
+      await page.route(`**/${file}*`, route => route.fulfill({ contentType: "text/javascript", body }));
+    }
+  }
   const pageErrors = [];
   page.on("pageerror", (e) => pageErrors.push(String(e.message || e)));
   await page.goto(`${baseUrl}?v=${Date.now()}`, { waitUntil: "domcontentloaded", timeout: 120000 });

@@ -4034,7 +4034,10 @@ void main() {
     if (batch.veils?.length) drawVeils(batch);
     if (batch.layers?.length) {
       for (const layer of batch.layers) {
-        layer.camera = batch.camera;
+        const offset = layer.worldOffset;
+        layer.camera = offset && batch.camera
+          ? { ...batch.camera, x: batch.camera.x - offset.x, y: batch.camera.y - offset.y }
+          : batch.camera;
         layer.textPixelated = batch.textPixelated;
         // A layer may ask for its own quad blend (e.g. "straight" wire dots).
         drawContent(layer, layer.quadBlend || blend, alphaDst);

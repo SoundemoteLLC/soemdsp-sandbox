@@ -37,6 +37,9 @@ function nodeGraphGridKeyboardXY(col, row) {
 }
 
 function nodeGraphGridKeyboardPadFromPointer(event, surface) {
+  if (surface?._gridKeyModel) {
+    return nodeGraphGridKeyboardKeyAtClient(surface, event.clientX, event.clientY);
+  }
   const raw = event.target?.closest?.("[data-grid-midi]");
   if (raw && surface.contains(raw) && Number(raw.dataset.gridMidi) >= 0) {
     return raw;
@@ -51,6 +54,157 @@ function nodeGraphGridKeyboardPadFromPointer(event, surface) {
     if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return el;
   }
   return null;
+}
+
+/** Retained surface-local rectangles, shared by GL drawing and pointer hits. */
+function nodeGraphGridKeyboardLayoutKeyRects(surface) {
+  const w = surface.clientWidth;
+  const h = surface.clientHeight;
+  if (!(w > 0) || !(h > 0)) return null;
+  const style = getComputedStyle(surface);
+  const gapX = Number.parseFloat(style.columnGap) || 0;
+  const gapY = Number.parseFloat(style.rowGap) || 0;
+  const padW = Math.max(0, (w - gapX * (NODE_GRAPH_GRID_KEYBOARD_COLS - 1)) / NODE_GRAPH_GRID_KEYBOARD_COLS);
+  const padH = Math.max(0, (h - gapY * (NODE_GRAPH_GRID_KEYBOARD_ROWS - 1)) / NODE_GRAPH_GRID_KEYBOARD_ROWS);
+  const keys = [...surface.querySelectorAll("[data-grid-midi]")].map((pad) => ({
+    pad,
+    state: pad.classList,
+    black: pad.classList.contains("black-pc"),
+    x: Number(pad.dataset.gridCol) * (padW + gapX),
+    y: (NODE_GRAPH_GRID_KEYBOARD_ROWS - 1 - Number(pad.dataset.gridRow)) * (padH + gapY),
+    w: padW,
+    h: padH,
+  }));
+  surface._gridKeyModel = { w, h, keys };
+  return surface._gridKeyModel;
+}
+
+function nodeGraphGridKeyboardKeyAtClient(surface, clientX, clientY) {
+  const model = surface?._gridKeyModel;
+  if (!model) return null;
+  const box = surface.getBoundingClientRect();
+  if (!(box.width > 0) || !(box.height > 0)) return null;
+  const x = (clientX - box.left) * model.w / box.width;
+  const y = (clientY - box.top) * model.h / box.height;
+  const key = model.keys.find((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+  return key?.pad || null;
+}
+
+/** Hook: CollectChromeForNode adds Grid to the existing keyboard record list. */
+function nodeGraphGridKeyboardCollectChrome(id, el, keyboards) {
+  const surface = el.querySelector(".node-grid-keyboard-surface");
+  if (!surface) return;
+  const box = nodeGraphGlGraphWorldBox(surface);
+  if (!box || !nodeGraphGridKeyboardLayoutKeyRects(surface)) return;
+  keyboards.push({ id, surface, ...box, draw: nodeGraphGridKeyboardGlDraw });
+}
+
+let nodeGraphGridKeyboardLook = null;
+
+/** Keep Grid's dark idle pads; every highlight uses the shared piano paint logic. */
+function nodeGraphGridKeyboardKeyPaint(key) {
+  if (!nodeGraphGridKeyboardLook) {
+    const look = NODE_GRAPH_MIDI_KEY_LOOK;
+    const white = nodeGraphKeyboardRgba(18, 22, 26, 0.92);
+    const black = nodeGraphKeyboardRgba(8, 10, 12, 0.95);
+    nodeGraphGridKeyboardLook = {
+      ...look,
+      white: { ...look.white, base: { top: white, bottom: white, text: nodeGraphKeyboardRgba(243, 241, 236) } },
+      black: { ...look.black, base: { ...look.black.base, top: black, bottom: black } },
+    };
+  }
+  return nodeGraphPianoKeysPaint(nodeGraphGridKeyboardLook, key.state, { black: key.black, wideLabels: true });
+}
+
+/** The Keyboard highlight palette/precedence, drawn by the shared GL picture device. */
+function nodeGraphGridKeyboardGlDraw(batch, surface, x, y, w, h) {
+  const model = surface?._gridKeyModel;
+  if (!batch || !model || !(w > 0) || !(h > 0)) return false;
+  const sx = w / model.w;
+  const sy = h / model.h;
+  const scale = Math.min(sx, sy);
+  const textOpts = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts : (o) => o;
+  nodeGraphGlLinesRoundRect(batch, x, y, w, h, { radius: 0, fill: NODE_GRAPH_MIDI_KEY_LOOK.bed, feather: 0 });
+  for (const key of model.keys) {
+    const paint = nodeGraphGridKeyboardKeyPaint(key);
+    const px = x + key.x * sx;
+    const py = y + key.y * sy;
+    const pw = key.w * sx;
+    const ph = key.h * sy;
+    nodeGraphGlLinesRoundRect(batch, px, py, pw, ph, {
+      radius: Math.min(3 * scale, pw * 0.2, ph * 0.2),
+      fill: paint.top,
+      fillBottom: paint.bottom,
+      stroke: Math.max(1, paint.stroke) * scale,
+      strokeRgba: paint.stroke > 0 ? paint.strokeRgba : NODE_GRAPH_MIDI_KEY_LOOK.ring,
+      feather: 0.75,
+    });
+    const label = key.pad.textContent || "";
+    if (!label || typeof nodeGraphGlLinesText !== "function") continue;
+    nodeGraphGlLinesText(batch, label, px + pw / 2, py + ph / 2, textOpts({
+      px: Math.max(1, Math.min(ph * 0.45, (pw - 4 * sx) / Math.max(1, label.length) / 0.62)),
+      maxWidth: Math.max(1, pw - 4 * sx),
+      rgba: paint.text,
+      align: "center",
+      baseline: "middle",
+      weight: 700,
+      family: NODE_GRAPH_MIDI_KEY_LABEL_FONT,
+    }));
+  }
+  return true;
+}
+
+/** Hook: route an overlay press before the shared plate/title drag hit test. */
+function nodeGraphGridKeyboardGlPointerDown(event, point) {
+  const records = nodeGraphGlGraphState.chrome?.keyboards || [];
+  for (let i = records.length - 1; i >= 0; i -= 1) {
+    const record = records[i];
+    if (record.draw !== nodeGraphGridKeyboardGlDraw
+      || !nodeGraphGlHitInside(point.x, point.y, record)
+      || nodeGraphGlHitCovered(record.id, point.x, point.y)) continue;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof nodeGraphModuleRaiseToFront === "function") nodeGraphModuleRaiseToFront(record.id);
+    // Capture on the real surface: its existing listeners receive move/up/cancel.
+    try { record.surface.setPointerCapture(event.pointerId); } catch (_e) { /* detached pointer */ }
+    updateNodeGraphGridKeyboardSignal(nodeGraphGlHitRetarget(event, record.surface));
+    return true;
+  }
+  return false;
+}
+
+/** Face-only tiles use the same painter, not a DOM/C2D fallback. */
+function nodeGraphGridKeyboardPresentFaceCanvases() {
+  if (typeof document === "undefined" || typeof nodeGraphGlLinesBegin !== "function") return;
+  document.querySelectorAll(".node-grid-keyboard-surface").forEach((surface) => {
+    let canvas = surface.querySelector(":scope > canvas.node-grid-keyboard-face-canvas");
+    if (!surface.closest(".node-layout-canvas-face, .node-screen-solo-stage, .node-metamodule-canvas-stage, .node-mini-perform-keyboard")
+      || surface.closest(".node-whole-module-face")) {
+      if (canvas) canvas.hidden = true;
+      return;
+    }
+    const model = nodeGraphGridKeyboardLayoutKeyRects(surface);
+    if (!model) return;
+    if (!canvas) {
+      canvas = document.createElement("canvas");
+      canvas.className = "node-grid-keyboard-face-canvas";
+      canvas.setAttribute("aria-hidden", "true");
+      Object.assign(canvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
+      surface.style.position = "relative";
+      surface.append(canvas);
+    }
+    canvas.hidden = false;
+    const rect = surface.getBoundingClientRect();
+    const scale = Math.max(0.25, rect.width / model.w * (window.devicePixelRatio || 1));
+    const pw = Math.max(1, Math.round(model.w * scale));
+    const ph = Math.max(1, Math.round(model.h * scale));
+    if (canvas.width !== pw) canvas.width = pw;
+    if (canvas.height !== ph) canvas.height = ph;
+    const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { scale, transparent: true, publishNodeId: "" });
+    if (!batch) return;
+    nodeGraphGridKeyboardGlDraw(batch, surface, 0, 0, model.w, model.h);
+    nodeGraphGlLinesEnd(batch, "alpha");
+  });
 }
 
 function nodeGraphGridKeyboardSignalFromPad(pad, event, options = {}) {
@@ -202,6 +356,7 @@ function nodeGraphGridKeyboardFillSurface(surface, octave) {
       const pad = document.createElement("button");
       pad.type = "button";
       pad.className = "node-grid-keyboard-pad";
+      pad.style.opacity = "0";
       pad.dataset.gridCol = String(col);
       pad.dataset.gridRow = String(row);
       pad.dataset.gridMidi = String(midi);
@@ -215,6 +370,9 @@ function nodeGraphGridKeyboardFillSurface(surface, octave) {
       surface.append(pad);
     }
   }
+  surface._gridKeyModel = null;
+  nodeGraphGridKeyboardLayoutKeyRects(surface);
+  if (typeof nodeGraphKeyboardRequestPaint === "function") nodeGraphKeyboardRequestPaint(surface);
 }
 
 function renderNodeGraphGridKeyboardPads() {
@@ -226,8 +384,12 @@ function renderNodeGraphGridKeyboardPads() {
     if (surface.dataset.gridOctave !== String(octave)) {
       nodeGraphGridKeyboardFillSurface(surface, octave);
     }
-    const signal = nodeGraphKeyboardRuntime(nodeId).signal;
+    const rt = nodeGraphKeyboardRuntime(nodeId);
+    const signal = rt.signal;
     const playing = Number(signal?.gate) > 0 ? Number(signal.midi) : NaN;
+    const playMask = typeof nodeGraphHeldKeysDemux === "function"
+      ? nodeGraphHeldKeysDemux(rt.facePlayTransmit, rt.playRegs)
+      : null;
     const gold = nodeGraphKeyboardArpLatchView(nodeId).mask;
     const momMask = typeof nodeGraphChordMemoryMomentaryMaskForNode === "function"
       ? nodeGraphChordMemoryMomentaryMaskForNode(nodeId)
@@ -235,13 +397,19 @@ function renderNodeGraphGridKeyboardPads() {
     surface.querySelectorAll(".node-grid-keyboard-pad[data-grid-midi]").forEach((pad) => {
       const midi = Number(pad.dataset.gridMidi);
       if (!(midi >= 0 && midi <= 127)) return;
+      const previousState = pad.className;
       const goldOn = Boolean(gold[midi]);
       pad.classList.toggle("held", goldOn);
-      pad.classList.toggle("active", Number.isFinite(playing) && playing === midi);
+      const fromPlay = playMask instanceof Uint8Array && typeof noteMaskGet === "function"
+        && noteMaskGet(playMask, midi);
+      pad.classList.toggle("active", (Number.isFinite(playing) && playing === midi) || Boolean(fromPlay));
       const playGhost = typeof noteMaskGet === "function"
         && (momMask instanceof Uint8Array && noteMaskGet(momMask, midi));
       pad.classList.toggle("ghost-play", Boolean(playGhost) && !goldOn);
       pad.classList.remove("ghost-arp");
+      if (pad.className !== previousState && typeof nodeGraphKeyboardRequestPaint === "function") {
+        nodeGraphKeyboardRequestPaint(surface);
+      }
     });
   });
   if (typeof nodeGraphChordMemoryPaintKeys === "function") {
@@ -302,6 +470,15 @@ function updateNodeGraphGridKeyboardSignal(event) {
     return;
   }
 
+  if (event.type === "pointerdown" && !event.ctrlKey && !event.shiftKey && !altDown && pad) {
+    const held = nodeGraphKeyboardHeldPointerSignal(nodeId);
+    if (held && held.midi === Number(pad.dataset.gridMidi)) {
+      clearNodeGraphKeyboardPointerHold(nodeId);
+      event.preventDefault();
+      return;
+    }
+  }
+
   if (event.type === "pointerdown" && mode === "toggle" && !event.ctrlKey) {
     if (pad) nodeGraphKeyboardToggleHeldMidi(nodeId, Number(pad.dataset.gridMidi), 1);
     event.preventDefault();
@@ -311,8 +488,13 @@ function updateNodeGraphGridKeyboardSignal(event) {
   if (event.type === "pointerdown" && (event.shiftKey || mode === "hold")) {
     if (pad) {
       const next = nodeGraphGridKeyboardSignalFromPad(pad, event);
-      next.gate = 1;
-      renderNodeGraphKeyboardSignal(nodeId, next);
+      const held = nodeGraphKeyboardHeldPointerSignal(nodeId);
+      if (held && held.midi === next.midi) {
+        clearNodeGraphKeyboardPointerHold(nodeId);
+      } else {
+        rt.pointerHeldSignal = { ...next, gate: 1, gatePulse: 0, source: "pointerHold" };
+        renderNodeGraphKeyboardSignal(nodeId, rt.pointerHeldSignal);
+      }
     }
     try { surface.setPointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
     event.preventDefault();
@@ -336,7 +518,7 @@ function updateNodeGraphGridKeyboardSignal(event) {
     return;
   }
 
-  if (event.type === "pointerup" || event.type === "pointercancel") {
+  if (event.type === "pointerup" || event.type === "pointercancel" || event.type === "lostpointercapture") {
     try { surface.releasePointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
     const held = nodeGraphKeyboardHeldPointerSignal(nodeId);
     if (held) {
@@ -358,10 +540,24 @@ function updateNodeGraphGridKeyboardSignal(event) {
   }
 }
 
+let nodeGraphGridKeyboardResizeObserver = null;
+
 function bindNodeGraphGridKeyboardEvents() {
+  if (!nodeGraphGridKeyboardResizeObserver && typeof ResizeObserver !== "undefined") {
+    nodeGraphGridKeyboardResizeObserver = new ResizeObserver((entries) => {
+      for (const { target: surface } of entries) {
+        const prev = surface._gridKeyModel;
+        if (prev && prev.w === surface.clientWidth && prev.h === surface.clientHeight) continue;
+        if (!nodeGraphGridKeyboardLayoutKeyRects(surface)) continue;
+        if (typeof nodeGraphKeyboardRequestGlRebuild === "function") nodeGraphKeyboardRequestGlRebuild();
+        if (typeof nodeGraphKeyboardRequestPaint === "function") nodeGraphKeyboardRequestPaint(surface);
+      }
+    });
+  }
   document.querySelectorAll(".node-grid-keyboard-surface").forEach((surface) => {
     if (surface.dataset.gridKeyboardBound === "true") return;
     surface.dataset.gridKeyboardBound = "true";
+    nodeGraphGridKeyboardResizeObserver?.observe(surface);
     surface.addEventListener("pointerdown", updateNodeGraphGridKeyboardSignal);
     surface.addEventListener("pointermove", updateNodeGraphGridKeyboardSignal);
     surface.addEventListener("pointerup", updateNodeGraphGridKeyboardSignal);

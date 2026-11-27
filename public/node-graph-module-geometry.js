@@ -72,6 +72,13 @@ function nodeGraphModuleGeometryTranslate(nodeId, dx, dy) {
   if (typeof nodeGraphGlGraphChromeCacheTranslate === "function") {
     nodeGraphGlGraphChromeCacheTranslate(nodeId, dx, dy);
   }
+  if (typeof nodeGraphGlGraphState === "object" && !nodeGraphGlGraphState.view) {
+    for (const item of [...(nodeGraphGlGraphState.plates || []), ...(nodeGraphGlGraphState.displays || [])]) {
+      if (String(item.id) !== String(nodeId)) continue;
+      item.x += dx;
+      item.y += dy;
+    }
+  }
 }
 
 function nodeGraphModuleGeometryGet(nodeId) {

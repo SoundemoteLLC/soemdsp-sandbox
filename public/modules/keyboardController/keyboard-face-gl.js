@@ -21,7 +21,8 @@
 
 /** classList-shaped key state; any change schedules one repaint. */
 class NodeGraphMidiKeyState {
-  constructor() {
+  constructor(surface) {
+    this.surface = surface;
     this._on = new Set();
   }
 
@@ -32,13 +33,13 @@ class NodeGraphMidiKeyState {
   add(name) {
     if (this._on.has(name)) return;
     this._on.add(name);
-    nodeGraphKeyboardRequestPaint();
+    nodeGraphKeyboardRequestPaint(this.surface);
   }
 
   remove(name) {
     if (!this._on.has(name)) return;
     this._on.delete(name);
-    nodeGraphKeyboardRequestPaint();
+    nodeGraphKeyboardRequestPaint(this.surface);
   }
 
   toggle(name, force) {
@@ -91,7 +92,7 @@ function nodeGraphKeyboardBuildKeyModel(surface, start, count, labels) {
       leftWhiteIndex: black ? src.leftWhiteIndex : -1,
       label: "",
       aria: "",
-      state: new NodeGraphMidiKeyState(),
+      state: new NodeGraphMidiKeyState(surface),
     });
   };
   for (const key of generated.whiteKeys) add(key, false);
@@ -112,7 +113,7 @@ function nodeGraphKeyboardBuildKeyModel(surface, start, count, labels) {
     geom: null,
   };
   nodeGraphKeyboardSetKeyLabels(surface, labels);
-  nodeGraphKeyboardRequestPaint();
+  nodeGraphKeyboardRequestPaint(surface);
   return true;
 }
 
@@ -134,7 +135,7 @@ function nodeGraphKeyboardSetKeyLabels(surface, labels) {
       ? `${nodeGraphKeyboardPitchLabel(key.midi)} / MIDI ${key.midi}`
       : `MIDI ${key.midi}`;
   }
-  if (changed) nodeGraphKeyboardRequestPaint();
+  if (changed) nodeGraphKeyboardRequestPaint(surface);
 }
 
 /**
@@ -230,7 +231,15 @@ function nodeGraphKeyboardKeyClientRect(key) {
 let nodeGraphKeyboardPaintFrame = 0;
 
 /** Key state / labels changed: repaint every place that draws a keyboard, once per frame. */
-function nodeGraphKeyboardRequestPaint() {
+function nodeGraphKeyboardRequestPaint(surface = null) {
+  // Present alone replays cached key colors. Dirty the owning plate before
+  // coalescing so every changed keyboard is repainted, not only the first one.
+  if (surface && typeof nodeGraphGlGraphNoteValueChrome === "function") {
+    const nodeId = typeof nodeGraphKeyboardNodeIdFromElement === "function"
+      ? nodeGraphKeyboardNodeIdFromElement(surface)
+      : "";
+    nodeGraphGlGraphNoteValueChrome(nodeId || surface);
+  }
   if (nodeGraphKeyboardPaintFrame || typeof requestAnimationFrame !== "function") return;
   nodeGraphKeyboardPaintFrame = requestAnimationFrame(() => {
     nodeGraphKeyboardPaintFrame = 0;
@@ -240,6 +249,7 @@ function nodeGraphKeyboardRequestPaint() {
       nodeGraphGlMiniPerformPresent();
     }
     nodeGraphKeyboardPresentFaceCanvases();
+    if (typeof nodeGraphGridKeyboardPresentFaceCanvases === "function") nodeGraphGridKeyboardPresentFaceCanvases();
   });
 }
 
