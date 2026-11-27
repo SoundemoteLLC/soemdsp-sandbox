@@ -9,6 +9,7 @@
 
 const nodeGraphGradientPageState = {
   filter: "all", // "all" | "touching"
+  showGraphs: false,
   selectedStop: new Map(), // gradientId -> stopId (the stop Delete stop removes)
   selectedParam: new Map(), // gradientId -> `${nodeId}\0${key}` for per-param segment curves
   renaming: "", // gradientId whose name is being edited
@@ -280,6 +281,7 @@ function nodeGraphGradientPageCard(gradient) {
   const card = document.createElement("section");
   card.className = "node-gradient-card";
   if (gradient.enabled === false) card.classList.add("is-disabled");
+  if (!nodeGraphGradientPageState.showGraphs) card.classList.add("graphs-hidden");
   card.dataset.gradientId = gradient.id;
 
   const head = document.createElement("div");
@@ -404,6 +406,7 @@ function renderNodeGraphGradientPage() {
     filter.append(b);
   }
   top.append(filter, nodeGraphGradientPageButton("Snapshot", "newGradient", ""));
+  top.append(nodeGraphGradientPageButton(nodeGraphGradientPageState.showGraphs ? "Hide graphs" : "Show graphs", "toggleGraphs", "", { pressed: nodeGraphGradientPageState.showGraphs }));
   fragment.append(top);
   const gradients = nodeGraphGradientPageGradients();
   const shown = nodeGraphGradientPageState.filter === "touching"
@@ -459,6 +462,11 @@ function nodeGraphGradientPageAction(action, gradientId, button) {
   if (!patch) return;
   if (action === "filter") {
     nodeGraphGradientPageState.filter = button.dataset.filter === "touching" ? "touching" : "all";
+    renderNodeGraphGradientPage();
+    return;
+  }
+  if (action === "toggleGraphs") {
+    nodeGraphGradientPageState.showGraphs = !nodeGraphGradientPageState.showGraphs;
     renderNodeGraphGradientPage();
     return;
   }
@@ -755,18 +763,14 @@ function nodeGraphGradientPagePointerUp(event) {
     return;
   }
   if (nodeGraphGradientPageState.editing) {
-    // Tap on empty strip while editing: stop editing (no new stop).
+    // An empty bar click moves the playhead; it never creates a stop.
     nodeGraphGradientEditEnd();
-    return;
   }
-  {
-    // Tap on an empty spot: a new stop there, a snapshot of the current bases.
-    const pos = nodeGraphGradientPageStripPos(drag.strip, event.clientX);
-    const next = NodeGraphGradients.snapshotIntoGradient(nodeGraphMvp.patch, gradient, pos);
-    const added = next.stops.find((s) => Math.abs(s.pos - pos) < 1e-9);
-    if (added) nodeGraphGradientPageState.selectedStop.set(gradient.id, added.id);
-    nodeGraphGradientPageCommit(nodeGraphGradientPageReplace(gradient.id, () => next), `${gradient.name} stop added`);
-  }
+  gradient.position = nodeGraphGradientPageStripPos(drag.strip, event.clientX);
+  nodeGraphGradientPageRepaintSliders([gradient]);
+  if (typeof nodeGraphGradientsNotifyPlayhead === "function") nodeGraphGradientsNotifyPlayhead(gradient, `${gradient.name} position`);
+  else nodeGraphGradientsNotifyChanged(`${gradient.name} position`);
+  nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), `${gradient.name} position`);
 }
 
 // ------------------------------------------------------------------------------------------------ editing a stop (HP-24)

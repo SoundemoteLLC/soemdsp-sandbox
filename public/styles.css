@@ -5753,6 +5753,17 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   outline-offset: 2px;
 }
 
+/* Final PASTE-12 stop geometry overrides the earlier legacy button sizing above. */
+#nodeGradientsBody .node-gradient-strip { height:24px; box-sizing:border-box; }
+#nodeGradientsBody .node-gradient-handle {
+  top:50%; transform:translateY(-50%); width:12px; height:14px; min-height:14px; margin-left:-6px;
+  box-sizing:border-box; padding:0; border:1px solid #25252b; border-radius:3px; appearance:none; -webkit-appearance:none;
+  background:#ddd; line-height:0;
+}
+#nodeGradientsBody .node-gradient-handle:active { transform:translateY(-50%); }
+#nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-param-chips,
+#nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-curve-chart { display:none; }
+
 .node-gradient-editing {
   margin: 4px 2px 0;
   color: #ffd24a;

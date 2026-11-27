@@ -82,6 +82,10 @@ try {
       out.registered = g().params.map((x) => x.nodeId === a ? "a." + x.key : x.nodeId === b ? "b." + x.key : x.key).sort();
       out.snapshotSteps = steps();
       out.rows = [...document.querySelectorAll(".node-gradient-param-chips .node-gradient-button:not(.node-gradient-button:last-child)")].map((x) => x.textContent);
+      out.graphsHiddenByDefault = Boolean(document.querySelector(".node-gradient-card")?.classList.contains("graphs-hidden"));
+      if (out.visible) btn("Show graphs").click();
+      else nodeGraphGradientPageState.showGraphs = true;
+      out.graphsShowOnDemand = !out.visible || Boolean(document.querySelector("[data-gradient-graph]")?.getClientRects().length);
       // Selecting a plotted point must retain capture across the page re-render; horizontal and vertical drags edit separate dimensions.
       const host = document.getElementById("nodeGradientsBody");
       host.setPointerCapture = (id) => { host.__testCapturedPointer = id; };
@@ -200,11 +204,11 @@ try {
         s2.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 6, button: 0, clientX: tapX }));
         s2.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 6, button: 0, clientX: tapX }));
       } else {
-        nodeGraphGradientPageCommit(nodeGraphGradientPageReplace(g().id, () => NodeGraphGradients.snapshotIntoGradient(nodeGraphMvp.patch, g(), 0.2)), "test tap");
-        nodeGraphGradientPageState.selectedStop.set(g().id, g().stops.find((s) => Math.abs(s.pos - 0.2) < 1e-9).id);
-        renderNodeGraphGradientPage();
+        g().position = 0.2;
+        nodeGraphGradientsNotifyPlayhead(g(), "test bar click");
+        nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), "test bar click");
       }
-      out.stopsAfterTap = g().stops.length; out.tapSteps = steps();
+      out.stopsAfterTap = g().stops.length; out.positionAfterTap = Math.round(g().position * 100) / 100; out.tapSteps = steps();
       btn("Delete stop", card).click(); out.stopsAfterDelete = g().stops.length; out.deleteStopSteps = steps();
       btn("Set start", card).click(); out.setStartSteps = steps();
       // D-G1: delete a module, its params leave the gradient in the same commit.
@@ -231,6 +235,7 @@ try {
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(JSON.stringify(r.registered) === JSON.stringify(["a.frequency", "b.floorDb"]) && r.snapshotSteps === 1, "both moved params register");
     ok(r.rows.length === 2, "one row per registered param");
+    ok(r.graphsHiddenByDefault && r.graphsShowOnDemand, "graphs start hidden and the page toggle shows them");
     ok(r.graphCapture && r.graphHorizontalDrag && r.graphVerticalDrag, "graph point drag keeps pointer capture and separates shared position from selected-param value");
     ok(r.graphPointsStaySquare, "selected and unselected graph points keep the same square shape");
     ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
@@ -244,7 +249,7 @@ try {
     ok(r.displayValue, "displays read the gradient's moved value");
     ok(r.toggleSteps === 1 && r.disabledEffIsBase, "Off removes the gradient's effect, one step");
     ok(r.name === "Bright sweep" && r.renameSteps === 1, "Rename");
-    ok(r.stopsAfterTap === 3 && r.tapSteps === 1 && r.stopsAfterDelete === 2 && r.deleteStopSteps === 1, "tap adds a stop; Delete stop removes it");
+    ok(r.stopsAfterTap === 2 && r.positionAfterTap === 0.2 && r.tapSteps === 1 && r.stopsAfterDelete === 1 && r.deleteStopSteps === 1, "empty bar click moves the playhead without adding a stop; Delete stop removes a selected stop");
     ok(r.setStartSteps === 1, "Set start");
     ok(r.deleteDrops, "deleting a module drops its params in the same undo step (D-G1)");
     ok(r.roundTrip, "save / load round trip");
