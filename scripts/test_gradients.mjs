@@ -153,7 +153,9 @@ function gradient(id, offsets, extra = {}) {
     assert.equal(g.stops.length, 1); assert.equal(g.stops[0].pos, 0);
     deq(g.params, [], "nothing registered at the first snapshot");
     assert.ok(g.origin.n1 && Math.abs(g.origin.n1.cutoff - 0.3) < 1e-12, "origin = the base slider values");
-    assert.equal(g.origin.stepper, undefined, "Step Graph holds still: it is not captured");
+    // HP-05: a Step Graph's sliders take part (its graph points hold still, and the page says so).
+    assert.ok(g.origin.stepper && Math.abs(g.origin.stepper.level - 0.5) < 1e-12, "a Step Graph's sliders are captured");
+    assert.equal(api.holdsStill("stepGraph"), true, "Step Graph data holds still");
     p.nodes[0].params.cutoff = 0.5;            // moves
     p.nodes[0].params.untouched = 0.77 + 5e-5; // below the epsilon (1e-4 of travel)
     g = api.snapshotIntoGradient(p, g, 1);

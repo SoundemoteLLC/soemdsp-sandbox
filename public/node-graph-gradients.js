@@ -20,7 +20,8 @@
   "use strict";
 
   const EPSILON = 1e-4; // a base differing from the origin by more than this fraction of slider travel is "moved"
-  // Module-level data that is not a slider: it holds still under a gradient.
+  // Modules with data that is not a slider (graph points, steps, chords): their sliders take part in a gradient, that data holds still.
+  // The Gradients page names them on a plain "Holds still: ..." line (HP-05).
   const HOLDS_STILL = new Set(["stepGraph", "smoothGraph", "stepRegister", "chordMemory"]);
 
   function finite(value, fallback) {
@@ -249,7 +250,7 @@
   function baseSliders(patch) {
     const out = {};
     for (const node of (patch && Array.isArray(patch.nodes)) ? patch.nodes : []) {
-      if (!node || typeof node.id !== "string" || !plain(node.params) || HOLDS_STILL.has(node.type)) continue;
+      if (!node || typeof node.id !== "string" || !plain(node.params)) continue;
       const row = {};
       for (const key of Object.keys(node.params)) {
         const value = node.params[key];

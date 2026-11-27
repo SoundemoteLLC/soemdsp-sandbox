@@ -176,6 +176,20 @@ function nodeGraphGradientPageCard(gradient) {
   card.append(head);
 
   card.append(nodeGraphGradientPageStrip(gradient));
+  // HP-05: one plain line naming the gradient's modules whose non-slider data (graph points, steps, chords) holds still.
+  const holds = [];
+  for (const { nodeId } of gradient.params) {
+    const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+    if (!node || !NodeGraphGradients.holdsStill(node.type)) continue;
+    const label = nodeGraphGradientPageModuleLabel(nodeId);
+    if (!holds.includes(label)) holds.push(label);
+  }
+  if (holds.length) {
+    const line = document.createElement("p");
+    line.className = "node-gradient-holds";
+    line.textContent = `Holds still: ${holds.join(", ")}`;
+    card.append(line);
+  }
   const active = nodeGraphGradientEditActive();
   if (active && active.gradient.id === gradient.id) {
     const note = document.createElement("p");

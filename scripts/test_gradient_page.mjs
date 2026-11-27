@@ -107,6 +107,21 @@ try {
       out.position = Math.round(g().position * 100) / 100;
       out.glides = glide.every((v, i) => i === 0 || v > glide[i - 1]);
       out.baseUnchanged = nodeGraphPatchNode(a).params.frequency === base;
+      // HP-05: "Holds still" names a gradient's Step Graph (its points hold still); a gradient without one has no such line.
+      out.holdsBefore = Boolean(document.querySelector("#nodeGradientsBody .node-gradient-holds"));
+      const sg = showNodeGraphModule("stepGraph", { x: 100, y: 500 }, opt);
+      const sgNode = nodeGraphPatchNode(sg);
+      const sgKey = Object.keys(sgNode.params).find((k) => typeof sgNode.params[k] === "number"
+        && NodeGraphGradients.metaFor(sgNode, k) && !NodeGraphGradients.isDiscrete(NodeGraphGradients.metaFor(sgNode, k)));
+      const gNow = g();
+      nodeGraphMvp.patch.gradients = nodeGraphMvp.patch.gradients.map((x) => (x.id === gNow.id
+        ? { ...x, params: [...x.params, { nodeId: sg, key: sgKey }] } : x));
+      renderNodeGraphGradientPage();
+      out.holdsText = document.querySelector("#nodeGradientsBody .node-gradient-holds")?.textContent || "";
+      nodeGraphMvp.patch.gradients = nodeGraphMvp.patch.gradients.map((x) => (x.id === gNow.id
+        ? { ...x, params: x.params.filter((p) => p.nodeId !== sg) } : x));
+      renderNodeGraphGradientPage();
+      out.holdsAfter = Boolean(document.querySelector("#nodeGradientsBody .node-gradient-holds"));
       // HP-23: the moved value shows where a modulated value shows (ghost + slider number + displays), with audio stopped, on the event.
       g().position = 0.8;
       nodeGraphGradientsNotifyChanged("test");
@@ -162,6 +177,7 @@ try {
     if (r.visible) ok(r.stripHeight === 44, "the strip is 44 px tall");
     ok(r.stepsDuringDrag === 0 && r.releaseSteps === 1, "a playhead drag is exactly one undo step");
     ok(r.position === 0.8 && (r.glides || !r.visible) && r.baseUnchanged, "dragging glides the effective value; the base never changes");
+    ok(!r.holdsBefore && /^Holds still: /.test(r.holdsText) && !r.holdsAfter, "Holds still line only for a gradient touching a Step Graph");
     if (r.visible) ok(r.ghostShown && r.ghostValue, "the gradient's moved value shows as the slider ghost and number");
     ok(r.displayValue, "displays read the gradient's moved value");
     ok(r.toggleSteps === 1 && r.disabledEffIsBase, "Off removes the gradient's effect, one step");

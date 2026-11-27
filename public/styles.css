@@ -5726,6 +5726,12 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   font-size: 12px;
 }
 
+.node-gradient-holds {
+  margin: 4px 2px 0;
+  color: rgba(200, 205, 212, 0.72);
+  font-size: 12px;
+}
+
 .node-gradient-handle-label {
   position: absolute;
   left: 50%;
