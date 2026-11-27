@@ -4,6 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
+### Boot can report ready before deferred module definitions register — FIXED
+
+- **Reported:** 2026-11-27, in PASTE-10.
+- **Fixed:** 2026-11-27, `72c180fc`. Startup now awaits the deferred-script load events before patch/module readiness. The eight-second watchdog only reports a slow load and no longer races startup or marks the interface ready early.
+- **Verification:** `test_boot_deferred_modules.mjs` throttles Chrome CPU 8×, waits for earliest readiness, checks all 12 factory module types, loads a full factory patch, and spawns Analog Distortion. `test_event_binding_boot.mjs` also passes.
+
 ### Text sharpens in two visible passes after camera settle — FIXED
 
 - **Reported:** 2026-11-27, by Argi.
