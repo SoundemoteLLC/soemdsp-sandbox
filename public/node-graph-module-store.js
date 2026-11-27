@@ -108,7 +108,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "wavetable3d",
   "pixelGrid",
   "image",
-  "rgbaHsla",
   "waveguide",
   "flexGrid",
   "gravity",
@@ -123,8 +122,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "additiveImage",
   "animatedTextBox",
   "theremin",
-  "waterfallRgb",
-  "waterfallXyz",
   // Efficient-shop gaps: defined modules that are not on the live-audio /
   // observer allowlist. Park them as UC cards so search does not silently omit them.
   // audioInput: intentionally not shop-listed in efficient mode (APP_POLICY §0b).
@@ -149,6 +146,9 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
 // from persisted underconstructionsort so old UI settings do not keep the
 // construction plate over a working face (Output meter/trace).
 const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
+  "waterfallRgb",
+  "waterfallXyz",
+  "rgbaHsla",
   // Shipped as Formant Voice (was BLIT Formant; the parked "formantFilter" placeholder).
   "formantFilter",
   // Shipped as the real Spectral Smear (the old Spectral Blur); a saved underconstructionsort must not keep it parked.
@@ -2785,11 +2785,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Viewport Out: its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
     notes: ["viewport", "viewport out", "screen space", "screen", "feedback", "picture"],
   },
-  rgbaHsla: {
-    category: "rgba",
-    description: "Retired: Chroma Color does this and more (RGB channel gains, hue, saturation, lightness) on a picture.",
-    notes: ["under construction", "retired", "use chroma color", "rgb channels", "hsla control"],
-  },
   image: {
     category: "rgb",
     description: "Hold a patch image asset for textures (e.g. phosphor dots). Sits with Image Ghost and Picture in the RGB category.",
@@ -2854,13 +2849,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "waveform",
       "display testbed",
     ],
-  },
-  waterfallXyz: {
-    hidden: true,
-    category: "oscilloscope",
-    description: "Retired alias. Use 1D Waterfall XYZ (waterfallXyz).",
-    label: "1D Waterfall XYZ",
-    notes: ["retired"],
   },
   dotOscilloscope: {
     hidden: true,

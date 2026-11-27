@@ -630,6 +630,10 @@ function showNodeGraphModuleGroup(types, point = null, options = {}) {
 
 function showNodeGraphModule(node, point = null, options = {}) {
   const type = node;
+  if (type === "rgbaHsla") {
+    if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp("RGBA / HSLA was retired; use Chroma Color.");
+    return "";
+  }
   if (
     (typeof nodeGraphIsPortalIoCatalogType === "function" && nodeGraphIsPortalIoCatalogType(type))
     || type === "portalIo"

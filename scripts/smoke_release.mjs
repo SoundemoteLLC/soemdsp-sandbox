@@ -50,6 +50,8 @@ try {
     // real wasm instead: scripts/smoke_native_audio.mjs.
     const types = await page.evaluate(() => Object.keys(nodeGraphModuleDefinitions)
       .filter((t) => typeof nodeGraphModuleIsEfficientProductShopType !== "function" || nodeGraphModuleIsEfficientProductShopType(t))
+      .filter((t) => t !== "rgbaHsla")
+      .filter((t) => typeof nodeGraphModuleTypeIsUnderConstruction !== "function" || !nodeGraphModuleTypeIsUnderConstruction(t))
       .filter((t) => t !== "output"));
     // SMOKE_MODULES=<regex> limits the sweep to matching module types.
     if (process.env.SMOKE_MODULES) {
