@@ -188,6 +188,7 @@ var nodeGraphMvp = {
   // Unified floating window: one active page at a time (command center,
   // modules, module/display/parameter settings).
   unifiedWindowPage: "",
+  unifiedWindowLastPage: "", // the page the Command Center reopens on (survives closing)
   unifiedWindowPosition: null,
   unifiedWindowSize: null,
   // closed | open | embedLeft | embedRight | float

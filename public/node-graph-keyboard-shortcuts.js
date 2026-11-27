@@ -609,7 +609,7 @@ function handleNodeGraphKeydown(event) {
   ) {
     event.preventDefault();
     if (typeof openNodeGraphUnifiedWindowPage === "function") {
-      openNodeGraphUnifiedWindowPage("commandCenter");
+      openNodeGraphUnifiedWindowPage(typeof nodeGraphCommandCenterReopenPage === "function" ? nodeGraphCommandCenterReopenPage() : "commandCenter");
     } else if (typeof openNodeGraphCommandCenter === "function") {
       openNodeGraphCommandCenter();
     }

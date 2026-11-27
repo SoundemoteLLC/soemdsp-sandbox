@@ -1355,6 +1355,11 @@ function normalizeNodeGraphUserSession(payload = {}) {
       && nodeGraphUnifiedWindowPageConfig(payload.unifiedWindowPage ?? view.unifiedWindowPage)
       ? String(payload.unifiedWindowPage ?? view.unifiedWindowPage)
       : "",
+    // The page the Command Center reopens on (kept when it is closed).
+    unifiedWindowLastPage: typeof nodeGraphUnifiedWindowPageConfig === "function"
+      && nodeGraphUnifiedWindowPageConfig(payload.unifiedWindowLastPage ?? view.unifiedWindowLastPage)
+      ? String(payload.unifiedWindowLastPage ?? view.unifiedWindowLastPage)
+      : "",
     unifiedWindowPresentation: ["open", "embedLeft", "embedRight", "float", "closed"].includes(
       payload.unifiedWindowPresentation ?? view.unifiedWindowPresentation,
     )
@@ -1455,6 +1460,7 @@ function readNodeGraphUserSessionFromState() {
     bookScriptPage: nodeGraphMvp.bookScriptPage === "ui-settings" ? "ui-settings" : "patch",
     uiSettingsPage: nodeGraphMvp.uiSettingsPage === "uidev" ? "uidev" : "settings",
     unifiedWindowPage: String(nodeGraphMvp.unifiedWindowPage || ""),
+    unifiedWindowLastPage: String(nodeGraphMvp.unifiedWindowLastPage || ""),
     unifiedWindowPresentation: String(nodeGraphMvp.unifiedWindowPresentation || "closed"),
     unifiedWindowPosition: nodeGraphMvp.unifiedWindowPosition
       && Number.isFinite(Number(nodeGraphMvp.unifiedWindowPosition.left))
@@ -1581,6 +1587,7 @@ function applyNodeGraphUserSession(session, options = {}) {
     syncNodeUserUiSettingsPageChrome();
   }
   nodeGraphMvp.unifiedWindowPage = String(normalized.unifiedWindowPage || "");
+  nodeGraphMvp.unifiedWindowLastPage = String(normalized.unifiedWindowLastPage || normalized.unifiedWindowPage || "");
   nodeGraphMvp.unifiedWindowPresentation = String(normalized.unifiedWindowPresentation || "closed");
   nodeGraphMvp.unifiedWindowPosition = normalized.unifiedWindowPosition || null;
   nodeGraphMvp.unifiedWindowSize = normalized.unifiedWindowSize || null;

@@ -772,12 +772,22 @@ function restoreNodeGraphUnifiedWindowAfterWorkspaceStates() {
   }
 }
 
+/**
+ * The page the Command Center shows when it opens again: the last page looked at. Closing clears unifiedWindowPage (nothing is showing),
+ * never this; the home page is the fallback.
+ */
+function nodeGraphCommandCenterReopenPage() {
+  const last = String(nodeGraphMvp?.unifiedWindowLastPage || "").trim();
+  return last && nodeGraphUnifiedWindowPageConfig(last) && nodeGraphUnifiedWindowElement(last) ? last : "commandCenter";
+}
+
 function markNodeGraphUnifiedWindowPage(page = "") {
   const key = String(page || "").trim();
   if (!nodeGraphUnifiedWindowPageConfig(key)) {
     return "";
   }
   nodeGraphMvp.unifiedWindowPage = key;
+  nodeGraphMvp.unifiedWindowLastPage = key;
   if (key === "moduleActions" || key === "metaparameters" || key === "traceDisplaySettings") {
     nodeGraphMvp.sharedInspectorActive = key;
   }
@@ -1340,7 +1350,7 @@ function setNodeGraphCommandCenterPresentation(mode, options = {}) {
   }
   if (!nodeGraphUnifiedWindowIsShowing()) {
     if (typeof openNodeGraphUnifiedWindowPage === "function") {
-      openNodeGraphUnifiedWindowPage("commandCenter", options);
+      openNodeGraphUnifiedWindowPage(nodeGraphCommandCenterReopenPage(), options);
     } else if (typeof openNodeGraphCommandCenter === "function") {
       openNodeGraphCommandCenter(options.x, options.y);
     }
