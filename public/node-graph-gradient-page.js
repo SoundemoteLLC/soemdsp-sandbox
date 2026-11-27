@@ -1201,6 +1201,19 @@ function bindNodeGraphGradientPage() {
     if (!button || button.disabled) return;
     nodeGraphGradientPageAction(button.dataset.gradientAction, button.dataset.gradientId || "", button);
   });
+  host.addEventListener("contextmenu", (event) => {
+    const graph = event.target?.closest?.(".node-gradient-curve-chart");
+    if (!graph) return;
+    const series = event.target?.closest?.("[data-curve-series], [data-curve-series-hit]");
+    const encodedId = series?.dataset.curveSeries || series?.dataset.curveSeriesHit;
+    if (!encodedId || typeof openNodeMetadataPopover !== "function") return;
+    const [nodeId, key] = decodeURIComponent(encodedId).split("\u0000");
+    const slider = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, key) : null;
+    const readout = slider?.id
+      ? document.querySelector(`.node-slider-readout[data-slider-target="${CSS.escape(slider.id)}"]`)
+      : null;
+    if (readout) openNodeMetadataPopover(event, readout);
+  });
   host.addEventListener("input", (event) => {
     const playhead = event.target?.closest?.("[data-gradient-playhead]");
     if (playhead) {
