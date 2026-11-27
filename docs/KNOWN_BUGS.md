@@ -11,7 +11,7 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 - **Symptoms:** While dragging a module, a title too long to fit (so it gets shrunk to fit) jitters from full size to the shrunk size, then stays small.
 - **Notes:** Probably related to the text-redraw group below (module drag text rebuild, fixed in `82380fa0`). The title seems to be drawn at full size for a frame before the fit-to-width shrink is applied again, so the fitted size isn't kept in the retained text record during a drag.
 
-### Right double-click on a module title acts like left double-click
+### Right double-click on a module title acts like left double-click — FIXED
 
 - **Reported:** 2026-11-26, by Argi
 - **Fixed:** 2026-11-27, `167b8490`. Both DOM and GL title-action paths now require the left button.
@@ -21,7 +21,7 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 ### Module title text remains visible while editing — FIXED
 
 - **Reported:** 2026-11-27, by Argi
-- **Fixed:** 2026-11-27, targeted browser probe confirms the old GL title is hidden during edit, committed text appears, and cancel restores the committed title.
+- **Fixed:** 2026-11-27, `bec022e3`. Targeted browser probe confirms the old GL title is hidden during edit, committed text appears, and cancel restores the committed title.
 - **Notes:** Title edit/commit/cancel now dirties only the owning module's GL value chrome and presents once per completed action.
 
 ### Output Mono shows no IO by default — RECLASSIFIED
