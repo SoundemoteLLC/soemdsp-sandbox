@@ -100,11 +100,20 @@ try {
       });
       await page.mouse.move(700, 450);
       for (let i = 0; i < 6; i += 1) { await page.mouse.wheel(0, -120); await page.waitForTimeout(50); }
-      await page.evaluate(() => { window.__ts.wheelEnd = performance.now(); });
+      await page.evaluate(() => {
+        window.__ts.wheelEnd = performance.now();
+        window.__ts.atlasBakeStart = nodeGraphGlLinesTextAtlasStats().bakes;
+        window.__ts.stackRepaintStart = nodeGraphGlGraphState.sharpen?.repaints || 0;
+      });
       // Test-side wait for the sharpen job to finish (the app itself does not poll).
       await page.waitForFunction(() => { const s = nodeGraphGlGraphState; return performance.now() - window.__ts.wheelEnd > 600 && !s.sharpen?.want && Math.abs((s.textRecordScale || 0) - nodeGraphGlGraphSharpenScale()) < 1e-3; }, null, { timeout: 30000, polling: 100 }).catch(() => {});
       await page.waitForTimeout(500);
-      const r = await page.evaluate(() => { window.__ts.run = false; return window.__ts; });
+      const r = await page.evaluate(() => {
+        window.__ts.run = false;
+        window.__ts.atlasBakeEnd = nodeGraphGlLinesTextAtlasStats().bakes;
+        window.__ts.stackRepaintEnd = nodeGraphGlGraphState.sharpen?.repaints || 0;
+        return window.__ts;
+      });
       const after = r.frames.filter((f) => f.t >= r.wheelEnd);
       const ids = Object.keys(after[0]?.rec || {});
       const changes = {};
@@ -117,11 +126,17 @@ try {
       const stale = ids.filter((id) => (last.rec[id] || "").split(",").filter(Boolean).some((run) => { const sc = Number(run.split(":")[2]); return !(sc > 0) || Math.abs(sc - last.scale) > 1e-3 * last.scale; }));
       const moved = ids.filter((id) => changes[id] > 0);
       const multi = ids.filter((id) => changes[id] > 1);
+      const unchanged = ids.filter((id) => changes[id] === 0);
+      const atlasBakeDelta = r.atlasBakeEnd - r.atlasBakeStart;
+      const stackRepaintDelta = r.stackRepaintEnd - r.stackRepaintStart;
       const hist = {};
       for (const id of ids) hist[changes[id]] = (hist[changes[id]] || 0) + 1;
-      console.log(`${tag}: ${ids.length} stacks, changes per stack ${JSON.stringify(hist)}, ${after.length} frames, discarded fallback records ${last.discarded - (after[0]?.discarded || 0)}`);
+      console.log(`${tag}: ${ids.length} stacks, changes per stack ${JSON.stringify(hist)}, ${after.length} frames, atlas bake delta ${atlasBakeDelta}, stack repaint delta ${stackRepaintDelta}, discarded fallback records ${last.discarded - (after[0]?.discarded || 0)}`);
       check(moved.length >= 1, `${tag}: the zoom resharpened some stacks (${moved.length})`);
-      check(multi.length === 0, `${tag}: no stack changes more than once (${multi.slice(0, 4).map((id) => `${id} x${changes[id]}`).join(", ") || "none"})`);
+      check(multi.length === 0 && moved.every((id) => changes[id] === 1), `${tag}: each changed text stack updates exactly once (${multi.slice(0, 4).map((id) => `${id} x${changes[id]}`).join(", ") || "none"})`);
+      check(unchanged.every((id) => changes[id] === 0) && stackRepaintDelta === moved.length,
+        `${tag}: unchanged stacks are not repainted (${unchanged.length} unchanged, ${stackRepaintDelta} repaints for ${moved.length} changed)`);
+      check(atlasBakeDelta > 0, `${tag}: atlas bake counter records settled sharp-text work (${atlasBakeDelta})`);
       check(stale.length === 0, `${tag}: every stack ends 1:1 at the zoom x device scale (stale: ${stale.slice(0, 4).join(", ") || "none"})`);
       check(errors.length === 0, `${tag}: no page errors (${errors.slice(0, 2).join(" | ")})`);
       await context.close();
