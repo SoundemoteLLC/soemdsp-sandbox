@@ -31,7 +31,7 @@ The whole chain pays **one** STFT delay. Displays (spectral-display face, Spectr
 What exists today, for reference:
 - All the STFT modules already share one convention: periodic Hann analysis and synthesis windows, overlap-add, unnormalised forward FFT, latency = FFT size N. Freeze, Delay, Warp and Cross Synthesis use hop N/4. Smear uses N/4. Cloud and Warble use N/8 (E:164). Gate and Contrast are fixed at 1024 / 256 (`stft_contrast/spectral_engine.h:7`). Because of this, a common frame format costs no sound change.
 - Each module's FFT-size change already runs two cores and crossfades over 50 ms (E:457-519 `State`, `beginChange`). Section 3.5 reuses that pattern for the stream.
-- The engine has no graph-wide latency compensation. Modules export `*_latency_for_handle` (for example `spectral_smear.cpp:46`), but nothing in G or JS reads it. Spectral Delay's own docs say "Plugin-host latency compensation is unverified".
+- Today the engine has no graph-wide latency compensation. Modules export `*_latency_for_handle` (for example `spectral_smear.cpp:46`), but nothing in G or JS reads it. Spectral Delay's own docs say "Plugin-host latency compensation is unverified". This plan adds graph delay compensation so a dry path around an STFT chain lines up at a mixer or Output (section 4.2, phase 1b), and it reports the total delay to the command center and to a plugin host (sections 4.3 and 4.4).
 - The **Vocoder** is an IIR filter bank (`vocoder/filter_bank_vocoder.h`), not an STFT module, so it stays an audio module. A frame-domain vocoder is a new kernel (section 9, phase 5).
 
 ---
@@ -258,14 +258,14 @@ This reuses today's two-core pattern (E `State`: `cores[2]`, `warm`, smoothstep 
    - At a hop-only change with the same N, the effect copies its per-bin state into the new slot verbatim, so the crossfaded signals are coherent (Smear plan §3.1).
    - At an N change, it remaps the state the way `beginChange` does today (E:478-491).
 3. STFT Out synthesises both. After the warm-up (N samples), it crossfades from old to new over 50 ms, then drops the old stream (`configSerial` advances).
-4. Latency moves from N_old to N_new at the end of the crossfade, the same as a size change today. The latency readout (section 4) updates on that event.
+4. Latency moves from N_old to N_new at the end of the crossfade, the same as a size change today. The latency readout (section 4.1 and 4.3) updates on that event, and graph delay compensation is recomputed (section 4.2).
 
 A change queued during a crossfade waits, the same as today.
 
 ### 3.6 Feedback loops
 
 - **A spectral cable inside a feedback group is refused** in this plan (G builds `fbGroup*` from strongly connected components). The connect is rejected with the wire-break animation, and the jack shows the visible text "Spectral loop: go through STFT Out and STFT In".
-- A loop through audio (STFT Out → … → STFT In) is allowed. It costs one hop of delay per lap, plus N, which is honest.
+- A loop through audio (STFT Out → … → STFT In) is allowed. It is fully supported. It is just not realtime: it costs one hop of delay per lap, plus N, which is honest. Graph delay compensation leaves the cycle-closing edge alone and flags the loop (section 4.2).
 - Spectral Delay's internal feedback is unaffected, because it is inside one module.
 
 ### 3.7 Worklet and edit continuity
@@ -278,22 +278,44 @@ A change queued during a crossfade waits, the same as today.
 
 ---
 
-## 4. Latency reporting
+## 4. Latency reporting and delay compensation
+
+### 4.1 What each chain costs
 
 - **One delay per In/Out pair:** an STFT In → (any number of effects) → STFT Out chain has latency exactly N. Effects add 0 samples, because they process the frame in the frame.
-  - Exception: **Spectral Delay** adds its musical delay on purpose. That is the effect, not latency, and it is not reported.
-- **New engine export** `soemdsp_graph_latency_samples(handle)`: the largest sum of module latencies along any audio path into the Output module.
+  - Exception: **Spectral Delay** adds its musical delay on purpose. That is the effect, not latency, and it is not reported. Delay compensation (4.2) must not treat that musical delay as latency, or it would undo the effect.
+- **New engine export** `soemdsp_graph_latency_samples(handle)`: the largest sum of module latencies along any audio path into the Output module. This is the patch's total delay: the command center shows it (4.3), delay compensation lines earlier paths up to it (4.2), and the plugin host reports it (4.4).
   - An STFT Out reports the N of the stream it is synthesising.
   - A standalone spectral module reports its own N.
   - Everything else reports 0. Modules with fixed internal latency can opt in later through the same hook.
   - Compute it at compile time and on `configSerial` changes (an event), not per quantum.
-- **Visible readout:** STFT Out's face shows "Latency 4096 smp · 85.3 ms" in plain text. That text updates on the configSerial event. No hover tooltip.
-- **Dry/wet matching:**
+- **Visible readout on STFT Out:** the face shows "Latency 4096 smp · 85.3 ms" in plain text. That text is this chain's N, and it updates on the configSerial event. No hover tooltip. The command center shows the patch total, which can be larger when several chains or standalone modules feed Output.
+- **Dry/wet matching inside a chain:**
   - **Inside the chain, a module's Mix blends its input frame with its output frame** (a complex lerp per bin). This is exact, because both are on the same frame grid, and it needs no delay matching.
     - Note: Mix is then read once per frame instead of per sample. Static settings match standalone exactly; fast Mix modulation is smoothed by the overlap-add.
   - **STFT Out has a Mix:** "dry" is the paired STFT In's input ring read at delay N, located through `streamId`. It is sample-exact, so it needs no extra cable and no extra delay module. For a two-stream chain, dry comes from the primary (first) input's STFT In.
-  - Parallel audio paths outside a spectral chain are not auto-compensated. The app has no graph PDC, and this plan does not add one. The readout tells the user the number.
-- **Plugin host:** the plugin shell (`soemdsp-sandbox-plugins`, `docs/PLUGIN_REPO_PLAN.md`) should report `soemdsp_graph_latency_samples` to the host as the plugin's latency. That work lives in the plugin repo and is listed as phase 6. This plan only provides the number and its change event.
+  - A dry cable that runs around the chain, and meets the wet path at a mixer or Output, is the job of graph delay compensation (4.2). That is the main case this section adds.
+
+### 4.2 Graph delay compensation (PDC)
+
+Argi's main concern: a signal that runs around an STFT chain must line up with it automatically. Example: split an audio signal, send one copy through STFT In → effects → STFT Out, and send the other copy straight to a mixer or Output. With compensation on, the two arrivals are sample-exact.
+
+- **How the engine works it out.** In topological order, each node has an arrival latency: the maximum, over its audio and spectral inputs, of (that input's upstream arrival + the upstream module's latency). A node with no such inputs arrives at 0. The node's output is then available at arrival + its own module latency. Module latencies are the same numbers as in 4.1. Compute this at compile time and on `configSerial` changes (an event), not per quantum.
+- **Merge points.** A merge point is any module with two or more audio or spectral inputs, including mixers and Output. At a merge, earlier-arriving inputs get a hidden per-input delay line of (merge arrival − that input's arrival) samples, so every input at that node lines up with the latest one. The delay lines are engine state, not visible Delay modules in the patch. An input that is already the latest gets 0 and no delay line. The delay lines delay only; they do not change level.
+- **Spectral inputs.** Frames from equal-signature streams are already on the global grid (section 3.3), so two spectral cables with the same arrival need no extra delay. When their arrivals differ (for example one path went through another STFT Out before being re-analysed), the merge delays the earlier stream by a whole number of frames: (max − own) / hop. Because every reported STFT latency is a multiple of its hop, that division is exact. A signature mismatch is still the mismatch rule in section 7, not a compensation case.
+- **Feedback loops.** Edges that close a cycle are left out of the arrival maximum and are not compensated. The loop itself is fully supported: an audio loop through STFT Out → … → STFT In is allowed (section 3.6). It is just not realtime. Each lap costs at least the STFT latency (N plus one hop). The face and the command center show the visible text "loop, not compensated" and the loop's delay. Spectral cables inside a feedback group stay refused, as in 3.6. A loop cannot be compensated: lining it up would mean hearing the future. The delay becomes part of the sound, like a spectral echo.
+- **When amounts change.** Recompute on graph changes and on latency-change events (`configSerial`), including the end of an STFT In size or hop crossfade (section 3.5). When a compensation amount changes while sound is playing, crossfade from the old delay to the new delay over 50 ms with the same two-tap, smoothstep pattern as a size change, then drop the old length. A change queued during a crossfade waits.
+- **Memory and safety.** Each delay line is allocated to the actual compensation amount computed from the graph, not to a hard-coded musical cap. Safety guards (non-finite, allocation bounds derived from the computed latency, array bounds) stay allowed, each with a `// safety:` comment.
+- **Toggle.** Compensation is on by default. It can be turned off in the command center. With it off, the hidden delay lines are bypassed, and a dry path around an STFT chain arrives early by N. The readout still shows the uncompensated total, and that compensation is off.
+- **CV and parameter modulation.** Audio and spectral inputs are compensated. CV and parameter-modulation inputs are not compensated by default: delaying a knob or a cutoff with the audio often feels worse than a short timing mismatch between a modulator and the sound it modulates. This is an open question for Argi (section 13).
+
+### 4.3 Command center readout
+
+The command center shows the patch's total delay to Output, in samples and milliseconds, as plain visible text. The numbers match `soemdsp_graph_latency_samples`. The text updates on the same events as the engine figure (`configSerial`, latency change). No hover tooltip, and no timer. It is phone-friendly. If the graph has a feedback loop, the command center flags it with "loop, not compensated" and the loop's delay. The compensation on/off toggle lives here too.
+
+### 4.4 Plugin host
+
+The plugin shell (`soemdsp-sandbox-plugins`, `docs/PLUGIN_REPO_PLAN.md`) should report `soemdsp_graph_latency_samples` to the host as the plugin's latency. Internal compensation (4.2) lines up paths inside the patch. The host still needs the total so it can line the whole plugin up with other tracks in the DAW. That work lives in the plugin repo and stays phase 6. This plan provides the number, its change event, and the internal compensation.
 
 ---
 
@@ -414,7 +436,7 @@ Insert after `additive`, its sibling non-realtime plane:
 
 ## 9. Coordination with the three fix plans
 
-- **The cable comes after the three fix plans.** Recommended order: Warble → Cloud → Smear (per the order in those plans) → cable phase 0 → phases 1-6.
+- **The cable comes after the three fix plans.** Recommended order: Warble → Cloud → Smear (per the order in those plans) → cable phase 0 → phases 1, 1b, 2-6.
   - The fix plans repair the sound inside the shared engine E: Cloud's phase diffusion, Warble's lobe moves, Smear's live/smeared phase and level match.
   - Doing the cable first would mean refactoring DSP that is about to be rewritten, and the T15/T13 baselines would move twice.
   - Phase 0 is then a **pure refactor of the fixed engine**. The fix plans' tests become its bit-exact regression tests.
@@ -437,6 +459,7 @@ No patch migration is needed in any phase: existing modules keep type ids, jacks
 |---|---|---|
 | **0. Refactor** | Split E into `stft_analysis.h`, `stft_synthesis.h` and per-engine `process_frame`. Generic two-slot holder. No behaviour change. | The fix plans' tests and baselines pass bit-exact. |
 | **1. Proof of concept** | `spectral` port type, magenta jack, the glass-tube cable style with its UIDEV group (2.5), `kPortSpectral(B)`, frame lists in the pool, global grid. **STFT In**, **STFT Out** (with Mix and latency readout). **Spectral Cloud** dual-mode. **1D Spectrum** spectral tap. The 🌊 Spectral department (all moves in 8.2). `docs/PORT_TYPES.md` updated (new type, magenta, the tube style, the IN-jack colour rule). `soemdsp_graph_latency_samples`. | C1, C2 (with Cloud), C3, C9, C10, C11, C13, C14, C15, C18, C19, C20. |
+| **1b. Graph delay compensation** | Automatic delay compensation at every merge point (section 4.2), so a dry path around an STFT chain lines up at a mixer or Output. Command center total-delay readout, loop flag, and on-by-default compensation toggle (section 4.3). | C21, C22, C23, C24, C25. |
 | **2. Shared-engine effects** | Warble and Smear dual-mode. The spectral-display face reads frames (standalone and cable), and the JS re-analysis is deleted for these modules. FFT Size / Hop crossfade on STFT In (3.5). | C2 with 3 effects, C5, C6, C7, C12. |
 | **3. Own-engine effects** | Freeze, Delay, Warp, Gate, Contrast move onto the shared analysis/synthesis, with their private STFT code deleted. Gate and Contrast standalone stay at their fixed 1024; in cable mode they take the stream's N. | C7 for each. |
 | **4. Two streams** | Cross Synthesis on `Voice`/`Synth` spectral jacks; new **Blend** module; mismatch state and badge. | C4, C8. |
@@ -477,15 +500,20 @@ Run these with `node scripts/test_spectral_cable.mjs` (new), plus the existing p
 | C15 | **Edit continuity:** insert and remove an effect in the middle of a running chain. | The other modules' state continues (Cloud's walk does not restart; Freeze keeps its hold). No full compile (§22). |
 | C17 | **STFT In defaults and CPU badge:** spawn STFT In; toggle the G debug switch and the CPU toggle. | Hop = Smooth and FFT Size = 4096 at spawn. The `cpu` badge on Hop and FFT Size is visible only while debug (G) and the CPU toggle are on, and gone when debug is off. |
 | C16 | **True-frequency view:** a stationary sine between bins, with Warble requesting `trueHz`. | `trueHz` is within 0.01 bin of the true frequency. `trueHzValid` is cleared after a phase-moving module. No `trueHz` array exists when no consumer asks for it. |
+| C21 | **Around-the-chain null:** split a signal to a mixer: one path dry, the other STFT In → (neutral effects) → STFT Out, Mix at 100% wet. Invert one mixer input and sum, at every N and both hops, 44.1 / 48 / 96 kHz, noise, sine sweep and impulse. Then repeat with the compensation toggle off. | With compensation on, after warm-up, residual peak is below −90 dB (dry minus wet cancels). With the toggle off, the dry path arrives N samples early and the same null fails. |
+| C22 | **Two chains in parallel:** two STFT In → Out chains with different N (for example 2048 and 8192), same source, into a mixer. | After compensation, impulses at the two mixer inputs line up at the later N. At neutral settings, either wet path minus the other is below −90 dB. |
+| C23 | **Compensation change without a click:** a sustained saw plus plucks; toggle STFT In N, add and remove the dry around-path, and switch the compensation toggle, including during a crossfade. | No click: the same high-passed (> 8 kHz) criterion as C5. 10 ms RMS stays within ±1 dB. |
+| C24 | **Feedback loop flagged, not compensated:** close an audio loop through STFT Out → … → STFT In. | The patch runs with no crash and no NaN. The cycle-closing edge is not delay-compensated. The command center and the face show "loop, not compensated" and the loop's delay (N plus one hop per lap). A spectral-cable loop is still refused (C9). |
+| C25 | **Command center readout matches the export:** In → Out; two parallel chains of different N; a dry path around one chain; a loop as in C24. | Visible samples and ms match `soemdsp_graph_latency_samples` (ms = samples / sampleRate × 1000, shown to one decimal place). The text updates on the configSerial / latency-change event, not on a timer. The loop case is flagged as in C24. |
 
 ---
 
 ## 12. Rules that apply to every line
 
-- **Phone-friendly:** visible face text for all states (mismatch, loop, latency, "set by STFT In"). No hover `title` tooltips (APP_POLICY §12: no mouse-following tooltips). Docked tips are the `tooltip` strings, in real sentences. The jacks have the standard size.
-- **Events, not timers:** latency readout, mismatch badge and tap redraws update on change events (configSerial, status change, new `frameIndex`).
-- **Limits only from parameter definitions** (§25). The native side has safety guards only, each with a `// safety:` comment: power-of-two N in the FFT tables, an overlap that divides N, non-finite input reset (E `tick`), array bounds.
-- **No boost:** In → Out is unity (C1). Kernels keep their own level-match rules from their plans. Blend uses equal-power or linear crossfade by its own parameter, never a hidden gain.
+- **Phone-friendly:** visible face text for all states (mismatch, loop, "loop, not compensated", latency, "set by STFT In"). No hover `title` tooltips (APP_POLICY §12: no mouse-following tooltips). Docked tips are the `tooltip` strings, in real sentences. The jacks have the standard size. The command center delay readout is plain visible text, phone-friendly, with no tooltip.
+- **Events, not timers:** latency readout, command center delay, compensation amounts, loop flags, mismatch badge and tap redraws update on change events (configSerial, status change, new `frameIndex`).
+- **Limits only from parameter definitions** (§25). The native side has safety guards only, each with a `// safety:` comment: power-of-two N in the FFT tables, an overlap that divides N, non-finite input reset (E `tick`), array bounds. Compensation delay lines are sized from the computed graph latency, not from a hard-coded musical cap.
+- **No boost:** In → Out is unity (C1). Kernels keep their own level-match rules from their plans. Blend uses equal-power or linear crossfade by its own parameter, never a hidden gain. Compensation delay lines delay only; they do not change level.
 - **No shims, no dead code** (§1, §10b): dual-mode ports reuse the shared analysis/synthesis. Private STFT copies and the JS re-analysis path are deleted as each module migrates. No dual keys and no patch migration.
 - **Cache tags:** bump the `?v=` tags in `public/index.html` and `public/perform.html` for every JS file a phase touches (as in the fix plans).
 
@@ -498,5 +526,7 @@ Run these with `node scripts/test_spectral_cable.mjs` (new), plus the existing p
 3. **Mismatch:** pass the first input through unchanged and show the visible badge (section 7).
 4. **STFT In Hop defaults to Smooth (N/8).** STFT In shows the existing `cpu` badge (on its Hop and FFT Size rows), visible only in debug mode via the G switch (section 2.3, test C17).
 5. **Spectrogram, Circular Spectrogram and 1D Spectrum move into 🌊 Spectral** and get the spectral jack (sections 5 and 8.2).
+6. **Graph delay compensation (2026-11-26).** Argi wants automatic compensation for a signal that runs around an STFT chain (a dry path next to STFT In → effects → STFT Out, meeting at a mixer or Output). Feedback loops are allowed and supported, but they are not compensated. Design in section 4.2, tests C21-C25, phase 1b.
 
-There are no open questions.
+Open question for Argi:
+- **CV and parameter modulation.** The recommended default is that only audio and spectral inputs are compensated, and CV / param-modulation inputs are not. Delaying a knob or a cutoff with the audio often feels worse than a short timing mismatch between a modulator and the sound it modulates. Confirm or change this.
