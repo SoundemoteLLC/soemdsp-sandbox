@@ -4,6 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
+### Output Mono shows no IO by default
+
+- **Reported:** 2026-11-26, by Argi
+- **Symptoms:** The Output Mono module shows no IO (jacks) when it first appears. Pressing Tab makes the IO show.
+- **Notes:** Probably an initial IO visibility or layout state that is only applied after a Tab toggle.
+
 ### Text redraws during drag, pan, zoom, and wire pull
 
 These reports probably share a root cause: text in the GL text and label rendering rebuilds or re-renders when it shouldn't. MasterBot owns the viewport, text, and culling rendering code and is partway through a module display rewrite (`docs/MODULE_DISPLAY_REWRITE_PLAN.md`).
