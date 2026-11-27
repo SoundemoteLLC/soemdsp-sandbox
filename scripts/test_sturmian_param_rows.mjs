@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Sturmian Grid param-band rows: common sliders (not definition.face), compact
-// parameterRows count, Hide Sliders still collapses the params band.
+// Sturmian Grid param-band rows: common sliders (not definition.face), generic
+// parameterRows packing, Hide Sliders still collapses the params band.
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -118,8 +118,8 @@ const hidden = { slidersHidden: true, ioHidden: false, displayHeightGu: 8 };
 const shownH = ctx.nodeGraphModuleSliderBodyHeightGu("sturmianGrid", shown);
 const hiddenH = ctx.nodeGraphModuleSliderBodyHeightGu("sturmianGrid", hidden);
 const rawH = ctx.nodeGraphModuleSliderBodyHeightGu("sturmianGrid", null);
-const six = 6 * (30 / 28) + 5 * (2 / 28);
-assert(Math.abs(shownH - six) < 1e-9, `shown height is 6 compact rows (got ${shownH})`);
+const six = 6 * (40 / 28) + 5 * (2 / 28);
+assert(Math.abs(shownH - six) < 1e-9, `shown height is 6 face-aligned 40px rows (got ${shownH})`);
 assert(hiddenH === 0, "Hide Sliders collapses the param body height");
 assert(rawH > 0, "raw (no ui) height stays the definition body");
 
@@ -141,11 +141,13 @@ assert(uiSrc.includes("sturmianLaneButtons"), "K/S/H/M strip laid out in the Web
 assert(uiSrc.includes("sturmianHitFace"), "face hit-test covers cells and lane toggles");
 assert(!uiSrc.includes("sturmian-side") && !uiSrc.includes("sturmianCreateLaneMap"), "lane map is not a DOM strip");
 assert(uiSrc.includes("display-canvas-pixel-snap"), "plate opts into compositor pixel-snap");
-assert(uiSrc.includes("sturmianLayoutParamRows"), "common sliders packed after mount");
-assert(uiSrc.includes("queueMicrotask"), "pack waits until the param body exists");
+const registrySrc = fs.readFileSync(path.join(root, "public/node-graph-chromeless-module-registry.js"), "utf8");
+const renderSrc = fs.readFileSync(path.join(root, "public/node-graph-module-rendering.js"), "utf8");
+assert(registrySrc.includes("nodeGraphLayoutParameterRows") && registrySrc.includes("nodeGraphModuleDefinitions[type]?.parameterRows"), "generic parameter row packer reads declared groups");
+assert(renderSrc.includes("nodeGraphLayoutParameterRows(body, type)"), "module renderer packs declared groups after mount");
 
 const css = fs.readFileSync(path.join(root, "public/modules/sturmianGrid/sturmian-grid.css"), "utf8");
-assert(css.includes(".sturmian-param-row"), "compact row CSS");
+assert(css.includes("--node-body-row-height: 40px"), "slider row height matches face cells");
 assert(!css.includes(".sturmian-side") && !css.includes(".sturmian-lane-map"), "lane strip CSS removed");
 
 
