@@ -329,10 +329,10 @@ function nodeGraphGradientPageCard(gradient) {
   graph.setAttribute("aria-label", "Gradient parameter curves");
   card.append(graph);
   card.append(nodeGraphGradientPageStrip(gradient));
-  const playheadControl = document.createElement("label");
+  const playheadControl = document.createElement("div");
   playheadControl.className = "node-gradient-playhead-control";
-  playheadControl.innerHTML = '<span>Playhead</span>';
   const playheadSlider = document.createElement("input"); playheadSlider.type = "range"; playheadSlider.min = "0"; playheadSlider.max = "1"; playheadSlider.step = "0.001"; playheadSlider.value = String(gradient.position); playheadSlider.dataset.gradientPlayhead = gradient.id;
+  playheadSlider.setAttribute("aria-label", `${gradient.name} playhead`);
   playheadControl.append(playheadSlider); card.append(playheadControl);
   nodeGraphGradientPageDrawGraph(card, gradient);
   if (selectedParam) card.append(nodeGraphGradientPageCurveControls(gradient, selectedParam.nodeId, selectedParam.key));
