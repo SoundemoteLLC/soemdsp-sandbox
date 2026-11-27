@@ -61,3 +61,13 @@ For each one: fix it, add a browser test that does the real gesture (middle-drag
 ### Step 0 addition: text sharpens twice (Argi, newest)
 
 4. **Text visibly redraws twice, getting sharper each time** (blurry, then sharper, then sharp), instead of appearing sharp once. Likely the text-sharpness follow-up merged in PASTE-9 (A0): a low-resolution atlas pass followed by two upgrade passes, or two separate settle timers or paths that each rebake. Find where text gets baked after a gesture or settle and make it settle **once** at final resolution. Keep zero rebakes during a gesture. Add a probe that counts atlas bakes after a settle (expect exactly one per changed text, zero for unchanged text).
+
+### Step 0 root-cause lead (Argi's console, newest, check FIRST)
+
+On page load Argi's console shows:
+
+```text
+ERR console Node graph event binding failed: workspace {}
+```
+
+The workspace event binding threw during boot, so the workspace's pointer handlers were probably never attached. That would explain middle-mouse pan and zoom, drag-in and snake select all failing at once. The `{}` means the error object was logged badly. Find where `Node graph event binding failed` is logged, log the real `error.message` and stack, find the throw (likely a function or element that the PASTE-8/9 or text-gesture commits renamed, removed or moved into a deferred script), and fix it. One failed binder must never stop the others from binding. Add a test that fails if any `event binding failed` error is logged on boot. Then recheck items 1 to 4.
