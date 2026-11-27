@@ -72,7 +72,7 @@ The AI ran out of energy (Argi t502u). Resume in about 5 hours.
 
 ## Catch-up 2026-11-27
 
-These landed after the main table was last updated, or are the paste bundles that followed them. Marked done here as an index catch-up. PASTE-11 is the next stable-release bug paste.
+These landed after the main table was last updated, or are the paste bundles that followed them. Marked done here as an index catch-up. PASTE-12 is the next served paste (Gradient + Mutator UI/UX pass).
 
 | ID | Title | Status | Handoff | Last event |
 |----|-------|--------|---------|------------|
@@ -83,7 +83,8 @@ These landed after the main table was last updated, or are the paste bundles tha
 | PASTE-8 | Gradient module follow-ups | done | `docs/handoffs/ready/PASTE-8.md` | 2026-11-27: served and landed; INDEX catch-up. |
 | PASTE-9 | text redraw bug fixes, then gradient/mutator points and curves | done | `docs/handoffs/ready/PASTE-9.md` | 2026-11-27: served and landed; INDEX catch-up. Open follow-up is PASTE-11 item 1 (points-and-curves editor missing after Addendum 2). |
 | PASTE-10 | stable release pass (bugs only, no new features) | done | `docs/handoffs/ready/PASTE-10.md` | 2026-11-27: handed over and reported; remaining spawn issues and the Mutator/Gradient editor go to PASTE-11. |
-| PASTE-11 | restore Mutator/Gradient points-and-curves editor; spawn-error fixes (bugs only) | ready | `docs/handoffs/ready/PASTE-11.md` | 2026-11-27: added. Next stable-release bug paste. |
+| PASTE-11 | restore Mutator/Gradient points-and-curves editor; spawn-error fixes (bugs only) | done | `docs/handoffs/ready/PASTE-11.md` | 2026-11-27: landed (`515a9f33`, `b06176ce`, `12f7755f`; playhead/pin follow-up `1247a153`). UI/UX follow-up is PASTE-12. |
+| PASTE-12 | Gradient + Mutator UI/UX pass | ready | `docs/handoffs/ready/PASTE-12.md` | 2026-11-27: added. Next served paste. |
 | HP-29 | Metamodule GL ghost plates | ready, HELD: do not serve until Argi confirms the symptom and asks for it; after release-readiness (Argi: metamodule last) | `docs/handoffs/HP-29.md` | 2026-11-27: filed from MasterBot's reading of `e0d742dd`. Symptom still needs Argi's confirm. |
 | HP-30 | Metamodule display: pick one module | ready, HELD: depends on HP-29; do not serve until Argi asks; after release-readiness | `docs/handoffs/HP-30.md` | 2026-11-27: filed. Depends on HP-29. Follow-up is HP-31 (mini canvas). |
 | HP-31 | Metamodule mini canvas | idea, not queued; depends on HP-30 | `docs/handoffs/HP-31.md` | 2026-11-27: filed as stage 2 of HP-30. |
