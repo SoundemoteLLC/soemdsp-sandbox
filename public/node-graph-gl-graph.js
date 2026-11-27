@@ -4610,7 +4610,8 @@ function nodeGraphGlGraphSharpenQueue(mesh, scale) {
     let py = NaN;
     nodeGraphGlGraphEachTextRun(batch.layers.slice(range.layerStart, range.layerEnd), (t, b) => {
       if (t.color || stale) return;
-      if (!(t.snapScale > 0) || Math.abs(t.snapScale - scale) > 1e-3 * scale) {
+      const qualityScale = t.qualityScale ?? t.snapScale;
+      if (!(qualityScale > 0) || Math.abs(qualityScale - scale) > 1e-3 * scale) {
         stale = true;
         if (b.tdata && t.end > t.start) { px = b.tdata[t.start]; py = b.tdata[t.start + 1]; }
       }

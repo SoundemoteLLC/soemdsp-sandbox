@@ -2977,6 +2977,7 @@ void main() {
       width = adv * g;
     }
     let squeeze = 1;
+    let fitPending = false;
     const maxW = Number(options.maxWidth) * k;
     // Camera text too wide for maxWidth: shrink to the next half-device-pixel
     // size below the fit and bake that size, so the run is still sampled 1:1
@@ -2994,7 +2995,7 @@ void main() {
           let adv = 0;
           for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
           width = adv * g;
-        }
+        } else fitPending = true;
       }
     }
     // Face text too wide for maxWidth: the next whole pixel size below the fit,
@@ -3034,13 +3035,16 @@ void main() {
     // 1:1 runs (atlas baked at the on-screen size, no squeeze) have their
     // origins snapped to whole device pixels by the vertex shader.
     const snapScale = cam && !capped && squeeze === 1 && Math.abs(atlas.bakePx - wantBake) < 0.02 ? devScale : 0;
+    // Fitting/capping can intentionally disable pixel snapping. That does not
+    // make a resolved atlas stale or require its glyphs to be recorded again.
+    const qualityScale = cam && !fitPending && Math.abs(atlas.bakePx - wantBake) < 0.02 ? devScale : 0;
     if (!hasEmoji) {
-      pen = pushGlyphs(batch, atlas, str, pen, baseline, gy, sx, cr, cg, cb, ca, snapScale);
+      pen = pushGlyphs(batch, atlas, str, pen, baseline, gy, sx, cr, cg, cb, ca, snapScale, qualityScale);
       return;
     }
     for (const seg of segs) {
       if (!seg.emoji) {
-        pen = pushGlyphs(batch, atlas, seg.text, pen, baseline, gy, sx, cr, cg, cb, ca, snapScale);
+        pen = pushGlyphs(batch, atlas, seg.text, pen, baseline, gy, sx, cr, cg, cb, ca, snapScale, qualityScale);
         continue;
       }
       const entry = emojiEntry(batch.s, seg.text, emojiPx);
@@ -3074,10 +3078,10 @@ void main() {
   const textLazyReqScratch = { scale: 0, prio: 0 };
 
   /** Current run for a texture (consecutive same-texture quads share one draw). */
-  function textRun(batch, texture, color, snapScale = 0) {
+  function textRun(batch, texture, color, snapScale = 0, qualityScale = 0) {
     let run = batch.texts.length ? batch.texts[batch.texts.length - 1] : null;
-    if (!run || run.texture !== texture || (run.snapScale || 0) !== snapScale) {
-      run = { texture, color, start: batch.tn, end: batch.tn, snapScale };
+    if (!run || run.texture !== texture || (run.snapScale || 0) !== snapScale || (run.qualityScale || 0) !== qualityScale) {
+      run = { texture, color, start: batch.tn, end: batch.tn, snapScale, qualityScale };
       batch.texts.push(run);
     }
     return run;
@@ -3101,7 +3105,7 @@ void main() {
     return out;
   }
 
-  function pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca, snapScale = 0) {
+  function pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca, snapScale = 0, qualityScale = 0) {
     const ratio = sx / Math.max(1e-9, g);
     if (!batch.camera) {
       const n = [...str].length;
@@ -3114,7 +3118,7 @@ void main() {
     textAspect.quads += 1;
     if (ratio < textAspect.minRatio) textAspect.minRatio = ratio;
     if (ratio > textAspect.maxRatio) textAspect.maxRatio = ratio;
-    const run = textRun(batch, atlas.texture, false, snapScale);
+    const run = textRun(batch, atlas.texture, false, snapScale, qualityScale);
     // Atlas size of this run (tests / diagnostics): texels per glyph em.
     if (run.bakePx === undefined) run.bakePx = atlas.bakePx;
     for (const ch of str) {

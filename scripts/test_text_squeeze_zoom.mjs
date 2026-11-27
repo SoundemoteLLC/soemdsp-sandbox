@@ -107,6 +107,8 @@ try {
     check(worst <= 0.12, `${text}: world width constant across zoom ${ZOOMS[0]}-${ZOOMS[ZOOMS.length - 1]} (worst drift ${(worst * 100).toFixed(1)}%), so it scales with zoom and fits its module`);
   }
   check(rows.some((c) => c.text === "Lightness" && c.squeezed), "Lightness is a squeezed label (exercises the maxWidth fit)");
+  const queued = await page.evaluate(() => nodeGraphGlGraphSharpenQueue(nodeGraphGlGraphState.mesh, nodeGraphGlGraphSharpenScale()).map(item => item.id));
+  check(queued.length === 0, `resolved fitted/capped text does not request another sharpen (${queued.join(", ") || "none"})`);
   check(errors.length === 0, `no page errors (${errors.slice(0, 3).join(" | ")})`);
 } finally {
   if (browser) await browser.close().catch(() => {});
