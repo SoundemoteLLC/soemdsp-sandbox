@@ -36,13 +36,13 @@ The AI ran out of energy (Argi t502u). Resume in about 5 hours.
 | ID | Title | Owner | Phase | Depends | Argi gate | Status | Handed to | Commits | Last event |
 |----|-------|-------|-------|---------|-----------|--------|-----------|---------|------------|
 | HP-00 | Housekeeping and unblockers | big AI | A | — | D-C1 (decided 2026-11-25) | ready, serving | — | — | 2026-11-25: trimmed to cursors + stale docs; Patch View Remove done in `afaee444`; `55a0a3aa` is on origin; `cursor: move` is at styles.css:12634 |
-| HP-01 | Stage 1 removal (broom circuit presets, Trigger Patch, Pages menu, orphan presets) | Moth | A | — | D-P1 (decided: keep bank/program in data and filename) | ready, serving | — | — | 2026-11-25: D-P1 decided (keep bank/program; bank = category in the filename; one flat folder) |
+| HP-01 | Stage 1 removal (broom circuit presets, Trigger Patch, Pages menu, orphan presets) | Moth | A | — | D-P1 (decided: keep bank/program in data and filename) | done | — | — | 2026-11-27: marked done (INDEX catch-up). Earlier: D-P1 decided (keep bank/program; bank = category in the filename; one flat folder) |
 | HP-02 | Stage A1, one param-offset provider list (+ plugin-host reads effective params) | Moth | A | — | — | done for now (browser retest passed; REAPER retest dropped by Argi) | big AI | 5bd52c53 | 2026-11-25: browser retest passed (t412u); REAPER retest dropped (D-R1); done for now |
 | HP-03 | Stage A2, gradient data and engine effect (no UI) | Moth | B | HP-02 | D-G2 (decided 2026-11-25: hold) | done locally (`c9f808f5`, not pushed) | — | c9f808f5 | 2026-11-25: done locally at `c9f808f5` (not pushed). Earlier: handed off to the AI. D-G2 decided (t449u) "hold" for v1; revisit remains HP-17. |
 | HP-20 | Hypersaw parameter layout | big AI | A | after HP-03 | — | done locally (face in `46445674`; test and tokens in `e943008d`, not pushed) | — | e943008d | 2026-11-25: done locally. Face landed inside Cloud commit `46445674`; test and tokens in `e943008d`. Open question (t502u): "two-high" was read as two params side by side per row — Argi should confirm. Earlier: added (t494u). |
 | HP-21 | Display trail/ghost defaults | big AI | A | after HP-03 (after HP-20) | — | done locally (`e943008d`, not pushed) | — | e943008d | 2026-11-25: done locally at `e943008d`. Trail and Ghost are 0/0 across the shared defaults and the listed faces; Rounding Error's Trail (s) is exposed and only its current step lights; Trail 0 still leaves about 30 ms of fast erase. Earlier: added (t494u). |
-| HP-04 | Stage A3, the Gradients page | Misty | C | HP-01, HP-03 | D-G1, D-G5 (decided 2026-11-25) | planned (next) | — | — | 2026-11-25: next in the queue after the 1:41 PM MST checkpoint (t502u). Earlier: D-G1 and D-G5 decided (t449u) "yes" — recommended defaults. |
-| HP-05 | Stage A4, slider ghost uses the effective value, 1 to 2 px outline, "Holds still" line | Misty | C | HP-03, HP-04 | — | planned | — | — | 2026-11-25: index created |
+| HP-04 | Stage A3, the Gradients page | Misty | C | HP-01, HP-03 | D-G1, D-G5 (decided 2026-11-25) | done | — | — | 2026-11-27: marked done (INDEX catch-up). Earlier: next in the queue after the 1:41 PM MST checkpoint (t502u). D-G1 and D-G5 decided (t449u) "yes" — recommended defaults. |
+| HP-05 | Stage A4, slider ghost uses the effective value, 1 to 2 px outline, "Holds still" line | Misty | C | HP-03, HP-04 | — | done | — | — | 2026-11-27: marked done (INDEX catch-up). Earlier: index created |
 | HP-06 | Stage B1, the variations store (server, catalog script, client wrapper) | Moth | A | — (D-P1 decided 2026-11-25) | D-P1, D-P4 (decided 2026-11-25) | ready, serving | — | — | 2026-11-25: D-P4 decided (t449u): remind Argi to restart when it is needed; report must say "server restart needed". D-P2 (with HP-07): expose factory vs user source for a seamless list. |
 | HP-06b | Plugin mirror of the variations / rename / remove API | Moth (plugin repo) | B | HP-06 | — | planned | — | — | 2026-11-25: index created |
 | HP-07 | Stage B2, the Preset Explorer UI | Misty | B | HP-01, HP-06 | D-P1, D-P2 (decided 2026-11-25) | planned | — | — | 2026-11-25: D-P2 decided (t449u): user presets treated like factory, different save location, visible indicator, filter Factory / User / Both |
@@ -70,6 +70,20 @@ The AI ran out of energy (Argi t502u). Resume in about 5 hours.
 | S-5 | Wraparound controls re-verify (DSF Phase wraps to 0 then the drag sticks) | Moth | Side | — | D-S5 | parked | — | plan `docs/WRAPAROUND_CONTROLS_ESCALATION.md` | 2026-11-25: index created |
 | S-6 | Sandy backlog: Spectral Oscillator 3D display; dedicated perfect-shape module; Wing Thump Explorer; Fluvv; S-curve envelope; Euclidean Circles; snare/kick follow-ups | Sandy | Side | — | D-S6 | parked | — | `docs/EUCLIDEAN_CIRCLES_PLAN.md` among others | 2026-11-25: index created |
 
+## Catch-up 2026-11-27
+
+These landed after the main table was last updated, or are the paste bundles that followed them. Marked done here as an index catch-up. PASTE-11 is the next stable-release bug paste.
+
+| ID | Title | Status | Handoff | Last event |
+|----|-------|--------|---------|------------|
+| HP-22 | One debug window on G | done | `docs/handoffs/ready/HP-22.md` | 2026-11-27: marked done (INDEX catch-up). |
+| HP-23 | Gradient module (modulatable playhead) | done | `docs/handoffs/ready/HP-23.md` | 2026-11-27: marked done (INDEX catch-up). |
+| HP-24 | G toggle fix, negative amplitude everywhere, gradient stop editing | done | `docs/handoffs/ready/HP-24.md` | 2026-11-27: marked done (INDEX catch-up). |
+| PASTE-7 | Release loose ends (ship a live update) | done | `docs/handoffs/ready/PASTE-7.md` | 2026-11-27: served and landed; INDEX catch-up. |
+| PASTE-8 | Gradient module follow-ups | done | `docs/handoffs/ready/PASTE-8.md` | 2026-11-27: served and landed; INDEX catch-up. |
+| PASTE-9 | text redraw bug fixes, then gradient/mutator points and curves | done | `docs/handoffs/ready/PASTE-9.md` | 2026-11-27: served and landed; INDEX catch-up. Open follow-up is PASTE-11 item 1 (points-and-curves editor missing after Addendum 2). |
+| PASTE-10 | stable release pass (bugs only, no new features) | done | `docs/handoffs/ready/PASTE-10.md` | 2026-11-27: handed over and reported; remaining spawn issues and the Mutator/Gradient editor go to PASTE-11. |
+| PASTE-11 | restore Mutator/Gradient points-and-curves editor; spawn-error fixes (bugs only) | ready | `docs/handoffs/ready/PASTE-11.md` | 2026-11-27: added. Next stable-release bug paste. |
 ## Later / notes
 
 Not queued. N-1, N-2 and N-3 are notes only (no plan files). HP-14 has a plan file but was deferred to later plans (t449u).
