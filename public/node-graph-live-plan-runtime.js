@@ -1,3 +1,14 @@
+function nodeGraphLiveModulationObserverPorts(patch, activeNodeIds) {
+  const active = new Set(activeNodeIds || []);
+  const ports = new Map();
+  for (const modulation of patch?.modulations || []) {
+    if (!active.has(modulation.sourceNode)) continue;
+    const { sourceNode, sourcePort } = modulation;
+    ports.set(`${sourceNode}\0${sourcePort}`, { sourceNode, sourcePort });
+  }
+  return [...ports.values()];
+}
+
 function nodeGraphBuildLivePlan() {
   const compiled = compileNodeGraphExecutionPlan();
   if (!compiled.valid) {
@@ -43,6 +54,7 @@ function nodeGraphBuildLivePlan() {
     outputNode: compiled.outputNode,
     patchFingerprint: nodeGraphPatchFingerprint(),
     scopeCaptureNodeIds: [...(compiled.scopeCaptureNodeIds || [])],
+    scopeCapturePorts: nodeGraphLiveModulationObserverPorts(nodeGraphMvp.patch, activeNodeIds),
     scopeCaptureRates: compiled.scopeCaptureRates && typeof compiled.scopeCaptureRates === "object"
       ? { ...compiled.scopeCaptureRates }
       : {},
@@ -99,6 +111,7 @@ function nodeGraphBuildLivePlanForPatch(patch) {
     outputNode: compiled.outputNode,
     patchFingerprint: nodeGraphPatchFingerprint(normalizedPatch),
     scopeCaptureNodeIds: [...(compiled.scopeCaptureNodeIds || [])],
+    scopeCapturePorts: nodeGraphLiveModulationObserverPorts(normalizedPatch, activeNodeIds),
     scopeCaptureRates: compiled.scopeCaptureRates && typeof compiled.scopeCaptureRates === "object"
       ? { ...compiled.scopeCaptureRates }
       : {},

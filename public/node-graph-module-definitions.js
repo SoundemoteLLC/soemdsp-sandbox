@@ -6130,15 +6130,15 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["morph", "Morph"], ["frequency", "Frequency"]], h: 40 },
       { kind: "cells", params: [["phase", "Phase"], ["randomizePhase", "Random Phase"]], h: 40 },
       { kind: "choices", param: "phaseCollapse", labels: ["Merge", "Distribute"], h: 26 },
-      // Jitter, all together
-      { kind: "cells", params: [["jitterDistance", "Jitter Distance"], ["jitterSpeed", "Jitter Speed"]], h: 40 },
-      { kind: "cells", params: [["jitterFilter", "Jitter Filter", "horizontal"]], h: 26 },
-      { kind: "choices", param: "jitterSteps", labels: ["Fixed", "Random"], h: 26 },
-      { kind: "choices", param: "jitterDistanceTiltSource", labels: ["Wavelength", "Division"], h: 26 },
-      // Vibrato, all together
-      { kind: "cells", params: [["vibratoDistance", "Vibrato Distance"], ["vibratoSpeed", "Vibrato Speed"]], h: 40 },
-      { kind: "cells", params: [["vibratoPhaseVary", "Vibrato Phase Vary", "horizontal"]], h: 26 },
-      { kind: "choices", param: "vibratoDistanceTiltSource", labels: ["Wavelength", "Division"], h: 26 },
+      { kind: "group", label: "Jitter", choices: [
+        { param: "jitterSteps", labels: ["Fix", "Rnd"] },
+        { param: "jitterDistanceTiltSource", labels: ["Wave", "Div"] },
+      ], h: 20 },
+      { kind: "xy", x: "jitterDistance", y: "jitterSpeed", label: "Jitter", xLabel: "Distance", yLabel: "Speed", cell: ["jitterFilter", "Filter"], h: 52 },
+      { kind: "group", label: "Vibrato", choices: [
+        { param: "vibratoDistanceTiltSource", labels: ["Wave", "Div"] },
+      ], h: 20 },
+      { kind: "xy", x: "vibratoDistance", y: "vibratoSpeed", label: "Vibrato", xLabel: "Distance", yLabel: "Speed", cell: ["vibratoPhaseVary", "Phase Vary"], h: 52 },
       { kind: "seed", param: "seed", h: 28 },
       { kind: "cells", params: [["amplitude", "Amplitude", "horizontal"]], h: 26 },
     ],
@@ -6254,6 +6254,7 @@ const nodeGraphModuleDefinitions = (
           + "0 = no extra random offset." },
       {
         key: "jitterDistance",
+        shortName: "Dist",
         label: "Jitter Distance",
         defaultValue: "2",
         min: "0",
@@ -6268,6 +6269,7 @@ const nodeGraphModuleDefinitions = (
           + "Uses normal parameter smoothing (param menu)." },
       {
         key: "jitterSpeed",
+        shortName: "Spd",
         label: "Jitter Speed",
         kind: "frequency",
         defaultValue: "3.6",
@@ -6281,6 +6283,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Walk step rate in Hz when Distance > 0. Same at every pitch." },
       {
         key: "jitterSteps",
+        shortName: "Mode",
         label: "Jitter Steps",
         defaultValue: "0",
         min: "0",
@@ -6296,6 +6299,7 @@ const nodeGraphModuleDefinitions = (
           "Fixed: drunk ±step (original Hypersaw). Random: noise×step (noisier grain)." },
       {
         key: "jitterFilter",
+        shortName: "Filt",
         label: "Jitter Filter",
         kind: "frequency",
         defaultValue: "20",
@@ -6310,6 +6314,7 @@ const nodeGraphModuleDefinitions = (
           "Walk LPF cutoff in Hz. Same at every pitch. Low = smooth. High = rawer steps." },
       {
         key: "jitterDistanceTiltSource",
+        shortName: "Src",
         label: "Jitter Distance Source",
         defaultValue: "0",
         min: "0",
@@ -6326,6 +6331,7 @@ const nodeGraphModuleDefinitions = (
           + "Division: allotted 1/N slot space (legacy)." },
       {
         key: "vibratoDistance",
+        shortName: "Dist",
         label: "Vibrato Distance",
         defaultValue: "0",
         min: "0",
@@ -6341,6 +6347,7 @@ const nodeGraphModuleDefinitions = (
           + "Center saw is unmodulated. 0 = rest." },
       {
         key: "vibratoSpeed",
+        shortName: "Spd",
         label: "Vibrato Speed",
         kind: "frequency",
         defaultValue: "0",
@@ -6354,6 +6361,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Shared vibrato LFO rate in Hz. Same at every pitch." },
       {
         key: "vibratoPhaseVary",
+        shortName: "Vary",
         label: "Vibrato Phase Vary",
         defaultValue: "0",
         min: "0",
@@ -6367,6 +6375,7 @@ const nodeGraphModuleDefinitions = (
           + "0 = all in phase; 1 = full random 0…1 offset." },
       {
         key: "vibratoDistanceTiltSource",
+        shortName: "Src",
         label: "Vibrato Distance Source",
         defaultValue: "1",
         min: "0",

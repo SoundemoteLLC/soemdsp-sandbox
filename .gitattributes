@@ -9,6 +9,9 @@
 *.mp3 binary
 *.ico binary
 
+# Preserve this shared UI script's existing CRLF line endings.
+public/node-graph-module-face.js whitespace=cr-at-eol
+
 # This existing test uses CRLF; keep carriage returns out of whitespace errors.
 scripts/test_text_resharpen.mjs whitespace=cr-at-eol
 scripts/smoke_release.mjs whitespace=cr-at-eol

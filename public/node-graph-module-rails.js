@@ -327,7 +327,7 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     const widgets = spec && typeof nodeGraphModuleFaceWidgets === "function" ? nodeGraphModuleFaceWidgets(spec, face.offsetWidth, el) : [];
     const section = (port) => {
       const key = port.dataset.param;
-      const wd = widgets.find((x) => x.param === key || x.hpf === key || x.lpf === key);
+      const wd = widgets.find((widget) => nodeGraphModuleFaceWidgetKeys(widget).includes(key));
       if (wd) return [faceBox.y + wd.y, faceBox.y + wd.y + wd.h];
       const row = nodeGraphModuleLayoutBox(port.closest(".node-parameter-row") || port, el);
       return row ? [row.y, row.y + row.h] : null;

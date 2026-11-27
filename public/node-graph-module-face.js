@@ -7,6 +7,7 @@
 //
 // Row kinds (any module opts in with a `face` list in its definition):
 //   choices   { param, labels }                 labeled button row (short names that fit)
+//   group     { label, choices: [{ param, labels }] } thin label + inline choices; shares rail slots with the following row
 //   fraction  { num, den, mode, modeLabels, cell? } musical division: n / d + Normal/Dotted/Triplet (+ optional cell)
 //   lfoStyles { param, labels, seedParam, shapes? }  buttons with waveform snips; shapes maps
 //     each button to a snip (0 Parabol, 1 Walk, 2 FBM), default the button index
@@ -30,7 +31,7 @@
 //                                               drags it alone, between two drags that pair; handles stop at
 //                                               their neighbours (no crossing, no pushing)
 //   seed      { param }                         [code][die][+][-]
-//   xy        { x, y, label, cell? }            one square pad that edits TWO params (x, y), optionally with one more param as a
+//   xy        { x, y, label, xLabel?, yLabel?, cell? } shared XY pad with both formatted values/units inside, optionally with a
 //                                               tall cell beside it ({ cell: [key, label] }, like fraction). Jacks stack down the
 //                                               rail: x, y, cell. Same mouse law as every slider: drag is relative, Alt+click jumps
 //                                               to the pointer, Ctrl+click resets both, Shift/Ctrl while dragging scale it.
@@ -191,7 +192,7 @@ function nodeGraphModuleFaceSpec(type, node = null) {
     }
     return up;
   });
-  if (!node || typeof nodeGraphParameterEffectiveVisible !== "function") return mapped;
+  if (!node || typeof nodeGraphParameterEffectiveVisible !== "function") return nodeGraphModuleFaceGroupHeights(mapped);
   const defs = nodeGraphModuleDefinitions[type]?.parameters || [];
   const shown = (key) => nodeGraphParameterEffectiveVisible(defs.find((p) => p.key === key), node.paramMeta?.[key]);
   const rows = [];
@@ -199,11 +200,23 @@ function nodeGraphModuleFaceSpec(type, node = null) {
     if (row.kind === "cells") {
       const params = row.params.filter((cell) => shown(cell[0]));
       if (params.length) rows.push(params.length === row.params.length ? row : { ...row, params });
+    } else if (row.kind === "group") {
+      const choices = row.choices.filter(choice => shown(choice.param));
+      if (choices.length) rows.push(choices.length === row.choices.length ? row : { ...row, choices });
     } else if (nodeGraphModuleFaceRowParams(row).some(shown)) {
       rows.push(row);
     }
   }
-  return rows;
+  return nodeGraphModuleFaceGroupHeights(rows);
+}
+
+function nodeGraphModuleFaceGroupHeights(rows) {
+  return rows.map((row, i) => {
+    const header = rows[i - 1];
+    if (header?.kind !== "group" || row.kind === "group") return row;
+    const slots = nodeGraphModuleFaceRowParams(header).length + nodeGraphModuleFaceRowParams(row).length;
+    return { ...row, h: Math.max(nodeGraphModuleFaceRowHeight(row), slots * NODE_GRAPH_FACE_JACK_SLOT_PX - nodeGraphModuleFaceRowHeight(header)) };
+  });
 }
 
 function nodeGraphModuleFaceSpecForElement(el) {
@@ -214,6 +227,7 @@ function nodeGraphModuleFaceSpecForElement(el) {
 /** Params a face row owns, in rail order (top to bottom). */
 function nodeGraphModuleFaceRowParams(row) {
   switch (row.kind) {
+    case "group": return row.choices.map(choice => choice.param);
     case "fraction": return [row.num, row.den, row.mode, row.cell?.[0]].filter(Boolean);
     case "cells": return row.params.map((cell) => cell[0]);
     case "filter": return [row.hpf, row.lpf];
@@ -251,7 +265,7 @@ function nodeGraphModuleFaceRowIsContinuousHorizontalSlider(row, defs) {
 
 /** Row height: the drawn height, grown so stacked 16 px rail tags never overlap. */
 function nodeGraphModuleFaceRowHeight(row, defs) {
-  const jackMin = nodeGraphModuleFaceRowParams(row).length * NODE_GRAPH_FACE_JACK_SLOT_PX;
+  const jackMin = row.kind === "group" ? NODE_GRAPH_FACE_JACK_SLOT_PX : nodeGraphModuleFaceRowParams(row).length * NODE_GRAPH_FACE_JACK_SLOT_PX;
   const declared = nodeGraphModuleFaceRowIsContinuousHorizontalSlider(row, defs)
     ? NODE_GRAPH_HORIZONTAL_SLIDER_HEIGHT_PX
     : (Number(row && row.h) || 0);
@@ -302,7 +316,20 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
     const w = fw - ins.l - ins.r;
     const first = out.length;
     const base = { row, y, h };
-    if (row.kind === "choices" || row.kind === "lfoStyles") {
+    if (row.kind === "group") {
+      const labelW = Math.min(64, Math.round(w * 0.28));
+      out.push({ ...base, type: "groupLabel", label: row.label, x: 0, w: labelW });
+      const count = row.choices.reduce((sum, choice) => sum + choice.labels.length, 0);
+      const boxes = split(labelW, w - labelW, count);
+      let slot = 0;
+      for (const choice of row.choices) {
+        const start = Math.max(0, Math.round(Number(choice.start) || 0));
+        choice.labels.forEach((label, i) => {
+          const [x, cw] = boxes[slot++];
+          out.push({ ...base, type: "choice", param: choice.param, index: start + i, label, x, w: cw });
+        });
+      }
+    } else if (row.kind === "choices" || row.kind === "lfoStyles") {
       const start = Math.max(0, Math.round(Number(row.start) || 0));
       const values = Array.isArray(row.values) ? row.values : null;
       split(0, w, row.labels.length).forEach(([x, cw], i) => {
@@ -376,11 +403,10 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
     } else if (row.kind === "span") {
       out.push({ ...base, type: "span", handles: row.handles, x: 0, w, param: "" });
     } else if (row.kind === "xy") {
-      // A square pad (centred in the room left of the optional tall cell) and that cell.
+      // One shared pad fills the space left of the optional tall cell.
       const cellW = row.cell ? Math.round(Math.min(60, w * 0.27)) : 0;
       const room = Math.max(10, w - cellW - NODE_GRAPH_FACE_XY_GAP_PX);
-      const s = Math.max(10, Math.min(room, h - NODE_GRAPH_FACE_XY_GAP_PX * 2));
-      out.push({ ...base, type: "xyPad", param: row.x, py: row.y, label: row.label || "", x: Math.round((room - s) / 2), w: s });
+      out.push({ ...base, type: "xyPad", param: row.x, py: row.y, label: row.label || "", x: NODE_GRAPH_FACE_XY_GAP_PX, w: Math.max(10, room - NODE_GRAPH_FACE_XY_GAP_PX * 2) });
       if (row.cell) out.push({ ...base, type: "cell", param: row.cell[0], label: row.cell[1], bipolar: false, x: w - cellW, w: cellW });
     } else if (row.kind === "seed") {
       const bw = Math.round(Math.min(28, w * 0.15));
@@ -556,9 +582,11 @@ function layoutNodeGraphModuleFace(article) {
   face.style.height = `${total}px`;
   const placed = new Set();
   let y = 0;
-  for (const row of spec) {
-    const h = nodeGraphModuleFaceRowHeight(row);
-    const keys = nodeGraphModuleFaceRowParams(row);
+  for (let index = 0; index < spec.length; index++) {
+    const row = spec[index];
+    const bodyRow = row.kind === "group" && spec[index + 1]?.kind !== "group" ? spec[index + 1] : null;
+    const h = nodeGraphModuleFaceRowHeight(row) + (bodyRow ? nodeGraphModuleFaceRowHeight(bodyRow) : 0);
+    const keys = [...nodeGraphModuleFaceRowParams(row), ...(bodyRow ? nodeGraphModuleFaceRowParams(bodyRow) : [])];
     keys.forEach((key, i) => {
       placed.add(key);
       const slot = h / keys.length;
@@ -568,15 +596,16 @@ function layoutNodeGraphModuleFace(article) {
       }
     });
     y += h;
+    if (bodyRow) index++;
   }
   for (const row of body.querySelectorAll(".node-parameter-row")) {
     row.classList.toggle("node-face-unplaced", !placed.has(row.dataset.param));
   }
 }
 
-/** The square an xyPad widget draws and answers in (face px): its width, centred in the row's height. */
+/** Shared XY drawing and hit geometry in face pixels. */
 function nodeGraphModuleFaceXyBox(wd) {
-  return { x: wd.x, y: wd.y + (wd.h - wd.w) / 2, s: wd.w };
+  return { x: wd.x, y: wd.y + NODE_GRAPH_FACE_XY_GAP_PX, w: wd.w, h: Math.max(10, wd.h - NODE_GRAPH_FACE_XY_GAP_PX * 2) };
 }
 
 function nodeGraphModuleFaceLocalPoint(face, event) {
@@ -588,7 +617,7 @@ function nodeGraphModuleFaceLocalPoint(face, event) {
 
 function nodeGraphModuleFaceWidgetAt(spec, face, x, y, faceWidth = face.offsetWidth) {
   return nodeGraphModuleFaceWidgets(spec, faceWidth, face.closest(".dsp-node"))
-    .find((wd) => wd.type !== "slash" && x >= wd.x && x < wd.x + wd.w && y >= wd.y && y < wd.y + wd.h) || null;
+    .find((wd) => wd.type !== "slash" && wd.type !== "groupLabel" && x >= wd.x && x < wd.x + wd.w && y >= wd.y && y < wd.y + wd.h) || null;
 }
 
 /** Wire-drop hit boxes (client px) so a cable dropped on a widget finds its param row. */
@@ -1008,13 +1037,13 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       if (typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
     };
     if (!resetOnClick && event.altKey && !(event.shiftKey && (event.ctrlKey || event.metaKey))) {
-      u0 = Math.max(0, Math.min(1, (p.x - box.x) / Math.max(1, box.s)));
-      v0 = Math.max(0, Math.min(1, 1 - (p.y - box.y) / Math.max(1, box.s)));
+      u0 = Math.max(0, Math.min(1, (p.x - box.x) / Math.max(1, box.w)));
+      v0 = Math.max(0, Math.min(1, 1 - (p.y - box.y) / Math.max(1, box.h)));
       put(u0, v0, true, true);
     }
     nodeGraphModuleFaceCapture(face, event, (ev, drag) => {
       const { dx, dy } = travel(ev);
-      put(Math.max(0, Math.min(1, u0 + dx / Math.max(1, box.s))), Math.max(0, Math.min(1, v0 - dy / Math.max(1, box.s))), drag, false);
+      put(Math.max(0, Math.min(1, u0 + dx / Math.max(1, box.w))), Math.max(0, Math.min(1, v0 - dy / Math.max(1, box.h))), drag, false);
     }, captureOpts);
     return;
   }
@@ -1355,10 +1384,12 @@ function nodeGraphModuleFaceValueRun(batch, input, x, y, px, css, opts = {}) {
     return;
   }
   const family = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts({ px }).family : undefined;
-  const unitPx = px * 0.8;
-  const gap = px * 0.3;
-  const valueW = nodeGraphGlLinesMeasureText(text, px, family, 400);
-  const unitW = nodeGraphGlLinesMeasureText(unit, unitPx, family, 400);
+  let unitPx = px * 0.8;
+  let gap = px * 0.3;
+  let valueW = nodeGraphGlLinesMeasureText(text, px, family, 400);
+  let unitW = nodeGraphGlLinesMeasureText(unit, unitPx, family, 400);
+  const fit = opts.maxWidth > 0 ? Math.min(1, opts.maxWidth / (valueW + gap + unitW)) : 1;
+  px *= fit; unitPx *= fit; gap *= fit; valueW *= fit; unitW *= fit;
   const align = opts.align || "center";
   const start = align === "right" ? x - valueW - gap - unitW : (align === "left" ? x : x - (valueW + gap + unitW) * 0.5);
   nodeGraphModuleFaceText(batch, text, start, y, px, css, { align: "left" });
@@ -1449,12 +1480,14 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
     const gIndex = Number.isFinite(gv) ? Math.round(gv - Number(input.min || 0)) : Number.NaN;
     const cx = wd.x + wd.w * 0.5;
     const cy = wd.y + wd.h * 0.5;
-    if (wd.type === "choice") {
+    if (wd.type === "groupLabel") {
+      nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, 12.6 * z, ink.label, { maxWidth: Math.max(1, wd.w - 6) * z });
+    } else if (wd.type === "choice") {
       const on = index === wd.index;
       if (on) rect(wd.x, wd.y + 1, wd.w, wd.h - 1, ink.choiceOn);
       if (gIndex === wd.index) rect(wd.x, wd.y + 1, wd.w, wd.h - 1, ink.ghost);
       if (wd.x > 0) line(wd.x, wd.y, 1, wd.h, ink.rowLine);
-      nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, 12.6 * z, on ? ink.choiceOnText : ink.offText);
+      nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, 12.6 * z, on ? ink.choiceOnText : ink.offText, { maxWidth: Math.max(1, wd.w - 4) * z });
     } else if (wd.type === "lfoStyle") {
       const on = index === wd.index;
       if (on) rect(wd.x, wd.y + 1, wd.w, wd.h - 1, ink.subOn);
@@ -1640,38 +1673,45 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         }
       }
     } else if (wd.type === "xyPad") {
-      // The pad: well, quarter grid, centre cross, the handle (and a ghost where a wired MOD puts it), label, values, jack letters.
+      // Shared XY pad: well, moving crosshair, hollow handle, modulation ghost and values.
       const yin = nodeGraphModuleFaceInput(el, wd.py);
       const box = nodeGraphModuleFaceXyBox(wd);
-      rect(box.x, box.y, box.s, box.s, ink.cellFill);
-      for (let g = 1; g < 4; g += 1) {
-        const c = g === 2 ? ink.cellLine : ink.tickLine;
-        line(box.x + (box.s * g) / 4, box.y, 1, box.s, c);
-        line(box.x, box.y + (box.s * g) / 4, box.s, 1, c);
-      }
-      line(box.x, box.y, box.s, 1, ink.rowLine);
-      line(box.x, box.y + box.s - hairFace, box.s, 1, ink.rowLine);
-      line(box.x, box.y, 1, box.s, ink.rowLine);
-      line(box.x + box.s - hairFace, box.y, 1, box.s, ink.rowLine);
+      rect(box.x, box.y, box.w, box.h, ink.cellFill);
+      line(box.x, box.y, box.w, 1, ink.rowLine);
+      line(box.x, box.y + box.h - hairFace, box.w, 1, ink.rowLine);
+      line(box.x, box.y, 1, box.h, ink.rowLine);
+      line(box.x + box.w - hairFace, box.y, 1, box.h, ink.rowLine);
       const u = nodeGraphModuleFaceTravel(input);
       const v = nodeGraphModuleFaceTravel(yin);
       const gu = nodeGraphModuleFaceGhostTravel(input);
       const gv2 = nodeGraphModuleFaceGhostTravel(yin);
-      if (Number.isFinite(gu) && Number.isFinite(gv2) && typeof nodeGraphGlLinesDot === "function") {
-        nodeGraphGlLinesDot(batch, ox + (box.x + gu * box.s) * z, oy + (box.y + (1 - gv2) * box.s) * z, 4 * z, 0.7, nodeGraphModuleFaceRgba(ink.ghost));
+      const hx = ox + (box.x + u * box.w) * z;
+      const hy = oy + (box.y + (1 - v) * box.h) * z;
+      rect(box.x + u * box.w - 0.5, box.y, 1, box.h, "rgba(142, 197, 255, 0.28)");
+      rect(box.x, box.y + (1 - v) * box.h - 0.5, box.w, 1, "rgba(142, 197, 255, 0.28)");
+      if (typeof nodeGraphGlLinesRing === "function") nodeGraphGlLinesRing(batch, hx, hy, 4.5 * z, 0.7 * z, 0.7, nodeGraphModuleFaceRgba(ink.bandHandle));
+      if ((Number.isFinite(gu) || Number.isFinite(gv2)) && typeof nodeGraphGlLinesDot === "function") {
+        const ghostX = ox + (box.x + (Number.isFinite(gu) ? gu : u) * box.w) * z;
+        const ghostY = oy + (box.y + (1 - (Number.isFinite(gv2) ? gv2 : v)) * box.h) * z;
+        // Keep modulation visible even when its position coincides with the base handle.
+        nodeGraphGlLinesDot(batch, ghostX, ghostY, 4 * z, 0.7, nodeGraphModuleFaceRgba(ink.ghost));
       }
-      const hx = ox + (box.x + u * box.s) * z;
-      const hy = oy + (box.y + (1 - v) * box.s) * z;
-      rect(box.x + u * box.s - 0.5, box.y, 1, box.s, "rgba(142, 197, 255, 0.28)");
-      rect(box.x, box.y + (1 - v) * box.s - 0.5, box.s, 1, "rgba(142, 197, 255, 0.28)");
-      if (typeof nodeGraphGlLinesRing === "function") nodeGraphGlLinesRing(batch, hx, hy, 6.5 * z, 0.7 * z, 0.7, nodeGraphModuleFaceRgba(ink.bandHandle));
-      if (typeof nodeGraphGlLinesDot === "function") nodeGraphGlLinesDot(batch, hx, hy, 3 * z, 0.7, nodeGraphModuleFaceRgba(ink.value));
-      if (wd.label) nodeGraphModuleFaceText(batch, wd.label, ox + (box.x + 5) * z, oy + (box.y + 9) * z, 11 * z, ink.offText, { align: "left" });
-      const fmt = (n) => (Math.abs(n) >= 100 ? n.toFixed(0) : Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2));
-      nodeGraphModuleFaceText(batch, `${fmt(nodeGraphModuleFaceValue(input))}, ${fmt(nodeGraphModuleFaceValue(yin))}`, ox + (box.x + box.s - 5) * z, oy + (box.y + box.s - 9) * z, 10.5 * z, ink.offText, { align: "right" });
+      const namedAxes = Boolean(wd.row.xLabel || wd.row.yLabel);
+      if (!namedAxes && wd.label) nodeGraphModuleFaceText(batch, wd.label, ox + (box.x + 5) * z, oy + (box.y + 9) * z, 11 * z, ink.offText, { align: "left", maxWidth: (box.w - 10) * z });
+      [input, yin].forEach((axis, i) => {
+        const label = i ? (wd.row.yLabel || "Y") : (wd.row.xLabel || "X");
+        if (namedAxes) {
+          const ax = box.x + box.w * (i ? 0.75 : 0.25);
+          nodeGraphModuleFaceText(batch, label, ox + ax * z, oy + (box.y + 10) * z, 11.6 * z, ink.label, { maxWidth: (box.w * 0.5 - 8) * z });
+          nodeGraphModuleFaceValueRun(batch, axis, ox + ax * z, oy + (box.y + box.h - 10) * z, 11.6 * z, ink.value, { maxWidth: (box.w * 0.5 - 8) * z });
+        } else {
+          const text = `${label} ${nodeGraphModuleFaceValueText(axis)}`;
+          nodeGraphModuleFaceText(batch, text, ox + (box.x + box.w - 5) * z, oy + (box.y + box.h - 22 + i * 13) * z, 10.5 * z, ink.value, { align: "right", maxWidth: (box.w - 10) * z });
+        }
+      });
       // Which jack is which: the rail stacks one slot per param, x then y (then the cell's).
       const slots = nodeGraphModuleFaceRowParams(wd.row).length;
-      ["X", "Y"].forEach((letter, i) => nodeGraphModuleFaceText(batch, letter, ox + (box.x + 5) * z, oy + (wd.y + (wd.h / slots) * (i + 0.5)) * z, 10.5 * z, ink.offText, { align: "left" }));
+      if (!namedAxes) ["X", "Y"].forEach((letter, i) => nodeGraphModuleFaceText(batch, letter, ox + (box.x + 5) * z, oy + (wd.y + (wd.h / slots) * (i + 0.5)) * z, 10.5 * z, ink.offText, { align: "left" }));
     } else if (wd.type === "filter") {
       nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line);
     } else if (wd.type === "band") {
