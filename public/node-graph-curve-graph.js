@@ -33,8 +33,12 @@
         parts.push(`<path data-curve-series-hit="${seriesId}" d="${d}" fill="none" stroke="transparent" stroke-width="14"/>`);
       }
       points.forEach((point, index) => {
-        const size = 7;
-        parts.push(`<rect class="pm-pin ${selected ? "pm-pin-selected" : "pm-pin-other"}" data-curve-series="${seriesId}" data-curve-point="${index}" x="${(x(point.x) - size / 2).toFixed(2)}" y="${(y(point.y) - size / 2).toFixed(2)}" width="${size}" height="${size}" rx="1.5" fill="${item.color}" fill-opacity="${selected ? 1 : .48}" stroke="${selected ? "#fff" : "none"}" stroke-width="${selected ? 1 : 0}" vector-effect="non-scaling-stroke"/>`);
+        const size = 12;
+        // Keep both the geometry and raster alignment identical as selection changes. The series
+        // line carries selection emphasis; changing the pin's fill/stroke made its apparent size jump.
+        const px = Math.round(x(point.x) - size / 2) + .5;
+        const py = Math.round(y(point.y) - size / 2) + .5;
+        parts.push(`<rect class="pm-pin ${selected ? "pm-pin-selected" : "pm-pin-other"}" data-curve-series="${seriesId}" data-curve-point="${index}" x="${px}" y="${py}" width="${size}" height="${size}" rx="2" fill="${item.color}" fill-opacity=".78" stroke="#fff" stroke-opacity=".72" stroke-width="1" vector-effect="non-scaling-stroke"/>`);
       });
     }
     if (playhead !== null && Number.isFinite(playhead)) {

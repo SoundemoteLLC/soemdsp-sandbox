@@ -95,10 +95,14 @@ try {
       let box = point?.getBoundingClientRect();
       const sx = box ? box.left + box.width / 2 : 0, sy = box ? box.top + box.height / 2 : 0;
       const stopId = g().stops[0].id, firstParam = g().params[0], secondParam = g().params[1];
+      const pointGeometry = point ? ["x", "y", "width", "height", "rx", "stroke-width"].map((key) => point.getAttribute(key)) : [];
       const startPos = g().stops.find((s) => s.id === stopId).pos;
       const startOther = Number(g().stops.find((s) => s.id === stopId).offsets?.[secondParam.nodeId]?.[secondParam.key]) || 0;
       nodeGraphGradientPagePointerDown({ target: point, currentTarget: host, pointerId: 77, button: 0, clientX: sx, clientY: sy, preventDefault() {} });
       out.graphCapture = host.__testCapturedPointer === 77 && nodeGraphGradientPageState.drag?.graph === true;
+      const pressedPoint = document.querySelector('[data-gradient-graph] [data-curve-point="0"]');
+      const pressedGeometry = pressedPoint ? ["x", "y", "width", "height", "rx", "stroke-width"].map((key) => pressedPoint.getAttribute(key)) : [];
+      out.graphPointDoesNotResizeOnPress = pointGeometry.length > 0 && pointGeometry.every((value, index) => value === pressedGeometry[index]);
       nodeGraphGradientPagePointerMove({ pointerId: 77, clientX: sx + 24, clientY: sy });
       nodeGraphGradientPagePointerUp({ pointerId: 77, type: "pointerup" });
       const movedXStop = g().stops.find((s) => s.id === stopId);
@@ -115,14 +119,19 @@ try {
       out.graphVerticalDrag = movedYStop.pos === beforeVerticalPos
         && (Number(movedYStop.offsets?.[firstParam.nodeId]?.[firstParam.key]) || 0) < beforeVerticalValue
         && (Number(movedYStop.offsets?.[secondParam.nodeId]?.[secondParam.key]) || 0) === startOther;
-      out.graphPointsStaySquare = [...document.querySelectorAll("[data-gradient-graph] [data-curve-point]")].every((el) => el.localName === "rect");
+      const points = [...document.querySelectorAll("[data-gradient-graph] [data-curve-point]")];
+      out.graphPointsStaySquare = points.length > 0 && points.every((el) => el.localName === "rect" && el.getAttribute("width") === "12" && el.getAttribute("height") === "12" && el.getAttribute("rx") === "2" && el.getAttribute("stroke-width") === "1");
       steps();
-      const colorPicker = [...nodeGraphGradientPageColorWidgets][0];
-      if (colorPicker?.setColor) colorPicker.setColor({ h: 0, s: 100, l: 50 });
-      else {
-        const input = document.querySelector("#nodeGradientsBody .node-gradient-stop-colors input[type=color]");
-        if (input) { input.value = "#ff0000"; input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }
+      const colorInput = document.querySelector("#nodeGradientsBody .node-gradient-native-color-picker");
+      const colorHandle = document.querySelector("#nodeGradientsBody .node-gradient-handle");
+      let pickerOpened = false;
+      if (colorInput && colorHandle) {
+        colorInput.showPicker = () => { pickerOpened = true; };
+        colorHandle.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
       }
+      out.doubleClickOpensNativeColorPicker = pickerOpened && Boolean(colorInput?.dataset.stopId);
+      out.noVisibleColorWidget = Boolean(colorInput && !document.querySelector("#nodeGradientsBody .node-gradient-stop-colors"));
+      if (colorInput) { colorInput.value = "#ff0000"; colorInput.dispatchEvent(new Event("input", { bubbles: true })); colorInput.dispatchEvent(new Event("change", { bubbles: true })); }
       out.colorPicker = g().stops[0].color === "#ff0000"
         && Boolean(document.querySelector("#nodeGradientsBody .node-gradient-strip")?.style.background);
       const shapeButton = document.querySelector('#nodeGradientsBody [data-gradient-action="curveShape"][data-shape="smoothstep"]');
@@ -238,6 +247,8 @@ try {
     ok(r.graphsHiddenByDefault && r.graphsShowOnDemand, "graphs start hidden and the page toggle shows them");
     ok(r.graphCapture && r.graphHorizontalDrag && r.graphVerticalDrag, "graph point drag keeps pointer capture and separates shared position from selected-param value");
     ok(r.graphPointsStaySquare, "selected and unselected graph points keep the same square shape");
+    ok(r.graphPointDoesNotResizeOnPress, "selecting a graph point does not change its pixel-aligned geometry");
+    ok(r.doubleClickOpensNativeColorPicker && r.noVisibleColorWidget, "double-clicking a gradient stop opens the native color picker with no visible extra widget");
     ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
     ok(r.shapeControls && r.curveStored && r.otherParamLinear, "HTML shape and skew controls store a per-param segment curve without changing the other parameter");
     ok(r.curveChart, "selected parameter renders SVG stop points and its shaped curve");

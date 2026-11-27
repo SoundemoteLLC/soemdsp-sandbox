@@ -17,7 +17,6 @@ const nodeGraphGradientPageState = {
   // HP-24: the stop being edited ({ gradientId, stopId }), or null. Editing holds only while the playhead sits on that stop.
   editing: null,
 };
-const nodeGraphGradientPageColorWidgets = new Set();
 let nodeGraphGradientPageColorDirty = false;
 
 function nodeGraphGradientSelectedParam(gradient) {
@@ -28,44 +27,29 @@ function nodeGraphGradientSelectedParam(gradient) {
 }
 
 function nodeGraphGradientPageColorControls(gradient, onlyStopId = "") {
-  const wrap = document.createElement("div");
-  wrap.className = "node-gradient-stop-colors";
-  [...gradient.stops].sort((a, b) => a.pos - b.pos).filter((stop) => !onlyStopId || stop.id === onlyStopId).forEach((stop, index) => {
-    const row = document.createElement("label");
-    row.className = "node-gradient-stop-color-row";
-    const caption = document.createElement("span");
-    caption.textContent = `Stop ${index + 1}`;
-    const host = document.createElement("span");
-    host.className = "node-gradient-stop-color-widget";
-    row.append(caption, host);
-    wrap.append(row);
-    const update = (hex) => {
-      if (!/^#[0-9a-f]{6}$/i.test(String(hex || ""))) return;
-      stop.color = hex.toLowerCase();
-      nodeGraphGradientPageColorDirty = true;
-      const strip = document.querySelector(`#nodeGradientsBody .node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"] .node-gradient-strip`);
-      if (strip) strip.style.background = nodeGraphGradientPageStripBackground(gradient);
-      nodeGraphGradientsNotifyVisuals();
-      if (typeof nodeGraphGradientModuleNoteMoved === "function") nodeGraphGradientModuleNoteMoved();
-      if (typeof scheduleNodeGraphWorkspaceAutosave === "function") scheduleNodeGraphWorkspaceAutosave(`${gradient.name} stop color`);
-    };
-    if (typeof window.mountColorWidget === "function") {
-      const widget = window.mountColorWidget(host, { label: "Stop", color: stop.color || nodeGraphGradientPageColorInputDefault(index), channels: "full", onChange: (color) => update(color?.hex) });
-      nodeGraphGradientPageColorWidgets.add(widget);
-    } else {
-      const input = document.createElement("input");
-      input.type = "color";
-      input.value = stop.color || nodeGraphGradientPageColorInputDefault(index);
-      input.setAttribute("aria-label", `Stop ${index + 1} color`);
-      input.addEventListener("input", () => update(input.value));
-      input.addEventListener("change", () => {
-        if (nodeGraphGradientPageColorDirty && typeof recordNodeGraphHistory === "function") recordNodeGraphHistory();
-        nodeGraphGradientPageColorDirty = false;
-      });
-      host.append(input);
-    }
+  const input = document.createElement("input");
+  input.type = "color";
+  input.className = "node-gradient-native-color-picker";
+  input.setAttribute("aria-label", `${gradient.name} stop color picker`);
+  const initial = gradient.stops.find((stop) => stop.id === onlyStopId) || gradient.stops[0];
+  input.value = initial?.color || nodeGraphGradientPageColorInputDefault(0);
+  const update = () => {
+    const stop = gradient.stops.find((item) => item.id === input.dataset.stopId);
+    if (!stop || !/^#[0-9a-f]{6}$/i.test(input.value)) return;
+    stop.color = input.value.toLowerCase();
+    nodeGraphGradientPageColorDirty = true;
+    const strip = document.querySelector(`#nodeGradientsBody .node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"] .node-gradient-strip`);
+    if (strip) strip.style.background = nodeGraphGradientPageStripBackground(gradient);
+    nodeGraphGradientsNotifyVisuals();
+    if (typeof nodeGraphGradientModuleNoteMoved === "function") nodeGraphGradientModuleNoteMoved();
+    if (typeof scheduleNodeGraphWorkspaceAutosave === "function") scheduleNodeGraphWorkspaceAutosave(`${gradient.name} stop color`);
+  };
+  input.addEventListener("input", update);
+  input.addEventListener("change", () => {
+    if (nodeGraphGradientPageColorDirty && typeof recordNodeGraphHistory === "function") recordNodeGraphHistory();
+    nodeGraphGradientPageColorDirty = false;
   });
-  return wrap;
+  return input;
 }
 
 function nodeGraphGradientPageColorInputDefault(index) {
@@ -394,8 +378,6 @@ function renderNodeGraphGradientPage() {
   const panel = document.getElementById("nodeGradientsPage");
   if (panel && panel.hidden) return;
   const fragment = document.createDocumentFragment();
-  for (const widget of nodeGraphGradientPageColorWidgets) widget.destroy?.();
-  nodeGraphGradientPageColorWidgets.clear();
   const top = document.createElement("div");
   top.className = "node-gradient-top";
   const filter = document.createElement("div");
@@ -715,6 +697,27 @@ function nodeGraphGradientPagePointerDown(event) {
   }
 }
 
+function nodeGraphGradientPageOpenStopColorPicker(event) {
+  const handle = event.target?.closest?.(".node-gradient-handle");
+  if (!handle) return;
+  const card = handle.closest(".node-gradient-card");
+  const gradient = nodeGraphGradientPageGradients().find((item) => item.id === handle.closest(".node-gradient-strip")?.dataset.gradientId);
+  const stop = gradient?.stops.find((item) => item.id === handle.dataset.stopId);
+  const picker = card?.querySelector(".node-gradient-native-color-picker");
+  if (!stop || !picker) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const index = [...gradient.stops].sort((a, b) => a.pos - b.pos).findIndex((item) => item.id === stop.id);
+  picker.dataset.stopId = stop.id;
+  picker.value = stop.color || nodeGraphGradientPageColorInputDefault(index);
+  try {
+    if (typeof picker.showPicker === "function") picker.showPicker();
+    else picker.click();
+  } catch (_error) {
+    picker.click();
+  }
+}
+
 function nodeGraphGradientPagePointerMove(event) {
   const drag = nodeGraphGradientPageState.drag;
   if (!drag || drag.pointerId !== event.pointerId) return;
@@ -978,11 +981,7 @@ function bindNodeGraphGradientPage() {
   host.addEventListener("pointermove", nodeGraphGradientPagePointerMove);
   host.addEventListener("pointerup", nodeGraphGradientPagePointerUp);
   host.addEventListener("pointercancel", nodeGraphGradientPagePointerUp);
-  host.addEventListener("pointerup", () => {
-    if (!nodeGraphGradientPageColorDirty) return;
-    nodeGraphGradientPageColorDirty = false;
-    if (typeof recordNodeGraphHistory === "function") recordNodeGraphHistory();
-  });
+  host.addEventListener("dblclick", nodeGraphGradientPageOpenStopColorPicker);
   // Undo / redo / load replace the patch: re-render from the committed patch (an edited stop that is gone ends the editing).
   if (typeof addNodeGraphPatchCommitListener === "function") {
     addNodeGraphPatchCommitListener(() => {

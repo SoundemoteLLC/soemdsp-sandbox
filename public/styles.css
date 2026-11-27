@@ -5767,15 +5767,15 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   background:transparent; cursor:var(--node-adjust-cursor, default);
 }
 #nodeGradientsBody .node-gradient-playhead-control input[type=range]::-webkit-slider-runnable-track {
-  height:1px; border:0; border-radius:0;
+  height:8px; border:0; border-radius:0;
   background:linear-gradient(90deg,#3b5aa8 0%,#3b5aa8 var(--gradient-playhead-progress,0%),#55555d var(--gradient-playhead-progress,0%),#55555d 100%);
 }
 #nodeGradientsBody .node-gradient-playhead-control input[type=range]::-webkit-slider-thumb {
-  box-sizing:border-box; appearance:none; -webkit-appearance:none; width:9px; height:9px; margin-top:-4px;
+  box-sizing:border-box; appearance:none; -webkit-appearance:none; width:9px; height:9px; margin-top:0;
   border:1px solid #111; border-radius:2px; background:#e8e8f0;
 }
-#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-moz-range-track { height:1px; border:0; border-radius:0; background:#55555d; }
-#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-moz-range-progress { height:1px; border:0; border-radius:0; background:#3b5aa8; }
+#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-moz-range-track { height:8px; border:0; border-radius:0; background:#55555d; }
+#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-moz-range-progress { height:8px; border:0; border-radius:0; background:#3b5aa8; }
 #nodeGradientsBody .node-gradient-playhead-control input[type=range]::-moz-range-thumb {
   box-sizing:border-box; width:9px; height:9px; border:1px solid #111; border-radius:2px; background:#e8e8f0;
 }
@@ -5881,6 +5881,10 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   display: block;
   min-width: 0;
   height: 58px;
+}
+
+#nodeGradientsBody .node-gradient-native-color-picker {
+  position:fixed; left:-10000px; top:0; width:1px; height:1px; opacity:0; pointer-events:none;
 }
 
 /* The Gradient face is directly draggable through the shared Playhead slider path. */
