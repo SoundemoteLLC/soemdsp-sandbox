@@ -1603,13 +1603,6 @@
       "tracePoints": [],
       "destinationNode": "superloveFilter-1",
       "destinationParam": "resonance"
-    },
-    {
-      "sourceNode": "robinSinusoid-1",
-      "sourcePort": "Out",
-      "tracePoints": [],
-      "destinationNode": "ellipsoid-2",
-      "destinationParam": "shape"
     }
   ],
   "bypassedNodes": [

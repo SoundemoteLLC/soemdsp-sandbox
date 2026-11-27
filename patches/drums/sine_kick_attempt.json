@@ -46,13 +46,6 @@
       "sourceNode": "sinCos-2",
       "sourcePort": "sin",
       "tracePoints": []
-    },
-    {
-      "destinationNode": "sinCos-2",
-      "destinationPort": "0.1V/Oct",
-      "sourceNode": "ampCurve-1",
-      "sourcePort": "Curve",
-      "tracePoints": []
     }
   ],
   "format": {

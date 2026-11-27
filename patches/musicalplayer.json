@@ -865,13 +865,6 @@
       "tracePoints": [],
       "destinationNode": "output",
       "destinationPort": "Right"
-    },
-    {
-      "sourceNode": "fractalBrownianNoise-1",
-      "sourcePort": "Out Z",
-      "tracePoints": [],
-      "destinationNode": "polyBlep-1",
-      "destinationPort": "0.1V/Oct"
     }
   ],
   "modulations": [],

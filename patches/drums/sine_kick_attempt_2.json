@@ -157,7 +157,7 @@
       "sourcePort": "Out",
       "tracePoints": [],
       "destinationNode": "sinCos-1",
-      "destinationParam": "frequency"
+      "destinationParam": "freq"
     }
   ],
   "monitors": [],

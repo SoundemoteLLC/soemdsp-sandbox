@@ -221,13 +221,6 @@
       "tracePoints": [],
       "destinationNode": "polyBlep-6",
       "destinationParam": "frequency"
-    },
-    {
-      "sourceNode": "keyboard-1",
-      "sourcePort": "f",
-      "tracePoints": [],
-      "destinationNode": "fm-1",
-      "destinationParam": "frequency"
     }
   ],
   "monitors": [],

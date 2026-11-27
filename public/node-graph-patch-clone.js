@@ -787,10 +787,11 @@ function cloneNodeGraphPatch(patch) {
     bypassedNodes: Array.isArray(patch.bypassedNodes) ? [...patch.bypassedNodes] : [],
     cameras: cameraState.cameras,
     codeScreen: normalizeNodeGraphCodeScreen(patch.codeScreen),
-    connections: (patch.connections || []).map((connection) => ({
-      ...connection,
-      tracePoints: normalizeNodeGraphTracePoints(connection.tracePoints),
-    })),
+    // Trace points only when there are some (as the patch normalizer does): a clone must save the same file as its source.
+    connections: (patch.connections || []).map(({ tracePoints, ...connection }) => {
+      const points = normalizeNodeGraphTracePoints(tracePoints);
+      return points.length ? { ...connection, tracePoints: points } : connection;
+    }),
     format: { ...(patch.format || nodeGraphPatchFormat) },
     grid: normalizeNodeGraphPatchGrid(patch.grid),
     graphConnections: normalizeNodeGraphGraphConnections(patch.graphConnections),
@@ -800,10 +801,10 @@ function cloneNodeGraphPatch(patch) {
       : {}),
     masterSeed: patch.masterSeed,
     modularOnlyControlsVisible: Boolean(patch.modularOnlyControlsVisible),
-    modulations: (patch.modulations || []).map((modulation) => ({
-      ...modulation,
-      tracePoints: normalizeNodeGraphTracePoints(modulation.tracePoints),
-    })),
+    modulations: (patch.modulations || []).map(({ tracePoints, ...modulation }) => {
+      const points = normalizeNodeGraphTracePoints(tracePoints);
+      return points.length ? { ...modulation, tracePoints: points } : modulation;
+    }),
     nodes: (patch.nodes || []).map((rawNode) => {
       const node = rawNode;
       const ui = nodeGraphModuleDefinitions[node.type]?.layout === "textBox" && !Object.hasOwn(node, "ui")

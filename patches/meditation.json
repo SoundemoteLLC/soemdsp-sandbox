@@ -1171,13 +1171,6 @@
       "sourceNode": "pitchQuantizer-1",
       "sourcePort": "0.1V/Oct",
       "tracePoints": [],
-      "destinationNode": "dsfOscillator-1",
-      "destinationPort": "0.1V/Oct"
-    },
-    {
-      "sourceNode": "pitchQuantizer-1",
-      "sourcePort": "0.1V/Oct",
-      "tracePoints": [],
       "destinationNode": "valueOscilloscope-1",
       "destinationPort": "In"
     },

@@ -1239,20 +1239,6 @@
       "tracePoints": [],
       "destinationNode": "reverbEffect-1",
       "destinationPort": "In"
-    },
-    {
-      "sourceNode": "fractalBrownianNoise-1",
-      "sourcePort": "Out X",
-      "tracePoints": [],
-      "destinationNode": "polyBlep-1",
-      "destinationPort": "0.1V/Oct"
-    },
-    {
-      "sourceNode": "fractalBrownianNoise-1",
-      "sourcePort": "Out Y",
-      "tracePoints": [],
-      "destinationNode": "polyBlep-1",
-      "destinationPort": "0.1V/Oct"
     }
   ],
   "modulations": [],
