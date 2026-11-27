@@ -89,7 +89,7 @@ These reports probably share a root cause: text in the GL text and label renderi
 
 - **Reported:** 2026-11-25, by Argi
 - **Symptoms:** Deleting the Viewport Out module makes the circuit builder grid lines dim until they seem to disappear, as if Viewport Out has to exist for the workspace background to render correctly.
-- **Notes:** MasterBot owns viewport and workspace rendering. See also the module display rewrite in `docs/MODULE_DISPLAY_REWRITE_PLAN.md`. Rechecked the screen-effects teardown path on 2026-11-27; no small verified fix or visual reproduction was established, so this remains open.
+- **Notes:** MasterBot owns viewport and workspace rendering. See also the module display rewrite in `docs/MODULE_DISPLAY_REWRITE_PLAN.md`. Rechecked directly on 2026-11-27 by adding Viewport In → Viewport Out, then deleting Out and comparing the workspace screenshots; the grid did not visibly dim in this run. No fix was indicated, so this remains open.
 
 ### Keyboard key color highlighting is missing or intermittent - FIXED
 
