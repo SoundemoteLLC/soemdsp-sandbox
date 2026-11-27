@@ -15,8 +15,8 @@ Same repo rules: work on master, commit each item separately, no push, run your 
 
 3. Keep Mutators and Gradients out of the module store (Argi t556u).
    - Remove the Gradient module and the Mutator modules from every module-store page and from store search.
-   - The only way to add a Gradient module is dragging it in from the rainbow page. Mutators keep whatever non-store route they already have. If the store is their only route now, stop and report rather than inventing a new one.
+   - The only way to add a Gradient module is dragging it in from the rainbow page. Mutators work the same way (Argi t557u): the Mutator page gets a visible drag button, matching the rainbow page's grip, so you can drag a Mutator module into the circuit. Same low-clutter rules: no hover, no animation, no hand cursor.
    - Existing patches that already contain them still load and work.
-   - Test: neither appears in the store or its search, and the rainbow-page drag still works.
+   - Test: neither appears in the store or its search, and dragging from both the rainbow page and the Mutator page places a module.
 
 Report: the commits, and a short list for Argi to check quickly after Ctrl+F5.
