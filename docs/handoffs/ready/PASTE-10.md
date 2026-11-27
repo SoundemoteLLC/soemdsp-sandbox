@@ -48,3 +48,12 @@ Argi reports these on current master after PASTE-9. They probably come from one 
 3. **Snake select can't select a wire.**
 
 For each one: fix it, add a browser test that does the real gesture (middle-drag pans, middle plus wheel or zoom gesture zooms, drag-in spawns a module where it's dropped, snake select selects a crossed wire), and confirm the PASTE-9 text fixes still hold (zero text rebuilds during drag and pan). Commit each one separately. Then do the rest of this paste.
+
+### Step 0 leads from Moth (read from the diffs, nothing was run)
+
+- **Strongest suspect: `fdfda54f`** (`node-graph-gl-graph.js`, `node-graph-wires.js`). Check:
+  - (a) the new `if (state.wireDragging || state.portMovePointer) return;` in the document pointermove in `node-graph-wires.js`. A stale flag left set would freeze later gestures and snake select.
+  - (b) `nodeGraphGridKeyboardGlPointerDown` runs before the shared plate and title hit test, and it calls preventDefault, stopPropagation and setPointerCapture. It must return false for non-keyboard hits.
+  - (c) `drawNodeGraphWires({gesture:true})` and `nodeGraphGlGraphPresent({retainPlates})` skip rebuilds during gestures. Check that hit rects don't go stale.
+- **`167b8490`:** unlikely to be the main cause, but the title branch of `nodeGraphGlHitPointerDown` (around line 6200) returns early on a non-left button, which swallows a middle press on a title. Let it fall through to pan instead of returning.
+- Bisect `82380fa0^`..HEAD on the three repros. All three dying together points to one shared pointerdown or pointermove early return. The three are already logged in `docs/KNOWN_BUGS.md`; update that entry when they're fixed.
