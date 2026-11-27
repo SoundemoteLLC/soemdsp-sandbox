@@ -109,7 +109,8 @@ function nodeGraphPluckEnvelopeCircuitPreviewCurve(params = {}, points = 160) {
   const releaseShape = Number(params.releaseShape);
   const feedback = Number(params.feedback);
   const bias = Number(params.bias);
-  const amplitude = Math.max(0, Number(params.amplitude) || 1);
+  // Magnitude: the face draws the sign (a negative Amplitude hangs the curve from the top).
+  const amplitude = Number.isFinite(Number(params.amplitude)) ? Math.abs(Number(params.amplitude)) : 1;
   const sr = 2000;
   const state = createNodeGraphPluckEnvelopeCircuitState();
   const n = Math.max(48, Math.round(Number(points) || 160));

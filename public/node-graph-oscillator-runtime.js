@@ -39,7 +39,7 @@ function nodeGraphSineWavetableLookup(phaseRadians) {
 }
 
 function nodeGraphSineCosWavetableSample(phaseRadians, frequency, amplitude, sampleRate) {
-  const level = Math.max(0, nodeGraphFiniteNumber(amplitude)) * nodeGraphNyquistFadeAmplitude(frequency, sampleRate);
+  const level = nodeGraphFiniteNumber(amplitude) * nodeGraphNyquistFadeAmplitude(frequency, sampleRate); // signed gain (HP-24)
   return {
     cos: nodeGraphSineWavetableLookup((nodeGraphFiniteNumber(phaseRadians)) + Math.PI * 0.5) * level,
     sin: nodeGraphSineWavetableLookup(phaseRadians) * level,
@@ -299,7 +299,7 @@ function nodeGraphEllipsoidVectorSample(phase, params = {}) {
   if (params && Object.prototype.hasOwnProperty.call(params, "morph") && params.scale == null && params.scaleX == null) {
     return nodeGraphEllipsoidSineToSquareVector(phase, params);
   }
-  const level = Math.max(0, nodeGraphFiniteNumber(params.amplitude, nodeGraphFiniteNumber(params.level)));
+  const level = nodeGraphFiniteNumber(params.amplitude, nodeGraphFiniteNumber(params.level)); // signed gain (HP-24)
   const frequencyHz = nodeGraphFiniteNumber(params.frequencyHz);
   const sampleRate = nodeGraphFiniteNumber(params.sampleRate, 44100);
   const antialias = Object.prototype.hasOwnProperty.call(params, "antialias")
@@ -489,7 +489,7 @@ function nodeGraphAdditiveOscillatorSample(runtime, nodeId, phase, params = {}, 
     clampNodeSliderValue(nodeGraphFiniteNumber(params.morph), 0, 1),
     clampNodeSliderValue(nodeGraphFiniteNumber(params.harmonicPhaseAdd), 0, 1),
     clampNodeSliderValue(nodeGraphFiniteNumber(params.harmonicPhaseMultiply), 0, 4),
-    Math.max(0, nodeGraphFiniteNumber(params.amplitude)),
+    nodeGraphFiniteNumber(params.amplitude), // signed gain (HP-24)
     nodeGraphFiniteNumber(params.dampingFilterFrequency, 20000),
     safeRate,
   );

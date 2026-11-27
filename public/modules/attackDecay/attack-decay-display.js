@@ -137,7 +137,7 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
   if (type === "linearAttackRelease" && typeof nodeGraphLinearAttackReleasePreviewCurve === "function") {
     const attack = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "attack", 0.01));
     const release = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "release", 0.25));
-    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+    const amplitude = Math.abs(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
     const preview = nodeGraphLinearAttackReleasePreviewCurve({ attack, release }, pts);
     return {
       points: preview.points,
@@ -161,7 +161,7 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
     const release = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "release", 0.25));
     const attackShape = nodeGraphEnvelopeCurveLiveParam(node, "attackShape", 0);
     const releaseShape = nodeGraphEnvelopeCurveLiveParam(node, "releaseShape", 0);
-    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+    const amplitude = Math.abs(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
     const preview = nodeGraphCurveAttackReleasePreviewCurve({
       attack, release, attackShape, releaseShape, amplitude,
     }, pts);
@@ -192,7 +192,7 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
     const releaseShape = nodeGraphEnvelopeCurveLiveParam(node, "releaseShape", 1);
     const feedback = nodeGraphEnvelopeCurveLiveParam(node, "feedback", 0.6804373070396221);
     const bias = nodeGraphEnvelopeCurveLiveParam(node, "bias", 0.9435542410230598);
-    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+    const amplitude = Math.abs(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
     const preview = nodeGraphPluckEnvelopeCircuitPreviewCurve({
       attack, release, attackShape, releaseShape, feedback, bias, amplitude,
     }, pts);
@@ -213,7 +213,7 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
     const decaySnap = Math.max(0, Math.min(1, nodeGraphEnvelopeCurveLiveParam(node, "decaySnap", 0)));
     const decayBody = Math.max(0, Math.min(1, nodeGraphEnvelopeCurveLiveParam(node, "decayBody", 0)));
     const fallCurve = nodeGraphEnvelopeCurveLiveParam(node, "fallCurve", 0.8062943900342834);
-    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 0.980691228326368));
+    const amplitude = Math.abs(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 0.980691228326368));
     const preview = nodeGraphThumpEnvelopePreviewCurve({
       attack, release, decaySnap, decayBody, fallCurve, amplitude,
     }, pts);
@@ -276,7 +276,7 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
     const shape = nodeGraphEnvelopeCurveLiveParam(node, "shape", 0);
     const attack = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "attackTime", 0));
     const attackShape = nodeGraphEnvelopeCurveLiveParam(node, "attackShape", 0);
-    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+    const amplitude = Math.abs(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
     const preview = nodeGraphHyperbolicDecayPreviewCurve({ duration, shape, attack, attackShape, amplitude }, pts, heightPx);
     // Phase dot: the engine's position (__EnvPos): 0..1 across the attack, 1..2 across the decay, -1 idle.
     // It is a phase, so changing a time while the envelope runs moves the curve under the dot, not the dot.
@@ -306,7 +306,7 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
     const morph = nodeGraphEnvelopeCurveLiveParam(node, "morph", 0);
     const attackMorph = nodeGraphEnvelopeCurveLiveParam(node, "attackMorph", 0);
     const decayMorph = nodeGraphEnvelopeCurveLiveParam(node, "decayMorph", 0);
-    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+    const amplitude = Math.abs(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
     const preview = nodeGraphEllipsoidDecayPreviewCurve({ duration, attack, morph, attackMorph, decayMorph, amplitude }, pts, heightPx);
     // Phase dot: the engine's position (__EnvPos): 0..1 across the attack, 1..2 across the decay, -1 idle.
     const pos = typeof nodeGraphModuleScopeLatestOutputValue === "function"
@@ -332,7 +332,7 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
   if (type === "pingEnvelope" && typeof nodeGraphPingEnvelopePreviewCurve === "function") {
     const attack = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "attack", 0));
     const decay = Math.max(0, Math.min(1, nodeGraphEnvelopeCurveLiveParam(node, "decay", 0.5)));
-    const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+    const amplitude = Math.abs(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
     const recalculateOnTrigger = nodeGraphEnvelopeCurveLiveParam(node, "recalculateOnTrigger", 1);
     const modelRaw = node?.params?.model ?? node?.parameters?.model ?? "Short";
     const model = (modelRaw === 0 || modelRaw === "0" || modelRaw === "Short") ? "Short" : "Long";
@@ -352,7 +352,7 @@ function nodeGraphEnvelopeCurveBuildPreview(node, type, width, heightPx = 40) {
   const attack = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "attack", 0.01));
   const decay = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "decay", 0.25));
   const curve = Math.max(0.001, nodeGraphEnvelopeCurveLiveParam(node, "curve", 1));
-  const amplitude = Math.max(0, nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+  const amplitude = Math.abs(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
   const preview = typeof nodeGraphAttackDecayPreviewCurve === "function"
     ? nodeGraphAttackDecayPreviewCurve(attack, decay, curve, 2000, pts)
     : { points: [{ t: 0, y: 0 }, { t: 1, y: 0 }], attackHold: 0, total: 1 };
@@ -394,7 +394,10 @@ function drawNodeGraphEnvelopeCurveDisplayInner(section) {
     ? faceMetrics.cssH
     : nodeGraphFiniteNumber(section.clientHeight || section.offsetHeight, 1));
   const built = nodeGraphEnvelopeCurveBuildPreview(node, type, cssW, cssH);
-  const signature = JSON.stringify(built.signature);
+  // Signed gain (HP-24): a negative Amplitude sounds inverted, so the curve hangs down from the top instead of rising from the floor.
+  const ampRaw = Number(nodeGraphEnvelopeCurveLiveParam(node, "amplitude", 1));
+  const ampSign = Number.isFinite(ampRaw) && ampRaw < 0 ? -1 : 1;
+  const signature = JSON.stringify(built.signature) + `|${ampSign}`;
   if (
     section._envelopeCurveSignature === signature
     && section._envelopeCurveCssW === cssW
@@ -430,8 +433,10 @@ function drawNodeGraphEnvelopeCurveDisplayInner(section) {
 
   const pts = built.points || [];
   const ampView = built.ampView ?? 1;
+  // Height of a curve value: up from the floor, or down from the top for a negative Amplitude.
+  const yOf = (v) => (ampSign < 0 ? v * ampView : 1 - v * ampView) * height;
   if (pts.length > 1) {
-    const line = pts.flatMap((p) => [p.t * width, (1 - p.y * ampView) * height]);
+    const line = pts.flatMap((p) => [p.t * width, yOf(p.y)]);
     nodeGraphGlLinesPolyline(batch, line, 0.75, fine, [61 / 255, 224 / 255, 1, 0.95]);
   }
 
@@ -451,7 +456,7 @@ function drawNodeGraphEnvelopeCurveDisplayInner(section) {
   let playT = joinT;
   if (Number.isFinite(liveOut) && pts.length) {
     const amp = Math.max(1e-9, Number(ampView) || 1);
-    const y = Math.max(0, Math.min(1, Number(liveOut) / amp));
+    const y = Math.max(0, Math.min(1, (Number(liveOut) * ampSign) / amp));
     const gateKnown = Number.isFinite(Number(liveGate));
     const gateOn = gateKnown && Number(liveGate) > 0.5;
     const sustainT = Number.isFinite(joinT) ? Math.max(0, Math.min(1, joinT)) : 1;
@@ -505,7 +510,7 @@ function drawNodeGraphEnvelopeCurveDisplayInner(section) {
       }
     }
     const dx = dot.t * width;
-    const dy = (1 - dot.y * ampView) * height;
+    const dy = yOf(dot.y);
     nodeGraphGlLinesDot(batch, dx, dy, 3.5 - fine * 0.5, fine, [1, 1, 1, 1]);
   }
 

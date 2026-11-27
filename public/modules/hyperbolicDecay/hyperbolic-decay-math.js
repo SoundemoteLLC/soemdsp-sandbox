@@ -44,7 +44,8 @@ function nodeGraphHyperbolicDecayPreviewCurve(params = {}, points = 160, heightP
   const shape = Number.isFinite(Number(params.shape)) ? Number(params.shape) : 0;
   const attack = Math.max(0, Number.isFinite(Number(params.attack)) ? Number(params.attack) : 0);
   const attackShape = Number.isFinite(Number(params.attackShape)) ? Number(params.attackShape) : 0;
-  const amplitude = Math.max(0, Number.isFinite(Number(params.amplitude)) ? Number(params.amplitude) : 1);
+  // Magnitude: the face draws the sign (a negative Amplitude hangs the curve from the top).
+  const amplitude = Number.isFinite(Number(params.amplitude)) ? Math.abs(Number(params.amplitude)) : 1;
   const total = attack + duration;
   const aFrac = attack > 0 ? attack / total : 0;
   const n = Math.max(64, Math.floor(points));

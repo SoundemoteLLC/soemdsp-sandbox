@@ -63,7 +63,8 @@ function nodeGraphEllipsoidDecayPreviewCurve(params = {}, points = 160, heightPx
   const morph = Number.isFinite(Number(params.morph)) ? Number(params.morph) : 0;
   const attackMorph = nodeGraphEllipsoidDecayRoomMorph(morph, params.attackMorph);
   const decayMorph = nodeGraphEllipsoidDecayRoomMorph(morph, params.decayMorph);
-  const amplitude = Math.max(0, Number.isFinite(Number(params.amplitude)) ? Number(params.amplitude) : 1);
+  // Magnitude: the face draws the sign (a negative Amplitude hangs the curve from the top).
+  const amplitude = Number.isFinite(Number(params.amplitude)) ? Math.abs(Number(params.amplitude)) : 1;
   const total = attack + duration;
   const aFrac = attack > 0 ? attack / total : 0;
   const n = Math.max(64, Math.floor(points));

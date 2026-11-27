@@ -108,7 +108,8 @@ function nodeGraphPingEnvelopePreviewCurve(params = {}, points = 160) {
   const attack = Math.max(0, nodeGraphFiniteNumber(params.attack));
   const dRaw = Number(params.decay);
   const decay = Number.isFinite(dRaw) ? Math.max(0, Math.min(1, dRaw)) : 0.5;
-  const amplitude = Math.max(0, Number(params.amplitude) ?? 1);
+  // Magnitude: the face draws the sign (a negative Amplitude hangs the curve from the top).
+  const amplitude = Number.isFinite(Number(params.amplitude)) ? Math.abs(Number(params.amplitude)) : 1;
   const isShort = nodeGraphPingEnvelopeModelIsShort(params.model);
   const n = Math.max(48, Math.round(nodeGraphFiniteNumber(points, 160)));
   const gateHoldSec = attack > 0 ? Math.max(0.05, attack * 5) : 0.02;

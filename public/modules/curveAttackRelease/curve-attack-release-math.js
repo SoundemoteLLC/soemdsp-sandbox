@@ -168,7 +168,8 @@ function nodeGraphCurveAttackReleasePreviewCurve(params = {}, points = 160) {
   const release = Math.max(0, nodeGraphFiniteNumber(params.release));
   const attackShape = nodeGraphCurveArNormalizeShape(params.attackShape);
   const releaseShape = nodeGraphCurveArNormalizeShape(params.releaseShape);
-  const amplitude = Math.max(0, Number(params.amplitude) ?? 1);
+  // Magnitude: the face draws the sign (a negative Amplitude hangs the curve from the top).
+  const amplitude = Number.isFinite(Number(params.amplitude)) ? Math.abs(Number(params.amplitude)) : 1;
   // No hold plateau — peak join of attack and release is the park height.
   const gateHigh = attack;
   const total = Math.max(gateHigh + release, 1e-9);
