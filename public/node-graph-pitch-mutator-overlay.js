@@ -21,6 +21,7 @@
     // Auto-Pin off: the value a knob turn set at the playhead, not yet pinned. { mut, lane, x, offset } or null.
     pending: null,
     // A pin being dragged: { pointerId, laneId, x, startX, startY, moved, timer }.
+    pinDrag: null,
     keyDrag: null,
     pinMsg: "",
     // Last frequency each possible Pitch In source (keyboard / MIDI module) was heard at, from the signals it sends. Not a poll: set by the send hooks.
@@ -637,6 +638,7 @@
     el.addEventListener("pointermove", onAxisPointerMove);
     el.addEventListener("pointerup", onAxisPointerUp);
     el.addEventListener("pointercancel", onAxisPointerUp);
+    el.addEventListener("contextmenu", onOverlayContextMenu);
     el.addEventListener("dblclick", onOverlayDoubleClick);
     el.addEventListener("focusout", (event) => {
       const input = event.target;
@@ -789,12 +791,118 @@
 
   function onOverlayDoubleClick(event) {
     const scrub = event.target.closest && event.target.closest("input[data-unit-stepper-drag]");
-    if (!scrub) return;
+    if (!scrub) {
+      if (!event.target.closest?.(".pm-plot-wrap") || event.target.closest("[data-pm=pin-dot]")) return;
+      const E = engine();
+      const node = selectedNode();
+      if (!E || !node) return;
+      const state = ensureState(node);
+      const lane = state.lanes[0];
+      if (!lane) { ui.notice = NO_LANE_NOTICE; return renderOverlay(); }
+      const to = plotPointToPin(event, lane, state);
+      if (!to) return;
+      event.preventDefault();
+      lane.keys = E.pinKey(lane.keys, to.x, "offset", to.offset, state.snap);
+      lane.discrete = isDiscreteMeta(paramMeta(lane.target));
+      state.activeLane = lane.id;
+      ui.pending = null;
+      ui.pinMsg = "Added a point at " + midiName(Math.round(to.x)) + ".";
+      ui.notice = "";
+      recordChange("Pin added");
+      paintBoundKnobs();
+      renderOverlay();
+      refreshRings();
+      return;
+    }
     scrub.readOnly = false;
     scrub.classList.add("editing");
     scrub.focus();
     scrub.select();
     event.preventDefault();
+  }
+
+  function pinLaneAndKey(dot) {
+    const node = selectedNode();
+    const state = node && ensureState(node);
+    return { node, state, lane: state?.lanes.find((item) => item.id === dot.dataset.lane), x: Number(dot.dataset.x) };
+  }
+
+  function deletePin(laneId, x) {
+    const node = selectedNode();
+    const state = node && ensureState(node);
+    const lane = state?.lanes.find((item) => item.id === laneId);
+    if (!lane) return false;
+    const keys = lane.keys.filter((key) => key.x !== x);
+    if (keys.length === lane.keys.length) return false;
+    lane.keys = keys;
+    ui.pending = null;
+    ui.pinMsg = "Deleted the pin at " + midiName(x) + ".";
+    recordChange("Pin deleted");
+    paintBoundKnobs();
+    renderOverlay();
+    return true;
+  }
+
+  function onOverlayContextMenu(event) {
+    const dot = event.target.closest?.("[data-pm=pin-dot]");
+    if (!dot) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    deletePin(dot.dataset.lane, Number(dot.dataset.x));
+  }
+
+  function plotPointToPin(event, lane, state) {
+    const E = engine();
+    const svg = document.querySelector("#pitchMutatorOverlay [data-pm=plot]");
+    if (!E || !svg) return null;
+    const rect = svg.getBoundingClientRect();
+    const range = midiRange();
+    const count = range.max - range.min + 1;
+    const note = range.min + ((event.clientX - rect.left) / Math.max(1, rect.width)) * count - 0.5;
+    const x = Math.min(range.max, Math.max(range.min, state.snap ? Math.round(note) : note));
+    const slider = Math.min(1, Math.max(0, 1 - ((event.clientY - rect.top) - 3) / Math.max(1, rect.height - 6)));
+    const meta = paramMeta(lane.target);
+    return { x, offset: slider - E.sliderFromDomain(meta, baseDomain(lane.target)) };
+  }
+
+  function startPinDrag(event, dot) {
+    const { node, lane, x } = pinLaneAndKey(dot);
+    if (!node || !lane) return;
+    ui.pan = null;
+    const axis = event.target.closest("[data-pm=axis]");
+    try { axis?.setPointerCapture(event.pointerId); } catch (err) {}
+    const drag = { pointerId: event.pointerId, laneId: lane.id, x, startX: event.clientX, startY: event.clientY, moved: false, timer: 0 };
+    ui.pinDrag = drag;
+    ui.suppressKeyClick = true;
+    if (event.pointerType === "touch" || event.pointerType === "pen") {
+      drag.timer = root.setTimeout(() => {
+        drag.timer = 0;
+        if (ui.pinDrag === drag && !drag.moved) { ui.pinDrag = null; deletePin(drag.laneId, drag.x); }
+      }, 600);
+    }
+  }
+
+  function movePinDrag(event) {
+    const drag = ui.pinDrag;
+    const E = engine();
+    if (!drag || drag.pointerId !== event.pointerId || !E) return;
+    if (!drag.moved) {
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
+      drag.moved = true;
+      if (drag.timer) { root.clearTimeout(drag.timer); drag.timer = 0; }
+    }
+    const node = selectedNode();
+    const state = node && ensureState(node);
+    const lane = state?.lanes.find((item) => item.id === drag.laneId);
+    const to = lane && plotPointToPin(event, lane, state);
+    if (!to) return;
+    lane.keys = E.pinKey(lane.keys.filter((key) => key.x !== drag.x), to.x, "offset", to.offset, state.snap);
+    drag.x = lane.keys.find((key) => Math.abs(key.x - to.x) < 1e-9)?.x ?? to.x;
+    ui.pinMsg = "";
+    drawPlot(document.querySelector("#pitchMutatorOverlay [data-pm=plot]"), node);
+    paintBoundKnobs();
+    refreshPlayhead();
   }
 
   function onAxisPointerDown(event) {
@@ -809,6 +917,11 @@
       // The app-wide scrub number (data-unit-stepper-drag): its move / up listeners are bound with the settings windows.
       bindScrubListeners();
       if (typeof root.beginNodeGraphUnitStepperDrag === "function" && scrub.readOnly) root.beginNodeGraphUnitStepperDrag(event);
+      return;
+    }
+    const pinDot = event.target.closest?.("[data-pm=pin-dot]");
+    if (pinDot) {
+      if (event.button === 0 || event.button === undefined) startPinDrag(event, pinDot);
       return;
     }
     const axis = event.target.closest("[data-pm=axis]");
@@ -844,7 +957,7 @@
       if (was !== pressed) setAuditionNote(pressed);
       return;
     }
-    if (mouse) return; // a mouse press outside keyboard keys does not pan
+    if (mouse) return; // mouse does not pan; double-click adds a point on the curve plot
     if (keyEl) {
       const pressed = Number(keyEl.getAttribute("data-note"));
       const was = knobKeyOf(selectedNode());
@@ -853,13 +966,14 @@
       if (was !== pressed) setAuditionNote(pressed);
       return;
     }
-    if (!event.target.closest(".pm-kbd")) return;
+    if (!event.target.closest(".pm-plot-wrap") && !event.target.closest(".pm-kbd")) return;
     event.preventDefault();
     try { axis.setPointerCapture(event.pointerId); } catch (err) {}
     ui.pan = { kind: "pan", pointerId: event.pointerId, x: event.clientX, scroll0: axis.scrollLeft, axis: axis };
   }
 
   function onAxisPointerMove(event) {
+    if (ui.pinDrag) { movePinDrag(event); return; }
     if (ui.keyDrag && ui.keyDrag.pointerId === event.pointerId) {
       const under = document.elementFromPoint(event.clientX, event.clientY);
       const key = under && under.closest && under.closest("[data-pm=key]");
@@ -898,6 +1012,13 @@
   }
 
   function onAxisPointerUp(event) {
+    if (ui.pinDrag && ui.pinDrag.pointerId === event.pointerId) {
+      const drag = ui.pinDrag;
+      ui.pinDrag = null;
+      if (drag.timer) root.clearTimeout(drag.timer);
+      if (drag.moved) { recordChange("Pin moved"); renderOverlay(); }
+      return;
+    }
     if (ui.keyDrag && ui.keyDrag.pointerId === event.pointerId) {
       const drag = ui.keyDrag;
       ui.keyDrag = null;
@@ -1056,7 +1177,11 @@
         }
         parts.push(`<path d="${d}" fill="none" stroke="${escapeAttr(node?.color || "#c45a7a")}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`);
       }
-      for (const key of keys) parts.push(`<circle cx="${x(key.x).toFixed(2)}" cy="${y(key.offset).toFixed(2)}" r="3.5" fill="${escapeAttr(node?.color || "#c45a7a")}" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>`);
+      for (const key of keys) {
+        const cx = x(key.x).toFixed(2), cy = y(key.offset).toFixed(2), color = escapeAttr(node?.color || "#c45a7a");
+        parts.push(`<circle data-pm="pin-dot" data-lane="${escapeAttr(lane.id)}" data-x="${key.x}" cx="${cx}" cy="${cy}" r="22" fill="transparent"/>`);
+        parts.push(`<circle class="pm-pin" cx="${cx}" cy="${cy}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>`);
+      }
     }
     const playX = x(soundingNote(node));
     parts.push(`<line x1="${playX.toFixed(2)}" x2="${playX.toFixed(2)}" y1="0" y2="${height}" stroke="#fff" opacity=".7" vector-effect="non-scaling-stroke"/>`);
