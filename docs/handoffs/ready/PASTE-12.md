@@ -37,6 +37,32 @@ If a UX choice is a real judgment call (not an obvious cleanup), do not guess bi
 
 Commit each change separately, staging only your own files. Don't push. Report the commits, what you changed, any numbered open questions, and a short Ctrl+F5 checklist for Argi.
 
+## Addendum 1 (Argi, 2026-11-27): APPROVED LAYOUT, follow this. Newest note wins over anything above.
+
+Mockups (follow layout and feel; exact pixels are up to you):
+- Gradient: docs/handoffs/ready/PASTE-12-assets/gradient-mockup.png
+- Mutator: docs/handoffs/ready/PASTE-12-assets/mutator-mockup.png
+Style reference: the soundemote-dev Preset Browser (https://soundemote.dev/interface/preset-browser, source C:\Users\argit\Documents\_PROGRAMMING\soundemote-dev\public\experiments\preset-browser\style.css). Match its feel: dark panels, monospace, rounded SQUARE stops (about 12x14, 3px radius, white ring on the selected one), position numbers under the stops, a white playhead line, filled-bar sliders with the label inside, small flat buttons. Ignore its hover styles and its pointer cursor (our policy: no hover, shared mouse-dot cursor).
+
+The crucial requirement is MULTIPLE PARAMS ON ONE GRAPH (both pages):
+- Every param's curve is drawn on the same graph in its own color. The selected param is bold, with full-size editable square points. The others are thinner and dimmer, with small points, but always visible.
+- A row of colored param chips sits above the graph to pick the selected param, plus a "+ Param" chip. Clicking a curve on the graph also selects that param.
+- Under the graph is one row for the selected point or segment: Shape and Skew, then Value.
+
+Gradient (stop positions move together):
+- One shared STOPS lane under the graph that is the gradient bar itself: the stop colors crossfade across it, with square stops sitting on it and position numbers (0 to 127) under them. The playhead line crosses both the graph and the bar.
+- Faint dotted vertical guides go up from each stop through the graph.
+- Dragging a stop (in the lane, or a point sideways in the graph) moves that position for ALL params together. Dragging a point up or down changes only the selected param's value.
+- A Playhead slider. Stop color and Value next to Shape and Skew. Buttons: Add stop at playhead, Duplicate, Delete.
+
+Mutator (pitch and keyboard focused, points are arbitrary):
+- The X axis is the keyboard (MIDI keys 0 to 127), with a piano keyboard strip under the graph and octave labels (C-1 to C9). Faint octave guide lines run through the graph.
+- Each param has its own independent points: no shared stop lane, no playhead slider. A white line marks the note being played.
+- The selected point row is Shape, Skew, Key (shown as number plus note name) and Value. Gestures: double-click adds, drag moves, right-click (or long-press) deletes.
+- The Mutator graph and the Gradient graph share the same drawing code and look.
+
+Still: SVG/DOM/2D canvas only (no WebGL in the Command Center), no hover effects, no animations, no tooltips, params are the single source of truth, event-driven redraws, phone width keeps working. Leave the Gradient module face alone in this pass.
+
 ## Testing scope
 - Test only the Gradient page, Mutator page, and Gradient module face, plus their direct dependents. Existing tests such as `scripts/test_gradient_page.mjs` and `scripts/test_pitch_mutator_knob_lane_browser.mjs` are in scope if your changes touch what they cover.
 - Run each test once. After a fix, re-run only the tests that failed.
