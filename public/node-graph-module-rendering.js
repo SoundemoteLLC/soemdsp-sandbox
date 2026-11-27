@@ -75,6 +75,9 @@ function attachNodeGraphNodeEvents(node) {
   node.querySelector(".node-execution-order-badge")?.addEventListener("pointerdown", beginNodeGraphNodeDrag);
   node.querySelector(".node-header-title-row")?.addEventListener("pointerdown", beginNodeGraphNodeDrag);
   node.querySelector(".node-header-title-row")?.addEventListener("dblclick", (event) => {
+    if (event.button !== 0) {
+      return;
+    }
     if (event.altKey) {
       event.preventDefault();
       event.stopPropagation();

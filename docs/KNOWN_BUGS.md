@@ -17,11 +17,10 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 - **Symptoms:** Double-clicking a module title with the right mouse button triggers the same action as a left double-click.
 - **Notes:** The title double-click handler probably doesn't check which button was pressed (`event.button === 0`). Right-click should keep its own behavior (context menu or selection).
 
-### Output Mono shows no IO by default
+### Output Mono shows no IO by default — RECLASSIFIED
 
 - **Reported:** 2026-11-26, by Argi
-- **Symptoms:** The Output Mono module shows no IO (jacks) when it first appears. Pressing Tab makes the IO show.
-- **Notes:** Probably an initial IO visibility or layout state that is only applied after a Tab toggle.
+- **Rechecked:** 2026-11-27. Current IO View A intentionally shows compact side pills and hides individual jacks for every module; Tab opens View B and displays the full jacks. This is global IO-view behavior, not an Output Mono initialization fault. No module-specific code change is indicated.
 
 ### Text redraws during drag, pan, zoom, and wire pull
 
@@ -38,13 +37,13 @@ These reports probably share a root cause: text in the GL text and label renderi
 
 - **Reported:** 2026-11-25, by Argi
 - **Symptoms:** Panning with WASD seems to make text rebuild. After panning stops, the text stays blurry for about a second.
-- **Notes:** Grouped with the other text-redraw reports above.
+- **Notes:** Grouped with the other text-redraw reports above. A focused probe reports no GL text calls or atlas bakes during WASD pan, but this is not visual confirmation. Argi has not confirmed the symptom; leave open.
 
 #### Zoom then middle-mouse triggers a leftover text redraw
 
 - **Reported:** 2026-11-25, by Argi
 - **Symptoms:** After zooming, simply pressing the middle mouse button down triggers another text redraw it doesn't need. The redraw after the zoom may not have finished, and the mouse-down completes it — or something else is going on.
-- **Notes:** Grouped with the other text-redraw reports above.
+- **Notes:** Grouped with the other text-redraw reports above. A focused probe reports no GL text calls or atlas bakes after zoom then middle press, but this is not visual confirmation. Argi has not confirmed the symptom; leave open.
 
 #### Wire drag from Flower Child re-renders text - FIXED
 
@@ -64,7 +63,7 @@ These reports probably share a root cause: text in the GL text and label renderi
 
 - **Reported:** 2026-11-25, by Argi
 - **Symptoms:** Deleting the Viewport Out module makes the circuit builder grid lines dim until they seem to disappear, as if Viewport Out has to exist for the workspace background to render correctly.
-- **Notes:** MasterBot owns viewport and workspace rendering. See also the module display rewrite in `docs/MODULE_DISPLAY_REWRITE_PLAN.md`.
+- **Notes:** MasterBot owns viewport and workspace rendering. See also the module display rewrite in `docs/MODULE_DISPLAY_REWRITE_PLAN.md`. Rechecked the screen-effects teardown path on 2026-11-27; no small verified fix or visual reproduction was established, so this remains open.
 
 ### Keyboard key color highlighting is missing or intermittent - FIXED
 

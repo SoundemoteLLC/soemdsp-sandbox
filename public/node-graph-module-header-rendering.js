@@ -1020,6 +1020,9 @@ function createNodeGraphModuleHeader(type, node, definition) {
     }
   });
   titleText.addEventListener("dblclick", (event) => {
+    if (event.button !== 0) {
+      return;
+    }
     // Alt + click bypasses, so Alt + double click is two quick bypass toggles, never a rename.
     if (event.altKey) {
       event.preventDefault();

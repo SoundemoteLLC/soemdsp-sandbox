@@ -6197,6 +6197,7 @@ function nodeGraphGlHitPointerDown(event) {
     return;
   }
   if (hit.kind === "title" && hit.el) {
+    if (event.button !== 0) return;
     const now = performance.now();
     const last = nodeGraphGlHitState.lastTitleDown;
     const repeat = last && last.el === hit.el && now - last.time < 400;
