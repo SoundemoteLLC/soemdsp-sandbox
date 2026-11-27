@@ -619,7 +619,7 @@
     const link = document.createElement("link");
     link.id = "pitchMutatorOverlayCss";
     link.rel = "stylesheet";
-    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-4-hp09e2";
+    link.href = "./public/node-graph-pitch-mutator.css?v=mutator-slice-4-hp09e2-grip1";
     document.head.append(link);
   }
 
@@ -929,6 +929,12 @@
   }
 
   function onAxisPointerDown(event) {
+    const grip = event.target.closest && event.target.closest("[data-pm=grip]");
+    if (grip) {
+      // Drag past the slop: a new Pitch Mutator follows the pointer into the circuit (the store's placement).
+      if (typeof root.nodeGraphDragGripBegin === "function") root.nodeGraphDragGripBegin(event, { type: "pitchMutator", name: "Pitch Mutator" });
+      return;
+    }
     const scrub = event.target.closest && event.target.closest("input[data-unit-stepper-drag]");
     if (scrub) {
       // The app-wide scrub number (data-unit-stepper-drag): its move / up listeners are bound with the settings windows.
@@ -1159,7 +1165,11 @@
     const tabs = nodes.map((n) => (
       '<button type="button" class="pm-tab' + (n.id === (node && node.id) ? " active" : "") + '" data-pm="tab" data-id="' + n.id + '">' +
       escapeHtml(titleOf(n)) + "</button>"
-    )).join("") || '<span>Add a Pitch Mutator module to the canvas.</span>';
+    )).join("") || '<span>Drag the grip into the circuit to add a Pitch Mutator.</span>';
+    // PASTE-8: the grip (the same as the 🌈 page's) is the way to bring a Pitch Mutator into the circuit: the store no longer lists it.
+    const grip = typeof root.nodeGraphDragGripHtml === "function"
+      ? root.nodeGraphDragGripHtml("Drag a new Pitch Mutator into the circuit", 'data-pm="grip"')
+      : "";
     const swatches = COLORS.map((c) => (
       '<button type="button" class="pm-swatch' + (c === color ? " active" : "") + '" data-pm="color" data-color="' + c + '" style="background:' + c + '" aria-label="Color ' + c + '"></button>'
     )).join("");
@@ -1189,6 +1199,7 @@
     el.innerHTML = [
       '<div class="pm-overlay-chrome">',
         '<span class="pm-overlay-title">Mutators</span>',
+        grip,
         '<div class="pm-tabs">' + tabs + "</div>",
         node ? ('<input class="pm-name" data-pm="name" maxlength="48" value="' + escapeAttr(titleOf(node)) + '">') : "",
         '<span>' + swatches + "</span>",

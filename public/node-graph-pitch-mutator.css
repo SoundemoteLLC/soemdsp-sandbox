@@ -33,6 +33,12 @@
   cursor: var(--node-dot-cursor);
 }
 
+/* PASTE-8: the drag grip keeps the app's move cursor (the drag handle for a new Pitch Mutator; styled in styles.css). */
+#pitchMutatorOverlay .node-drag-grip,
+#pitchMutatorOverlay .node-drag-grip * {
+  cursor: move;
+}
+
 #pitchMutatorOverlay input[type="text"],
 #pitchMutatorOverlay input[type="number"] {
   cursor: text;

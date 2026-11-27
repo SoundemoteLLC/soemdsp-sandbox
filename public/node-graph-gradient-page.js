@@ -155,6 +155,10 @@ function nodeGraphGradientPageCard(gradient) {
 
   const head = document.createElement("div");
   head.className = "node-gradient-card-head";
+  // PASTE-8: the grip is the drag handle for the Gradient module (the name is only a label).
+  const grip = nodeGraphDragGripButton(`Drag ${gradient.name} into the circuit`);
+  grip.dataset.gradientDrag = gradient.id;
+  head.append(grip);
   if (nodeGraphGradientPageState.renaming === gradient.id) {
     const input = document.createElement("input");
     input.type = "text";
@@ -167,8 +171,6 @@ function nodeGraphGradientPageCard(gradient) {
     const name = document.createElement("span");
     name.className = "node-gradient-name";
     name.textContent = gradient.name;
-    // HP-23: drag the name into the circuit to place a Gradient module playing this gradient.
-    name.dataset.gradientDrag = gradient.id;
     head.append(name);
   }
   const enabled = nodeGraphGradientPageButton(gradient.enabled === false ? "Off" : "On", "toggle", gradient.id, { pressed: gradient.enabled !== false });
@@ -371,30 +373,110 @@ function nodeGraphGradientPageStripPos(strip, clientX) {
   return rect.width > 0 ? Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) : 0;
 }
 
-/** Drag a gradient's name out of its card: past the slop, a Gradient module bound to it follows the pointer (the store's placement). */
-function nodeGraphGradientPageDragOutDown(event) {
-  const name = event.target?.closest?.("[data-gradient-drag]");
-  if (!name || event.button > 0) return false;
-  nodeGraphGradientPageState.dragOut = { gradientId: name.dataset.gradientDrag, pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+// ------------------------------------------------------------------------------------------------ the drag grip (PASTE-8)
+//
+// The one way to bring a Gradient module (🌈 page) or a Pitch Mutator (Mutator page) into the circuit: a visible grip button. Static: no
+// hover, no animation, the app's move cursor; it reads as draggable on its own (six dots). Press it and drag past the slop, and the module
+// follows the pointer (the store's placement, one undo step on the drop). A module that may exist only once (one per gradient) is selected
+// instead of placed, on a drag or a tap.
+
+const nodeGraphDragGripDots = '<svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true" focusable="false">'
+  + [3, 8, 13].map((y) => `<circle cx="2.5" cy="${y}" r="1.6"/><circle cx="7.5" cy="${y}" r="1.6"/>`).join("")
+  + "</svg>";
+
+/** A grip button's markup (for pages built from HTML strings, the Mutator page). */
+function nodeGraphDragGripHtml(label, attrs = "") {
+  const safe = String(label || "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+  return `<button type="button" class="node-drag-grip" aria-label="${safe}" ${attrs}>${nodeGraphDragGripDots}</button>`;
+}
+
+function nodeGraphDragGripButton(label) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "node-drag-grip";
+  b.setAttribute("aria-label", label);
+  b.innerHTML = nodeGraphDragGripDots;
+  return b;
+}
+
+const nodeGraphDragGripState = { pending: null };
+
+/** The Gradient module already playing a gradient, else null (one per gradient). */
+function nodeGraphGradientModuleForGradient(gradientId) {
+  const id = String(gradientId || "");
+  return (nodeGraphMvp?.patch?.nodes || []).find((n) => n && n.type === "gradient" && String(n.gradientId || "") === id) || null;
+}
+
+/**
+ * Press on a grip. spec: { type, bind(node) (sets what the new module plays, before the drop commits), existing() (a module that must
+ * not be made twice, selected instead), name (for the status line) }.
+ */
+function nodeGraphDragGripBegin(event, spec) {
+  if (!spec?.type || event.button > 0) return false;
+  nodeGraphDragGripState.pending = { ...spec, pointerId: event.pointerId, x: event.clientX, y: event.clientY };
   return true;
 }
 
-function nodeGraphGradientPageDragOutMove(event) {
-  const out = nodeGraphGradientPageState.dragOut;
-  if (!out || out.pointerId !== event.pointerId) return;
-  if (Math.hypot(event.clientX - out.x, event.clientY - out.y) < 6) return;
-  nodeGraphGradientPageState.dragOut = null;
+function nodeGraphDragGripSelectExisting(pending) {
+  const existing = typeof pending.existing === "function" ? pending.existing() : null;
+  if (!existing) return false;
+  if (typeof setNodeGraphNodeSelection === "function") setNodeGraphNodeSelection([existing.id]);
+  if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp(`${pending.name || "It"} already has its module: selected it.`);
+  return true;
+}
+
+function nodeGraphDragGripMove(event) {
+  const pending = nodeGraphDragGripState.pending;
+  if (!pending || pending.pointerId !== event.pointerId) return;
+  if (pending.selectedExisting || Math.hypot(event.clientX - pending.x, event.clientY - pending.y) < 6) return;
+  if (nodeGraphDragGripSelectExisting(pending)) {
+    pending.selectedExisting = true; // the rest of this press only selects it again on release
+    return;
+  }
+  nodeGraphDragGripState.pending = null;
   if (typeof beginNodeGraphModulePlacement !== "function") return;
-  const id = beginNodeGraphModulePlacement("gradient", nodeGraphClientPoint(event), {
+  const id = beginNodeGraphModulePlacement(pending.type, nodeGraphClientPoint(event), {
     overWorkspace: typeof nodeGraphClientPointInsideWorkspace === "function" ? nodeGraphClientPointInsideWorkspace(event) : true,
   });
   const node = id ? nodeGraphPatchNode(id) : null;
-  const gradient = nodeGraphGradientPageGradients().find((g) => g.id === out.gradientId);
-  if (!node || !gradient) return;
+  if (!node) return;
   // Bound before the drop commits, so the placement's one undo step holds the binding.
-  node.gradientId = gradient.id;
-  node.params = { ...(node.params || {}), playhead: Number(gradient.position) || 0 };
+  if (typeof pending.bind === "function") pending.bind(node);
   if (nodeGraphMvp.modulePlacement) nodeGraphMvp.modulePlacement.pointerId = event.pointerId;
+}
+
+function nodeGraphDragGripUp(event) {
+  const pending = nodeGraphDragGripState.pending;
+  if (!pending || pending.pointerId !== event.pointerId) return;
+  nodeGraphDragGripState.pending = null;
+  // A tap on the grip of a gradient that already has its module, or a drag of one: select that module.
+  if (event.type === "pointerup") nodeGraphDragGripSelectExisting(pending);
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("pointermove", nodeGraphDragGripMove);
+  document.addEventListener("pointerup", nodeGraphDragGripUp);
+  document.addEventListener("pointercancel", nodeGraphDragGripUp);
+}
+
+/** Press on a gradient's grip: a Gradient module playing that gradient, or the one that already does. */
+function nodeGraphGradientPageDragOutDown(event) {
+  const grip = event.target?.closest?.("[data-gradient-drag]");
+  if (!grip) return false;
+  const gradientId = grip.dataset.gradientDrag;
+  const gradient = nodeGraphGradientPageGradients().find((g) => g.id === gradientId);
+  if (!gradient) return false;
+  return nodeGraphDragGripBegin(event, {
+    type: "gradient",
+    name: gradient.name,
+    existing: () => nodeGraphGradientModuleForGradient(gradientId),
+    bind: (node) => {
+      const live = nodeGraphGradientPageGradients().find((g) => g.id === gradientId);
+      if (!live) return;
+      node.gradientId = live.id;
+      node.params = { ...(node.params || {}), playhead: Number(live.position) || 0 };
+    },
+  });
 }
 
 function nodeGraphGradientPagePointerDown(event) {
@@ -634,8 +716,6 @@ function bindNodeGraphGradientPage() {
   });
   host.addEventListener("pointerdown", nodeGraphGradientPagePointerDown);
   host.addEventListener("pointermove", nodeGraphGradientPagePointerMove);
-  document.addEventListener("pointermove", nodeGraphGradientPageDragOutMove);
-  document.addEventListener("pointerup", () => { nodeGraphGradientPageState.dragOut = null; });
   host.addEventListener("pointerup", nodeGraphGradientPagePointerUp);
   host.addEventListener("pointercancel", nodeGraphGradientPagePointerUp);
   // Undo / redo / load replace the patch: re-render from the committed patch (an edited stop that is gone ends the editing).
