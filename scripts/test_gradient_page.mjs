@@ -111,6 +111,7 @@ try {
       out.graphVerticalDrag = movedYStop.pos === beforeVerticalPos
         && (Number(movedYStop.offsets?.[firstParam.nodeId]?.[firstParam.key]) || 0) < beforeVerticalValue
         && (Number(movedYStop.offsets?.[secondParam.nodeId]?.[secondParam.key]) || 0) === startOther;
+      out.graphPointsStaySquare = [...document.querySelectorAll("[data-gradient-graph] [data-curve-point]")].every((el) => el.localName === "rect");
       steps();
       const colorPicker = [...nodeGraphGradientPageColorWidgets][0];
       if (colorPicker?.setColor) colorPicker.setColor({ h: 0, s: 100, l: 50 });
@@ -231,6 +232,7 @@ try {
     ok(JSON.stringify(r.registered) === JSON.stringify(["a.frequency", "b.floorDb"]) && r.snapshotSteps === 1, "both moved params register");
     ok(r.rows.length === 2, "one row per registered param");
     ok(r.graphCapture && r.graphHorizontalDrag && r.graphVerticalDrag, "graph point drag keeps pointer capture and separates shared position from selected-param value");
+    ok(r.graphPointsStaySquare, "selected and unselected graph points keep the same square shape");
     ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
     ok(r.shapeControls && r.curveStored && r.otherParamLinear, "HTML shape and skew controls store a per-param segment curve without changing the other parameter");
     ok(r.curveChart, "selected parameter renders SVG stop points and its shaped curve");

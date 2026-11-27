@@ -350,14 +350,6 @@ function nodeGraphGradientPageCard(gradient) {
     line.textContent = `Holds still: ${holds.join(", ")}`;
     card.append(line);
   }
-  const active = nodeGraphGradientEditActive();
-  if (active && active.gradient.id === gradient.id) {
-    const note = document.createElement("p");
-    note.className = "node-gradient-editing";
-    note.textContent = `Editing stop ${active.stop.pos.toFixed(2)}: outlined sliders set this stop.`;
-    card.append(note);
-  }
-
   const buttons = document.createElement("div");
   buttons.className = "node-gradient-buttons";
   const selected = nodeGraphGradientPageState.selectedStop.get(gradient.id);

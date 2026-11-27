@@ -33,12 +33,8 @@
         parts.push(`<path data-curve-series-hit="${seriesId}" d="${d}" fill="none" stroke="transparent" stroke-width="14"/>`);
       }
       points.forEach((point, index) => {
-        if (selected) {
-          const size = 8;
-          parts.push(`<rect class="pm-pin pm-pin-selected" data-curve-series="${seriesId}" data-curve-point="${index}" x="${(x(point.x) - size / 2).toFixed(2)}" y="${(y(point.y) - size / 2).toFixed(2)}" width="${size}" height="${size}" rx="2" fill="${item.color}" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>`);
-        } else {
-          parts.push(`<circle class="pm-pin pm-pin-other" data-curve-series="${seriesId}" data-curve-point="${index}" cx="${x(point.x).toFixed(2)}" cy="${y(point.y).toFixed(2)}" r="2.5" fill="${item.color}" fill-opacity=".48"/>`);
-        }
+        const size = 7;
+        parts.push(`<rect class="pm-pin ${selected ? "pm-pin-selected" : "pm-pin-other"}" data-curve-series="${seriesId}" data-curve-point="${index}" x="${(x(point.x) - size / 2).toFixed(2)}" y="${(y(point.y) - size / 2).toFixed(2)}" width="${size}" height="${size}" rx="1.5" fill="${item.color}" fill-opacity="${selected ? 1 : .48}" stroke="${selected ? "#fff" : "none"}" stroke-width="${selected ? 1 : 0}" vector-effect="non-scaling-stroke"/>`);
       });
     }
     if (playhead !== null && Number.isFinite(playhead)) {
