@@ -317,6 +317,8 @@ assert(nodeGraphSegmentApplySkewPercent(0.2, 1.5) === nodeGraphSegmentApplySkewP
     nodeGraphFiniteNumber: (v, f = 0) => (Number.isFinite(Number(v)) ? Number(v) : f),
   };
   vm.createContext(sCtx);
+  const sliderMetadataPath = path.join(root, "public", "node-graph-slider-metadata.js");
+  vm.runInContext(fs.readFileSync(sliderMetadataPath, "utf8"), sCtx, { filename: "node-graph-slider-metadata.js" });
   vm.runInContext(fs.readFileSync(sliderPath, "utf8"), sCtx, { filename: "node-graph-slider-values.js" });
   const taper = sCtx.nodeGraphContourFromTaper;
   const untaper = sCtx.nodeGraphTaperFromContour;
