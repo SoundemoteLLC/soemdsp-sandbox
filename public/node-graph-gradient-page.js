@@ -1192,10 +1192,25 @@ function nodeGraphGradientPageSelectionChanged() {
   if (nodeGraphGradientPageState.filter === "touching") renderNodeGraphGradientPage();
 }
 
+function nodeGraphGradientPageParamContextSettings(event) {
+  const readout = event.target?.closest?.(".node-slider-readout[data-slider-target]");
+  if (!readout || typeof openNodeMetadataPopover !== "function") return;
+  const slider = document.getElementById(readout.dataset.sliderTarget);
+  const nodeId = slider?.closest?.(".dsp-node")?.dataset.node || "";
+  const key = String(slider?.dataset?.param || "");
+  const belongs = nodeGraphGradientPageGradients().some((gradient) => gradient.params.some((param) => param.nodeId === nodeId && param.key === key));
+  if (!belongs) return;
+  openNodeMetadataPopover(event, readout);
+}
+
 function bindNodeGraphGradientPage() {
   const host = document.getElementById("nodeGradientsBody");
   if (!host || host.dataset.gradientPageBound === "true") return;
   host.dataset.gradientPageBound = "true";
+  if (document.documentElement.dataset.gradientParamContextSettingsBound !== "true") {
+    document.documentElement.dataset.gradientParamContextSettingsBound = "true";
+    document.addEventListener("contextmenu", nodeGraphGradientPageParamContextSettings, true);
+  }
   host.addEventListener("click", (event) => {
     const button = event.target?.closest?.("[data-gradient-action]");
     if (!button || button.disabled) return;
