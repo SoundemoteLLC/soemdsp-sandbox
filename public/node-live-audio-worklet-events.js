@@ -199,6 +199,7 @@ NodeLiveAudioProcessor.prototype.setConnections = function setConnections(plan, 
     this.scopeCaptureNodeIds = Array.isArray(plan?.scopeCaptureNodeIds)
       ? plan.scopeCaptureNodeIds.map((nodeId) => String(nodeId || "")).filter(Boolean)
       : this.scopeCaptureNodeIds;
+    this.scopeCapturePorts = Array.isArray(plan?.scopeCapturePorts) ? plan.scopeCapturePorts : [];
     if (plan?.scopeCaptureRates && typeof plan.scopeCaptureRates === "object") {
       this.scopeCaptureRates = { ...plan.scopeCaptureRates };
     }

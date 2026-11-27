@@ -2662,6 +2662,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlan = function syncNativeGr
   }
   const key = this.nativeGraphTopologyKey();
   if (this.nativeGraphCompiled && key === this._nativeGraphTopologyKey) {
+    // Observer-only wires can change without changing the executable circuit.
+    const ids = this._nativeGraphNodeIds || new Set();
+    this.pushNativeGraphScopeTaps(this.nativeGraph, this._planConnections, ids,
+      new Map([...ids].map(id => [id, this.nodes.get(id)?.type])),
+      new Map([...ids].map(id => [id, this.fnv1aHash32(id)])));
     this.syncNativeGraphBypass();
     if (typeof this.syncNativeGraphParams === "function") {
       this.syncNativeGraphParams();
@@ -2949,7 +2954,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphWireChangeInPlace =
     };
     const removedOps = [];
     const addedOps = [];
-    let tapsChange = false;
+    let tapsChange = modDiff.added.length > 0 || modDiff.removed.length > 0;
     for (const k of cableDiff.removed) {
       const [src, , dst] = k.split("\0");
       if (goneIds.has(src) || goneIds.has(dst)) continue; // remove_node drops these edges
@@ -10447,8 +10452,8 @@ NodeLiveAudioProcessor.prototype.bindNativeNamedPortals = function bindNativeNam
 
 /**
  * Native out ports that only scopes / observers read (a 1D Plot on PolyBLEP Saw).
- * Those cables never become native Conns, so tap-masked shapes (PolyBLEP /
- * BLIT) would stay silent. Tell the engine which ports are watched.
+ * Observer cables and MOD ghosts need tap-masked shapes (PolyBLEP / BLIT)
+ * even when the destination isn't on the native audio route.
  */
 NodeLiveAudioProcessor.prototype.pushNativeGraphScopeTaps = function pushNativeGraphScopeTaps(
   native,
@@ -10459,18 +10464,28 @@ NodeLiveAudioProcessor.prototype.pushNativeGraphScopeTaps = function pushNativeG
 ) {
   if (!native?.soemdsp_graph_set_node_scope_taps || !this.nativeGraphHandle) return;
   const masks = new Map();
+  const watch = (sourceNode, sourcePort) => {
+    const src = String(sourceNode || "");
+    if (!src || !idSet.has(src)) return;
+    const type = typeById.get(src);
+    if (type !== "polyBlep" && type !== "blit") return;
+    const port = this.mapNativeGraphSrcPortId(sourcePort, type, src);
+    if (!Number.isFinite(port) || port < 0 || port > 31) return;
+    masks.set(src, ((masks.get(src) || 0) | (1 << port)) >>> 0);
+  };
   const list = Array.isArray(connections) ? connections : [];
   for (let i = 0; i < list.length; i += 1) {
     const c = list[i];
     const src = String(c?.sourceNode || "");
     const dst = String(c?.destinationNode || "");
     if (!src || !idSet.has(src) || idSet.has(dst)) continue;
-    const type = typeById.get(src);
-    if (type !== "polyBlep" && type !== "blit") continue;
-    const port = this.mapNativeGraphSrcPortId(c.sourcePort, type, src);
-    if (!Number.isFinite(port) || port < 0 || port > 31) continue;
-    masks.set(src, ((masks.get(src) || 0) | (1 << port)) >>> 0);
+    watch(src, c.sourcePort);
   }
+  this.modulationConnections?.forEach((mods) => {
+    if (!Array.isArray(mods)) return;
+    for (const modulation of mods) watch(modulation?.sourceNode, modulation?.sourcePort);
+  });
+  for (const observer of this.scopeCapturePorts || []) watch(observer?.sourceNode, observer?.sourcePort);
   for (const [id, type] of typeById) {
     if (type !== "polyBlep" && type !== "blit") continue;
     const hash = hashById.get(id);
