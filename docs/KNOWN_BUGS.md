@@ -4,6 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
+### Output module Waterfall draws the zero line during silence (regression)
+
+- **Reported:** 2026-11-27, by Argi
+- **Symptoms:** The Waterfall display on the Output module draws its "0 line" when the audio is below the silence threshold. It should stay blank.
+- **Notes:** Regression. The app-wide silence threshold is Planck, `1e-7`: `kPlanck` in `library/include/soemdsp/constant/constant.h`, `NODE_GRAPH_PLANCK` / `nodeGraphPlanck()` in JS (see APP_POLICY.md, "Planck range"). The Waterfall should treat `|x| < Planck` as silence and skip drawing the line, using the shared constant instead of its own literal.
+
 ### Sturmian grid draws uneven stroke widths
 
 - **Reported:** 2026-11-27, by Argi
