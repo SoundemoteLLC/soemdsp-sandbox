@@ -119,6 +119,7 @@ try {
     const { page, errors } = await boot({ width: 1280, height: 900 });
     const rows = [];
     for (const file of files) {
+      console.log(`[patch ${rows.length + 1}/${files.length}] ${path.relative(root, file).replace(/\\/g, "/")}`);
       const text = fs.readFileSync(file, "utf8");
       const before = errors.length;
       const r = await page.evaluate(async (text) => {
