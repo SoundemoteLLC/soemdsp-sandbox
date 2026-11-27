@@ -151,7 +151,6 @@ const nodeGraphUnifiedWindowPageOrder = Object.freeze([
   "moduleBrowser",
   "moduleFace",
   "presets",
-  "gradients",
   "moduleActions",
   "traceDisplaySettings",
   "metaparameters",
@@ -162,6 +161,8 @@ const nodeGraphUnifiedWindowPageOrder = Object.freeze([
   "hotkeys",
   "emoji",
   "pencil",
+  // Last, after the Mutators (🧬) button the Pitch Mutator overlay adds (it keeps 🌈 after itself).
+  "gradients",
 ]);
 
 function nodeGraphUnifiedWindowPageConfig(page = "") {

@@ -1390,6 +1390,9 @@
         toggleOverlay();
       });
       nav.append(button);
+      // The rainbow Gradients page sits after 🧬 in the Command Center row.
+      const gradients = nav.querySelector('[data-unified-page="gradients"]');
+      if (gradients) nav.append(gradients);
       return nav;
     };
     if (typeof root.syncNodeGraphUnifiedWindowNavBars === "function") {
