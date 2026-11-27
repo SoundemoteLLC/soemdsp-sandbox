@@ -786,6 +786,12 @@ The only limits a user should ever meet are the node count (128) and total memor
 
 (Failure that created this section: Spectral Blur Swarm shipped Swarm and Drift as `%` amounts and hard-coded Rate 0.1-40 and 0..1 clamps in the native setter, against the plan that said limits come from the definitions.)
 
+## 26. No WebGL in the Command Center (Argi, 2026-11-27)
+
+- The Command Center window and its pages (🌈 Gradients, Mutators, 🕹️ Controllers, 🧩 UI Settings and the rest) are plain HTML controls. WebGL there is discouraged: don't add WebGL canvases, curve views or other drawn displays to Command Center pages.
+- Edit values there with ordinary controls (choice buttons, sliders, number fields, color pickers). Anything that needs a drawn view, such as curves, shows on the module's display in the circuit builder, which is WebGL (§3).
+- §3 (module displays are WebGL2 only) applies to the circuit builder, not to the Command Center.
+
 ## Public links (Argi, 2026-10-17)
 
 - The soundemote GitHub org is banned: code, docs and plugin metadata must never link to `github.com/soundemote`. Public links go to `github.com/elanhickler`.

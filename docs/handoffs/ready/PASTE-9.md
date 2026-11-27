@@ -133,3 +133,11 @@ Date: 2026-11-27. Argi's decision: gradients and mutators stay **separate system
 - While a module title is being edited, hide that module's WebGL title text so only the text being typed shows. Nothing should be drawn under or on top of the edit field.
 - When the edit is committed or canceled, the WebGL title comes back once, showing the new text (or the old text on cancel). No flicker and no extra text rebuilds for other modules.
 - Test it: a browser test starts a title edit and checks the module's GL title isn't drawn. It then commits and checks the new title is drawn, and does the same for cancel.
+
+## Addendum 2 (Argi, newest; wins over everything above): no WebGL in the Command Center
+
+- See `docs/APP_POLICY.md` §26. **Drop the WebGL curve views on the 🌈 page and the Mutator page.** Ignore every earlier line in this paste that asks for a drawn curve view on those pages, a playhead on a page view, or tap-to-add and drag-points on a page curve.
+- **🌈 page:** for the selected param, each segment (stop to next stop) gets a shape choice row (the shapes `nodeGraphSegmentCurve01` supports) and a skew slider. These are plain HTML controls. Stops are still added, moved and deleted with the page's existing stop controls, and the stop color picker stays.
+- **Mutator page:** each lane's keys get the same shape choice row and skew slider per segment, as plain HTML controls. Report what the page was missing before.
+- **Curves are seen on the Gradient module's display** (WebGL, read-only curve lines, stops, playhead, stop colors, playhead options), as in Addendum 1.
+- Everything else stays the same: per-param curves, positions shared across params, curves baked into the audio LUTs, linear by default, plus the tests for maths, audio, linear default, grouping and snapping. Change the UI test so it sets shape and skew with the page controls and checks the module display and the audio.
