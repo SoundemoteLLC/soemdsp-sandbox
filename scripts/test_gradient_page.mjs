@@ -122,18 +122,6 @@ try {
         const color = readout?.style.getPropertyValue("--gradient-edit-color").trim();
         return Boolean(color) && color === chip?.style.getPropertyValue("--curve-color").trim() && color === series?.getAttribute("stroke");
       });
-      const slider = nodeGraphSliderForParameter(a, "frequency");
-      const curveSeries = [...gradientCard.querySelectorAll("[data-curve-series]")].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${a}\u0000frequency`);
-      curveSeries?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
-      const popover = document.getElementById("nodeParameterMetadataPopover");
-      out.curveContextSettings = nodeGraphMvp.metadataEditorTarget === slider?.id && !popover?.hidden
-        && Boolean(document.getElementById("metadataSmoothingModeGroup"));
-      closeNodeMetadataPopover();
-      const readout = document.querySelector(`.node-slider-readout[data-slider-target="${CSS.escape(slider?.id || "")}"]`);
-      readout?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
-      out.sliderContextSettings = nodeGraphMvp.metadataEditorTarget === slider?.id && !popover?.hidden
-        && Boolean(document.getElementById("metadataSmoothingModeGroup"));
-      closeNodeMetadataPopover();
       nodeGraphGradientPageSetPlayhead(g(), 0.5 + 1 / 127);
       const snappedStop = g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9);
       const beforeSnapEdit = Number(snappedStop.offsets?.[a]?.frequency) || 0;
@@ -316,6 +304,16 @@ try {
       out.roundTrip = JSON.stringify(loaded.gradients) === JSON.stringify(nodeGraphMvp.patch.gradients);
       out.minRow = Math.min(...[...document.querySelectorAll("#nodeGradientsBody .node-gradient-button, .node-gradient-param")].map((e) => e.getBoundingClientRect().height));
       out.titles = document.querySelectorAll("#nodeGradientsBody [title]").length;
+      const slider = nodeGraphSliderForParameter(a, "frequency");
+      const curveSeries = [...document.querySelectorAll(`${card} [data-curve-series]`)].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${a}\u0000frequency`);
+      curveSeries?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
+      const popover = document.getElementById("nodeParameterMetadataPopover");
+      out.curveContextSettings = nodeGraphMvp.metadataEditorTarget === slider?.id && !popover?.hidden
+        && Boolean(document.getElementById("metadataSmoothingModeGroup"));
+      const readout = document.querySelector(`.node-slider-readout[data-slider-target="${CSS.escape(slider?.id || "")}"]`);
+      readout?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
+      out.sliderContextSettings = nodeGraphMvp.metadataEditorTarget === slider?.id && !popover?.hidden
+        && Boolean(document.getElementById("metadataSmoothingModeGroup"));
       return out;
     });
     const where = file || "index.html";
