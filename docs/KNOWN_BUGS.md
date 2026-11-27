@@ -6,7 +6,7 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ### Text redraws during drag, pan, zoom, and wire pull
 
-These four reports probably share a root cause: text in the GL text and label rendering rebuilds or re-renders when it shouldn't. MasterBot owns the viewport, text, and culling rendering code and is partway through a module display rewrite (`docs/MODULE_DISPLAY_REWRITE_PLAN.md`).
+These reports probably share a root cause: text in the GL text and label rendering rebuilds or re-renders when it shouldn't. MasterBot owns the viewport, text, and culling rendering code and is partway through a module display rewrite (`docs/MODULE_DISPLAY_REWRITE_PLAN.md`).
 
 #### Module drag redraws text on every pixel
 
@@ -31,6 +31,12 @@ These four reports probably share a root cause: text in the GL text and label re
 - **Reported:** 2026-11-25, by Argi
 - **Symptoms:** Dragging a wire out of the Flower Child filter makes text re-render. This is probably not limited to that one module.
 - **Notes:** Grouped with the other text-redraw reports above.
+
+#### Wire drag is slow, with a low framerate
+
+- **Reported:** 2026-11-26, by Argi
+- **Symptoms:** Dragging a wire is slow, with a low framerate. This may be caused by the constant text redraws in this group.
+- **Notes:** Grouped with the other text-redraw reports above. Measure frame time while dragging a wire, before and after a text-redraw fix.
 
 ### Deleting Viewport Out dims or hides the workspace grid
 
