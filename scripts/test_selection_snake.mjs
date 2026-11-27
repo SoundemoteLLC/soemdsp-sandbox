@@ -1,7 +1,8 @@
 // Selection snake / highlight test (Stage 5b).
 // Drags a real selection snake across 3+ modules and asserts, per frame,
 // that the GL trail and selected highlights were actually submitted — not
-// just that the JS selection set changed. Also checks wire highlight, a
+// just that the JS selection set changed. Also crosses a real on-screen wire
+// with the mouse (no programmatic selection fallback), checks wire highlight, a
 // module drag, and port hover. Starts its own server.py on a free port;
 // never touches 8765 / 8766 / 8080.
 import { spawn } from "node:child_process";
@@ -116,27 +117,49 @@ try {
     const hitsStart = pick.some((m) => start.x >= m.left && start.x <= m.right && start.y >= m.top && start.y <= m.bottom);
     if (hitsStart) start.x = hr.left + 20;
     const toClient = (wx, wy) => {
-      const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;
-      const scale = typeof nodeGraphZoomSurfaceClientScale === "function" && surface
-        ? nodeGraphZoomSurfaceClientScale(surface)
+      const scale = typeof nodeGraphZoomSurfaceClientScale === "function"
+        ? nodeGraphZoomSurfaceClientScale()
         : { x: (typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1), y: (typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1) };
-      const r = surface?.getBoundingClientRect?.() || hr;
+      const metrics = typeof nodeGraphWorkspaceLayoutMetrics === "function" ? nodeGraphWorkspaceLayoutMetrics(host) : null;
       const origin = typeof nodeGraphRenderedOriginOffset === "function"
         ? nodeGraphRenderedOriginOffset(nodeGraphMvp?.pan || { x: 0, y: 0 }, host)
         : (nodeGraphMvp?.pan || { x: 0, y: 0 });
       return {
-        x: r.left + (Number(origin?.x) || 0) + Number(wx) * scale.x,
-        y: r.top + (Number(origin?.y) || 0) + Number(wy) * scale.y,
+        x: Number(metrics?.left ?? hr.left) + Number(metrics?.borderLeft || 0) + (Number(origin?.x) || 0) + Number(wx) * scale.x,
+        y: Number(metrics?.top ?? hr.top) + Number(metrics?.borderTop || 0) + (Number(origin?.y) || 0) + Number(wy) * scale.y,
       };
     };
     const wires = (typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState.wires : null) || [];
     let wireClient = null;
-    for (const w of wires) {
-      if (!Array.isArray(w.xy) || w.xy.length < 4) continue;
-      const i = Math.max(0, Math.floor(w.xy.length / 4) * 2);
-      const c = toClient(w.xy[i], w.xy[i + 1]);
-      if (c.x > hr.left + 10 && c.x < hr.right - 10 && c.y > hr.top + 10 && c.y < hr.bottom - 10) {
-        wireClient = { kind: w.kind, index: w.index, x: c.x, y: c.y };
+    // Resolve an on-screen cable through the same client→world transform used by
+    // the real GL hit-test. Then snake across it perpendicular to its local run.
+    const worldAt = (x, y) => {
+      const world = nodeGraphGlHitPoint({ clientX: x, clientY: y });
+      return world;
+    };
+    const wireAt = (x, y) => { const world = worldAt(x, y); return world ? nodeGraphGlHitWireAt(world.x, world.y) : null; };
+    const moduleAt = (x, y) => { const world = worldAt(x, y); return world ? nodeGraphGlHitTest(world.x, world.y) : null; };
+    for (let y = Math.ceil(hr.top + 20); y < hr.bottom - 20 && !wireClient; y += 8) {
+      for (let x = Math.ceil(hr.left + 20); x < hr.right - 20; x += 8) {
+        if (document.elementFromPoint(x, y)?.closest?.(".dsp-node")) continue;
+        const hit = wireAt(x, y);
+        if (!hit || moduleAt(x, y)) continue;
+        const same = (dx, dy) => {
+          const a = wireAt(x - dx, y - dy), b = wireAt(x + dx, y + dy);
+          return Number(a?.kind === hit.kind && a?.index === hit.index) + Number(b?.kind === hit.kind && b?.index === hit.index);
+        };
+        const horizontalRun = same(8, 0), verticalRun = same(0, 8);
+        const crossX = horizontalRun < verticalRun;
+        const from = crossX ? { x: x - 36, y } : { x, y: y - 36 };
+        const to = crossX ? { x: x + 36, y } : { x, y: y + 36 };
+        if (from.x <= hr.left + 5 || to.x >= hr.right - 5 || from.y <= hr.top + 5 || to.y >= hr.bottom - 5) continue;
+        let clear = true;
+        for (let d = -32; d <= 32; d += 4) {
+          const px = crossX ? x + d : x, py = crossX ? y : y + d;
+          if (moduleAt(px, py)) { clear = false; break; }
+        }
+        if (!clear) continue;
+        wireClient = { kind: hit.kind, index: hit.index, x, y, from, to };
         break;
       }
     }
@@ -256,34 +279,31 @@ try {
     await page.evaluate(() => { if (typeof setNodeGraphSelection === "function") setNodeGraphSelection(null); });
     await beginLog();
     const w = layout.wireClient;
-    // Start off the cable, then cross it so lockMode becomes wires.
-    await page.mouse.move(w.x - 30, w.y - 30);
+    // Start off the cable, then cross its actual segment at a right angle.
+    await page.mouse.move(w.from.x, w.from.y);
     await page.mouse.down({ button: "left" });
     for (let s = 1; s <= 10; s += 1) {
-      await page.mouse.move(w.x - 30 + 6 * s, w.y - 30 + 6 * s);
+      await page.mouse.move(w.from.x + (w.to.x - w.from.x) * s / 10, w.from.y + (w.to.y - w.from.y) * s / 10);
       await page.waitForTimeout(20);
     }
+    const wireGestureDebug = await page.evaluate(({ x, y }) => {
+      const point = nodeGraphGlHitPoint({ clientX: x, clientY: y });
+      const drag = nodeGraphMvp.marqueeSelection;
+      return { lockMode: drag?.lockMode, hitWires: drag?.hitWires, hitAtEnd: point ? nodeGraphGlHitWireAt(point.x, point.y) : null,
+        start: drag?.start, current: drag?.current, points: drag?.points?.length };
+    }, w.to);
     await page.mouse.up({ button: "left" });
     await page.waitForTimeout(150);
     const wireLog = await endLog();
     const lastW = wireLog.last?.wiresDrawn || [];
     const anyWire = wireLog.live.some((d) => (d.wiresDrawn || []).length > 0) || lastW.length > 0;
-    console.log(`wire highlight last=${JSON.stringify(lastW)} path=${wireLog.last?.path}`);
-    check(anyWire, `selected wire(s) were submitted to GL (${lastW.join(", ") || "none"})`);
+    console.log(`wire gesture=${JSON.stringify(wireGestureDebug)} highlight last=${JSON.stringify(lastW)} path=${wireLog.last?.path}`);
+    const selectedWires = await page.evaluate(() => (typeof nodeGraphSelectedWireEntries === "function" ? nodeGraphSelectedWireEntries() : []));
+    check(anyWire && selectedWires.some((entry) => entry.kind === w.kind && entry.index === w.index),
+      `real snake gesture selected and submitted wire ${w.kind}:${w.index} (${JSON.stringify({ selectedWires, lastW })})`);
   } else {
-    console.log("note no on-screen mid-wire; falling back to programmatic wire selection");
+    check(false, "a real on-screen wire segment is available for snake selection");
   }
-  const forcedWire = await page.evaluate(() => {
-    const wires = (typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState.wires : null) || [];
-    const w = wires.find((entry) => entry && entry.kind && entry.index >= 0);
-    if (!w) return { ok: false, reason: "no-wires", n: wires.length };
-    if (typeof setNodeGraphWireSelection === "function") setNodeGraphWireSelection([{ kind: w.kind, index: w.index }]);
-    else if (typeof setNodeGraphSelection === "function") setNodeGraphSelection({ type: "wire", kind: w.kind, index: w.index });
-    return { ok: true, key: `${w.kind}:${w.index}`, last: nodeGraphGlGraphState.lastLiveDraw || null };
-  });
-  console.log("forced wire select", JSON.stringify(forcedWire));
-  check(forcedWire.ok && (forcedWire.last?.wiresDrawn || []).includes(forcedWire.key),
-    `programmatic wire highlight submitted ${forcedWire.key} (drawn=${(forcedWire.last?.wiresDrawn || []).join(",")})`);
 
   // ---- module drag ----
   if (layout.pick[0]) {
