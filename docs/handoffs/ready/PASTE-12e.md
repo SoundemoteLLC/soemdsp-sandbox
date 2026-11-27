@@ -7,6 +7,8 @@ Follows PASTE-12d. Gradient only; do not touch the Mutator. Run after 12d has la
 2. **Bring Snapshot back** (12d removed it; Argi wants it): with Edit OFF, set params however you like, then Snapshot writes a stop (keyframe) at the playhead with ALL of that gradient's params at their current values. If a stop is at/snapped to the playhead, update it; otherwise create one. Playhead does not move. One Snapshot button per gradient, next to its Edit button.
 3. **Remove "Set Start"**: it does nothing. Remove the button and any dead code/tests for it.
 3b. **Buttons never change size when their text changes** (e.g. the gradient On/Off button). Give toggle/stateful buttons a fixed width that fits their longest label (min-width or reserved width), so the layout never shifts. Apply to every Gradient page/module button touched.
+3c. **BUG (fix first): param jumps in Edit mode.** Clicking a param control in Edit mode makes its value jump to a new value on mouse-up, and again on the first pixel of drag. A click without movement must change nothing; a drag must start from the value currently shown (the pending/ghost or the stop value at the playhead) and move relatively, with no jump. Likely the control and the Edit pending value disagree about the start value (base vs offset vs stop value, or 0-127 vs 0-1). Add a regression test: mousedown+mouseup with no move = no change; first drag pixel = at most one step of change.
+3d. **Delete gradient button becomes a trash emoji** (🗑️), fixed width, no text label.
 4. Keep everything else from 12c/12d (New Gradient live flow, param-colored outlines, right-click param settings with Smoothing, no + Param chip, playhead snapping, click-a-stop-to-edit).
 5. Policies: no hover effects, no animations, no tooltips, shared mouse-dot cursor, params single source of truth, event-driven redraws only, no WebGL in the Command Center.
 
@@ -14,6 +16,8 @@ Follows PASTE-12d. Gradient only; do not touch the Mutator. Run after 12d has la
 - Two gradients: Edit on A, then Edit on B -> A turns off.
 - Edit off, move params, Snapshot -> keyframe at playhead with all that gradient's params at current values.
 - No Set Start button.
+- Clicking a param in Edit mode without moving changes nothing; dragging starts smoothly from the shown value.
+- Delete gradient is a 🗑️ button.
 - Toggling On/Off or Edit does not change any button's size or shift the layout.
 
 ## Testing scope
