@@ -1260,18 +1260,12 @@
     }
 
     function updateConnectionModeCursor(event) {
-      let redraw = false;
-      if (state.portConnectionMode) {
-        state.portConnectionMode.cursorPoint = deps.clientPoint(event);
-        redraw = true;
-      }
-      if (state.wireDragging) {
-        state.wireDragging.cursorPoint = deps.clientPoint(event);
-        redraw = true;
-      }
-      if (redraw) {
-        deps.drawWires();
-      }
+      // Pointer-owned drags update in handleWireDragMove. Do not draw twice
+      // for the same document pointermove, or before its drag threshold.
+      if (state.wireDragging || state.portMovePointer) return;
+      if (!state.portConnectionMode) return;
+      state.portConnectionMode.cursorPoint = deps.clientPoint(event);
+      deps.drawWires({ gesture: true });
     }
 
     function handlePortPointerDown(event) {
@@ -1365,7 +1359,7 @@
           }
           if (movePtr?.active && state.portConnectionMode?.movingWires) {
             state.portConnectionMode.cursorPoint = deps.clientPoint(event);
-            deps.drawWires();
+            deps.drawWires({ gesture: true });
             return;
           }
           if (movePtr && !movePtr.active) {
@@ -1388,7 +1382,7 @@
       }
       drag.active = true;
       drag.cursorPoint = deps.clientPoint(event);
-      deps.drawWires();
+      deps.drawWires({ gesture: true });
     }
 
     function handleWireDragEnd(event) {

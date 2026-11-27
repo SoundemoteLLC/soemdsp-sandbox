@@ -315,6 +315,12 @@ function drawNodeGraphWires(options = {}) {
   if (!workspace) {
     return;
   }
+  if (options.gesture === true && nodeGraphGlGraphState?.mesh) {
+    nodeGraphPortCenterCacheBegin();
+    try { nodeGraphGlGraphPaint(options); }
+    finally { nodeGraphPortCenterCacheEnd(); }
+    return;
+  }
   const lite = Boolean(options.lite);
   const skipScopes = options.skipScopes === true || lite;
   const skipSelection = options.skipSelection === true || lite;

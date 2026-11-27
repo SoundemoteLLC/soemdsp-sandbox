@@ -775,6 +775,7 @@ function nodeGraphChordMemoryPaintKeys() {
     key.state.toggle("ghost-chord", !editNote && nodeGraphChordMemoryNoteIsSounding(nodeId, midi));
   });
   document.querySelectorAll(".node-grid-keyboard-pad[data-grid-midi]").forEach((pad) => {
+    const previousState = pad.className;
     const nodeId = nodeGraphChordMemoryNodeIdFromElement(pad);
     const cmMode = cmModeFor(nodeId);
     const midi = Number(pad.dataset.gridMidi);
@@ -784,6 +785,9 @@ function nodeGraphChordMemoryPaintKeys() {
     pad.classList.toggle("slot-edit", cmMode && nodeGraphChordMemoryEditIs(nodeId, midi));
     pad.classList.toggle("chord-edit-note", editNote);
     pad.classList.toggle("ghost-chord", !editNote && nodeGraphChordMemoryNoteIsSounding(nodeId, midi));
+    if (pad.className !== previousState && typeof nodeGraphKeyboardRequestPaint === "function") {
+      nodeGraphKeyboardRequestPaint(pad);
+    }
   });
 }
 

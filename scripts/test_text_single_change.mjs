@@ -52,6 +52,8 @@ try {
       const startBtn = page.locator("#nodeBootStartButton");
       if (await startBtn.count()) await startBtn.click().catch(() => {});
       await page.waitForFunction(() => typeof loadNodeGraphPatchFromObject === "function" && typeof commitNodeGraphPatch === "function" && typeof flushNodeGraphViewportImmediate === "function" && typeof scheduleNodeGraphLivePlanSync === "function" && typeof viewFrame === "function" && typeof nodeGraphGlGraphRepaintMeshedPlates === "function", null, { timeout: 180000 });
+      await page.waitForFunction(() => document.body.classList.contains("node-boot-ready")
+        && typeof createNodeSliderReadout === "function" && typeof nodeGraphScopeWindowSettings !== "undefined", null, { timeout: 180000 });
       await page.waitForFunction(() => { const b = document.querySelector(".node-boot-loading-screen"); return !b || b.hidden || getComputedStyle(b).display === "none" || b.getBoundingClientRect().height === 0; }, null, { timeout: 180000 }).catch(() => {});
       await page.evaluate(async (p) => {
         commitNodeGraphPatch(loadNodeGraphPatchFromObject(p), { status: "test_text_single_change" });

@@ -8,3 +8,6 @@
 *.wav binary
 *.mp3 binary
 *.ico binary
+
+# This existing test uses CRLF; keep carriage returns out of whitespace errors.
+scripts/test_text_resharpen.mjs whitespace=cr-at-eol

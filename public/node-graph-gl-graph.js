@@ -1208,6 +1208,7 @@ function nodeGraphGlGraphCollectChromeForNode(id, el, node, buckets, radius) {
     if (keyboardBox) {
       keyboards.push({ id, surface: keyboardSurface, x: keyboardBox.x, y: keyboardBox.y, w: keyboardBox.w, h: keyboardBox.h });
     }
+    if (typeof nodeGraphGridKeyboardCollectChrome === "function") nodeGraphGridKeyboardCollectChrome(id, el, keyboards);
     const graphFace = el.querySelector(".node-module-graph-display");
     const graphBox = nodeGraphGlGraphWorldBox(graphFace);
     if (graphBox) {
@@ -1399,6 +1400,7 @@ function nodeGraphGlGraphFillChromeForNode(id, el, node, buckets, radius) {
 function nodeGraphGlGraphChromeCacheTranslate(nodeId, dx, dy) {
   const id = String(nodeId || "");
   if (!id || !Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) return;
+  nodeGraphGlGraphState.moduleMoveEpoch = (nodeGraphGlGraphState.moduleMoveEpoch || 0) + 1;
   const rec = nodeGraphGlGraphChromeCache.get(id);
   if (rec) {
     rec.ox += dx;
@@ -2683,7 +2685,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH, skipLabel
       }
     }
   }
-  // Piano Keyboard faces: key model state + layout rects (keyboard-face-gl.js).
+  // Keyboard faces share state-driven GL paint, including Grid Keyboard pads.
   const keyboardList = chrome.keyboards || [];
   for (let i = 0; i < keyboardList.length; i += 1) {
     const kb = keyboardList[i];
@@ -2692,7 +2694,8 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH, skipLabel
     const w = kb.w * zoom;
     const h = kb.h * zoom;
     if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
-    if (typeof nodeGraphKeyboardGlDraw === "function") nodeGraphKeyboardGlDraw(batch, kb.surface, x, y, w, h);
+    const draw = kb.draw || (typeof nodeGraphKeyboardGlDraw === "function" ? nodeGraphKeyboardGlDraw : null);
+    if (draw) draw(batch, kb.surface, x, y, w, h);
   }
   // Step / Smooth Graph faces are display canvases (node-graph-graph-face-gl.js),
   // composited with the module's other displays; chrome.graphs is hit-only.
@@ -3274,7 +3277,7 @@ function nodeGraphGlGraphWireJackEl(node, port, io) {
 }
 
 function nodeGraphGlGraphRebuild(options = {}) {
-  nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
+  if (!options.gesture) nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
   nodeGraphGlGraphState.firstCable = new Map();
   nodeGraphGlGraphState.firstCableIn = new Map();
   nodeGraphGlGraphState.cablesOut = new Map();
@@ -3473,7 +3476,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
   }
   if (!lite || !nodeGraphGlGraphState.wires.length) {
     nodeGraphGlGraphState.wires = wires;
-    if (!lite) nodeGraphGlGraphRebuildPlates();
+    if (!lite && !options.gesture) nodeGraphGlGraphRebuildPlates();
   }
 }
 
@@ -4073,6 +4076,7 @@ function nodeGraphGlGraphReplayMesh(layers = "all") {
   const zoom = nodeGraphGlGraphZoom();
   const cam = typeof nodeGraphWireCameraViewBox === "function" ? nodeGraphWireCameraViewBox(host) : { x: 0, y: 0 };
   const frameCamera = { x: cam.x, y: cam.y, zoom };
+  nodeGraphGlGraphSyncRetainedModules(mesh, frameCamera);
   // Zoom-1 pictures, nearest-neighbour above 2.5x, chosen at replay time.
   const pixelated = zoom > 2.5;
   const pictures = mesh.pictures || [];
@@ -4101,6 +4105,62 @@ function nodeGraphGlGraphReplayMesh(layers = "all") {
     if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
   }
   return ok;
+}
+
+// Moving or selecting a module changes its transform/rim, not its recorded ink.
+function nodeGraphGlGraphSyncRetainedModules(mesh, camera) {
+  const batch = mesh?.batches?.[0];
+  if (!batch?.layers || !camera) return;
+  batch.camera = camera;
+  const drag = nodeGraphMvp?.wireDragging;
+  const endpoint = drag?.endpoint;
+  const key = `${nodeGraphGlGraphState.moduleMoveEpoch || 0}|${nodeGraphGlGraphLiveKey()}|${drag?.active ? 1 : 0}:${endpoint?.node || ""}:${endpoint?.io || ""}:${endpoint?.port || endpoint?.param || ""}`;
+  if (mesh.moduleStateKey === key && mesh.moduleLayers === batch.layers) return;
+  mesh.moduleStateKey = key;
+  mesh.moduleLayers = batch.layers;
+  const order = new Map(nodeGraphModuleStackNodes(nodeGraphMvp?.patch).map((node, i) => [String(node.id), i]));
+  batch.layers.sort((a, b) => (order.get(a.moduleRecord?.id) ?? -1) - (order.get(b.moduleRecord?.id) ?? -1));
+  const ranges = [];
+  const style = nodeGraphGlGraphState.plateStyle;
+  const ink = (name, fallback) => typeof nodeGraphGlLinesCss === "function"
+    ? nodeGraphGlLinesCss(style?.getPropertyValue(name) || fallback) : null;
+  const selectedInk = ink("--node-module-selected-stroke", "#f2db73");
+  const idleInk = ink("--node-module-idle-stroke", "#3a4248");
+  const visit = (layer, id, selected, offset) => {
+    for (const outline of layer.outlines || []) {
+      if (outline.nodeId !== id || outline.dimShape) continue;
+      if (outline.selected !== selected) {
+        outline.selected = selected;
+        outline.rgba = selected ? selectedInk : idleInk;
+      }
+      const jacks = nodeGraphGlGraphState.chrome?.byId?.get(id)?.jacks || [];
+      for (const dot of outline.jacks || []) {
+        const jack = jacks.find(j => Math.abs(j.x - offset.x - dot.x) < 0.1 && Math.abs(j.y - offset.y - dot.y) < 0.1);
+        if (jack) dot.rgba = jack.lit || nodeGraphGlGraphJackDragging(jack)
+          ? nodeGraphGlGraphLitStroke(jack.rgba) : nodeGraphGlGraphUnlitStroke(jack.rgba);
+      }
+    }
+    for (const child of layer.layers || []) visit(child, id, selected, offset);
+  };
+  for (let i = 0; i < batch.layers.length; i++) {
+    const layer = batch.layers[i];
+    const rec = layer.moduleRecord;
+    if (!rec) continue;
+    const box = nodeGraphModuleGeometryGet(rec.id)?.box;
+    layer.worldOffset = box ? { x: box.x - rec.x, y: box.y - rec.y } : { x: 0, y: 0 };
+    visit(layer, rec.id, Boolean(nodeGraphNodeElement(rec.id)?.classList.contains("selected")), layer.worldOffset);
+    ranges.push({ ids: [rec.id], layerStart: i, layerEnd: i + 1 });
+  }
+  if (ranges.length) mesh.plateGroupLayers = ranges;
+  for (const light of batch.lights || []) {
+    const box = nodeGraphModuleGeometryGet(light.id)?.box;
+    if (box) { light.x = box.x; light.y = box.y; }
+    const selected = Boolean(nodeGraphNodeElement(light.id)?.classList.contains("selected"));
+    if (light.selected !== selected) {
+      light.selected = selected;
+      light.base = (selected ? selectedInk : idleInk)?.slice(0, 3) || light.base;
+    }
+  }
 }
 
 // Live scopes painted their face textures. Replay the batch that holds the
@@ -4227,6 +4287,23 @@ function nodeGraphGlGraphDisplayAt(id, x, y) {
 }
 
 function nodeGraphGlGraphDrawStackGroup(batch, group, ctx) {
+  if (!nodeGraphGlGraphState.view && batch.camera) {
+    // Each module keeps its ink in its own transformable record. Moving or
+    // raising one must not re-record the other modules that shared its group.
+    for (const plate of group.plates) {
+      const moduleLayer = nodeGraphGlLinesLayer(batch);
+      if (!moduleLayer) continue;
+      moduleLayer.moduleRecord = { id: String(plate.id), x: plate.x, y: plate.y };
+      nodeGraphGlGraphDrawStackGroupContents(moduleLayer, {
+        plates: [{ ...plate }], displays: group.displays.filter(d => d.id === plate.id).map(d => ({ ...d })),
+      }, ctx);
+    }
+    return;
+  }
+  nodeGraphGlGraphDrawStackGroupContents(batch, group, ctx);
+}
+
+function nodeGraphGlGraphDrawStackGroupContents(batch, group, ctx) {
   const toX = ctx.toX;
   const toY = ctx.toY;
   const layoutZoom = ctx.layoutZoom;
@@ -4711,8 +4788,16 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   const cameraOnly = options.cameraOnly === true;
   const meshSel = nodeGraphGlGraphState.mesh?.selKey;
   const liveUnchanged = Boolean(nodeGraphGlGraphState.mesh && meshSel === liveKey);
+  const retained = !view && (options.retainPlates === true || !liveUnchanged)
+    ? nodeGraphGlGraphState.mesh : null;
+  let retainPlates = Boolean(retained && retained.gen === nodeGraphGlGraphState.gen
+    && retained.w === canvas.width && retained.h === canvas.height
+    && options.resharpenText !== true && !nodeGraphGlGraphState.textBakeDirty);
+  if (retainPlates && nodeGraphGlGraphState.valueChromeDirty?.size) {
+    retainPlates = nodeGraphGlGraphRepaintMeshedPlates(nodeGraphGlGraphTakeValueChromeDirty()) === true;
+  }
   const resharpenText = options.resharpenText === true || Boolean(nodeGraphGlGraphState.textBakeDirty);
-  if (!view && frameCamera && liveUnchanged && !resharpenText) {
+  if (!view && frameCamera && liveUnchanged && !resharpenText && !retainPlates) {
     nodeGraphGlGraphEnsureRecordedPlatesInMesh();
     const dirty = typeof nodeGraphGlGraphTakeValueChromeDirty === "function"
       ? nodeGraphGlGraphTakeValueChromeDirty()
@@ -4750,13 +4835,14 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   nodeGraphGlGraphState.textBakeDirty = false;
   // Camera text atlases are per size and zoom: this full record asks for the
   // ones it needs, then retires the rest (see the sweep below).
-  if (!view && typeof nodeGraphGlLinesTextAtlasEpoch === "function") nodeGraphGlLinesTextAtlasEpoch();
+  if (!view && !retainPlates && typeof nodeGraphGlLinesTextAtlasEpoch === "function") nodeGraphGlLinesTextAtlasEpoch();
   const recordFallbacks0 = !view && typeof nodeGraphGlLinesTextAtlasStats === "function" ? nodeGraphGlLinesTextAtlasStats().fallbacks : 0;
   // An explicit resharpen (options.resharpenText) bakes what it needs now;
   // every other record draws missing sizes with the nearest atlas and lets
   // the sharpen job bake them a few glyphs per frame.
   const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true, lazyText: !view && options.resharpenText !== true, exactText: !view };
-  const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
+  const batch = retainPlates ? retained.batches[0] : nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
+  if (retainPlates) nodeGraphGlGraphSyncRetainedModules(retained, frameCamera);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);
   // Free wire ends (drag cursor) as straight coverage, then "Show on top"
   // Text Boxes and badges. Ends on a module draw in that module's stack.
@@ -5006,7 +5092,7 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   // Module lights on the GPU: one pass under every module stack (see the renderer). The base light is
   // the original ellipse; the stroke light follows the module's own shape.
   let hasLights = false;
-  if (!view && frameCamera && typeof nodeGraphGlLinesLights === "function"
+  if (!retainPlates && !view && frameCamera && typeof nodeGraphGlLinesLights === "function"
     && (typeof nodeGraphHeatmapWantsLight !== "function" || nodeGraphHeatmapWantsLight()
       || (typeof nodeGraphHeatmapWantsGrid === "function" && nodeGraphHeatmapWantsGrid()))) {
     const spread = typeof nodeGraphHeatmapFloatProperty === "function"
@@ -5047,7 +5133,7 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
       ambientDark, endsByNode, dotBake, wireFeather,
       frameCamera, gesturing: false,
     };
-    for (let g = 0; g < groups.length; g += 1) {
+    for (let g = 0; !retainPlates && g < groups.length; g += 1) {
       const group = groups[g];
       const layerStart = (batch.layers || []).length;
       nodeGraphGlGraphDrawStackGroup(batch, group, presentGroupCtx);
@@ -5059,7 +5145,7 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
     }
     if (cursorEnds.length) {
       const straight = typeof nodeGraphWireDotShadows === "function" && !nodeGraphWireDotShadows();
-      const layer = nodeGraphGlLinesLayer(batch);
+      const layer = nodeGraphGlLinesLayer(contactBatch);
       if (layer) {
         if (straight) layer.quadBlend = "straight";
         for (let d = 0; d < cursorEnds.length; d += 1) nodeGraphGlGraphDrawWireEnd(layer, cursorEnds[d], wireFeather);
@@ -5095,10 +5181,12 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
   if (!view) {
     // Fallback atlases drawn (a size not baked yet): not sharp at this scale.
     const fallbacks = typeof nodeGraphGlLinesTextAtlasStats === "function" ? nodeGraphGlLinesTextAtlasStats().fallbacks : 0;
-    if (fallbacks === recordFallbacks0) nodeGraphGlGraphState.textRecordScale = frameCamera ? frameCamera.zoom * scale : 0;
-    else nodeGraphGlGraphState.textRecordScale = -1;
+    if (!retainPlates) {
+      if (fallbacks === recordFallbacks0) nodeGraphGlGraphState.textRecordScale = frameCamera ? frameCamera.zoom * scale : 0;
+      else nodeGraphGlGraphState.textRecordScale = -1;
+    }
     nodeGraphGlGraphState.textBakeDirty = false;
-    if (typeof nodeGraphGlLinesTextAtlasSweep === "function") nodeGraphGlLinesTextAtlasSweep();
+    if (!retainPlates && typeof nodeGraphGlLinesTextAtlasSweep === "function") nodeGraphGlLinesTextAtlasSweep();
     nodeGraphGlGraphState.mesh = {
       gen: nodeGraphGlGraphState.gen,
       displayGen: nodeGraphGlGraphState.displayGen || 0,
@@ -5108,10 +5196,10 @@ function nodeGraphGlGraphPresentOnce(options = {}) {
       batches: [batch, wireBatch, contactBatch, veilBatch, trailBatch],
       wireBake: Boolean(wireBake || wireLiveBake),
       wireScale: scale,
-      pictures,
-      inks,
-      plateGroupLayers,
-      hasLights,
+      pictures: retainPlates ? retained.pictures : pictures,
+      inks: retainPlates ? retained.inks : inks,
+      plateGroupLayers: retainPlates ? retained.plateGroupLayers : plateGroupLayers,
+      hasLights: retainPlates ? retained.hasLights : hasLights,
       keepable: true,
       selKey: liveKey,
     };
@@ -5290,7 +5378,7 @@ function nodeGraphGlGraphPresentTile(face) {
 
 /** Full rebuild from the patch. Returns true when GL owns cables. */
 function nodeGraphGlGraphPaint(options = {}) {
-  if (!options.lite && nodeGraphMvp) {
+  if (!options.lite && !options.gesture && nodeGraphMvp) {
     for (const connection of nodeGraphMvp.connections || []) {
       if (typeof markNodeGraphWireEndpointsConnected === "function") {
         markNodeGraphWireEndpointsConnected(connection);
@@ -5303,7 +5391,7 @@ function nodeGraphGlGraphPaint(options = {}) {
     }
   }
   nodeGraphGlGraphRebuild(options);
-  nodeGraphGlGraphPresent();
+  nodeGraphGlGraphPresent({ retainPlates: options.gesture === true });
   nodeGraphGlHitInstall();
   return true;
 }
@@ -6039,6 +6127,8 @@ function nodeGraphGlHitPointerDown(event) {
   if (event.target instanceof Element && event.target.closest(".node-text-box-body, .node-text-box-input")) return;
   const point = nodeGraphGlHitPoint(event);
   if (!point) return;
+  if (event.button === 0 && typeof nodeGraphGridKeyboardGlPointerDown === "function"
+    && nodeGraphGridKeyboardGlPointerDown(event, point)) return;
   const hit = nodeGraphGlHitTest(point.x, point.y);
   if (!hit) {
     const wire = nodeGraphGlHitWireAt(point.x, point.y);

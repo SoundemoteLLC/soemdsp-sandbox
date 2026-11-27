@@ -3607,10 +3607,9 @@ function nodeGraphModuleRaiseToFront(id) {
   if (typeof nodeGraphModuleStackSyncDom === "function") nodeGraphModuleStackSyncDom();
   // The GL scene is built in stack order: rebuild it.
   if (typeof drawNodeGraphWires === "function") {
-    try { drawNodeGraphWires(); } catch { /* wires not ready yet */ }
+    try { drawNodeGraphWires({ gesture: true }); } catch { /* wires not ready yet */ }
   }
   if (typeof nodeGraphGlGraphState === "object" && nodeGraphGlGraphState) {
-    nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
     if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
   }
 }

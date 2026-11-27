@@ -243,7 +243,7 @@ function dragNodeGraphNode(event) {
       y: dragged.startY + deltaY,
     }, { clamp: false });
   }
-  drawNodeGraphWires();
+  drawNodeGraphWires({ gesture: true });
   // Frozen faces live on the module DOM and move with it. Scheduling a
   // paused draw used to paint cold plates over LCD / trace residual.
   const frozen = typeof scopePaintIsFrozen === "function"
