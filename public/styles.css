@@ -5747,26 +5747,38 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   background: rgba(255, 255, 255, 0.85);
 }
 
-/* HP-24: the stop being edited. The same solid outline marks every slider it writes (face sliders draw it in GL). */
-#nodeGradientsBody .node-gradient-handle.is-editing {
-  outline: 2px solid #ffd24a;
-  outline-offset: 2px;
-}
-
 /* Final PASTE-12 stop geometry overrides the earlier legacy button sizing above. */
 #nodeGradientsBody .node-gradient-strip { height:24px; box-sizing:border-box; }
 #nodeGradientsBody .node-gradient-handle {
-  top:50%; transform:translateY(-50%); width:12px; height:14px; min-height:14px; margin-left:-6px;
+  top:5px; transform:none; width:12px; height:12px; min-height:12px; margin-left:-6px;
   box-sizing:border-box; padding:0; border:1px solid #25252b; border-radius:3px; appearance:none; -webkit-appearance:none;
-  background:#ddd; line-height:0;
+  background:#ddd; line-height:0; box-shadow:0 0 0 1px rgba(221,221,221,.48);
 }
-#nodeGradientsBody .node-gradient-handle:active { transform:translateY(-50%); }
+#nodeGradientsBody .node-gradient-handle.is-selected { box-shadow:0 0 0 2px #fff; }
+#nodeGradientsBody .node-gradient-handle:active { transform:none; }
 #nodeGradientsBody .node-gradient-card { gap:2px; }
 #nodeGradientsBody .node-gradient-strip { margin:0 7px 8px; }
 #nodeGradientsBody .node-gradient-handle-label.is-high,
 #nodeGradientsBody .node-gradient-handle-label.is-low { top:calc(100% + 2px); }
 #nodeGradientsBody .node-gradient-playhead-control { display:flex; width:100%; margin:0; padding:0; }
-#nodeGradientsBody .node-gradient-playhead-control input[type=range] { display:block; width:100%; min-width:0; height:24px; margin:0; padding:0; }
+#nodeGradientsBody .node-gradient-playhead-control input[type=range] {
+  display:block; box-sizing:border-box; appearance:none; -webkit-appearance:none;
+  width:100%; min-width:0; height:24px; margin:0; padding:0; border:0; border-radius:0;
+  background:transparent; cursor:var(--node-adjust-cursor, default);
+}
+#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-webkit-slider-runnable-track {
+  height:1px; border:0; border-radius:0;
+  background:linear-gradient(90deg,#3b5aa8 0%,#3b5aa8 var(--gradient-playhead-progress,0%),#55555d var(--gradient-playhead-progress,0%),#55555d 100%);
+}
+#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-webkit-slider-thumb {
+  box-sizing:border-box; appearance:none; -webkit-appearance:none; width:9px; height:9px; margin-top:-4px;
+  border:1px solid #111; border-radius:2px; background:#e8e8f0;
+}
+#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-moz-range-track { height:1px; border:0; border-radius:0; background:#55555d; }
+#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-moz-range-progress { height:1px; border:0; border-radius:0; background:#3b5aa8; }
+#nodeGradientsBody .node-gradient-playhead-control input[type=range]::-moz-range-thumb {
+  box-sizing:border-box; width:9px; height:9px; border:1px solid #111; border-radius:2px; background:#e8e8f0;
+}
 #nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-param-chips,
 #nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-curve-chart,
 #nodeGradientsBody .node-gradient-card.graphs-hidden .node-gradient-curves { display:none; }
@@ -5829,6 +5841,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 .node-gradient-handle-label.is-low {
   top: calc(100% + 10px);
 }
+#nodeGradientsBody .node-gradient-handle-label { color:#889; font-variant-numeric:tabular-nums; }
+#nodeGradientsBody .node-gradient-handle-label.is-selected { color:#fff; }
 
 .node-gradient-params {
   display: flex;

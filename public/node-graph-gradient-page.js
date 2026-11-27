@@ -267,9 +267,10 @@ function nodeGraphGradientPageStrip(gradient) {
     }
     handle.dataset.stopId = stop.id;
     handle.style.left = `${(stop.pos * 100).toFixed(3)}%`;
+    handle.style.backgroundColor = stop.color || nodeGraphGradientPageColorInputDefault(i);
     handle.setAttribute("aria-label", `Stop ${i + 1} at ${Math.round(stop.pos * 127)}`);
     const label = document.createElement("span");
-    label.className = `node-gradient-handle-label ${i % 2 ? "is-low" : "is-high"}`;
+    label.className = `node-gradient-handle-label ${i % 2 ? "is-low" : "is-high"}${stop.id === selected ? " is-selected" : ""}`;
     label.textContent = String(Math.round(stop.pos * 127));
     handle.append(label);
     strip.append(handle);
@@ -333,6 +334,7 @@ function nodeGraphGradientPageCard(gradient) {
   playheadControl.className = "node-gradient-playhead-control";
   const playheadSlider = document.createElement("input"); playheadSlider.type = "range"; playheadSlider.min = "0"; playheadSlider.max = "1"; playheadSlider.step = "0.001"; playheadSlider.value = String(gradient.position); playheadSlider.dataset.gradientPlayhead = gradient.id;
   playheadSlider.setAttribute("aria-label", `${gradient.name} playhead`);
+  playheadSlider.style.setProperty("--gradient-playhead-progress", `${(gradient.position * 100).toFixed(3)}%`);
   playheadControl.append(playheadSlider); card.append(playheadControl);
   nodeGraphGradientPageDrawGraph(card, gradient);
   if (selectedParam) card.append(nodeGraphGradientPageCurveControls(gradient, selectedParam.nodeId, selectedParam.key));
@@ -425,6 +427,7 @@ function renderNodeGraphGradientPage() {
   }
   for (const g of shown) fragment.append(nodeGraphGradientPageCard(g));
   host.replaceChildren(fragment);
+  for (const g of shown) nodeGraphGradientPageUpdateLive(g);
   const rename = host.querySelector("[data-gradient-rename-input]");
   if (rename) {
     rename.focus();
@@ -439,16 +442,21 @@ function nodeGraphGradientPageUpdateLive(gradient) {
   const strip = card.querySelector(".node-gradient-strip");
   const playhead = card.querySelector(".node-gradient-playhead");
   const shown = Math.max(0, Math.min(1, NodeGraphGradients.positionOf(gradient)));
-  if (playhead) playhead.style.left = `${(shown * 100).toFixed(3)}%`;
+  if (playhead) playhead.style.left = `${Math.round(shown * (strip?.clientWidth || 0))}px`;
   if (strip) strip.style.background = nodeGraphGradientPageStripBackground(gradient);
   strip?.setAttribute("aria-valuenow", String(gradient.position));
   for (const stop of gradient.stops) {
     const handle = strip?.querySelector(`[data-stop-id="${CSS.escape(stop.id)}"]`);
     if (!handle) continue;
-    handle.style.left = `${(stop.pos * 100).toFixed(3)}%`;
+    handle.style.left = `${Math.round(stop.pos * (strip?.clientWidth || 0))}px`;
     const label = handle.querySelector(".node-gradient-handle-label");
-    if (label) label.textContent = String(Math.round(stop.pos * 127));
+    if (label) {
+      label.textContent = String(Math.round(stop.pos * 127));
+      label.classList.toggle("is-selected", stop.id === nodeGraphGradientPageState.selectedStop.get(gradient.id));
+    }
   }
+  const slider = card.querySelector("[data-gradient-playhead]");
+  if (slider) slider.style.setProperty("--gradient-playhead-progress", `${(shown * 100).toFixed(3)}%`);
   for (const el of card.querySelectorAll("[data-gradient-param]")) {
     const [nodeId, key] = el.dataset.gradientParam.split("\u0000");
     el.textContent = nodeGraphGradientPageFormat(nodeGraphGradientPageOffsetAt(gradient, nodeId, key));
@@ -697,7 +705,11 @@ function nodeGraphGradientPagePointerDown(event) {
   };
   if (handle) {
     nodeGraphGradientPageState.selectedStop.set(gradient.id, handle.dataset.stopId);
-    for (const h of strip.querySelectorAll(".node-gradient-handle")) h.classList.toggle("is-selected", h === handle);
+    for (const h of strip.querySelectorAll(".node-gradient-handle")) {
+      const selected = h === handle;
+      h.classList.toggle("is-selected", selected);
+      h.querySelector(".node-gradient-handle-label")?.classList.toggle("is-selected", selected);
+    }
     const del = strip.parentElement?.querySelector('[data-gradient-action="deleteStop"]');
     if (del) del.disabled = gradient.stops.length < 2;
   }
@@ -919,6 +931,7 @@ function bindNodeGraphGradientPage() {
       const gradient = nodeGraphGradientPageGradients().find((g) => g.id === playhead.dataset.gradientPlayhead);
       if (!gradient) return;
       gradient.position = Number(playhead.value);
+      playhead.style.setProperty("--gradient-playhead-progress", `${(gradient.position * 100).toFixed(3)}%`);
       nodeGraphGradientPageRepaintSliders([gradient]);
       if (typeof nodeGraphGradientsNotifyPlayhead === "function") nodeGraphGradientsNotifyPlayhead(gradient, `${gradient.name} position`);
       nodeGraphGradientPageUpdateLive(gradient);
