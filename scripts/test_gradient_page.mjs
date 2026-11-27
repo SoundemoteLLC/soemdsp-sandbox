@@ -122,8 +122,8 @@ try {
         return Boolean(color) && color === chip?.style.getPropertyValue("--curve-color").trim() && color === series?.getAttribute("stroke");
       });
       const slider = nodeGraphSliderForParameter(a, "frequency");
-      const curve = [...card.querySelectorAll("[data-curve-series]")].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${a}\u0000frequency`);
-      curve?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
+      const curveSeries = [...card.querySelectorAll("[data-curve-series]")].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${a}\u0000frequency`);
+      curveSeries?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
       const popover = document.getElementById("nodeParameterMetadataPopover");
       out.curveContextSettings = nodeGraphMvp.metadataEditorTarget === slider?.id && !popover?.hidden
         && Boolean(document.getElementById("metadataSmoothingModeGroup"));
