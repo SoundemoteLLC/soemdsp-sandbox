@@ -195,13 +195,13 @@ function drawNodeGraphGradientModuleFace(section) {
 
 function bindNodeGraphGradientModulePlayheadSurface(section, nodeId) {
   if (!section) return;
-  if (typeof nodeGraphBindGradientResetGesture === "function") nodeGraphBindGradientResetGesture(section);
-  if (section.dataset.sliderDragBound === "true" || typeof nodeGraphSliderForParameter !== "function") return;
+  if (typeof nodeGraphSliderForParameter !== "function") return;
   const slider = nodeGraphSliderForParameter(nodeId, "playhead");
   if (!slider?.id) return;
   section.dataset.sliderTarget = slider.id;
   section.dataset.sliderDragSurface = "vertical";
   section.dataset.sliderTypeIn = "reset";
+  if (section.dataset.sliderDragBound === "true") return;
   if (typeof bindNodeSliderDragSurface === "function") bindNodeSliderDragSurface(section);
 }
 

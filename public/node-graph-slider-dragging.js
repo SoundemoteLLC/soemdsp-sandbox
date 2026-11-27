@@ -1311,30 +1311,6 @@ function nodeGraphResetSliderSurface(surface) {
   return true;
 }
 
-function nodeGraphBindGradientResetGesture(surface) {
-  if (!surface?.classList?.contains("node-gradient-module-face") || surface.dataset?.sliderTypeIn !== "reset"
-      || surface.dataset.gradientResetGestureBound === "1") return;
-  surface.dataset.gradientResetGestureBound = "1";
-  surface.addEventListener("mousedown", (event) => {
-    if (event.button !== 0) return;
-    const now = performance.now();
-    const last = surface._gradientResetPointer;
-    if (last && now - last.time < 400 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 6) {
-      surface._gradientResetPointer = null;
-      if (nodeGraphMvp) nodeGraphMvp.sliderLastPointerDown = null;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      nodeGraphResetSliderSurface(surface);
-      return;
-    }
-    surface._gradientResetPointer = { time: now, x: event.clientX, y: event.clientY };
-  }, true);
-  surface.addEventListener("mousemove", (event) => {
-    const last = surface._gradientResetPointer;
-    if (last && Math.hypot(event.clientX - last.x, event.clientY - last.y) > 2) surface._gradientResetPointer = null;
-  }, true);
-}
-
 /** True if `el` is a surface that drives a range slider via data-slider-target. */
 function nodeSliderIsDragSurface(el) {
   return Boolean(
@@ -1366,32 +1342,8 @@ function bindNodeSliderDragSurface(surface) {
     return false;
   }
   surface.dataset.sliderDragBound = "true";
-  nodeGraphBindGradientResetGesture(surface);
   surface.addEventListener("pointerdown", beginNodeSliderDrag);
   surface.addEventListener("mousedown", beginNodeSliderDrag);
-  surface.addEventListener("click", (event) => {
-    // Some pointer surfaces suppress both pointer-down double-click timing and the browser dblclick event.
-    // Keep a local click pair for this Gradient reset surface, then use the shared reset action.
-    if (!surface.classList.contains("node-gradient-module-face") || surface.dataset?.sliderTypeIn !== "reset") return;
-    const now = performance.now();
-    const lastAt = Number(surface.dataset.gradientResetClickAt);
-    const lastX = Number(surface.dataset.gradientResetClickX);
-    const lastY = Number(surface.dataset.gradientResetClickY);
-    const second = Number.isFinite(lastAt) && now - lastAt < 400
-      && Math.hypot(event.clientX - lastX, event.clientY - lastY) < 6;
-    if (second) {
-      delete surface.dataset.gradientResetClickAt;
-      delete surface.dataset.gradientResetClickX;
-      delete surface.dataset.gradientResetClickY;
-      event.preventDefault();
-      event.stopPropagation();
-      nodeGraphResetSliderSurface(surface);
-    } else {
-      surface.dataset.gradientResetClickAt = String(now);
-      surface.dataset.gradientResetClickX = String(event.clientX);
-      surface.dataset.gradientResetClickY = String(event.clientY);
-    }
-  });
   surface.addEventListener("lostpointercapture", endNodeSliderDrag);
   surface.addEventListener("keydown", stepNodeSliderFromKeyboard);
   return true;
