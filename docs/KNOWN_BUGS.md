@@ -4,6 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
+### Sturmian grid draws uneven stroke widths
+
+- **Reported:** 2026-11-27, by Argi
+- **Symptoms:** At a fixed zoom the Sturmian grid sometimes draws 2-pixel horizontal black strokes and 1-pixel vertical strokes, unevenly and intermittently.
+- **Notes:** Argi's likely fix: let the grid fit itself to whole-pixel cell sizes instead of stretching to fill the display exactly. The outermost edges can be uneven (leftover margin) if needed. Stretching to fill forces fractional cell sizes, so strokes land on half pixels and round to 1 or 2 px.
+
 ### Boot can report ready before deferred module definitions register — FIXED
 
 - **Reported:** 2026-11-27, in PASTE-10.
