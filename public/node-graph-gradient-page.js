@@ -26,10 +26,10 @@ function nodeGraphGradientSelectedParam(gradient) {
   return params.find((param) => `${param.nodeId}\u0000${param.key}` === id) || params[0];
 }
 
-function nodeGraphGradientPageColorControls(gradient) {
+function nodeGraphGradientPageColorControls(gradient, onlyStopId = "") {
   const wrap = document.createElement("div");
   wrap.className = "node-gradient-stop-colors";
-  [...gradient.stops].sort((a, b) => a.pos - b.pos).forEach((stop, index) => {
+  [...gradient.stops].sort((a, b) => a.pos - b.pos).filter((stop) => !onlyStopId || stop.id === onlyStopId).forEach((stop, index) => {
     const row = document.createElement("label");
     row.className = "node-gradient-stop-color-row";
     const caption = document.createElement("span");
@@ -156,48 +156,11 @@ function nodeGraphGradientPageCurveControls(gradient, nodeId, key) {
   const stops = [...(gradient.stops || [])].sort((a, b) => a.pos - b.pos);
   const rows = document.createElement("div");
   rows.className = "node-gradient-curves";
-  const chart = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  chart.classList.add("node-gradient-curve-chart");
-  chart.setAttribute("viewBox", "0 0 320 84");
-  chart.setAttribute("preserveAspectRatio", "none");
-  chart.setAttribute("role", "img");
-  chart.setAttribute("aria-label", "Parameter points and curve");
-  chart.dataset.gradientCurveChart = `${gradient.id}:${nodeId}:${key}`;
-  const offsets = stops.map((stop) => nodeGraphGradientPageOffset(stop, nodeId, key));
-  const min = Math.min(0, ...offsets), max = Math.max(0, ...offsets);
-  const span = Math.max(0.1, max - min);
-  const px = (stop) => 10 + stop.pos * 300;
-  const py = (value) => 8 + ((max - value) / span) * 68;
-  const curvePath = document.createElementNS(chart.namespaceURI, "path");
-  let path = "";
-  for (let i = 0; i + 1 < stops.length; i += 1) {
-    const a = stops[i], b = stops[i + 1];
-    const steps = 24;
-    for (let j = 0; j <= steps; j += 1) {
-      if (i && j === 0) continue;
-      const t = j / steps;
-      const shaped = NodeGraphGradients.curveProgress(t, a, nodeId, key);
-      const value = offsets[i] + (offsets[i + 1] - offsets[i]) * shaped;
-      path += `${path ? " L" : "M"}${(px(a) + (px(b) - px(a)) * t).toFixed(2)} ${py(value).toFixed(2)}`;
-    }
-  }
-  curvePath.setAttribute("d", path);
-  curvePath.setAttribute("fill", "none");
-  curvePath.setAttribute("stroke", "currentColor");
-  curvePath.setAttribute("stroke-width", "2");
-  curvePath.setAttribute("vector-effect", "non-scaling-stroke");
-  chart.append(curvePath);
-  stops.forEach((stop, i) => {
-    const point = document.createElementNS(chart.namespaceURI, "circle");
-    point.setAttribute("cx", px(stop).toFixed(2));
-    point.setAttribute("cy", py(offsets[i]).toFixed(2));
-    point.setAttribute("r", "4");
-    point.setAttribute("fill", "currentColor");
-    point.dataset.stopId = stop.id;
-    chart.append(point);
-  });
-  rows.append(chart);
-  for (let i = 0; i + 1 < stops.length; i += 1) {
+  rows.dataset.selectedCurve = `${nodeId}\u0000${key}`;
+  const selectedId = nodeGraphGradientPageState.selectedStop.get(gradient.id);
+  const selectedIndex = Math.max(0, stops.findIndex((stop) => stop.id === selectedId));
+  const i = Math.min(selectedIndex, Math.max(0, stops.length - 2));
+  if (stops.length > 1) {
     const stop = stops[i];
     const curve = NodeGraphGradients.curveOf(stop, nodeId, key);
     const row = document.createElement("div");
@@ -231,8 +194,17 @@ function nodeGraphGradientPageCurveControls(gradient, nodeId, key) {
     skew.dataset.stopId = stop.id;
     skew.dataset.nodeId = nodeId;
     skew.dataset.paramKey = key;
-    row.append(choices, skew);
+    const value = document.createElement("span");
+    value.className = "node-gradient-selected-value";
+    value.textContent = `Value ${nodeGraphGradientPageFormat(nodeGraphGradientPageOffsetAt(gradient, nodeId, key))}`;
+    row.append(choices, skew, value);
     rows.append(row);
+  }
+  if (stops.length === 1) {
+    const value = document.createElement("span");
+    value.className = "node-gradient-selected-value";
+    value.textContent = `Value ${nodeGraphGradientPageFormat(nodeGraphGradientPageOffset(stops[0], nodeId, key))}`;
+    rows.append(value);
   }
   return rows;
 }
@@ -273,7 +245,7 @@ function nodeGraphGradientPageStrip(gradient) {
   strip.setAttribute("role", "slider");
   strip.setAttribute("aria-label", `${gradient.name} position`);
   strip.setAttribute("aria-valuemin", "0");
-  strip.setAttribute("aria-valuemax", "1");
+  strip.setAttribute("aria-valuemax", "127");
   strip.setAttribute("aria-valuenow", String(gradient.position));
   const stops = [...gradient.stops].sort((a, b) => a.pos - b.pos);
   // One hue per stop, from stop order: a picture of the blend.
@@ -294,10 +266,10 @@ function nodeGraphGradientPageStrip(gradient) {
     }
     handle.dataset.stopId = stop.id;
     handle.style.left = `${(stop.pos * 100).toFixed(3)}%`;
-    handle.setAttribute("aria-label", `Stop ${i + 1} at ${stop.pos.toFixed(2)}`);
+    handle.setAttribute("aria-label", `Stop ${i + 1} at ${Math.round(stop.pos * 127)}`);
     const label = document.createElement("span");
     label.className = `node-gradient-handle-label ${i % 2 ? "is-low" : "is-high"}`;
-    label.textContent = stop.pos.toFixed(2);
+    label.textContent = String(Math.round(stop.pos * 127));
     handle.append(label);
     strip.append(handle);
   });
@@ -336,8 +308,34 @@ function nodeGraphGradientPageCard(gradient) {
   head.append(enabled);
   card.append(head);
 
+  const selectedParam = nodeGraphGradientSelectedParam(gradient);
+  const chips = document.createElement("div");
+  chips.className = "node-gradient-param-chips";
+  gradient.params.forEach(({ nodeId, key }, index) => {
+    const id = `${nodeId}\u0000${key}`;
+    const chip = nodeGraphGradientPageButton(`${nodeGraphGradientPageModuleLabel(nodeId)} · ${nodeGraphGradientPageParamLabel(nodeId, key)}`, "selectCurveParam", gradient.id, { pressed: selectedParam && `${selectedParam.nodeId}\u0000${selectedParam.key}` === id });
+    chip.dataset.nodeId = nodeId; chip.dataset.paramKey = key; chip.style.setProperty("--curve-color", nodeGraphCurveColor(index));
+    chips.append(chip);
+  });
+  const addParam = nodeGraphGradientPageButton("+ Param", "snapshot", gradient.id);
+  chips.append(addParam);
+  card.append(chips);
+  const graph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  graph.classList.add("node-gradient-curve-chart");
+  graph.dataset.gradientGraph = gradient.id;
+  graph.setAttribute("role", "img");
+  graph.setAttribute("aria-label", "Gradient parameter curves");
+  card.append(graph);
   card.append(nodeGraphGradientPageStrip(gradient));
-  card.append(nodeGraphGradientPageColorControls(gradient));
+  const playheadControl = document.createElement("label");
+  playheadControl.className = "node-gradient-playhead-control";
+  playheadControl.innerHTML = '<span>Playhead</span>';
+  const playheadSlider = document.createElement("input"); playheadSlider.type = "range"; playheadSlider.min = "0"; playheadSlider.max = "1"; playheadSlider.step = "0.001"; playheadSlider.value = String(gradient.position); playheadSlider.dataset.gradientPlayhead = gradient.id;
+  playheadControl.append(playheadSlider); card.append(playheadControl);
+  nodeGraphGradientPageDrawGraph(card, gradient);
+  if (selectedParam) card.append(nodeGraphGradientPageCurveControls(gradient, selectedParam.nodeId, selectedParam.key));
+  const selectedStop = gradient.stops.find((s) => s.id === nodeGraphGradientPageState.selectedStop.get(gradient.id)) || gradient.stops[0];
+  if (selectedStop) card.append(nodeGraphGradientPageColorControls(gradient, selectedStop.id));
   // HP-05: one plain line naming the gradient's modules whose non-slider data (graph points, steps, chords) holds still.
   const holds = [];
   for (const { nodeId } of gradient.params) {
@@ -364,7 +362,8 @@ function nodeGraphGradientPageCard(gradient) {
   buttons.className = "node-gradient-buttons";
   const selected = nodeGraphGradientPageState.selectedStop.get(gradient.id);
   buttons.append(
-    nodeGraphGradientPageButton("Snapshot", "snapshot", gradient.id),
+    nodeGraphGradientPageButton("Add stop at playhead", "snapshot", gradient.id),
+    nodeGraphGradientPageButton("Duplicate", "duplicateStop", gradient.id, { disabled: true }),
     nodeGraphGradientPageButton("Delete stop", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 }),
     nodeGraphGradientPageButton(nodeGraphGradientPageState.renaming === gradient.id ? "Done" : "Rename", "rename", gradient.id),
     nodeGraphGradientPageButton("Delete gradient", "deleteGradient", gradient.id),
@@ -372,36 +371,25 @@ function nodeGraphGradientPageCard(gradient) {
   );
   card.append(buttons);
 
-  const rows = document.createElement("div");
-  rows.className = "node-gradient-params";
-  if (!gradient.params.length) {
-    const empty = document.createElement("p");
-    empty.className = "node-gradient-hint";
-    empty.textContent = "Move sliders, then Snapshot (or tap the strip) to record them here.";
-    rows.append(empty);
-  }
-  for (const { nodeId, key } of gradient.params) {
-    const row = document.createElement("div");
-    row.className = "node-gradient-param";
-    const label = document.createElement("span");
-    label.className = "node-gradient-param-label";
-    label.textContent = `${nodeGraphGradientPageModuleLabel(nodeId)} · ${nodeGraphGradientPageParamLabel(nodeId, key)}`;
-    const value = document.createElement("span");
-    value.className = "node-gradient-param-value";
-    value.dataset.gradientParam = `${nodeId}\u0000${key}`;
-    value.textContent = nodeGraphGradientPageFormat(nodeGraphGradientPageOffsetAt(gradient, nodeId, key));
-    const paramId = `${nodeId}\u0000${key}`;
-    const select = nodeGraphGradientPageButton(label.textContent, "selectCurveParam", gradient.id, { pressed: (nodeGraphGradientPageState.selectedParam.get(gradient.id) || `${gradient.params[0]?.nodeId}\u0000${gradient.params[0]?.key}`) === paramId });
-    select.dataset.nodeId = nodeId;
-    select.dataset.paramKey = key;
-    row.append(select, value);
-    if ((nodeGraphGradientPageState.selectedParam.get(gradient.id) || `${gradient.params[0]?.nodeId}\u0000${gradient.params[0]?.key}`) === paramId) {
-      row.append(nodeGraphGradientPageCurveControls(gradient, nodeId, key));
-    }
-    rows.append(row);
-  }
-  card.append(rows);
   return card;
+}
+
+function nodeGraphCurveColor(index) { return ["#62bce5", "#d99b58", "#67c477", "#c678d2", "#e16c7e", "#c4bd69"][index % 6]; }
+
+function nodeGraphGradientPageDrawGraph(card, gradient) {
+  const svg = card.querySelector("[data-gradient-graph]");
+  if (!svg || !window.NodeGraphCurveGraph) return;
+  const params = gradient.params || [];
+  const selected = nodeGraphGradientSelectedParam(gradient);
+  const series = params.map((param, index) => {
+    const id = `${param.nodeId}\u0000${param.key}`;
+    const node = nodeGraphPatchNode(param.nodeId);
+    const meta = node && nodeGraphReadPatchParameterMetadata(node, param.key);
+    const base = meta && window.PitchMutatorEngine ? PitchMutatorEngine.sliderFromDomain(meta, Number(node.params?.[param.key]) || 0) : 0.5;
+    const stops = [...gradient.stops].sort((a, b) => a.pos - b.pos);
+    return { id, color: nodeGraphCurveColor(index), selected: selected && id === `${selected.nodeId}\u0000${selected.key}`, points: stops.map((stop) => ({ x: stop.pos, y: Math.max(0, Math.min(1, base + nodeGraphGradientPageOffset(stop, param.nodeId, param.key))), shape: NodeGraphGradients.curveOf(stop, param.nodeId, param.key).shape, skew: NodeGraphGradients.curveOf(stop, param.nodeId, param.key).skew })) };
+  });
+  window.NodeGraphCurveGraph.render(svg, { series, guides: (gradient.stops || []).map((s) => ({ x: s.pos })), playhead: gradient.position });
 }
 
 function renderNodeGraphGradientPage() {
@@ -457,13 +445,14 @@ function nodeGraphGradientPageUpdateLive(gradient) {
   const playhead = card.querySelector(".node-gradient-playhead");
   const shown = Math.max(0, Math.min(1, NodeGraphGradients.positionOf(gradient)));
   if (playhead) playhead.style.left = `${(shown * 100).toFixed(3)}%`;
+  if (strip) strip.style.background = nodeGraphGradientPageStripBackground(gradient);
   strip?.setAttribute("aria-valuenow", String(gradient.position));
   for (const stop of gradient.stops) {
     const handle = strip?.querySelector(`[data-stop-id="${CSS.escape(stop.id)}"]`);
     if (!handle) continue;
     handle.style.left = `${(stop.pos * 100).toFixed(3)}%`;
     const label = handle.querySelector(".node-gradient-handle-label");
-    if (label) label.textContent = stop.pos.toFixed(2);
+    if (label) label.textContent = String(Math.round(stop.pos * 127));
   }
   for (const el of card.querySelectorAll("[data-gradient-param]")) {
     const [nodeId, key] = el.dataset.gradientParam.split("\u0000");
@@ -663,9 +652,32 @@ function nodeGraphGradientPageDragOutDown(event) {
 function nodeGraphGradientPagePointerDown(event) {
   if (nodeGraphGradientPageDragOutDown(event)) return;
   const strip = event.target?.closest?.(".node-gradient-strip");
-  if (!strip || event.button > 0) return;
-  const gradient = nodeGraphGradientPageGradients().find((g) => g.id === strip.dataset.gradientId);
+  const graph = event.target?.closest?.(".node-gradient-curve-chart");
+  if ((!strip && !graph) || event.button > 0) return;
+  const card = event.target.closest(".node-gradient-card");
+  const gradientId = strip?.dataset.gradientId || graph?.dataset.gradientGraph;
+  const gradient = nodeGraphGradientPageGradients().find((g) => g.id === gradientId);
   if (!gradient) return;
+  if (graph) {
+    const point = event.target.closest("[data-curve-point]");
+    const series = event.target.closest("[data-curve-series], [data-curve-series-hit]");
+    const rawParamId = point?.dataset.curveSeries || series?.dataset.curveSeries || series?.dataset.curveSeriesHit;
+    if (rawParamId) {
+      const paramId = decodeURIComponent(rawParamId);
+      const [nodeId, key] = paramId.split("\u0000");
+      nodeGraphGradientPageState.selectedParam.set(gradient.id, paramId);
+      if (point) nodeGraphGradientPageState.selectedStop.set(gradient.id, gradient.stops[Number(point.dataset.curvePoint)]?.id || "");
+      renderNodeGraphGradientPage();
+      const nextGraph = card?.querySelector(".node-gradient-curve-chart");
+      if (point && nextGraph) {
+        event.preventDefault();
+        try { nextGraph.setPointerCapture(event.pointerId); } catch (_e) {}
+        nodeGraphGradientPageState.drag = { pointerId: event.pointerId, graph: nextGraph, gradientId: gradient.id, stopId: gradient.stops[Number(point.dataset.curvePoint)]?.id || "", paramId, startX: event.clientX, startY: event.clientY, moved: false };
+      }
+      return;
+    }
+    return;
+  }
   const handle = event.target.closest(".node-gradient-handle");
   event.preventDefault();
   try { strip.setPointerCapture(event.pointerId); } catch (_e) { /* ignore */ }
@@ -675,6 +687,7 @@ function nodeGraphGradientPagePointerDown(event) {
     gradientId: gradient.id,
     stopId: handle?.dataset.stopId || "",
     startX: event.clientX,
+    startY: event.clientY,
     moved: false,
   };
   if (handle) {
@@ -688,15 +701,24 @@ function nodeGraphGradientPagePointerDown(event) {
 function nodeGraphGradientPagePointerMove(event) {
   const drag = nodeGraphGradientPageState.drag;
   if (!drag || drag.pointerId !== event.pointerId) return;
-  if (!drag.moved && Math.abs(event.clientX - drag.startX) < 4) return;
+  if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
   drag.moved = true;
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === drag.gradientId);
   if (!gradient) return;
-  const pos = nodeGraphGradientPageStripPos(drag.strip, event.clientX);
+  const graphDrag = !!drag.graph;
+  const bounds = (drag.graph || drag.strip).getBoundingClientRect();
+  const pos = Math.max(0, Math.min(1, (event.clientX - bounds.left - (graphDrag ? 8 : 0)) / Math.max(1, bounds.width - (graphDrag ? 16 : 0))));
   // Live edit of the gradient object; the undo step is recorded on release.
   if (drag.stopId) {
     const stop = gradient.stops.find((s) => s.id === drag.stopId);
     if (stop) stop.pos = pos;
+    if (graphDrag && Math.abs(event.clientY - drag.startY) >= 1) {
+      const [nodeId, key] = drag.paramId.split("\u0000");
+      const node = nodeGraphPatchNode(nodeId), meta = node && nodeGraphReadPatchParameterMetadata(node, key);
+      const base = meta && window.PitchMutatorEngine ? PitchMutatorEngine.sliderFromDomain(meta, Number(node.params?.[key]) || 0) : 0.5;
+      const y = 1 - (event.clientY - bounds.top - 6) / Math.max(1, bounds.height - 12);
+      if (stop) (stop.offsets[nodeId] || (stop.offsets[nodeId] = {}))[key] = Math.max(-1, Math.min(1, y - base));
+    }
   } else {
     gradient.position = pos;
   }
@@ -706,13 +728,14 @@ function nodeGraphGradientPagePointerMove(event) {
   else if (typeof nodeGraphGradientsNotifyPlayhead === "function") nodeGraphGradientsNotifyPlayhead(gradient, `${gradient.name} position`);
   else nodeGraphGradientsNotifyChanged(`${gradient.name} position`);
   nodeGraphGradientPageUpdateLive(gradient);
+  nodeGraphGradientPageDrawGraph(document.querySelector(`.node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"]`), gradient);
 }
 
 function nodeGraphGradientPagePointerUp(event) {
   const drag = nodeGraphGradientPageState.drag;
   if (!drag || drag.pointerId !== event.pointerId) return;
   nodeGraphGradientPageState.drag = null;
-  try { drag.strip.releasePointerCapture(event.pointerId); } catch (_e) { /* ignore */ }
+  try { (drag.graph || drag.strip)?.releasePointerCapture(event.pointerId); } catch (_e) { /* ignore */ }
   if (event.type === "pointercancel") return;
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === drag.gradientId);
   if (!gradient) return;
@@ -722,6 +745,7 @@ function nodeGraphGradientPagePointerUp(event) {
     if (nodeGraphGradientPageState.editing && !nodeGraphGradientEditActive()) nodeGraphGradientEditEnd();
     return;
   }
+  if (drag.graph) return;
   if (drag.stopId) {
     // Tap on a stop: edit it (the playhead snaps there). Tap the edited stop again: stop editing.
     const editing = nodeGraphGradientPageState.editing;
@@ -885,6 +909,20 @@ function bindNodeGraphGradientPage() {
     nodeGraphGradientPageAction(button.dataset.gradientAction, button.dataset.gradientId || "", button);
   });
   host.addEventListener("input", (event) => {
+    const playhead = event.target?.closest?.("[data-gradient-playhead]");
+    if (playhead) {
+      const gradient = nodeGraphGradientPageGradients().find((g) => g.id === playhead.dataset.gradientPlayhead);
+      if (!gradient) return;
+      gradient.position = Number(playhead.value);
+      nodeGraphGradientPageRepaintSliders([gradient]);
+      if (typeof nodeGraphGradientsNotifyPlayhead === "function") nodeGraphGradientsNotifyPlayhead(gradient, `${gradient.name} position`);
+      nodeGraphGradientPageUpdateLive(gradient);
+      nodeGraphGradientPageDrawGraph(playhead.closest(".node-gradient-card"), gradient);
+      const value = playhead.closest(".node-gradient-card")?.querySelector(".node-gradient-selected-value");
+      const selected = nodeGraphGradientSelectedParam(gradient);
+      if (value && selected) value.textContent = `Value ${nodeGraphGradientPageFormat(nodeGraphGradientPageOffsetAt(gradient, selected.nodeId, selected.key))}`;
+      return;
+    }
     const input = event.target?.closest?.("[data-gradient-skew]");
     if (!input) return;
     const { gradientId, stopId, nodeId, paramKey } = input.dataset;
@@ -898,6 +936,12 @@ function bindNodeGraphGradientPage() {
     nodeGraphGradientsNotifyChanged(`${gradient.name} curve skew`);
   });
   host.addEventListener("change", (event) => {
+    const playhead = event.target?.closest?.("[data-gradient-playhead]");
+    if (playhead) {
+      const gradient = nodeGraphGradientPageGradients().find((g) => g.id === playhead.dataset.gradientPlayhead);
+      if (gradient) nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), `${gradient.name} position`);
+      return;
+    }
     if (!event.target?.matches?.("[data-gradient-skew]")) return;
     if (typeof recordNodeGraphHistory === "function") recordNodeGraphHistory();
   });

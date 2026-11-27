@@ -5647,6 +5647,39 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* PASTE-12 approved one-graph curve editor. */
+#nodeGradientsBody .node-gradient-card {
+  gap: 9px;
+  padding: 10px;
+  border-radius: 4px;
+  background: #1a1a1a;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+#nodeGradientsBody .node-gradient-param-chips { display:flex; flex-wrap:wrap; gap:5px; }
+#nodeGradientsBody .node-gradient-param-chips .node-gradient-button { border-color:color-mix(in srgb,var(--curve-color,#62bce5) 70%,#333); }
+#nodeGradientsBody .node-gradient-curve-chart {
+  display:block; width:100%; height:clamp(160px,30vh,280px); box-sizing:border-box;
+  background:#0d0d12; border:1px solid #353640; border-radius:3px; overflow:hidden;
+  touch-action:none;
+}
+#nodeGradientsBody .node-gradient-strip {
+  height:24px; margin:13px 7px 22px; border:1px solid #43434a; border-radius:2px;
+}
+#nodeGradientsBody .node-gradient-handle { top:4px; width:12px; height:14px; min-height:14px; margin-left:-6px; padding:0; border:1px solid #25252b; border-radius:3px; background:#ddd; }
+#nodeGradientsBody .node-gradient-handle.is-selected { background:#fff; box-shadow:0 0 0 2px #fff; }
+#nodeGradientsBody .node-gradient-handle-label.is-high,
+#nodeGradientsBody .node-gradient-handle-label.is-low { top:calc(100% + 5px); bottom:auto; font:10px/1 ui-monospace,monospace; }
+#nodeGradientsBody .node-gradient-playhead-control { display:grid; grid-template-columns:70px 1fr; gap:10px; align-items:center; }
+#nodeGradientsBody .node-gradient-playhead-control input[type=range] { width:100%; accent-color:#62bce5; }
+#nodeGradientsBody .node-gradient-curves { display:grid; grid-template-columns:minmax(0,1fr); gap:5px; }
+#nodeGradientsBody .node-gradient-curve-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+#nodeGradientsBody .node-gradient-curve-shapes { gap:4px; }
+#nodeGradientsBody .node-gradient-curve-shapes .node-gradient-button,
+#nodeGradientsBody .node-gradient-button { min-height:30px; border-radius:3px; font:11px ui-monospace,monospace; }
+#nodeGradientsBody .node-gradient-stop-colors { grid-template-columns:minmax(100px,220px); padding:0; }
+#nodeGradientsBody .node-gradient-stop-color-row { grid-template-columns:auto minmax(64px,1fr); }
+#nodeGradientsBody .node-gradient-stop-color-widget { height:34px; }
+
 .node-gradient-card.is-disabled .node-gradient-strip {
   filter: grayscale(0.85) brightness(0.6);
 }

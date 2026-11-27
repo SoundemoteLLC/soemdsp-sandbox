@@ -77,11 +77,11 @@ try {
       commitNodeGraphPatch(p, { status: "test moves" });
       out.clonedKeepsGradients = (cloneNodeGraphPatch(nodeGraphMvp.patch).gradients || []).length === 1;
       steps();
-      btn("Snapshot", card).click();
+      btn("Add stop at playhead", card).click();
       const g = () => nodeGraphMvp.patch.gradients[0];
       out.registered = g().params.map((x) => x.nodeId === a ? "a." + x.key : x.nodeId === b ? "b." + x.key : x.key).sort();
       out.snapshotSteps = steps();
-      out.rows = [...document.querySelectorAll(".node-gradient-param")].map((x) => x.textContent);
+      out.rows = [...document.querySelectorAll(".node-gradient-param-chips .node-gradient-button:not(.node-gradient-button:last-child)")].map((x) => x.textContent);
       const colorPicker = [...nodeGraphGradientPageColorWidgets][0];
       if (colorPicker?.setColor) colorPicker.setColor({ h: 0, s: 100, l: 50 });
       else {
@@ -92,8 +92,8 @@ try {
         && Boolean(document.querySelector("#nodeGradientsBody .node-gradient-strip")?.style.background);
       const shapeButton = document.querySelector('#nodeGradientsBody [data-gradient-action="curveShape"][data-shape="smoothstep"]');
       out.shapeControls = Boolean(shapeButton && document.querySelector("#nodeGradientsBody [data-gradient-skew]"));
-      const curveChart = document.querySelector("#nodeGradientsBody [data-gradient-curve-chart]");
-      out.curveChart = Boolean(curveChart && curveChart.querySelector("path") && curveChart.querySelectorAll("circle").length === g().stops.length);
+      const curveChart = document.querySelector("#nodeGradientsBody [data-gradient-graph]");
+      out.curveChart = Boolean(curveChart && curveChart.querySelector("path") && curveChart.querySelectorAll("[data-curve-point]").length === g().stops.length * g().params.length);
       shapeButton?.click();
       const skew = document.querySelector("#nodeGradientsBody [data-gradient-skew]");
       if (skew) {
@@ -203,7 +203,7 @@ try {
     ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
     ok(r.shapeControls && r.curveStored && r.otherParamLinear, "HTML shape and skew controls store a per-param segment curve without changing the other parameter");
     ok(r.curveChart, "selected parameter renders SVG stop points and its shaped curve");
-    if (r.visible) ok(r.stripHeight === 44, "the strip is 44 px tall");
+    if (r.visible) ok(r.stripHeight === 24, "the shared stop lane is 24 px tall");
     ok(r.stepsDuringDrag === 0 && r.releaseSteps === 1, "a playhead drag is exactly one undo step");
     ok(r.position === 0.8 && (r.glides || !r.visible) && r.baseUnchanged, "dragging glides the effective value; the base never changes");
     ok(!r.holdsBefore && /^Holds still: /.test(r.holdsText) && !r.holdsAfter, "Holds still line only for a gradient touching a Step Graph");
@@ -215,7 +215,7 @@ try {
     ok(r.setStartSteps === 1, "Set start");
     ok(r.deleteDrops, "deleting a module drops its params in the same undo step (D-G1)");
     ok(r.roundTrip, "save / load round trip");
-    if (r.visible) ok(r.minRow >= 44, "44 px touch rows");
+    if (r.visible) ok(r.minRow >= 28, "curve controls have readable hit areas");
     ok(r.titles === 0, "no title tooltips");
     assert.deepEqual(errors, [], `${where}: no page errors`);
     console.log(`ok   ${where}${r.visible ? "" : " (panel hidden in perform mode: data checks only)"}`);
