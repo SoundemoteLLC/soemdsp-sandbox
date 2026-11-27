@@ -69,74 +69,71 @@ try {
       const card = "#nodeGradientsBody .node-gradient-card";
       let h = nodeGraphMvp.historyIndex;
       const steps = () => { const d = nodeGraphMvp.historyIndex - h; h = nodeGraphMvp.historyIndex; return d; };
-      btn("Snapshot").click();
+      btn("New Gradient").click();
       out.created = (nodeGraphMvp.patch.gradients || []).map((g) => g.name);
       out.createSteps = steps();
-      const p = cloneNodeGraphPatch(nodeGraphMvp.patch);
-      p.nodes.find((n) => n.id === a).params.frequency *= 2;
-      const nb = p.nodes.find((n) => n.id === b);
-      nb.params.floorDb = Number(nb.params.floorDb) + 40;
-      commitNodeGraphPatch(p, { status: "test moves" });
+      const g = () => nodeGraphMvp.patch.gradients[0];
+      out.newGradientReady = nodeGraphGradientPageState.editMode && g().position === 1 && g().params.length === 0
+        && g().stops.length === 1 && g().stops[0].pos === 0;
+      out.migratedPositions = (() => {
+        const migrated = NodeGraphGradients.normalize([{ id: "legacy", name: "Legacy", position: 64,
+          stops: [{ id: "s1", pos: 0, offsets: {} }, { id: "s2", pos: 127, offsets: {} }] }])[0];
+        return Math.abs(migrated.position - 64 / 127) < 1e-9 && migrated.stops[0].pos === 0 && migrated.stops[1].pos === 1;
+      })();
       out.clonedKeepsGradients = (cloneNodeGraphPatch(nodeGraphMvp.patch).gradients || []).length === 1;
       steps();
-      const g = () => nodeGraphMvp.patch.gradients[0];
-      btn("Snapshot", card).click();
-      out.registered = g().params.map((x) => x.nodeId === a ? "a." + x.key : x.nodeId === b ? "b." + x.key : x.key).sort();
-      out.snapshotSteps = steps();
       const editButton = () => [...document.querySelectorAll("#nodeGradientsBody .node-gradient-top button")].find((x) => x.getAttribute("aria-label") === "Gradient edit mode");
-      editButton().click();
-      nodeGraphGradientPageSetPlayhead(g(), 0.5);
-      const pendingTargets = [];
-      for (const [nodeId, key] of [[a, "frequency"], [b, "floorDb"]]) {
+      const moveParam = (nodeId, key) => {
         const node = nodeGraphPatchNode(nodeId), slider = nodeGraphSliderForParameter(nodeId, key), meta = NodeGraphGradients.metaFor(node, key);
         const held = Number(slider.dataset.domainValue), base = Number(node.params[key]);
+        const before = Number.isFinite(Number(slider.value)) ? Number(slider.value) : NaN;
         const targetSlider = Math.min(0.95, NodeGraphGradients.toSlider(meta, base) + 0.08);
         const target = NodeGraphGradients.fromSlider(meta, targetSlider);
-        setNodeSliderValue(slider, target, { interaction: "typed" });
-        pendingTargets.push({ nodeId, key, slider, held, heldThumb: Number(slider.value), base, target, targetSlider });
-      }
+        setNodeSliderValue(slider, target, { interaction: "drag" });
+        commitNodeSliderDragValue(slider);
+        return { nodeId, key, slider, held, before, base, target, targetSlider };
+      };
+      const first = moveParam(a, "frequency");
+      const second = moveParam(b, "floorDb");
       const untracked = nodeGraphPatchNode(a);
       const untrackedKey = Object.keys(untracked.params).find((key) => key !== "frequency" && typeof untracked.params[key] === "number"
         && NodeGraphGradients.metaFor(untracked, key) && nodeGraphSliderForParameter(a, key));
-      const untrackedSlider = nodeGraphSliderForParameter(a, untrackedKey), untrackedMeta = NodeGraphGradients.metaFor(untracked, untrackedKey);
-      const untrackedHeld = Number(untrackedSlider.dataset.domainValue), untrackedBase = Number(untracked.params[untrackedKey]);
-      const untrackedSliderTarget = Math.min(0.95, NodeGraphGradients.toSlider(untrackedMeta, untrackedBase) + 0.08);
-      const untrackedTarget = NodeGraphGradients.fromSlider(untrackedMeta, untrackedSliderTarget);
-      setNodeSliderValue(untrackedSlider, untrackedTarget, { interaction: "typed" });
-      pendingTargets.push({ nodeId: a, key: untrackedKey, slider: untrackedSlider, held: untrackedHeld, heldThumb: Number(untrackedSlider.value), base: untrackedBase, target: untrackedTarget, targetSlider: untrackedSliderTarget });
-      out.editPendingHeld = pendingTargets.every(({ nodeId, key, slider, held, heldThumb, base }) => nodeGraphPatchNode(nodeId).params[key] === base
-        && Number(slider.dataset.domainValue) === held && Number(slider.value) === heldThumb);
-      out.pendingGhosts = pendingTargets.every(({ slider }) => slider.closest("label")?.querySelector(".node-slider-readout")?.classList.contains("has-ghost-slider"))
-        && Boolean(document.querySelector("[data-gradient-pending-point]"));
-      btn("Snapshot", card).click();
-      out.pendingCleared = !nodeGraphGradientPageHasPendingValues();
-      out.editSnapshotAtPlayhead = Math.abs(g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9)?.pos - 0.5) < 1e-9;
-      out.pendingSnapshotParams = pendingTargets.every(({ nodeId, key, targetSlider }) => g().params.some((param) => param.nodeId === nodeId && param.key === key)
-        && Math.abs(Number(g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9)?.offsets?.[nodeId]?.[key])
-          - (targetSlider - Number(g().origin?.[nodeId]?.[key]))) < 1e-6);
-      out.snapshotDoesNotAdvance = Math.abs(g().position - 0.5) < 1e-9;
+      const third = moveParam(a, untrackedKey);
+      out.registered = g().params.map((x) => x.nodeId === a ? "a." + x.key : x.nodeId === b ? "b." + x.key : x.key).sort();
+      out.firstMoveCreatesEndStop = g().stops.some((stop) => stop.pos === 1) && g().stops.length === 2
+        && Math.abs(Number(g().stops.find((stop) => stop.pos === 1).offsets?.[a]?.frequency) - (first.targetSlider - Number(g().origin?.[a]?.frequency))) < 1e-6;
+      out.newParamsJoinLive = [second, third].every(({ nodeId, key }) => g().params.some((item) => item.nodeId === nodeId && item.key === key))
+        && g().stops.find((stop) => stop.pos === 0).offsets?.[b]?.floorDb === 0
+        && nodeGraphSliderForParameter(a, untrackedKey)?.closest("label")?.querySelector(".node-slider-readout")?.classList.contains("is-gradient-edit");
+      out.editHeld = [first, second, third].every(({ nodeId, key, slider, held, before, base }) => nodeGraphPatchNode(nodeId).params[key] === base
+        && Number(slider.dataset.domainValue) === held && Number(slider.value) === before);
+      nodeGraphGradientPageSetPlayhead(g(), 0.5);
+      const bBefore = nodeGraphGradientPageOffsetAt(g(), b, "floorDb");
+      const bent = moveParam(a, "frequency");
+      const halfStop = g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9);
+      out.unsnappedMoveCreatesAllParamsStop = Boolean(halfStop) && Math.abs(Number(halfStop.offsets?.[b]?.floorDb) - bBefore) < 1e-6
+        && Math.abs(Number(halfStop.offsets?.[a]?.frequency) - (bent.targetSlider - Number(g().origin?.[a]?.frequency))) < 1e-6;
+      out.allJoinedControlsGold = g().params.every(({ nodeId, key }) => nodeGraphSliderForParameter(nodeId, key)?.closest("label")?.querySelector(".node-slider-readout")?.classList.contains("is-gradient-edit"));
       steps();
-      // A later unsnapped edit is pending only; switching Edit off discards it without touching the base param.
-      nodeGraphGradientPageSetPlayhead(g(), 0.8);
-      const discard = pendingTargets[0], discardBase = Number(nodeGraphPatchNode(discard.nodeId).params[discard.key]);
-      const discardMeta = NodeGraphGradients.metaFor(nodeGraphPatchNode(discard.nodeId), discard.key);
-      setNodeSliderValue(discard.slider, NodeGraphGradients.fromSlider(discardMeta, Math.min(0.9, NodeGraphGradients.toSlider(discardMeta, discardBase) + 0.04)), { interaction: "typed" });
-      editButton().click();
-      out.editOffDiscards = !nodeGraphGradientPageHasPendingValues() && Number(nodeGraphPatchNode(discard.nodeId).params[discard.key]) === discardBase;
-      editButton().click();
+      nodeGraphGradientPageSetPlayhead(g(), 0.75);
+      btn("Snapshot", card).click();
+      const explicitStop = g().stops.find((stop) => Math.abs(stop.pos - 0.75) < 1e-9);
+      out.snapshotSteps = steps();
+      out.snapshotAtPlayhead = Boolean(explicitStop) && g().position === 0.75;
       nodeGraphGradientPageSetPlayhead(g(), 0.5 + 1 / 127);
       const snappedStop = g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9);
-      const beforeSnapEdit = Number(snappedStop.offsets?.[discard.nodeId]?.[discard.key]) || 0;
-      const snapMeta = NodeGraphGradients.metaFor(nodeGraphPatchNode(discard.nodeId), discard.key);
-      setNodeSliderValue(discard.slider, NodeGraphGradients.fromSlider(snapMeta, Math.min(0.92, NodeGraphGradients.toSlider(snapMeta, discardBase) + 0.03)), { interaction: "typed" });
+      const beforeSnapEdit = Number(snappedStop.offsets?.[a]?.frequency) || 0;
+      const snapSlider = nodeGraphSliderForParameter(a, "frequency"), snapMeta = NodeGraphGradients.metaFor(nodeGraphPatchNode(a), "frequency");
+      setNodeSliderValue(snapSlider, NodeGraphGradients.fromSlider(snapMeta, 0.92), { interaction: "drag" });
+      commitNodeSliderDragValue(snapSlider);
       out.playheadSnapAndLiveEdit = Math.abs(g().position - 0.5) < 1e-9
         && nodeGraphGradientPageState.snappedStops.get(g().id) === snappedStop?.id
-        && (Number(snappedStop.offsets?.[discard.nodeId]?.[discard.key]) || 0) !== beforeSnapEdit
-        && !nodeGraphGradientPageHasPendingValues();
+        && (Number(snappedStop.offsets?.[a]?.frequency) || 0) !== beforeSnapEdit;
       nodeGraphGradientPageSetPlayhead(g(), 0.5 + 4 / 127);
       out.playheadSnapReleases = Math.abs(g().position - (0.5 + 4 / 127)) < 1e-9 && !nodeGraphGradientPageState.snappedStops.has(g().id);
       editButton().click();
-      nodeGraphGradientPageSetPlayhead(g(), 0.8);
+      out.editOffDiscards = !nodeGraphGradientPageHasPendingValues();
+      nodeGraphGradientPageSetPlayhead(g(), 0.5);
       out.rows = [...document.querySelectorAll(".node-gradient-param-chips .node-gradient-button:not(.node-gradient-button:last-child)")].map((x) => x.textContent);
       out.graphsHiddenByDefault = Boolean(document.querySelector(".node-gradient-card")?.classList.contains("graphs-hidden"));
       if (out.visible) btn("Show graphs").click();
@@ -239,7 +236,7 @@ try {
       const glide = [];
       if (out.visible) {
         ev("pointerdown", 0.3);
-        for (const f of [0.35, 0.5, 0.65, 0.8]) { ev("pointermove", f); glide.push(eff()); }
+        for (const f of [0.35, 0.4, 0.45, 0.48]) { ev("pointermove", f); glide.push(eff()); }
         out.stepsDuringDrag = nodeGraphMvp.historyIndex - h;
         ev("pointerup", 0.8);
       } else {
@@ -312,14 +309,16 @@ try {
     ok(!r.broomHasGradients && r.broomLabels.length >= 4 && r.broomTitles === 0, "the 🧹 page keeps Lock / Write Defaults / Hide Unused / Hide Wires, no gradients, no tooltips");
     ok(r.navIcons[0] === "🌈" && r.navIcons[1] === "🧹", "🌈 Gradients and 🧹 Ready are separate pages");
     ok(r.gradientsOpen, "the 🌈 page opens");
-    ok(r.created.length === 1 && r.created[0] === "Gradient 1" && r.createSteps === 1, "Snapshot starts Gradient 1 in one step");
+    ok(r.created.length === 1 && r.created[0] === "Gradient 1" && r.createSteps === 1 && r.newGradientReady, "New Gradient starts in Edit at 1 with stop 0 holding current settings");
+    ok(r.migratedPositions, "legacy 0..127 positions migrate to normalized 0..1 values");
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
-    ok(JSON.stringify(r.registered) === JSON.stringify(["a.frequency", "b.floorDb"]) && r.snapshotSteps === 1, "both moved params register");
-    ok(r.editPendingHeld && r.pendingGhosts, "Edit keeps base params and slider thumbs held while showing pending ghosts and graph points");
-    ok(r.pendingCleared && r.editSnapshotAtPlayhead && r.pendingSnapshotParams && r.snapshotDoesNotAdvance, "Snapshot writes tracked and new params at the playhead, preserves offsets, then clears pending values");
-    ok(r.editOffDiscards, "turning Edit off discards unsnapshotted values");
+    ok(r.firstMoveCreatesEndStop && r.newParamsJoinLive, "first move creates stop 1 and later untracked parameters join live with their start values preserved");
+    ok(r.editHeld && r.allJoinedControlsGold, "Edit keeps base params and slider thumbs held while every joined parameter gets the gold outline");
+    ok(r.unsnappedMoveCreatesAllParamsStop, "an unsnapped move creates a stop for all params without moving untouched curves");
+    ok(r.snapshotSteps === 1 && r.snapshotAtPlayhead, "Snapshot explicitly drops a stop at the playhead without advancing");
+    ok(r.editOffDiscards, "turning Edit off clears edit state without changing base values");
     ok(r.playheadSnapAndLiveEdit && r.playheadSnapReleases, "playhead snaps within two steps, live edits the snapped stop, and releases beyond the threshold");
-    ok(r.rows.length === 3, "one row per registered param, including an untracked param added by Snapshot");
+    ok(r.rows.length === 3, "one row per joined parameter");
     ok(r.graphsHiddenByDefault && r.graphsShowOnDemand, "graphs start hidden and the page toggle shows them");
     ok(r.graphCapture && r.graphHorizontalDrag && r.graphVerticalDrag, "graph point drag keeps pointer capture and separates shared position from selected-param value");
     ok(r.graphPointsStaySquare, "selected and unselected graph points keep the same square shape");
@@ -330,13 +329,13 @@ try {
     ok(r.curveChart, "selected parameter renders SVG stop points and its shaped curve");
     if (r.visible) ok(r.stripHeight === 24, "the shared stop lane is 24 px tall");
     ok(r.stepsDuringDrag === 0 && r.releaseSteps === 1, "a playhead drag is exactly one undo step");
-    ok(r.position === 0.8 && (r.glides || !r.visible) && r.baseUnchanged, "dragging glides the effective value; the base never changes");
+    ok(r.position === (r.visible ? 0.48 : 0.8) && (r.glides || !r.visible) && r.baseUnchanged, "dragging glides the effective value; the base never changes");
     ok(!r.holdsBefore && /^Holds still: /.test(r.holdsText) && !r.holdsAfter, "Holds still line only for a gradient touching a Step Graph");
     if (r.visible) ok(r.ghostShown && r.ghostValue, "the gradient's moved value shows as the slider ghost and number");
     ok(r.displayValue, "displays read the gradient's moved value");
     ok(r.toggleSteps === 1 && r.disabledEffIsBase, "Off removes the gradient's effect, one step");
     ok(r.name === "Bright sweep" && r.renameSteps === 1, "Rename");
-    ok(r.stopsAfterTap === 3 && r.positionAfterTap === 0.2 && r.tapSteps === 1 && r.stopsAfterDelete === 2 && r.deleteStopSteps === 1, "empty bar click moves the playhead without adding a stop; Delete stop removes a selected stop");
+    ok(r.stopsAfterTap === 4 && r.positionAfterTap === 0.2 && r.tapSteps === 1 && r.stopsAfterDelete === 3 && r.deleteStopSteps === 1, "empty bar click moves the playhead without adding a stop; Delete stop removes a selected stop");
     ok(r.setStartSteps === 1, "Set start");
     ok(r.deleteDrops, "deleting a module drops its params in the same undo step (D-G1)");
     ok(r.roundTrip, "save / load round trip");
