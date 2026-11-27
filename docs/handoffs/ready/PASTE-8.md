@@ -20,3 +20,12 @@ Same repo rules: work on master, commit each item separately, no push, run your 
    - Test: neither appears in the store or its search, and dragging from both the rainbow page and the Mutator page places a module.
 
 Report: the commits, and a short list for Argi to check quickly after Ctrl+F5.
+
+## Final step: pre-release smoke
+
+This is the last pass before a release. After the steps above are committed, run a short smoke and report:
+- Full test suite (one browser at a time on a quiet machine; compare any failure against the commit before this paste).
+- Load every factory patch, plus any old patch that uses gradients or mutators: no error dialogs, gradients and mutators still drive their params, save, load and clone round-trip cleanly.
+- Drag a gradient in from the rainbow page and a mutator in from the Mutator page; a duplicate gradient selects the existing module.
+- Phone width: the rainbow page and the Mutator page rows fit with their grips.
+- A ranked list of anything found and not fixed. Do not push.
