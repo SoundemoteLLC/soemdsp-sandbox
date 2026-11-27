@@ -113,10 +113,9 @@ try {
   const kbOther = kbOuts.find((p) => p.port !== kbF.port && p.port !== "Play Keys") || kbOuts.find((p) => p.port !== kbF.port);
   const fltIn = s0.flt.input.ports.find((p) => p.port === "f") || s0.flt.input.ports[0];
   await wire(ids.kb, kbOther.port, ids.flt, fltIn.port);
-  const order = kbOuts.map((p) => p.port);
-  const first = [kbF, kbOther].sort((a, b) => order.indexOf(a.port) - order.indexOf(b.port))[0];
-  await waitText(compactOf(ids.kb, "output"), "/, 1$/.test(t)");
-  assert.equal(await compact("kb", "output"), `${first.label}, 1`, "two connected: first label in definition order, comma, 1 more");
+  // HP-22: more than one connection on a side shows only the count.
+  await waitText(compactOf(ids.kb, "output"), 't === "2"');
+  assert.equal(await compact("kb", "output"), "2", "two connected: the count of connections");
   await shotIf("two-connected");
 
   step = "unwire";

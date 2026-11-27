@@ -1,7 +1,7 @@
 // PASTE-7 release smoke (not a unit test; it reports). Real page on its own server.py port unless SANDBOX_URL is set.
 //   node scripts/smoke_release.mjs [modules|patches|phone ...]   (default: all three)
-//   modules  spawn every store module with Live on, wire it to Output: console errors, the module renders, output never NaN;
-//            sources that stay silent are listed (may be fine: a trigger-driven source needs a trigger).
+//   modules  spawn every store module: console errors, the module renders, a spawn never hangs (60 s). Audio NaN / silence is
+//            swept headless against the wasm by scripts/smoke_native_audio.mjs.
 //   patches  load every factory patch (patches/**, not acoustic/): console errors; serialize -> load -> serialize and clone keep it.
 //   phone    390 px wide: the rainbow page, UI Settings, the module store and the G window must not clip rows sideways.
 // Writes scripts/smoke_release.json and prints a summary. Exit 1 when anything failed.
@@ -46,12 +46,16 @@ try {
 
   if (parts.includes("modules")) {
     const { page, errors } = await boot({ width: 1280, height: 900 });
-    await page.evaluate(() => setNodeGraphLiveOutputEnabled(true));
-    await page.waitForFunction(() => nodeGraphMvp.live.node, null, { timeout: 60000 });
-    await page.waitForTimeout(1500);
+    // No Live audio here: headless software GL makes every frame cost seconds. Audio (NaN / silence) is swept headless against the
+    // real wasm instead: scripts/smoke_native_audio.mjs.
     const types = await page.evaluate(() => Object.keys(nodeGraphModuleDefinitions)
       .filter((t) => typeof nodeGraphModuleIsEfficientProductShopType !== "function" || nodeGraphModuleIsEfficientProductShopType(t))
       .filter((t) => t !== "output"));
+    // SMOKE_MODULES=<regex> limits the sweep to matching module types.
+    if (process.env.SMOKE_MODULES) {
+      const only = new RegExp(process.env.SMOKE_MODULES);
+      types.splice(0, types.length, ...types.filter((t) => only.test(t)));
+    }
     const rows = [];
     for (const [index, type] of types.entries()) {
       const before = errors.length;
@@ -65,19 +69,11 @@ try {
         } catch (e) { out.spawnError = String(e).slice(0, 200); return out; }
         if (!id) { out.spawnError = "no id"; return out; }
         const def = nodeGraphModuleDefinitions[type] || {};
-        const outPort = (def.outputs || [])[0];
-        const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
-        if (outPort && patch.nodes.some((n) => n.id === "output")) {
-          patch.connections = [...(patch.connections || []), { sourceNode: id, sourcePort: outPort, destinationNode: "output", destinationPort: (nodeGraphModuleDefinitions.output.inputs || ["In"])[0] }];
-          commitNodeGraphPatch(patch, { status: "smoke", record: false });
-        }
-        await wait(500);
+        await wait(300);
         const el = nodeGraphNodeElement(id);
         const rect = el?.getBoundingClientRect();
         out.rendered = Boolean(rect && rect.width > 4 && rect.height > 4);
-        const level = Number(nodeGraphMvp.live.outputLevelSmooth);
-        out.level = level;
-        out.finite = Number.isFinite(level);
+        out.finite = true;
         out.source = def.planRole === "source";
         // Remove it again (and its cable).
         const back = cloneNodeGraphPatch(nodeGraphMvp.patch);
@@ -88,7 +84,7 @@ try {
         await wait(120);
         return out;
       }, type);
-      const r = await Promise.race([run, new Promise((res) => setTimeout(() => res({ type, hung: true }), 15000))]);
+      const r = await Promise.race([run, new Promise((res) => setTimeout(() => res({ type, hung: true }), 60000))]);
       r.errors = errors.slice(before);
       rows.push(r);
       console.log(`[${index + 1}/${types.length}] ${type}${r.hung ? " HUNG" : r.spawnError ? " spawn error" : !r.finite ? " NaN" : ""}`);
@@ -101,7 +97,7 @@ try {
       consoleErrors: rows.filter((r) => r.errors.length).map((r) => `${r.type}: ${r.errors[0]}`),
       notRendered: rows.filter((r) => !r.spawnError && !r.rendered).map((r) => r.type),
       nonFinite: rows.filter((r) => !r.spawnError && !r.finite).map((r) => r.type),
-      silentSources: rows.filter((r) => r.source && r.finite && !(r.level > 1e-5)).map((r) => r.type),
+
     };
     await page.close();
   }
