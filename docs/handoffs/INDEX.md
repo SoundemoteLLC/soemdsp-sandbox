@@ -84,6 +84,8 @@ These landed after the main table was last updated, or are the paste bundles tha
 | PASTE-9 | text redraw bug fixes, then gradient/mutator points and curves | done | `docs/handoffs/ready/PASTE-9.md` | 2026-11-27: served and landed; INDEX catch-up. Open follow-up is PASTE-11 item 1 (points-and-curves editor missing after Addendum 2). |
 | PASTE-10 | stable release pass (bugs only, no new features) | done | `docs/handoffs/ready/PASTE-10.md` | 2026-11-27: handed over and reported; remaining spawn issues and the Mutator/Gradient editor go to PASTE-11. |
 | PASTE-11 | restore Mutator/Gradient points-and-curves editor; spawn-error fixes (bugs only) | ready | `docs/handoffs/ready/PASTE-11.md` | 2026-11-27: added. Next stable-release bug paste. |
+| HP-29 | Metamodule GL ghost plates | ready, HELD: do not serve until Argi confirms the symptom and asks for it; after release-readiness (Argi: metamodule last) | `docs/handoffs/HP-29.md` | 2026-11-27: filed from MasterBot's reading of `e0d742dd`. Symptom still needs Argi's confirm. |
+
 ## Later / notes
 
 Not queued. N-1, N-2 and N-3 are notes only (no plan files). HP-14 has a plan file but was deferred to later plans (t449u).
