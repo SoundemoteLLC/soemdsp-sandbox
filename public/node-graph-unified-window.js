@@ -161,7 +161,7 @@ const nodeGraphUnifiedWindowPageOrder = Object.freeze([
   "hotkeys",
   "emoji",
   "pencil",
-  // Last, after the Mutators (🧬) button the Pitch Mutator overlay adds (it keeps 🌈 after itself).
+  // Last page: right before the Mutators (🧬) button the Pitch Mutator overlay adds after the pages.
   "gradients",
 ]);
 
