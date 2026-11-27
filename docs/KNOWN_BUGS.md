@@ -4,6 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
+### Right double-click on a module title acts like left double-click
+
+- **Reported:** 2026-11-26, by Argi
+- **Symptoms:** Double-clicking a module title with the right mouse button triggers the same action as a left double-click.
+- **Notes:** The title double-click handler probably doesn't check which button was pressed (`event.button === 0`). Right-click should keep its own behavior (context menu or selection).
+
 ### Output Mono shows no IO by default
 
 - **Reported:** 2026-11-26, by Argi
