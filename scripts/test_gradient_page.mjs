@@ -82,6 +82,36 @@ try {
       out.registered = g().params.map((x) => x.nodeId === a ? "a." + x.key : x.nodeId === b ? "b." + x.key : x.key).sort();
       out.snapshotSteps = steps();
       out.rows = [...document.querySelectorAll(".node-gradient-param-chips .node-gradient-button:not(.node-gradient-button:last-child)")].map((x) => x.textContent);
+      // Selecting a plotted point must retain capture across the page re-render; horizontal and vertical drags edit separate dimensions.
+      const host = document.getElementById("nodeGradientsBody");
+      host.setPointerCapture = (id) => { host.__testCapturedPointer = id; };
+      host.releasePointerCapture = (id) => { host.__testReleasedPointer = id; };
+      let plot = document.querySelector("[data-gradient-graph]");
+      let point = plot?.querySelector('[data-curve-point="0"]');
+      let box = point?.getBoundingClientRect();
+      const sx = box ? box.left + box.width / 2 : 0, sy = box ? box.top + box.height / 2 : 0;
+      const stopId = g().stops[0].id, firstParam = g().params[0], secondParam = g().params[1];
+      const startPos = g().stops.find((s) => s.id === stopId).pos;
+      const startOther = Number(g().stops.find((s) => s.id === stopId).offsets?.[secondParam.nodeId]?.[secondParam.key]) || 0;
+      nodeGraphGradientPagePointerDown({ target: point, currentTarget: host, pointerId: 77, button: 0, clientX: sx, clientY: sy, preventDefault() {} });
+      out.graphCapture = host.__testCapturedPointer === 77 && nodeGraphGradientPageState.drag?.graph === true;
+      nodeGraphGradientPagePointerMove({ pointerId: 77, clientX: sx + 24, clientY: sy });
+      nodeGraphGradientPagePointerUp({ pointerId: 77, type: "pointerup" });
+      const movedXStop = g().stops.find((s) => s.id === stopId);
+      out.graphHorizontalDrag = movedXStop.pos > startPos && (Number(movedXStop.offsets?.[firstParam.nodeId]?.[firstParam.key]) || 0) === 0;
+      steps();
+      plot = document.querySelector("[data-gradient-graph]"); point = plot?.querySelector('[data-curve-point="0"]'); box = point?.getBoundingClientRect();
+      const vy = box ? box.top + box.height / 2 : 0, vx = box ? box.left + box.width / 2 : 0;
+      const beforeVerticalPos = movedXStop.pos;
+      const beforeVerticalValue = Number(movedXStop.offsets?.[firstParam.nodeId]?.[firstParam.key]) || 0;
+      nodeGraphGradientPagePointerDown({ target: point, currentTarget: host, pointerId: 78, button: 0, clientX: vx, clientY: vy, preventDefault() {} });
+      nodeGraphGradientPagePointerMove({ pointerId: 78, clientX: vx, clientY: vy + 24 });
+      nodeGraphGradientPagePointerUp({ pointerId: 78, type: "pointerup" });
+      const movedYStop = g().stops.find((s) => s.id === stopId);
+      out.graphVerticalDrag = movedYStop.pos === beforeVerticalPos
+        && (Number(movedYStop.offsets?.[firstParam.nodeId]?.[firstParam.key]) || 0) < beforeVerticalValue
+        && (Number(movedYStop.offsets?.[secondParam.nodeId]?.[secondParam.key]) || 0) === startOther;
+      steps();
       const colorPicker = [...nodeGraphGradientPageColorWidgets][0];
       if (colorPicker?.setColor) colorPicker.setColor({ h: 0, s: 100, l: 50 });
       else {
@@ -200,6 +230,7 @@ try {
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(JSON.stringify(r.registered) === JSON.stringify(["a.frequency", "b.floorDb"]) && r.snapshotSteps === 1, "both moved params register");
     ok(r.rows.length === 2, "one row per registered param");
+    ok(r.graphCapture && r.graphHorizontalDrag && r.graphVerticalDrag, "graph point drag keeps pointer capture and separates shared position from selected-param value");
     ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
     ok(r.shapeControls && r.curveStored && r.otherParamLinear, "HTML shape and skew controls store a per-param segment curve without changing the other parameter");
     ok(r.curveChart, "selected parameter renders SVG stop points and its shaped curve");

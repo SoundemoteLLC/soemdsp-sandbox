@@ -666,14 +666,19 @@ function nodeGraphGradientPagePointerDown(event) {
       const paramId = decodeURIComponent(rawParamId);
       const [nodeId, key] = paramId.split("\u0000");
       nodeGraphGradientPageState.selectedParam.set(gradient.id, paramId);
-      if (point) nodeGraphGradientPageState.selectedStop.set(gradient.id, gradient.stops[Number(point.dataset.curvePoint)]?.id || "");
-      renderNodeGraphGradientPage();
-      const nextGraph = card?.querySelector(".node-gradient-curve-chart");
-      if (point && nextGraph) {
+      const stop = point && gradient.stops[Number(point.dataset.curvePoint)];
+      if (stop) nodeGraphGradientPageState.selectedStop.set(gradient.id, stop.id);
+      if (stop) {
         event.preventDefault();
-        try { nextGraph.setPointerCapture(event.pointerId); } catch (_e) {}
-        nodeGraphGradientPageState.drag = { pointerId: event.pointerId, graph: nextGraph, gradientId: gradient.id, stopId: gradient.stops[Number(point.dataset.curvePoint)]?.id || "", paramId, startX: event.clientX, startY: event.clientY, moved: false };
+        const captureTarget = event.currentTarget;
+        try { captureTarget.setPointerCapture(event.pointerId); } catch (_e) { /* capture on the persistent page host */ }
+        nodeGraphGradientPageState.drag = {
+          pointerId: event.pointerId, graph: true, captureTarget, gradientId: gradient.id,
+          stopId: stop.id, paramId, startX: event.clientX, startY: event.clientY,
+          startPos: stop.pos, startOffset: nodeGraphGradientPageOffset(stop, nodeId, key), moved: false, axis: "",
+        };
       }
+      renderNodeGraphGradientPage();
       return;
     }
     return;
@@ -701,23 +706,27 @@ function nodeGraphGradientPagePointerDown(event) {
 function nodeGraphGradientPagePointerMove(event) {
   const drag = nodeGraphGradientPageState.drag;
   if (!drag || drag.pointerId !== event.pointerId) return;
-  if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
-  drag.moved = true;
+  const dx = event.clientX - drag.startX, dy = event.clientY - drag.startY;
+  if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+  if (!drag.moved) {
+    drag.moved = true;
+    if (drag.graph) drag.axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+  }
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === drag.gradientId);
   if (!gradient) return;
   const graphDrag = !!drag.graph;
-  const bounds = (drag.graph || drag.strip).getBoundingClientRect();
-  const pos = Math.max(0, Math.min(1, (event.clientX - bounds.left - (graphDrag ? 8 : 0)) / Math.max(1, bounds.width - (graphDrag ? 16 : 0))));
+  const graph = graphDrag ? document.querySelector(`.node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"] .node-gradient-curve-chart`) : null;
+  const bounds = (graph || drag.strip).getBoundingClientRect();
+  const pos = graphDrag
+    ? Math.max(0, Math.min(1, drag.startPos + dx / Math.max(1, bounds.width - 16)))
+    : nodeGraphGradientPageStripPos(drag.strip, event.clientX);
   // Live edit of the gradient object; the undo step is recorded on release.
   if (drag.stopId) {
     const stop = gradient.stops.find((s) => s.id === drag.stopId);
-    if (stop) stop.pos = pos;
-    if (graphDrag && Math.abs(event.clientY - drag.startY) >= 1) {
+    if (stop && (!graphDrag || drag.axis === "x")) stop.pos = pos;
+    if (graphDrag && drag.axis === "y" && stop) {
       const [nodeId, key] = drag.paramId.split("\u0000");
-      const node = nodeGraphPatchNode(nodeId), meta = node && nodeGraphReadPatchParameterMetadata(node, key);
-      const base = meta && window.PitchMutatorEngine ? PitchMutatorEngine.sliderFromDomain(meta, Number(node.params?.[key]) || 0) : 0.5;
-      const y = 1 - (event.clientY - bounds.top - 6) / Math.max(1, bounds.height - 12);
-      if (stop) (stop.offsets[nodeId] || (stop.offsets[nodeId] = {}))[key] = Math.max(-1, Math.min(1, y - base));
+      (stop.offsets[nodeId] || (stop.offsets[nodeId] = {}))[key] = Math.max(-1, Math.min(1, drag.startOffset - dy / Math.max(1, bounds.height - 12)));
     }
   } else {
     gradient.position = pos;
@@ -735,7 +744,7 @@ function nodeGraphGradientPagePointerUp(event) {
   const drag = nodeGraphGradientPageState.drag;
   if (!drag || drag.pointerId !== event.pointerId) return;
   nodeGraphGradientPageState.drag = null;
-  try { (drag.graph || drag.strip)?.releasePointerCapture(event.pointerId); } catch (_e) { /* ignore */ }
+  try { (drag.captureTarget || drag.graph || drag.strip)?.releasePointerCapture(event.pointerId); } catch (_e) { /* ignore */ }
   if (event.type === "pointercancel") return;
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === drag.gradientId);
   if (!gradient) return;
