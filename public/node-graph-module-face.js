@@ -1741,9 +1741,13 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       const bw = (w - wd.w) / 3;
       const cell = (x, cw) => ({ x: ox + x * z, y: oy + wd.y * z, w: cw * z, h: wd.h * z });
       const text = typeof formatNodeGraphSeedCode === "function" ? formatNodeGraphSeedCode(nodeGraphModuleFaceValue(input)) : "";
+      // The seed widget wraps its drawing in the over layer and turns it OFF when done, but the whole face draws on the over layer:
+      // without this, every row below the seed row (fills, handles) went under the plate and only its text showed.
+      const over = batch._over;
       nodeGraphGlGraphDrawSeedWidget(batch, {
         host: cell(0, w), value: cell(0, wd.w), dice: cell(wd.w, bw), plus: cell(wd.w + bw, bw), minus: cell(wd.w + bw * 2, bw),
       }, text, z);
+      batch._over = over;
     }
   }
   // Not-applicable parameters: striped (the same 135deg stripes as a jack-owned cell, in grey) while any of their conditions holds.
