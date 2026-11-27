@@ -12,3 +12,4 @@
 # This existing test uses CRLF; keep carriage returns out of whitespace errors.
 scripts/test_text_resharpen.mjs whitespace=cr-at-eol
 scripts/smoke_release.mjs whitespace=cr-at-eol
+public/node-graph-slider-dragging.js whitespace=cr-at-eol

@@ -181,6 +181,13 @@ function syncNodeGraphPatchParameterFromSlider(slider, options = {}) {
     ),
   };
   if (
+    patchNode.type === "pitchMutator"
+    && key === "playhead"
+    && typeof pitchMutatorPlayheadParameterChanged === "function"
+  ) {
+    pitchMutatorPlayheadParameterChanged(node);
+  }
+  if (
     patchNode.type === "audioPlayer"
     && key === "transport"
     && typeof nodeGraphAudioPlayerApplyTransportGesture === "function"

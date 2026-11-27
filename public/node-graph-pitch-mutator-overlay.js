@@ -303,6 +303,18 @@
     const off = el.querySelector('[data-pm="offset"]');
     const lane = state && (state.lanes || []).find((l) => l.id === state.activeLane);
     if (off && lane && document.activeElement !== off && !off.classList.contains("value-dragging")) off.value = offsetAt(node, lane, x).toFixed(3);
+    updatePlayheadLine(el.querySelector("[data-pm=plot]"), node);
+  }
+
+  function updatePlayheadLine(svg, node) {
+    const line = svg?.querySelector("[data-pm=playhead-line]");
+    if (!line) return;
+    const range = midiRange();
+    const width = svg.viewBox.baseVal.width || Number(svg.getAttribute("width")) || 1;
+    const x = ((soundingNote(node) - range.min + 0.5) / (range.max - range.min + 1)) * width;
+    const value = x.toFixed(2);
+    line.setAttribute("x1", value);
+    line.setAttribute("x2", value);
   }
 
   // The effective value the bound knob has right now, as a short number (the face readout is GL; this is the chip's own copy).
@@ -852,6 +864,15 @@
     deletePin(dot.dataset.lane, Number(dot.dataset.x));
   }
 
+  function playheadParameterChanged(nodeId) {
+    const node = nodeById(nodeId);
+    if (!node || node.type !== "pitchMutator") return;
+    dropPendingIfMoved();
+    document.querySelectorAll('[data-unified-action="mutators"]').forEach((btn) => btn.classList.toggle("pm-nav-pitched", anyPitchSet()));
+    paintBoundKnobs();
+    queueRedraw(true);
+  }
+
   function plotPointToPin(event, lane, state) {
     const E = engine();
     const svg = document.querySelector("#pitchMutatorOverlay [data-pm=plot]");
@@ -1179,12 +1200,12 @@
       }
       for (const key of keys) {
         const cx = x(key.x).toFixed(2), cy = y(key.offset).toFixed(2), color = escapeAttr(node?.color || "#c45a7a");
-        parts.push(`<circle data-pm="pin-dot" data-lane="${escapeAttr(lane.id)}" data-x="${key.x}" cx="${cx}" cy="${cy}" r="22" fill="transparent"/>`);
-        parts.push(`<circle class="pm-pin" cx="${cx}" cy="${cy}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>`);
+        parts.push(`<circle class="pm-pin" cx="${cx}" cy="${cy}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1" pointer-events="none" vector-effect="non-scaling-stroke"/>`);
+        parts.push(`<circle class="node-adjust-cursor pm-pin-hit" data-pm="pin-dot" data-lane="${escapeAttr(lane.id)}" data-x="${key.x}" cx="${cx}" cy="${cy}" r="22" fill="transparent" pointer-events="all"/>`);
       }
     }
     const playX = x(soundingNote(node));
-    parts.push(`<line x1="${playX.toFixed(2)}" x2="${playX.toFixed(2)}" y1="0" y2="${height}" stroke="#fff" opacity=".7" vector-effect="non-scaling-stroke"/>`);
+    parts.push(`<line data-pm="playhead-line" x1="${playX.toFixed(2)}" x2="${playX.toFixed(2)}" y1="0" y2="${height}" stroke="#fff" opacity=".7" vector-effect="non-scaling-stroke"/>`);
     svg.innerHTML = parts.join("");
   }
 
@@ -1448,6 +1469,7 @@
 
   root.togglePitchMutatorOverlay = toggleOverlay;
   root.pitchMutatorPlayheadHeard = playheadHeard;
+  root.pitchMutatorPlayheadParameterChanged = playheadParameterChanged;
   root.pitchMutatorPlayheadNote = soundingNote;
   // Order 20, after the gradients (order 0). applyParams only fills in the Mutator's own node (target offsets are added after the target's
   // smoother, natively); applyToBase serves the main-thread evaluators.

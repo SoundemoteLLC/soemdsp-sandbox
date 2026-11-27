@@ -103,6 +103,7 @@ try {
     const box = await page.locator(`#pitchMutatorOverlay .pm-key[data-note="${note}"]`).boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   };
+  const playheadLineX = () => page.locator('#pitchMutatorOverlay [data-pm="playhead-line"]').getAttribute("x1");
   // Where the Cutoff widget of the Flower Child face is on screen.
   const knobPoint = () => page.evaluate((id) => {
     const article = document.querySelector(`.dsp-node[data-node="${id}"]`);
@@ -145,6 +146,8 @@ try {
   await clickPm("autopin");
   assert.match(await page.locator('#pitchMutatorOverlay [data-pm="autopin"]').innerText(), /On/, "Auto-Pin shows On in text");
   await clickNote(60);
+  const keyboardLineX = await playheadLineX();
+  assert.ok(Number(keyboardLineX) > 0, "clicking the Mutator keyboard moves its SVG playhead line");
   step = "the Mutator's own control is never bound";
   {
     // The Mutator has no face widget (its only parameter is the Playhead knob), so drive its real slider through the app's own write path.
@@ -152,6 +155,8 @@ try {
       const slider = nodeGraphSliderForParameter(id, "playhead");
       setNodeSliderValue(slider, 69, { interaction: "drag" });
     }, ids.pm);
+    await page.waitForFunction((previous) => document.querySelector('#pitchMutatorOverlay [data-pm="playhead-line"]')?.getAttribute("x1") !== previous, keyboardLineX);
+    assert.notEqual(await playheadLineX(), keyboardLineX, "moving the Mutator module Playhead slider moves the displayed SVG playhead line");
     const own2 = await mut();
     assert.equal(own2.lanes.length, 0, "Arm + a drag of the Mutator's own playhead binds nothing");
     assert.deepEqual(own2.freqLane.keys, [], "and pins no Frequency keys");
@@ -290,7 +295,16 @@ try {
   assert.equal(await shapeChoice.count(), 1, "the segment has an HTML shape choice");
   assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=curve-skew]").count(), 3, "each of the three segments has an HTML skew slider");
   assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot] path").count(), 1, "the Mutator page draws lane curves in SVG");
-  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot] circle").count(), 4, "the Mutator page shows each lane point");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot] .pm-pin").count(), 4, "the Mutator page shows each lane point");
+  const hitTarget = await page.evaluate(() => {
+    const dot = document.querySelector('#pitchMutatorOverlay [data-pm="pin-dot"]');
+    const visible = document.querySelector("#pitchMutatorOverlay .pm-pin");
+    const r = visible.getBoundingClientRect();
+    const target = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { exactPointTargetsHitArea: target === dot, hitAreaCursor: getComputedStyle(dot).cursor };
+  });
+  assert.equal(hitTarget.exactPointTargetsHitArea, true, "the visible pin does not block its larger pointer hit area");
+  assert.match(hitTarget.hitAreaCursor, /slider-drag-dot\.svg/, "the point hit area uses the shared mouse-dot cursor while hovered");
   await page.setViewportSize({ width: 390, height: 860 });
   const mobileCurve = await page.locator("#pitchMutatorOverlay .pm-curve-segment").first().boundingBox();
   assert.ok(mobileCurve && mobileCurve.x >= 0 && mobileCurve.x + mobileCurve.width <= 390, `curve controls fit the phone viewport ${JSON.stringify(mobileCurve)}`);

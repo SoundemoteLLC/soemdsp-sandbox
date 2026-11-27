@@ -29,7 +29,7 @@
 /* Cursor policy: the little + while hovering, the little dot while the mouse is down. Never the hand, never the arrow.
    Text fields keep the text cursor. */
 #pitchMutatorOverlay,
-#pitchMutatorOverlay * {
+#pitchMutatorOverlay *:not(.node-adjust-cursor) {
   cursor: var(--node-dot-cursor);
 }
 
