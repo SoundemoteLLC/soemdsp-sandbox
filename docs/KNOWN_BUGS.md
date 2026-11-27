@@ -72,12 +72,6 @@ These reports probably share a root cause: text in the GL text and label renderi
 - **Symptoms:** Keyboard key color highlighting (blue, gold, and the other highlight colors) doesn't work, or works only sometimes, on any click, including Shift-click and Ctrl-click.
 - **Notes:** Argi suspects this regressed when timer polling (`setInterval`) was converted to event-driven updates, so the keyboard likely lost a refresh a timer used to drive. Check MasterBot's conversion commits `958808b4`, `9eb8b7ca`, `cb686247`, and `9ab21898` first. In Argi's words, the keyboard "doesn't really update properly" and isn't highlighting at the moment.
 
-### Refresh does not save camera view or patch-view visibility
-
-- **Reported:** 2026-11-25, by Argi
-- **Symptoms:** After a refresh, the camera viewpoint isn't saved, and neither is whether patch view is visible or hidden. The view you get after a refresh isn't the centered patch view (it isn't centered on the patch), though the modules stay in view.
-- **Notes:** Two related persistence misses: camera viewpoint, and patch-view visible/invisible.
-
 ## Logged earlier
 
 These were already on the earlier bug log. Fixed items include their commit hashes.
