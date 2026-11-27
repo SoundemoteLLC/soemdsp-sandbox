@@ -57,3 +57,7 @@ For each one: fix it, add a browser test that does the real gesture (middle-drag
   - (c) `drawNodeGraphWires({gesture:true})` and `nodeGraphGlGraphPresent({retainPlates})` skip rebuilds during gestures. Check that hit rects don't go stale.
 - **`167b8490`:** unlikely to be the main cause, but the title branch of `nodeGraphGlHitPointerDown` (around line 6200) returns early on a non-left button, which swallows a middle press on a title. Let it fall through to pan instead of returning.
 - Bisect `82380fa0^`..HEAD on the three repros. All three dying together points to one shared pointerdown or pointermove early return. The three are already logged in `docs/KNOWN_BUGS.md`; update that entry when they're fixed.
+
+### Step 0 addition: text sharpens twice (Argi, newest)
+
+4. **Text visibly redraws twice, getting sharper each time** (blurry, then sharper, then sharp), instead of appearing sharp once. Likely the text-sharpness follow-up merged in PASTE-9 (A0): a low-resolution atlas pass followed by two upgrade passes, or two separate settle timers or paths that each rebake. Find where text gets baked after a gesture or settle and make it settle **once** at final resolution. Keep zero rebakes during a gesture. Add a probe that counts atlas bakes after a settle (expect exactly one per changed text, zero for unchanged text).
