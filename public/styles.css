@@ -7033,6 +7033,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   position: fixed;
   z-index: 32;
   width: max-content;
+  /* Phone width: the chips wrap onto more lines instead of running off the screen (the GL drawing follows this box). */
+  max-width: calc(100vw - 16px);
   height: auto;
   margin: 0;
   opacity: 0;
@@ -7136,6 +7138,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 /* Engine status (HP-24): the collapsed fourth chip of the debug guide (G). */
 .node-engine-metrics {
   --node-constraint-meter-color: rgba(243, 241, 236, 0.6);
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .node-constraint-stack[data-constraint-stack="engine"] {

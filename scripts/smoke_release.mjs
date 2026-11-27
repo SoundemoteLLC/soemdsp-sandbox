@@ -53,9 +53,10 @@ try {
       .filter((t) => typeof nodeGraphModuleIsEfficientProductShopType !== "function" || nodeGraphModuleIsEfficientProductShopType(t))
       .filter((t) => t !== "output"));
     const rows = [];
-    for (const type of types) {
+    for (const [index, type] of types.entries()) {
       const before = errors.length;
-      const r = await page.evaluate(async (type) => {
+      // A module that never returns is a finding, not a frozen run: 15 s each.
+      const run = page.evaluate(async (type) => {
         const wait = (ms) => new Promise((res) => setTimeout(res, ms));
         const out = { type };
         let id = "";
@@ -87,11 +88,15 @@ try {
         await wait(120);
         return out;
       }, type);
+      const r = await Promise.race([run, new Promise((res) => setTimeout(() => res({ type, hung: true }), 15000))]);
       r.errors = errors.slice(before);
       rows.push(r);
+      console.log(`[${index + 1}/${types.length}] ${type}${r.hung ? " HUNG" : r.spawnError ? " spawn error" : !r.finite ? " NaN" : ""}`);
+      if (r.hung) break; // the page is stuck in that module: stop here and report it
     }
     report.modules = {
       count: rows.length,
+      hung: rows.filter((r) => r.hung).map((r) => r.type),
       spawnErrors: rows.filter((r) => r.spawnError).map((r) => `${r.type}: ${r.spawnError}`),
       consoleErrors: rows.filter((r) => r.errors.length).map((r) => `${r.type}: ${r.errors[0]}`),
       notRendered: rows.filter((r) => !r.spawnError && !r.rendered).map((r) => r.type),
@@ -206,7 +211,7 @@ try {
 }
 fs.writeFileSync(path.join(root, "scripts", "smoke_release.json"), JSON.stringify(report, null, 1));
 console.log(JSON.stringify(report, null, 1).slice(0, 6000));
-const bad = (report.modules && (report.modules.spawnErrors.length + report.modules.consoleErrors.length + report.modules.notRendered.length + report.modules.nonFinite.length))
+const bad = (report.modules && (report.modules.hung.length + report.modules.spawnErrors.length + report.modules.consoleErrors.length + report.modules.notRendered.length + report.modules.nonFinite.length))
   || (report.patches && (report.patches.loadErrors.length + report.patches.consoleErrors.length + report.patches.roundTripFails.length + report.patches.cloneFails.length))
   || (report.phone && Object.values(report.phone).some((v) => v && (v.clippedCount || v.panelPastScreen || v.pastScreen)));
 process.exit(bad ? 1 : 0);
