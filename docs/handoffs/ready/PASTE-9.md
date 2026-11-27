@@ -105,3 +105,25 @@ Date: 2026-11-27. Argi's decision: gradients and mutators stay **separate system
 - What the Mutator page was missing before.
 - Commits.
 - Argi's Ctrl+F5 checklist.
+
+## Addendum (Argi, newer wins over anything above)
+
+### Gradient display on the module face
+
+- It shows the stops, the playhead and the gradient's colors. **No curve editing on the gradient display**: no point dragging, no segment handles and no shape picking there. Curve editing happens only on the 🌈 page curve view.
+- It also draws each segment's curve line (read-only, with the same `nodeGraphSegmentCurve01` maths), so the shape is visible at a glance. Use the selected param's curves; if no param is selected, use the first param in the gradient.
+- The mouse interaction from the section above stays: dragging the display moves the gradient's position (the playhead), like the knob and slider displays, with double-click reset.
+
+### Gradient module display options
+
+- Add display options to the Gradient module in the same display-settings place other module displays use: **Playhead Alpha**, **Playhead Color** and **Playhead Thickness**. Defaults match today's look. They're saved with the patch.
+
+### Stop colors in the gradient Command Center window
+
+- In the 🌈 Command Center window, each stop's color can be changed with the app's existing color picker. Store it as `stops[i].color`; a missing value uses today's color. The module display, the 🌈 page and the curve view all use the stop color.
+
+### Tests
+
+- The gradient display ignores point and curve-edit gestures, and dragging it moves the playhead.
+- The three playhead options change the drawn playhead and survive save, load and clone.
+- A stop color set on 🌈 shows on the module display and survives save, load and clone.
