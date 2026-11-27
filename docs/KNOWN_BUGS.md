@@ -4,6 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
+### Input regressions after PASTE-9 (release blockers)
+
+- **Reported:** 2026-11-27, by Argi (via Badger)
+- **Symptoms:** (1) Middle mouse no longer pans or zooms, though WASDQE still works. (2) No module can be dragged in from anywhere. (3) Snake select can't select a wire.
+- **Notes:** Step 0 of PASTE-10. `167b8490` only adds left-button guards to title dblclick and the GL title hit; the GL guard returns early, so a middle press on a title is swallowed, but that can't explain the global failures. Stronger leads are in `fdfda54f`: `node-graph-wires.js` now returns early from a document pointermove when `state.wireDragging || state.portMovePointer` (check whether a stale value blocks snake select), the new grid-keyboard GL pointer hook calls `stopPropagation` and `setPointerCapture`, and `nodeGraphGlGraphPresent` now has the gesture and retain-plates path.
+
 ### Module drag makes shrunk title text flicker big to small — FIXED
 
 - **Reported:** 2026-11-27, by Argi
