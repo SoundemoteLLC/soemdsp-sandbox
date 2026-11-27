@@ -2627,6 +2627,11 @@ function openNodeModuleActionMenu(event) {
   if (event?.type === "dblclick") {
     return;
   }
+  // Right-click on the module's title opens its Module Settings. The rest of the module only selects it (below).
+  if (event?.target instanceof Element && event.target.closest(".node-header-title, .node-header-title-row")) {
+    openNodeGraphModuleSettingsFromContextEvent(event);
+    return;
+  }
   // Module shell binds contextmenu on the whole .dsp-node, which runs before
   // the document-level scene menu. Specialized display faces must claim the
   // event here (and stopPropagation) or Module Settings always wins.
