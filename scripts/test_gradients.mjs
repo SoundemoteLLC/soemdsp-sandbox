@@ -25,6 +25,7 @@ function context(extra = {}) {
   const run = (rel) => vm.runInContext(read(rel), c, { filename: path.basename(rel) });
   run("public/node-graph-stdlib/node-graph-param-surface-helpers.js");
   run("public/node-graph-param-offsets.js");
+  run("public/node-graph-segment-curves.js");
   c.nodeGraphMvp = { patch: null };
   c.nodeGraphReadPatchParameterMetadata = (node, key) => (node.paramMeta || {})[key] || null;
   c.nodeGraphGlGraphNoteValueChrome = () => {};
@@ -68,6 +69,27 @@ function gradient(id, offsets, extra = {}) {
   patch.gradients[0].position = 0;
   assert.equal(effective().cutoff, 0.3, "at the zero stop the value is the base, exactly");
   console.log("ok  two gradients add, disabled ignored, linear, untouched exact");
+
+  // Curves are per param and bake into the same live/audio values.
+  {
+    const g = gradient("curve", { "n1:cutoff": 0.8, "n1:freq": 0.4 });
+    g.position = 0.5;
+    g.stops[0].curves = { n1: { cutoff: { shape: "smoothstep", skew: 0.35 } } };
+    patch.gradients = [g];
+    const shaped = c.nodeGraphSegmentCurve01(0.5, "smoothstep", 0.35);
+    close(effective().cutoff, node.params.cutoff + 0.8 * shaped, 1e-9, "gradient applies the shared shaped curve");
+    close(c.NodeGraphGradients.curveProgress(0.5, g.stops[0], "n1", "freq"), 0.5, 1e-12, "unshaped parameter remains linear");
+    for (let i = 0; i <= 8; i += 1) {
+      const t = i / 8;
+      close(c.NodeGraphGradients.curveProgress(t, g.stops[0], "n1", "cutoff"), c.nodeGraphSegmentCurve01(t, "smoothstep", 0.35), 1e-12, `shared curve sample ${i}`);
+    }
+    const lut = c.NodeGraphGradients.laneLut(node, "cutoff", g, 257);
+    close(lut[128], 0.8 * shaped, 1e-6, "audio lane LUT matches the shaped UI curve");
+    const normalized = c.NodeGraphGradients.normalize([g])[0];
+    assert.equal(normalized.stops[0].curves.n1.cutoff.shape, "smoothstep");
+    assert.equal(normalized.stops[0].curves.n1.freq, undefined, "another parameter remains linear");
+    console.log("ok  shaped gradient maths, independent per-param curves, shared samples and audio LUT");
+  }
 
   // 2. the sum is clamped by the definition's min / max for a normal slider and a nonlinearSlider param
   patch.gradients = [gradient("g1", { "n1:cutoff": 0.6, "n1:freq": 0.8 }), gradient("g2", { "n1:cutoff": 0.6, "n1:freq": 0.8 })];

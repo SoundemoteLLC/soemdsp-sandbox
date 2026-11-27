@@ -5797,6 +5797,53 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   font-variant-numeric: tabular-nums;
 }
 
+.node-gradient-stop-colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.node-gradient-stop-color-row {
+  display: grid;
+  grid-template-columns: auto minmax(60px, 1fr);
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.node-gradient-stop-color-widget {
+  display: block;
+  min-width: 0;
+  height: 58px;
+}
+
+/* The Gradient face is directly draggable through the shared Playhead slider path. */
+.dsp-node .node-gradient-module-face {
+  pointer-events: auto;
+}
+
+.node-gradient-curve-row {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 6px 0;
+}
+
+.node-gradient-curve-shapes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.node-gradient-curve-row input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 32px;
+}
+
 .node-gradient-hint {
   margin: 4px 2px;
   color: rgba(200, 205, 212, 0.72);
@@ -12928,6 +12975,7 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-graph-workspace.gl-graph-on .dsp-node .metadata-popover,
 .node-graph-workspace.gl-graph-on .dsp-node .node-module-graph-face,
 .node-graph-workspace.gl-graph-on .dsp-node .node-module-graph-display,
+.node-graph-workspace.gl-graph-on .dsp-node .node-gradient-module-face,
 .node-graph-workspace.gl-graph-on .dsp-node .node-keypad-face,
 .node-graph-workspace.gl-graph-on .dsp-node .node-knob-face,
 .node-graph-workspace.gl-graph-on .dsp-node .node-xy-pad-canvas,

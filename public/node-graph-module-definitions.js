@@ -11691,7 +11691,7 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 2,
     spectrumCompanion: false,
     displayModes: [
-      { key: "face", label: "Face", renderer: "gradientFace" },
+      { key: "face", label: "Face", renderer: "gradientFace", settingsSchema: "gradientFace" },
     ],
     defaultDisplayMode: "face",
     defaultUi: {

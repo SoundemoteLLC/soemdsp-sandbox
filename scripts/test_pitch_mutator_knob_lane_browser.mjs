@@ -175,7 +175,9 @@ try {
   m = await mut();
   assert.deepEqual(m.lanes[0].keys.map((k) => k.x), [60, 84], "two keys at C4 and C6");
   assert.notEqual(m.lanes[0].keys[0].offset, m.lanes[0].keys[1].offset, "with different offsets");
-  assert.equal(await page.locator("#pitchMutatorOverlay svg circle.pm-pin").count(), 2, "the plot shows 2 pin dots");
+  assert.equal(await page.locator('#pitchMutatorOverlay [data-pm="curve-shape"]').count(), 6, "the two keyframes expose six HTML shape choices for their one segment");
+  assert.equal(await page.locator('#pitchMutatorOverlay [data-pm="curve-skew"]').count(), 1, "the segment exposes one HTML skew slider");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot]").count(), 0, "the Mutator page does not draw a curve plot");
   await shot("c6-pinned");
 
   // 2. The knob follows the note ---------------------------------------------------------------------------------------------------
@@ -270,8 +272,8 @@ try {
     }
   }
 
-  // 5b. Interactive pins: drag, right-click delete, long-press delete, Delete key ------------------------------------------------------
-  step = "pins";
+  // 5b. Per-segment shape and skew are plain HTML controls; the Mutator page has no curve plot.
+  step = "HTML curve controls";
   await page.evaluate(({ kb, pm }) => {
     nodeGraphMvp.patch.connections = nodeGraphMvp.patch.connections.filter((c) => !(c.sourceNode === kb && c.destinationNode === pm));
     commitNodeGraphPatch(nodeGraphMvp.patch, { status: "Unwire Pitch In" });
@@ -282,59 +284,29 @@ try {
     n.mutator.activeLane = n.mutator.lanes[0].id;
     pitchMutatorRefreshOverlay();
   });
-  const pinBox = async (x) => {
-    // C3..C6 are inside the default C0-C8 view, so no scrolling is needed.
-    const hit = page.locator(`#pitchMutatorOverlay circle.pm-pin-hit[data-x="${x}"]`);
-    const b = await hit.boundingBox();
-    return { x: b.x + b.width / 2, y: b.y + b.height / 2, w: b.width, h: b.height };
-  };
   const laneKeys = () => page.evaluate((id) => JSON.parse(JSON.stringify(nodeGraphPatchNode(id).mutator.lanes[0].keys)), ids.pm);
-  let pb = await pinBox(60);
-  assert.ok(pb.w >= 43.5 && pb.h >= 43.5, `a pin's hit target is at least 44 px (${pb.w} x ${pb.h})`);
-  const plotRect = await page.locator("#pitchMutatorOverlay [data-pm=plot]").boundingBox();
-  const target = { x: pb.x + (plotRect.width / 128) * 6, y: pb.y - 25 };
-  await page.mouse.move(pb.x, pb.y); await page.mouse.down(); await page.mouse.move(target.x, target.y, { steps: 10 }); await page.mouse.up();
-  const dragged = await page.evaluate(({ id, flt, ty, plotTop, plotH }) => {
-    const E = PitchMutatorEngine;
-    const n = nodeGraphPatchNode(id); const f = nodeGraphPatchNode(flt);
-    const meta = f.paramMeta.frequency;
-    const sliderExpected = Math.min(1, Math.max(0, 1 - ((ty - plotTop) - 3) / Math.max(1, plotH - 6)));
-    const base = E.sliderFromDomain(meta, Number(f.params.frequency));
-    return { keys: JSON.parse(JSON.stringify(n.mutator.lanes[0].keys)), expectedOffset: sliderExpected - base };
-  }, { id: ids.pm, flt: ids.flt, ty: target.y, plotTop: plotRect.y, plotH: plotRect.height });
-  assert.deepEqual(dragged.keys.map((k) => k.x), [48, 66, 72, 84], "a horizontal drag moved the pin from C4 to F#4");
-  assert.ok(Math.abs(dragged.keys[1].offset - dragged.expectedOffset) < 1e-6, `vertical drag stores slider(effective) - slider(base): ${dragged.keys[1].offset} vs ${dragged.expectedOffset}`);
-  await shot("pin-dragged");
-  // dragged far above the plot: the effective value clamps at the parameter's own maximum, not at a -1..1 offset
-  pb = await pinBox(72);
-  await page.mouse.move(pb.x, pb.y); await page.mouse.down(); await page.mouse.move(pb.x, plotRect.y - 40, { steps: 6 }); await page.mouse.up();
-  const topKey = (await laneKeys()).find((k) => k.x === 72);
-  const topBase = await page.evaluate((flt) => PitchMutatorEngine.sliderFromDomain(nodeGraphPatchNode(flt).paramMeta.frequency, Number(nodeGraphPatchNode(flt).params.frequency)), ids.flt);
-  assert.ok(Math.abs(topKey.offset - (1 - topBase)) < 1e-6, `above the plot clamps at the definition maximum (offset ${topKey.offset}, expected ${1 - topBase})`);
-  // right-click deletes: no context menu, selection unchanged
-  const selBefore = await page.evaluate(() => JSON.stringify(nodeGraphMvp.selected ?? null));
-  const nodesBefore = await page.evaluate(() => nodeGraphMvp.patch.nodes.length);
-  pb = await pinBox(84);
-  await shot("pin-before-right-click");
-  await page.mouse.click(pb.x, pb.y, { button: "right" });
-  assert.deepEqual((await laneKeys()).map((k) => k.x), [48, 66, 72], "right-click deleted the C6 pin");
-  assert.equal(await page.evaluate(() => JSON.stringify(nodeGraphMvp.selected ?? null)), selBefore, "right-click did not change the selection");
-  assert.equal(await page.evaluate(() => !!document.querySelector(".node-context-menu:not([hidden])")), false, "no context menu appeared");
-  await shot("pin-deleted");
-  // Delete / Backspace never delete a module or a pin
-  pb = await pinBox(66);
-  await page.mouse.move(pb.x, pb.y);
-  await page.keyboard.press("Delete"); await page.keyboard.press("Backspace");
-  assert.equal(await page.evaluate(() => nodeGraphMvp.patch.nodes.length), nodesBefore, "Delete / Backspace do not delete a module");
-  assert.equal((await laneKeys()).length, 3, "and do not delete a pin");
-  // long-press on touch deletes
-  pb = await pinBox(48);
-  await page.evaluate(({ x, y }) => {
-    document.elementFromPoint(x, y).dispatchEvent(new PointerEvent("pointerdown", { pointerId: 7, pointerType: "touch", button: 0, clientX: x, clientY: y, bubbles: true, cancelable: true }));
-  }, { x: pb.x, y: pb.y });
-  await page.waitForFunction((id) => nodeGraphPatchNode(id).mutator.lanes[0].keys.length === 2, ids.pm);
-  await page.evaluate(({ x, y }) => document.getElementById("pitchMutatorOverlay").dispatchEvent(new PointerEvent("pointerup", { pointerId: 7, pointerType: "touch", button: 0, clientX: x, clientY: y, bubbles: true })), { x: pb.x, y: pb.y });
-  assert.deepEqual((await laneKeys()).map((k) => k.x), [66, 72], "long-press on touch deleted the C3 pin");
+  const laneId = (await mut()).lanes[0].id;
+  const shapeChoice = page.locator(`#pitchMutatorOverlay [data-pm="curve-shape"][data-lane="${laneId}"][data-x="48"][data-shape="smoothstep"]`);
+  assert.equal(await shapeChoice.count(), 1, "the segment has an HTML shape choice");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=curve-skew]").count(), 3, "each of the three segments has an HTML skew slider");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot], #pitchMutatorOverlay .pm-plot-wrap, #pitchMutatorOverlay .pm-pin, #pitchMutatorOverlay .pm-pin-hit").count(), 0, "the Mutator page has no curve rendering or plot pins");
+  await page.setViewportSize({ width: 390, height: 860 });
+  const mobileCurve = await page.locator("#pitchMutatorOverlay .pm-curve-segment").first().boundingBox();
+  assert.ok(mobileCurve && mobileCurve.x >= 0 && mobileCurve.x + mobileCurve.width <= 390, `curve controls fit the phone viewport ${JSON.stringify(mobileCurve)}`);
+  await page.setViewportSize({ width: 1600, height: 1500 });
+  await shapeChoice.click();
+  const skew = page.locator(`#pitchMutatorOverlay [data-pm="curve-skew"][data-lane="${laneId}"][data-x="48"]`);
+  await skew.evaluate((input) => { input.value = "0.35"; input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); });
+  const shaped = await laneKeys();
+  assert.equal(shaped[0].shape, "smoothstep", "shape choice updates the lane key");
+  assert.ok(Math.abs(shaped[0].skew - 0.35) < 1e-9, "skew slider updates the lane key");
+  const curveSamples = await page.evaluate((id) => {
+    const keys = nodeGraphPatchNode(id).mutator.lanes[0].keys;
+    const baked = PitchMutatorEngine.bakeOffsetLane({ keys });
+    return { sample: PitchMutatorEngine.lookupOffset(baked.table, 54, true), keys: keys.length };
+  }, ids.pm);
+  assert.equal(curveSamples.keys, 4, "the controls edit existing key segments");
+  await shot("mutator-html-curves");
   await clickNote(60);
   assert.equal(await page.evaluate(() => document.querySelector("#pitchMutatorOverlay .pm-key.audition")?.dataset.note), "60", "a key tap still sets the note");
 
@@ -354,7 +326,11 @@ try {
     const patch = loadNodeGraphPatchFromObject(copy);
     return JSON.parse(JSON.stringify(patch.nodes.find((n) => n.id === id).mutator));
   }, ids.pm);
-  assert.deepEqual(reloaded.lanes, saved.lanes, "lane and keys survive a save and load");
+  const canonicalLanes = (lanes) => lanes.map((lane) => ({ ...lane, keys: lane.keys.map((key) => ({
+    ...key, shape: key.shape || "rational", skew: Number(key.skew) || 0,
+  })) }));
+  assert.deepEqual(canonicalLanes(reloaded.lanes), canonicalLanes(saved.lanes), "lane keys and shaped segments survive save/load (missing curves normalize to straight rational)");
+  assert.ok(reloaded.lanes[0].keys.some((key) => key.shape === "smoothstep" && Math.abs(key.skew - 0.35) < 1e-9), "the edited shape and skew survive save/load");
   assert.ok(saved.lanes.length === 1 && saved.lanes[0].keys.length >= 1, "the bound cutoff lane with pins is what was saved (not empty)");
   assert.deepEqual(reloaded.freqLane.keys, [], "no Frequency keys");
 

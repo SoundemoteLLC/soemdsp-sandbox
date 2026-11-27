@@ -93,6 +93,18 @@ assert(almost(offBake.table[60], 0.25), "offset at last key");
 const midOff = E.lookupOffset(offBake.table, 48, true);
 assert(almost(midOff, 0.05, 1e-9), "linear offset mid, got " + midOff);
 
+const curvedBake = E.bakeOffsetLane({ keys: [
+  { x: 36, offset: -0.2, shape: "smoothstep", skew: 0.3 },
+  { x: 84, offset: 0.6 },
+] });
+for (let i = 0; i <= 8; i += 1) {
+  const t = i / 8;
+  const shaped = curve01(t, "smoothstep", 0.3);
+  const expected = -0.2 + 0.8 * shaped;
+  assert(almost(E.lookupOffset(curvedBake.table, 36 + i * 6, true), expected, 1e-6), `shaped mutator LUT sample ${i}`);
+}
+assert(almost(E.lookupOffset(E.bakeOffsetLane({ keys: [{ x: 36, offset: 0 }, { x: 84, offset: 1 }] }).table, 60, true), 0.5), "missing curve stays exactly linear");
+
 // Discrete / hold does not interpolate
 const discBake = E.bakeOffsetLane({
   discrete: true,

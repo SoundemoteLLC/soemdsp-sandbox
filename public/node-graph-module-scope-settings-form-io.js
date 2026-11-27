@@ -215,6 +215,10 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
       );
     }
   }
+  if (type === "gradientFace") {
+    bindNodeGraphGradientDisplaySettingsBody(host);
+    syncNodeGraphGradientDisplaySettingsControls(host, nodeGraphGradientDisplaySettingsForNode(node));
+  }
   // RGB Picture: load / clear image.
   if (type === "rgbPictureFace") {
     if (typeof bindNodeGraphRgbPictureDisplaySettingsEvents === "function") {
@@ -713,6 +717,7 @@ if (type === "portalFace") {
       ? normalizeNodeGraphSturmianGridFaceSettings()
       : { ...(typeof NODE_GRAPH_STURMIAN_GRID_DISPLAY_DEFAULTS !== "undefined" ? NODE_GRAPH_STURMIAN_GRID_DISPLAY_DEFAULTS : { trackStrokeAlpha: 1, playheadStrokeAlpha: 1 }) };
   }
+  if (type === "gradientFace") return normalizeNodeGraphGradientDisplaySettings();
   if (type === "torchFace") {
     return normalizeNodeGraphTorchFaceSettings();
   }
@@ -1000,6 +1005,7 @@ if (type === "portalFace") {
       ? normalizeNodeGraphSturmianGridFaceSettings(settings)
       : (settings && typeof settings === "object" ? settings : {});
   }
+  if (type === "gradientFace") return normalizeNodeGraphGradientDisplaySettings(settings);
   if (type === "torchFace") {
     return normalizeNodeGraphTorchFaceSettings(settings);
   }
@@ -1176,6 +1182,7 @@ if (settingsSchema === "portalFace") {
         ? normalizeNodeGraphSturmianGridFaceSettings(node?.traceDisplaySettings)
         : (node?.traceDisplaySettings || {}));
   }
+  if (settingsSchema === "gradientFace") return nodeGraphGradientDisplaySettingsForNode(node);
   if (settingsSchema === "transportBpm") {
     return typeof nodeGraphTransportSettingsForNode === "function"
       ? nodeGraphTransportSettingsForNode(node)
@@ -1552,6 +1559,7 @@ function readNodeGraphTraceDisplaySettingsForm() {
     }
     return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
   }
+  if (formType === "gradientFace") return readNodeGraphGradientDisplaySettingsForm(root, current);
   if (formType === "keyboardFace") {
     const next = { ...(current && typeof current === "object" ? current : {}) };
     const host = root?.querySelector?.("[data-keyboard-layout-settings]") || root;
@@ -1881,6 +1889,10 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
     if (typeof syncNodeGraphSturmianGridDisplaySettingsControls === "function") {
       syncNodeGraphSturmianGridDisplaySettingsControls(panel, normalized);
     }
+    return;
+  }
+  if (formType === "gradientFace") {
+    syncNodeGraphGradientDisplaySettingsControls(root, normalized);
     return;
   }
   if (formType === "arpKeysFace") {

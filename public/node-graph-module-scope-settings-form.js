@@ -3338,6 +3338,9 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
   if (type === "sturmianGridFace" && typeof buildNodeGraphSturmianGridDisplaySettingsBodyHtml === "function") {
     return buildNodeGraphSturmianGridDisplaySettingsBodyHtml();
   }
+  if (type === "gradientFace" && typeof buildNodeGraphGradientDisplaySettingsBodyHtml === "function") {
+    return buildNodeGraphGradientDisplaySettingsBodyHtml();
+  }
   const activeFields = nodeGraphTraceDisplayActiveControlSet("fields", type);
   const activeColors = nodeGraphTraceDisplayActiveControlSet("colors", type);
   const activeToggles = nodeGraphTraceDisplayActiveControlSet("toggles", type);

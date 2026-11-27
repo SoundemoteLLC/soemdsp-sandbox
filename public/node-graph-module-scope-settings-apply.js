@@ -515,6 +515,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "gradientFace") {
+    node.traceDisplaySettings = typeof normalizeNodeGraphGradientDisplaySettings === "function"
+      ? normalizeNodeGraphGradientDisplaySettings(settings)
+      : (settings || {});
+    if (typeof applyNodeGraphGradientDisplaySettingsToFace === "function") applyNodeGraphGradientDisplaySettingsToFace(node);
+    return node.traceDisplaySettings;
+  }
   if (displayType === "torchFace") {
     node.traceDisplaySettings = normalizeNodeGraphTorchFaceSettings(settings);
     return node.traceDisplaySettings;

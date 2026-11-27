@@ -230,27 +230,6 @@
   min-width: 100%;
 }
 
-.pm-plot-wrap {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  touch-action: none;
-}
-
-.pm-plot-wrap svg {
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: 0;
-  height: 100%;
-  display: block;
-  background: #101010;
-  overflow: visible;
-}
-
 .pm-kbd {
   display: flex;
   flex: 0 0 22px;
@@ -365,19 +344,65 @@
   color: #ddd;
 }
 
-.pm-pin {
-  pointer-events: none;
-}
-
-/* The visible pin never takes the pointer; the 44 px disc around it does. */
-.pm-pin-hit {
-  pointer-events: all;
-  touch-action: none;
-}
-
 .pm-nav-armed {
   display: block;
   font: 700 8px/1 ui-sans-serif, system-ui, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+
+.pm-curve-controls {
+  flex: 0 0 auto;
+  max-height: 112px;
+  overflow: auto;
+  padding: 4px 6px;
+  border-top: 1px solid #333;
+}
+
+.pm-curve-controls h3 {
+  margin: 0 0 4px;
+  font: 700 10px/1.2 ui-sans-serif, system-ui, sans-serif;
+}
+
+.pm-curve-segment {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) minmax(0, 1fr) minmax(110px, 18%);
+  gap: 5px;
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px solid #292929;
+}
+
+.pm-curve-shapes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+#pitchMutatorOverlay .pm-curve-shape {
+  min-height: 28px;
+  padding: 3px 6px;
+}
+
+.pm-curve-segment label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pm-curve-segment input[type="range"] {
+  min-width: 0;
+  min-height: 28px;
+}
+
+.pm-curve-empty {
+  padding: 5px 0;
+  color: #aaa;
+}
+
+@media (max-width: 680px) {
+  .pm-curve-segment {
+    grid-template-columns: 1fr;
+  }
 }

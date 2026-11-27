@@ -68,6 +68,82 @@ try {
   });
   assert.ok(placed && placed.gradientId === "g1", `dragging the gradient in places a Gradient module bound to it ${JSON.stringify(placed)}`);
 
+  // The face is read-only WebGL for stops, colors, curve and playhead; its mouse path is the shared Playhead slider gesture.
+  const faceVisual = await page.evaluate(({ id, oscId }) => {
+    const node = nodeGraphPatchNode(id);
+    const gradient = nodeGraphMvp.patch.gradients.find((g) => g.id === "g1");
+    gradient.stops[0].color = "#12ab34";
+    gradient.stops[0].curves = { [oscId]: { frequency: { shape: "smoothstep", skew: 0.35 } } };
+    node.traceDisplaySettings = { playheadAlpha: 0.42, playheadColor: "#22aaff", playheadThickness: 5 };
+    const face = document.querySelector(`.node-gradient-module-face[data-node="${CSS.escape(id)}"]`);
+    const surface = face?.querySelector(".node-display-face");
+    const slider = nodeGraphSliderForParameter(id, "playhead");
+    const readout = slider?.closest?.(".node-slider-readout") || slider?.closest?.(".node-knob-face") || null;
+    window.__gradientFacePointerDown = 0;
+    face?.addEventListener("pointerdown", () => { window.__gradientFacePointerDown += 1; });
+    window.__gradientFaceDblClick = 0;
+    face?.addEventListener("dblclick", () => { window.__gradientFaceDblClick += 1; });
+    window.__gradientFacePointerTarget = "";
+    document.addEventListener("pointerdown", (event) => {
+      if (event.clientX >= box.x && event.clientX <= box.right && event.clientY >= box.y && event.clientY <= box.bottom) {
+        window.__gradientFacePointerTarget = String(event.target?.className || event.target?.tagName || "");
+      }
+    }, true);
+    const rectCalls = [];
+    let curves = 0;
+    const rect = nodeGraphGlLinesRect;
+    const line = nodeGraphGlLinesPolyline;
+    nodeGraphGlLinesRect = function (batch, x, y, w, h, color, ...rest) {
+      if (batch?.canvas === surface) rectCalls.push({ x, y, w, h, color: Array.isArray(color) ? color.slice() : color });
+      return rect(batch, x, y, w, h, color, ...rest);
+    };
+    nodeGraphGlLinesPolyline = function (batch, ...args) {
+      if (batch?.canvas === surface) curves += 1;
+      return line(batch, ...args);
+    };
+    face._gradientForceDraw = true;
+    drawNodeGraphGradientModuleFace(face);
+    nodeGraphGlLinesRect = rect;
+    nodeGraphGlLinesPolyline = line;
+    const saved = loadNodeGraphPatchFromScript(serializeNodeGraphPatch(nodeGraphMvp.patch));
+    const cloned = cloneNodeGraphPatch(nodeGraphMvp.patch);
+    const savedNode = saved.nodes.find((n) => n.id === id);
+    const savedStop = saved.gradients.find((g) => g.id === "g1").stops[0];
+    const expected = [18 / 255, 171 / 255, 52 / 255];
+    const colorDrawn = rectCalls.some(({ color }) => Array.isArray(color) && expected.every((v, i) => Math.abs(color[i] - v) < 1e-6));
+    const playheadExpected = [34 / 255, 170 / 255, 255 / 255, 0.42];
+    const playheadDrawn = rectCalls.some(({ w, color }) => Math.abs(w - 5) < 1e-6 && Array.isArray(color)
+      && playheadExpected.every((v, i) => Math.abs(color[i] - v) < 1e-6));
+    const box = face.getBoundingClientRect();
+    return {
+      colorDrawn,
+      playheadDrawn,
+      curveDrawn: curves > 0,
+      optionsRoundTrip: JSON.stringify(savedNode.traceDisplaySettings) === JSON.stringify(node.traceDisplaySettings)
+        && JSON.stringify(cloned.nodes.find((n) => n.id === id).traceDisplaySettings) === JSON.stringify(node.traceDisplaySettings),
+      colorRoundTrip: savedStop.color === "#12ab34" && cloned.gradients.find((g) => g.id === "g1").stops[0].color === "#12ab34",
+      box: { x: box.x, y: box.y, width: box.width, height: box.height },
+      reset: nodeSliderCtrlClickDefaultValue(nodeGraphSliderForParameter(id, "playhead")),
+      hit: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.className || "",
+      pointerEvents: getComputedStyle(face).pointerEvents,
+      sliderExists: Boolean(slider),
+      readout: readout ? { className: readout.className, target: readout.dataset.sliderTarget, pointerEvents: getComputedStyle(readout).pointerEvents } : null,
+    };
+  }, { id: placed.id, oscId: setup.osc });
+  assert.ok(faceVisual.colorDrawn && faceVisual.playheadDrawn && faceVisual.curveDrawn, `the WebGL face draws the chosen stop color, playhead options and shared curve ${JSON.stringify(faceVisual)}`);
+  assert.ok(faceVisual.optionsRoundTrip && faceVisual.colorRoundTrip, `display options and stop colors survive save/load/clone ${JSON.stringify(faceVisual)}`);
+  const startPos = await page.evaluate(() => nodeGraphMvp.patch.gradients.find((g) => g.id === "g1").position);
+  await page.mouse.move(faceVisual.box.x + faceVisual.box.width / 2, faceVisual.box.y + faceVisual.box.height / 2);
+  await page.mouse.down();
+  const faceDragStarted = await page.evaluate(() => ({ drag: Boolean(nodeGraphMvp.sliderDragging), pointerDown: window.__gradientFacePointerDown, target: window.__gradientFacePointerTarget }));
+  await page.mouse.move(faceVisual.box.x + faceVisual.box.width / 2 + 35, faceVisual.box.y + faceVisual.box.height / 2 + 25, { steps: 6 });
+  await page.mouse.up();
+  const draggedPos = await page.evaluate(() => nodeGraphMvp.patch.gradients.find((g) => g.id === "g1").position);
+  assert.ok(faceDragStarted.drag && Math.abs(draggedPos - startPos) > 1e-4, `dragging the WebGL face uses the existing Playhead slider path ${JSON.stringify({ faceDragStarted, startPos, draggedPos, faceVisual })}`);
+  await page.mouse.dblclick(faceVisual.box.x + faceVisual.box.width / 2, faceVisual.box.y + faceVisual.box.height / 2);
+  const faceReset = await page.evaluate(() => ({ position: nodeGraphMvp.patch.gradients.find((g) => g.id === "g1").position, dblclicks: window.__gradientFaceDblClick }));
+  assert.ok(Math.abs(faceReset.position - faceVisual.reset) < 1e-4, `the shared slider double-press gesture resets the Playhead ${JSON.stringify({ faceReset, faceVisual })}`);
+
   // The knob and the page playhead are one value.
   const knob = await page.evaluate((id) => {
     const slider = nodeGraphSliderForParameter(id, "playhead");

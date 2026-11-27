@@ -82,6 +82,28 @@ try {
       out.registered = g().params.map((x) => x.nodeId === a ? "a." + x.key : x.nodeId === b ? "b." + x.key : x.key).sort();
       out.snapshotSteps = steps();
       out.rows = [...document.querySelectorAll(".node-gradient-param")].map((x) => x.textContent);
+      const colorPicker = [...nodeGraphGradientPageColorWidgets][0];
+      if (colorPicker?.setColor) colorPicker.setColor({ h: 0, s: 100, l: 50 });
+      else {
+        const input = document.querySelector("#nodeGradientsBody .node-gradient-stop-colors input[type=color]");
+        if (input) { input.value = "#ff0000"; input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }
+      }
+      out.colorPicker = g().stops[0].color === "#ff0000"
+        && Boolean(document.querySelector("#nodeGradientsBody .node-gradient-strip")?.style.background);
+      const shapeButton = document.querySelector('#nodeGradientsBody [data-gradient-action="curveShape"][data-shape="smoothstep"]');
+      out.shapeControls = Boolean(shapeButton && document.querySelector("#nodeGradientsBody [data-gradient-skew]"));
+      shapeButton?.click();
+      const skew = document.querySelector("#nodeGradientsBody [data-gradient-skew]");
+      if (skew) {
+        skew.value = "0.35";
+        skew.dispatchEvent(new Event("input", { bubbles: true }));
+        skew.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      const curveParam = shapeButton ? g().params.find((p) => p.nodeId === shapeButton.dataset.nodeId && p.key === shapeButton.dataset.paramKey) : null;
+      const curve = curveParam ? g().stops.find((s) => s.id === shapeButton.dataset.stopId)?.curves?.[curveParam.nodeId]?.[curveParam.key] : null;
+      out.curveStored = curve?.shape === "smoothstep" && Math.abs(curve?.skew - 0.35) < 1e-9;
+      out.otherParamLinear = curveParam ? g().params.filter((p) => p !== curveParam).every((p) => !g().stops[0].curves?.[p.nodeId]?.[p.key]) : false;
+      h = nodeGraphMvp.historyIndex;
       // Playhead drag: many moves, one release.
       const strip = document.querySelector(".node-gradient-strip");
       const rect = strip.getBoundingClientRect();
@@ -176,6 +198,8 @@ try {
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(JSON.stringify(r.registered) === JSON.stringify(["a.frequency", "b.floorDb"]) && r.snapshotSteps === 1, "both moved params register");
     ok(r.rows.length === 2, "one row per registered param");
+    ok(r.colorPicker, "the app color picker updates stop color and the visible gradient strip");
+    ok(r.shapeControls && r.curveStored && r.otherParamLinear, "HTML shape and skew controls store a per-param segment curve without changing the other parameter");
     if (r.visible) ok(r.stripHeight === 44, "the strip is 44 px tall");
     ok(r.stepsDuringDrag === 0 && r.releaseSteps === 1, "a playhead drag is exactly one undo step");
     ok(r.position === 0.8 && (r.glides || !r.visible) && r.baseUnchanged, "dragging glides the effective value; the base never changes");

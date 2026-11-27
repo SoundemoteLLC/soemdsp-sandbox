@@ -369,6 +369,7 @@
     log2Hz,
     exp2,
     normalizeColor,
+    normalizeShape,
     clampView,
     normalizeMutatorState,
     normalizeFreqLane,

@@ -110,6 +110,21 @@
     return byNode ? finite(byNode[key], 0) : 0;
   }
 
+  function curveOf(stop, nodeId, key) {
+    const curve = stop && stop.curves && stop.curves[nodeId] && stop.curves[nodeId][key];
+    return {
+      shape: root.nodeGraphSegmentNormalizeShape?.(curve?.shape) || "rational",
+      skew: Math.max(-1, Math.min(1, finite(curve?.skew, 0))),
+    };
+  }
+
+  function curveProgress(t, stop, nodeId, key) {
+    const curve = curveOf(stop, nodeId, key);
+    return typeof root.nodeGraphSegmentCurve01 === "function"
+      ? root.nodeGraphSegmentCurve01(t, curve.shape, curve.skew)
+      : clamp01(t);
+  }
+
   function usable(gradient) {
     return plain(gradient) && gradient.enabled !== false && Array.isArray(gradient.stops) && Array.isArray(gradient.params);
   }
@@ -155,13 +170,14 @@
         }
         if (!meta) continue;
         if (isDiscrete(meta)) {
-          const stop = segment.t < 0.5 ? segment.a : segment.b;
+          const stop = curveProgress(segment.t, segment.a, node.id, key) < 0.5 ? segment.a : segment.b;
           const originSlider = gradient.origin && gradient.origin[node.id] && Number.isFinite(Number(gradient.origin[node.id][key]))
             ? Number(gradient.origin[node.id][key])
             : toSlider(meta, params[key]);
           params[key] = snapToStep(meta, fromSlider(meta, clamp01(originSlider + offsetOf(stop, node.id, key))));
         } else {
-          const offset = offsetOf(segment.a, node.id, key) + (offsetOf(segment.b, node.id, key) - offsetOf(segment.a, node.id, key)) * segment.t;
+          const t = curveProgress(segment.t, segment.a, node.id, key);
+          const offset = offsetOf(segment.a, node.id, key) + (offsetOf(segment.b, node.id, key) - offsetOf(segment.a, node.id, key)) * t;
           sums.set(key, (sums.get(key) || 0) + offset);
         }
       }
@@ -257,6 +273,7 @@
         if (!stopId || usedStopIds.has(stopId)) stopId = uniqueId(usedStopIds, "s", stops.length + 1);
         else usedStopIds.add(stopId);
         const offsets = {};
+        const curves = {};
         if (plain(rawStop.offsets)) {
           for (const [nodeId, byKey] of Object.entries(rawStop.offsets)) {
             if (!plain(byKey)) continue;
@@ -265,7 +282,21 @@
             if (Object.keys(row).length) offsets[nodeId] = row;
           }
         }
-        stops.push({ id: stopId, pos: clamp01(Number(rawStop.pos)), offsets });
+        if (plain(rawStop.curves)) {
+          for (const [nodeId, byKey] of Object.entries(rawStop.curves)) {
+            if (!plain(byKey)) continue;
+            const row = {};
+            for (const [key, value] of Object.entries(byKey)) {
+              if (!plain(value)) continue;
+              const shape = root.nodeGraphSegmentNormalizeShape?.(value.shape) || "rational";
+              const skew = Math.max(-1, Math.min(1, finite(value.skew, 0)));
+              if (shape !== "rational" || skew !== 0) row[key] = { shape, skew };
+            }
+            if (Object.keys(row).length) curves[nodeId] = row;
+          }
+        }
+        const color = typeof rawStop.color === "string" && /^#[0-9a-f]{6}$/i.test(rawStop.color) ? rawStop.color.toLowerCase() : "";
+        stops.push({ id: stopId, pos: clamp01(Number(rawStop.pos)), offsets, ...(Object.keys(curves).length ? { curves } : {}), ...(color ? { color } : {}) });
       }
       out.push({
         id,
@@ -445,6 +476,8 @@
     dropAllZeroParams,
     dropNodes,
     isDiscrete,
+    curveOf,
+    curveProgress,
     holdsStill: (type) => HOLDS_STILL.has(type),
   };
   root.nodeGraphNormalizeGradients = normalizeGradients;

@@ -1615,6 +1615,15 @@ function beginNodeSliderDrag(event) {
     nodeGraphMvp.sliderLastPointerDown = null;
     event.preventDefault();
     event.stopPropagation();
+    if (surface.dataset?.sliderTypeIn === "reset") {
+      const resetSlider = document.getElementById(surface.dataset.sliderTarget);
+      const reset = nodeSliderCtrlClickDefaultValue(resetSlider);
+      if (resetSlider && Number.isFinite(reset)) {
+        setNodeSliderValue(resetSlider, reset, { interaction: "drag" });
+        commitNodeSliderDragValue(resetSlider, "parameter reset to default");
+      }
+      return;
+    }
     beginNodeSliderSurfaceEdit(surface);
     return;
   }
