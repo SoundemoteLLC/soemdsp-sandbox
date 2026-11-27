@@ -2544,6 +2544,17 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH, skipLabel
       nodeGraphGlGraphDrawSliderHandle(batch, readout, x, y, h, zoom, slider.w, valueFill);
       nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
     });
+    // Gradient stop editing (HP-24, node-graph-gradient-page.js marks the input): a solid amber outline, static.
+    if (slider.input?.dataset?.gradientEdit === "1") {
+      const t = 2;
+      const amber = [1, 0xd2 / 255, 0x4a / 255, 1];
+      nodeGraphGlGraphDrawOver(batch, () => {
+        nodeGraphGlLinesRect(batch, x, y, w, t, amber);
+        nodeGraphGlLinesRect(batch, x, y + h - t, w, t, amber);
+        nodeGraphGlLinesRect(batch, x, y, t, h, amber);
+        nodeGraphGlLinesRect(batch, x + w - t, y, t, h, amber);
+      });
+    }
     if (slider.vertical && typeof nodeGraphGlLinesText === "function") {
       nodeGraphGlGraphDrawSliderStackedText(batch, slider, x, y, w, h, zoom, labelInk, ink, slider.unitInk || [127 / 255, 199 / 255, 217 / 255, 1]);
       continue;
