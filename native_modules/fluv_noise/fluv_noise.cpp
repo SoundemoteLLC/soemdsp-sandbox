@@ -8,6 +8,7 @@
 // Grain-free: nothing injected at/below Start. Independent L/R when Stereo On.
 
 #include <soemdsp/soemdsp.hpp>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -193,8 +194,7 @@ extern "C" void soemdsp_fluv_noise_sample_stereo(
   double spr = spread;
   if (!(spr == spr) || spr < 1.0) spr = kDefaultSpread;
   if (spr > 32.0) spr = 32.0;
-  double amp = amplitude;
-  if (!(amp == amp) || amp < 0.0) amp = 0.0;
+  const double amp = soemdsp_signed_gain(amplitude, 0.0);
   const int hp = clamp_poles(hpPoles);
   const int lp = clamp_poles(lpPoles);
   const double gate = sizzle_gate(f, startHz, fullHz) * amt;

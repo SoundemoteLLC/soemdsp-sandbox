@@ -70,10 +70,23 @@ try {
   }, ids.osc);
   await edit(ids.osc, "amplitude", "200");
   assert.equal((await report(ids.osc, "amplitude")).max, 2, "save inverse-transformed parameter units");
+  // HP-24: typing below the minimum extends the minimum, the same way (same path, persistence and one Undo).
+  const beforeMin = await report(ids.osc, "amplitude");
+  await edit(ids.osc, "amplitude", "-50");
+  const afterMin = await report(ids.osc, "amplitude");
+  assert.equal(afterMin.min, -0.5, "typing below min extends min");
+  assert.equal(afterMin.value, -0.5, "the typed value lands");
+  assert.equal(afterMin.max, beforeMin.max, "extending min leaves max");
+  await page.evaluate(() => undoNodeGraphPatch());
+  await page.waitForFunction(({ id, min }) => Number(nodeGraphPatchNode(id).paramMeta.amplitude.min) === min, { id: ids.osc, min: beforeMin.min });
+  assert.deepEqual(await report(ids.osc, "amplitude"), beforeMin, "one Undo restores value and minimum");
+  await page.evaluate(() => redoNodeGraphPatch());
+  await page.waitForFunction(id => Number(nodeGraphPatchNode(id).paramMeta.amplitude.min) === -0.5, ids.osc);
   const saved = await page.evaluate(() => serializeNodeGraphPatch(nodeGraphMvp.patch, { pretty: false }));
   await page.evaluate(text => loadNodeGraphPatchFromObject(JSON.parse(text)), saved);
   assert.equal((await report(ids.gate, "releaseMs")).max, 10000);
   assert.equal((await report(ids.osc, "frequency")).domMax, 30000, "saved ranges survive patch reload");
+  assert.equal((await report(ids.osc, "amplitude")).min, -0.5, "a saved extended minimum survives patch reload");
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ before, after, settingsMax, savedReload: true, errors }));
 } finally { await browser.close(); }

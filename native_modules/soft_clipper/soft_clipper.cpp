@@ -13,6 +13,7 @@
 // AA switch: Off, ADAA1, ADAA2. ADAA state is per channel on the instance.
 
 #include <soemdsp/soemdsp.hpp>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -75,9 +76,7 @@ static double shape_one(State& s, double input) {
   double kn = s.liveKnee;
   if (!(kn * 0.0 == 0.0) || kn < 0.0) kn = 0.0;
   if (kn > 1.0) kn = 1.0;
-  double amp = s.liveAmplitude;
-  if (!(amp * 0.0 == 0.0) || amp < 0.0) amp = 0.0;
-  if (amp > 1.0) amp = 1.0;
+  const double amp = soemdsp_signed_gain(s.liveAmplitude, 0.0);
 
   const double x = safe(input) * drive;
   const double ax = dsp_fabs(x);
@@ -153,9 +152,7 @@ static void clip_levels(const State& s, double* drive, double* thr, double* knee
   double k = s.liveKnee;
   if (!(k * 0.0 == 0.0) || k < 0.0) k = 0.0;
   if (k > 1.0) k = 1.0;
-  double a = s.liveAmplitude;
-  if (!(a * 0.0 == 0.0) || a < 0.0) a = 0.0;
-  if (a > 1.0) a = 1.0;
+  const double a = soemdsp_signed_gain(s.liveAmplitude, 0.0);
   *drive = d;
   *thr = t;
   *knee = k;
@@ -363,9 +360,7 @@ extern "C" void soemdsp_soft_clipper_set_params(
   double kn = knee;
   if (!(kn * 0.0 == 0.0) || kn < 0.0) kn = 0.0;
   if (kn > 1.0) kn = 1.0;
-  double amp = amplitude;
-  if (!(amp * 0.0 == 0.0) || amp < 0.0) amp = 0.0;
-  if (amp > 1.0) amp = 1.0;
+  const double amp = soemdsp_signed_gain(amplitude, 0.0);
   s.liveDrive = d;
   s.liveThreshold = thr;
   s.liveKnee = kn;

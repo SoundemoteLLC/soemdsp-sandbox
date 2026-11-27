@@ -45,6 +45,7 @@
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/filter/tpt_svf.h>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -377,7 +378,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
   if (!(decay * 0.0 == 0.0)) decay = 0.3;
   if (decay < kDecayMin) decay = kDecayMin;
   if (decay > kDecayMax) decay = kDecayMax;
-  if (!(amp * 0.0 == 0.0)) amp = 0.0;
+  amp = soemdsp_signed_gain(amp, 0.0);
   imp = clamp01_param(imp, 0.0);
   const double zeta = zeta_of(res);
   double track = clamp01_param(tracking, 0.0);
@@ -426,7 +427,8 @@ extern "C" double soemdsp_resonant_envelope_sample(
   if (fit) {
     const double g = s.peakGain > 1e-12 ? s.peakGain : 1.0;
     out = y / g;
-    if (out < 0.0) out = 0.0;
+    // Fit keeps the envelope on Amplitude's side of zero (a negative Amplitude gives the inverted envelope).
+    if (amp >= 0.0 ? out < 0.0 : out > 0.0) out = 0.0;
   }
   if (!(out * 0.0 == 0.0)) out = 0.0;
   const bool quiet = dsp_fabs(out) < 1e-5

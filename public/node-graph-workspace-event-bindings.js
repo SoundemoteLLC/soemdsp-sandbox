@@ -171,12 +171,35 @@ function normalizeNodeGraphConstraintToggles(value) {
   };
 }
 
+// Engine status (HP-24): a collapsed chip inside the CPU / RAM / GPU guide. Ticked, its rows show; the guide is GL-drawn from this DOM,
+// so while it is open every text change of a row re-presents the guide (a MutationObserver: events, no timer).
+let nodeGraphEngineStatusObserver = null;
+
+function syncNodeGraphEngineStatusChip() {
+  const input = document.getElementById("nodeEngineStatusToggle");
+  const open = Boolean(input?.checked);
+  document.body.classList.toggle("node-engine-status-active", open);
+  if (open && !nodeGraphEngineStatusObserver && typeof MutationObserver === "function") {
+    nodeGraphEngineStatusObserver = new MutationObserver(() => {
+      if (typeof nodeGraphGlConstraintGuidePresent === "function") nodeGraphGlConstraintGuidePresent();
+    });
+    for (const row of document.querySelectorAll(".node-engine-metrics")) {
+      nodeGraphEngineStatusObserver.observe(row, { childList: true, characterData: true, subtree: true });
+    }
+  } else if (!open && nodeGraphEngineStatusObserver) {
+    nodeGraphEngineStatusObserver.disconnect();
+    nodeGraphEngineStatusObserver = null;
+  }
+  if (typeof nodeGraphGlConstraintGuidePresent === "function") nodeGraphGlConstraintGuidePresent();
+}
+
 function bindNodeGraphConstraintOverlayToggles() {
   for (const input of document.querySelectorAll("[data-constraint-toggle]")) {
     input.addEventListener("change", () => {
       syncNodeGraphConstraintOverlayToggles({ persist: true });
     });
   }
+  document.getElementById("nodeEngineStatusToggle")?.addEventListener("change", syncNodeGraphEngineStatusChip);
   applyNodeGraphConstraintToggles(nodeGraphMvp?.constraintToggles, { persist: false });
   startNodeGraphConstraintResourceMetrics();
 }

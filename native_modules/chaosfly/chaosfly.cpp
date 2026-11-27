@@ -7,6 +7,7 @@
 // Reference JSFX: native_modules/chaosfly/originalcode/Butterfly
 
 #include <soemdsp/soemdsp.hpp>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -200,8 +201,7 @@ extern "C" void soemdsp_chaosfly_sample(
   if (pan < 0.0) pan = 0.0;
   if (pan > 1.0) pan = 1.0;
   // Master Volume (0…10) — same role as old Chaosfly `gain` on both outs.
-  double volume = amplitude;
-  if (!(volume == volume) || volume < 0.0) volume = 0.0;
+  const double volume = soemdsp_signed_gain(amplitude, 0.0);
   // Phase offset (cycles) — applied at lookup so 0 Hz still modulates.
   const double phaseOff = wrap01(safe(phaseOffsetTurns));
 

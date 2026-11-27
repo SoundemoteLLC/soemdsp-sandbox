@@ -593,6 +593,8 @@ function normalizeNodeSliderValue(slider, value, min = Number(slider.min), max =
   // values past the spawn slider max still work up to it.
   const hardMax = Number(slider?.dataset?.hardMax);
   if (Number.isFinite(hardMax) && hardMax > max) max = hardMax;
+  const hardMin = Number(slider?.dataset?.hardMin);
+  if (Number.isFinite(hardMin) && hardMin < min) min = hardMin;
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
     return value;
   }

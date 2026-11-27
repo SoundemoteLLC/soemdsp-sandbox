@@ -1401,6 +1401,9 @@ const NODE_GRAPH_FACE_INACTIVE_PARAMS = Object.freeze({
   }),
 });
 
+// The edited gradient stop's outline (matches .node-gradient-handle.is-editing).
+const NODE_GRAPH_GRADIENT_EDIT_OUTLINE = "#ffd24a";
+
 function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
   const spec = nodeGraphModuleFaceSpecForElement(el);
   if (!spec) return;
@@ -1759,6 +1762,16 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       const top = wd.y + Math.max(hairFace, NODE_GRAPH_FACE_CELL_GAP_PX);
       nodeGraphModuleFaceDrawOwnedStripes(batch, ox + (wd.x + gap) * z, oy + top * z, (wd.w - gap) * z, (wd.h - (top - wd.y)) * z, z, "rgba(150, 160, 180, 0.22)");
     }
+  }
+  // HP-24: every slider an edited gradient stop writes carries a solid outline, drawn over the widget (static, no animation).
+  for (const wd of widgets) {
+    if (!wd.param || wd.type === "choice" || wd.type === "lfoStyle" || wd.type === "subChoice") continue;
+    if (nodeGraphModuleFaceInput(el, wd.param)?.dataset?.gradientEdit !== "1") continue;
+    const t = 2;
+    rect(wd.x, wd.y, wd.w, t, NODE_GRAPH_GRADIENT_EDIT_OUTLINE);
+    rect(wd.x, wd.y + wd.h - t, wd.w, t, NODE_GRAPH_GRADIENT_EDIT_OUTLINE);
+    rect(wd.x, wd.y, t, wd.h, NODE_GRAPH_GRADIENT_EDIT_OUTLINE);
+    rect(wd.x + wd.w - t, wd.y, t, wd.h, NODE_GRAPH_GRADIENT_EDIT_OUTLINE);
   }
   // Debug overlay (D): a "cpu" tag in the corner of every cell whose parameter
   // costs more CPU as it rises (definition `constraint: "cpu"`). Drawn here in

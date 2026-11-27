@@ -5714,6 +5714,18 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   background: rgba(255, 255, 255, 0.85);
 }
 
+/* HP-24: the stop being edited. The same solid outline marks every slider it writes (face sliders draw it in GL). */
+#nodeGradientsBody .node-gradient-handle.is-editing {
+  outline: 2px solid #ffd24a;
+  outline-offset: 2px;
+}
+
+.node-gradient-editing {
+  margin: 4px 2px 0;
+  color: #ffd24a;
+  font-size: 12px;
+}
+
 .node-gradient-handle-label {
   position: absolute;
   left: 50%;
@@ -7106,8 +7118,44 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 
 .node-constraint-cpu-active .node-scope-cpu-metrics,
 .node-constraint-ram-active .node-scope-ram-metrics,
-.node-constraint-gpu-active .node-scope-gpu-metrics {
+.node-constraint-gpu-active .node-scope-gpu-metrics,
+.node-engine-status-active .node-engine-metrics {
   display: inline-flex;
+}
+
+/* Engine status (HP-24): the collapsed fourth chip of the debug guide (G). */
+.node-engine-metrics {
+  --node-constraint-meter-color: rgba(243, 241, 236, 0.6);
+}
+
+.node-constraint-stack[data-constraint-stack="engine"] {
+  flex: 1 1 100%;
+  align-items: center;
+}
+
+.node-engine-metrics .pill,
+.node-engine-metrics .node-output-summary {
+  display: inline;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: 1.2;
+}
+
+/* The live input device lives on the UI Settings page (it is the only device chooser). */
+.node-user-ui-settings-input-device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+}
+
+.node-user-ui-settings-input-device select {
+  flex: 1 1 auto;
+  min-height: 32px;
 }
 
 .node-constraint-metrics span {
@@ -24582,26 +24630,6 @@ button[data-transport-action="stop"]:disabled {
 .node-render-duration-control input:focus {
   outline: none;
   border-color: rgba(127, 199, 217, 0.58);
-}
-
-/* Engine status (G debug only): collapsed by default, one row of live pills + the render line. */
-.node-debug-engine {
-  flex: 1 1 100%;
-  color: var(--muted);
-  font-size: 0.74rem;
-}
-
-.node-debug-engine > summary {
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  list-style-position: inside;
-  cursor: var(--node-adjust-cursor, default);
-}
-
-.node-debug-engine[open] > summary {
-  color: rgba(243, 241, 236, 0.86);
 }
 
 .node-output-summary {

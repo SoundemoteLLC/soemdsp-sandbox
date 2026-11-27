@@ -312,25 +312,44 @@ function syncNodeGraphPatchParameterFromSlider(slider, options = {}) {
   }
 }
 
-function nodeSliderMetadataForTypedMaximum(slider, value) {
+/**
+ * Typing past either end of a slider extends that end (HP-24: the min mirrors the max exactly). Returns the slider's metadata with the
+ * extended end, or null when the value is inside the range or the param cannot extend (choices, seeds, wrapping). A hard-clamped
+ * param (resources, hardClamp) extends only up to its definition's hardMax / down to its hardMin: the definition is the only limit.
+ */
+function nodeSliderMetadataForTypedRange(slider, value) {
   const metadata = nodeSliderMetadata(slider);
-  if (!Number.isFinite(value) || !Number.isFinite(metadata.max) || value <= metadata.max
-    || metadata.choices?.length || metadata.kind === "seed" || metadata.wraparound) return null;
+  if (!Number.isFinite(value) || metadata.choices?.length || metadata.kind === "seed" || metadata.wraparound) return null;
+  const above = Number.isFinite(metadata.max) && value > metadata.max;
+  const below = Number.isFinite(metadata.min) && value < metadata.min;
+  if (!above && !below) return null;
   const constraint = String(slider.dataset.constraint || "").toLowerCase();
   const hard = slider.dataset.hardClamp === "true" || ["cpu", "gpu", "ram", "memory"].includes(constraint);
-  let max = value;
-  if (hard) {
-    const limit = Number(slider.dataset.hardMax);
-    if (!Number.isFinite(limit) || limit <= metadata.max) return null;
-    max = Math.min(max, limit);
+  if (above) {
+    let max = value;
+    if (hard) {
+      const limit = Number(slider.dataset.hardMax);
+      if (!Number.isFinite(limit) || limit <= metadata.max) return null;
+      max = Math.min(max, limit);
+    }
+    return { ...metadata, max };
   }
-  return { ...metadata, max };
+  let min = value;
+  if (hard) {
+    const limit = Number(slider.dataset.hardMin);
+    if (!Number.isFinite(limit) || limit >= metadata.min) return null;
+    min = Math.max(min, limit);
+  }
+  return { ...metadata, min };
 }
 
-function nodeGraphApplyTypedSliderMaximum(slider, patchNode, metadata) {
+function nodeGraphApplyTypedSliderRange(slider, patchNode, metadata) {
   const key = slider.dataset.param;
   const write = (node, paramKey, source) => {
-    const next = normalizeNodeGraphPatchParameterMetadata(node.type, paramKey, { ...source, max: metadata.max });
+    const ends = {};
+    if (Number.isFinite(Number(metadata.min))) ends.min = metadata.min;
+    if (Number.isFinite(Number(metadata.max))) ends.max = metadata.max;
+    const next = normalizeNodeGraphPatchParameterMetadata(node.type, paramKey, { ...source, ...ends });
     if (!next) return null;
     node.paramMeta = { ...(node.paramMeta || {}), [paramKey]: next };
     return next;
@@ -396,8 +415,8 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
     return;
   }
 
-  const expanded = patchNode && nodeSliderMetadataForTypedMaximum(slider, value);
-  if (expanded) nodeGraphApplyTypedSliderMaximum(slider, patchNode, expanded);
+  const expanded = patchNode && nodeSliderMetadataForTypedRange(slider, value);
+  if (expanded) nodeGraphApplyTypedSliderRange(slider, patchNode, expanded);
 
   // Domain may leave slider min/max; HTML range thumb stays in-range for display.
   const domain = normalizeNodeSliderValue(slider, value);
@@ -513,6 +532,12 @@ function commitNodeSliderDragValue(slider, status = "parameter changed") {
     }
     return;
   }
+  if (typeof nodeGraphGradientMaybeInterceptSlider === "function"
+    && nodeGraphGradientMaybeInterceptSlider(slider, Number(slider?.dataset?.domainValue), { commit: true, interaction: "commit" })) {
+    markNodeGraphRenderPending();
+    scheduleNodeGraphLiveParameterSync();
+    return;
+  }
   if (typeof pitchMutatorMaybeInterceptSlider === "function") {
     const domainRaw = Number(slider?.dataset?.domainValue);
     if (pitchMutatorMaybeInterceptSlider(slider, domainRaw, { commit: true, interaction: "commit" })) {
@@ -579,8 +604,12 @@ function setNodeSliderValue(slider, value, options = {}) {
       }
     }
   }
-  if (typeof pitchMutatorMaybeInterceptSlider === "function"
-    && pitchMutatorMaybeInterceptSlider(slider, value, { ...options, commit: false })) {
+  // An edited gradient stop (HP-24) takes moves of its outlined sliders first, then a Pitch Mutator lane.
+  const intercepted = (typeof nodeGraphGradientMaybeInterceptSlider === "function"
+    && nodeGraphGradientMaybeInterceptSlider(slider, value, { ...options, commit: false }))
+    || (typeof pitchMutatorMaybeInterceptSlider === "function"
+    && pitchMutatorMaybeInterceptSlider(slider, value, { ...options, commit: false }));
+  if (intercepted) {
     if (options.interaction === "drag") {
       scheduleNodeSliderReadoutUpdate(slider, Number(slider.dataset.domainValue));
     } else if (typeof syncNodeSliderReadout === "function") {

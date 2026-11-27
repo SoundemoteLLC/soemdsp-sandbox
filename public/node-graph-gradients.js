@@ -390,6 +390,9 @@
 
   root.NodeGraphGradients = {
     normalize: normalizeGradients,
+    metaFor,
+    toSlider,
+    fromSlider,
     createGradientFromSnapshot,
     snapshotIntoGradient,
     setStart,

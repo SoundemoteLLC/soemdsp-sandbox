@@ -17,6 +17,7 @@
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -218,8 +219,7 @@ extern "C" double soemdsp_pumping_limiter_sample(
   double dR = (double)st.delayR[readPos];
   st.pos = (pos + 1) % cap;
 
-  double amp = safe(amplitude);
-  if (!(amp * 0.0 == 0.0) || amp < 0.0) amp = 1.0;
+  const double amp = soemdsp_signed_gain(amplitude, 1.0);
   double g = st.gain;
   dL *= g;
   dR *= g;

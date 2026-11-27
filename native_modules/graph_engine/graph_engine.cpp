@@ -20,6 +20,7 @@
 #include <soemdsp/utility/memory_pool.h>
 #include "euclidean_sequencer.h"
 #include "divider_sequencer.h"
+#include "../shared/signed_gain.h"
 
 using soemdsp::math::gate_hit;
 using soemdsp::math::gate_hit_height;
@@ -9684,9 +9685,7 @@ static void process_filter_morph_oscillator(Circuit& g, Node& node, int frames) 
     if (!(poles == poles)) poles = 1.0;
     const double wave = control_effective(node.waveform);
     const double phaseOff = control_audio(g, node.phaseParam, f);
-    double level = control_audio(g, node.amplitude, f);
-    if (!(level == level)) level = 1.0;
-    if (level < 0.0) level = 0.0;
+    const double level = soemdsp_signed_gain(control_audio(g, node.amplitude, f), 1.0);
     const double reset = liveReset ? g.mixReset[f] : 0.0;
     if (liveReset) {
       if (gate_hit(reset, &node.lastReset)) {
@@ -9771,9 +9770,7 @@ static SoftpopControls softpop_controls(Circuit& g, Node& node, int f, bool live
   if (!(c.ampMod == c.ampMod)) c.ampMod = 0.0;
   if (c.ampMod < 0.0) c.ampMod = 0.0;
   if (c.ampMod > 1.0) c.ampMod = 1.0;
-  c.level = control_audio(g, node.amplitude, f);
-  if (!(c.level == c.level)) c.level = 1.0;
-  if (c.level < 0.0) c.level = 0.0;
+  c.level = soemdsp_signed_gain(control_audio(g, node.amplitude, f), 1.0);
   return c;
 }
 
@@ -9847,9 +9844,7 @@ static void process_softpop2(Circuit& g, Node& node, int frames) {
     if (!(po == po)) po = 0.0;
     if (po < 0.0) po = 0.0;
     if (po > 1.0) po = 1.0;
-    double level = control_audio(g, node.amplitude, f);
-    if (!(level == level)) level = 1.0;
-    if (level < 0.0) level = 0.0;
+    const double level = soemdsp_signed_gain(control_audio(g, node.amplitude, f), 1.0);
     {
       const double h = softpop_reset_edge(g, node, liveReset, f);
       if (h >= 1.0 || h <= -1.0) soemdsp_softpop2_reset(node.nativeHandle);
@@ -11494,10 +11489,9 @@ static void process_ensemble(Circuit& g, Node& node, int frames) {
     soemdsp_ensemble_amp_edge(node.nativeHandle, amp);
     const double inM = g.mixMono[f]
       + ((!hasLeftIn && !hasRightIn) ? (g.mixLeft[f] + g.mixRight[f]) : 0.0);
-    double inL = hasLeftIn ? (g.mixLeft[f] + g.mixMono[f]) : inM;
-    double inR = hasRightIn ? (g.mixRight[f] + g.mixMono[f]) : inM;
-    inL *= amp;
-    inR *= amp;
+    // Amplitude is one signed gain on the output (it used to scale the input too: amp squared, so the sign cancelled).
+    const double inL = hasLeftIn ? (g.mixLeft[f] + g.mixMono[f]) : inM;
+    const double inR = hasRightIn ? (g.mixRight[f] + g.mixMono[f]) : inM;
     double outL = 0.0;
     double outR = 0.0;
     soemdsp_ensemble_sample(

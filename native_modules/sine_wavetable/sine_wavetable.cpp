@@ -11,6 +11,7 @@
 //   3 = Taylor — quadrant-folded Taylor (continuous at wrap; no ±π click)
 
 #include <soemdsp/soemdsp.hpp>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -114,7 +115,7 @@ extern "C" void soemdsp_sine_wavetable_sample(
   const double rate = sampleRate < 1.0 ? 1.0 : sampleRate;
   const double safeFrequency = safe(frequency);
   // Signed level: negative amplitude inverts the output at that size. The param definition is the only limit (HP-22).
-  const double level = safe(amplitude) * nyquist_fade_amplitude(safeFrequency, rate);
+  const double level = soemdsp_signed_gain(safe(amplitude), 0.0) * nyquist_fade_amplitude(safeFrequency, rate);
   const double samplePhase = s.phase + safe(phaseOffsetRadians);
   s.samplePhase01 = wrap01(samplePhase / kTwoPi);
 

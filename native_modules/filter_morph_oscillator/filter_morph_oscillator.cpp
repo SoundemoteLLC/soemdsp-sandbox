@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #include <soemdsp/soemdsp.hpp>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -423,9 +424,7 @@ static double process_one(
     y *= makeup;
   }
 
-  double gain = (amplitude * 0.0 == 0.0) ? amplitude : 1.0;
-  if (gain < 0.0) gain = 0.0;
-  return y * gain;
+  return y * soemdsp_signed_gain(amplitude, 1.0);
 }
 
 }  // namespace

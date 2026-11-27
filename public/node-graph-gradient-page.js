@@ -12,6 +12,8 @@ const nodeGraphGradientPageState = {
   selectedStop: new Map(), // gradientId -> stopId (the stop Delete stop removes)
   renaming: "", // gradientId whose name is being edited
   drag: null,
+  // HP-24: the stop being edited ({ gradientId, stopId }), or null. Editing holds only while the playhead sits on that stop.
+  editing: null,
 };
 
 function nodeGraphGradientPageGradients() {
@@ -129,6 +131,10 @@ function nodeGraphGradientPageStrip(gradient) {
     handle.type = "button";
     handle.className = "node-gradient-handle";
     if (stop.id === selected) handle.classList.add("is-selected");
+    if (nodeGraphGradientEditActive()?.stop.id === stop.id && nodeGraphGradientPageState.editing.gradientId === gradient.id) {
+      handle.classList.add("is-editing");
+      handle.setAttribute("aria-pressed", "true");
+    }
     handle.dataset.stopId = stop.id;
     handle.style.left = `${(stop.pos * 100).toFixed(3)}%`;
     handle.setAttribute("aria-label", `Stop ${i + 1} at ${stop.pos.toFixed(2)}`);
@@ -170,6 +176,13 @@ function nodeGraphGradientPageCard(gradient) {
   card.append(head);
 
   card.append(nodeGraphGradientPageStrip(gradient));
+  const active = nodeGraphGradientEditActive();
+  if (active && active.gradient.id === gradient.id) {
+    const note = document.createElement("p");
+    note.className = "node-gradient-editing";
+    note.textContent = `Editing stop ${active.stop.pos.toFixed(2)}: outlined sliders set this stop.`;
+    card.append(note);
+  }
 
   const buttons = document.createElement("div");
   buttons.className = "node-gradient-buttons";
@@ -394,11 +407,24 @@ function nodeGraphGradientPagePointerUp(event) {
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === drag.gradientId);
   if (!gradient) return;
   if (drag.moved) {
-    // One undo step per release, never per move.
+    // One undo step per release, never per move. A playhead that left the edited stop ends the editing (no outlines between stops).
     nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), drag.stopId ? `${gradient.name} stop moved` : `${gradient.name} position`);
+    if (nodeGraphGradientPageState.editing && !nodeGraphGradientEditActive()) nodeGraphGradientEditEnd();
     return;
   }
-  if (!drag.stopId) {
+  if (drag.stopId) {
+    // Tap on a stop: edit it (the playhead snaps there). Tap the edited stop again: stop editing.
+    const editing = nodeGraphGradientPageState.editing;
+    if (editing && editing.gradientId === gradient.id && editing.stopId === drag.stopId) nodeGraphGradientEditEnd();
+    else nodeGraphGradientEditBegin(gradient.id, drag.stopId);
+    return;
+  }
+  if (nodeGraphGradientPageState.editing) {
+    // Tap on empty strip while editing: stop editing (no new stop).
+    nodeGraphGradientEditEnd();
+    return;
+  }
+  {
     // Tap on an empty spot: a new stop there, a snapshot of the current bases.
     const pos = nodeGraphGradientPageStripPos(drag.strip, event.clientX);
     const next = NodeGraphGradients.snapshotIntoGradient(nodeGraphMvp.patch, gradient, pos);
@@ -406,6 +432,130 @@ function nodeGraphGradientPagePointerUp(event) {
     if (added) nodeGraphGradientPageState.selectedStop.set(gradient.id, added.id);
     nodeGraphGradientPageCommit(nodeGraphGradientPageReplace(gradient.id, () => next), `${gradient.name} stop added`);
   }
+}
+
+// ------------------------------------------------------------------------------------------------ editing a stop (HP-24)
+//
+// Tap a stop: the playhead snaps to it and every slider of that gradient gets an outline (face sliders draw it; a slider input carries
+// data-gradient-edit="1" for any other paint site). Moving an outlined slider writes into that stop's offset, one undo step per release;
+// other sliders act as usual. Tap the stop again, tap empty strip or press Esc to stop. Between stops nothing is outlined or written.
+
+/** The edited stop while it holds ({ gradient, stop }), else null. */
+function nodeGraphGradientEditActive() {
+  const editing = nodeGraphGradientPageState.editing;
+  if (!editing) return null;
+  const gradient = nodeGraphGradientPageGradients().find((g) => g.id === editing.gradientId);
+  const stop = gradient?.stops?.find((s) => s.id === editing.stopId);
+  if (!gradient || !stop || gradient.enabled === false) return null;
+  if (Math.abs((Number(gradient.position) || 0) - stop.pos) > 1e-9) return null;
+  return { gradient, stop };
+}
+
+/** "nodeId\u0000key" of every slider the edited stop writes (the outlined ones). */
+function nodeGraphGradientEditTargetKeys() {
+  const active = nodeGraphGradientEditActive();
+  const out = new Set();
+  if (active) for (const { nodeId, key } of active.gradient.params) out.add(`${nodeId}\u0000${key}`);
+  return out;
+}
+
+let nodeGraphGradientEditMarked = new Set();
+
+/** Put the outline marks on the edited stop's sliders and take them off the others; repaint only the nodes that changed. */
+function nodeGraphGradientEditSyncOutlines() {
+  const next = nodeGraphGradientEditTargetKeys();
+  const touched = new Set();
+  for (const mapKey of nodeGraphGradientEditMarked) {
+    if (next.has(mapKey)) continue;
+    const [nodeId, key] = mapKey.split("\u0000");
+    const input = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, key) : null;
+    if (input) delete input.dataset.gradientEdit;
+    input?.closest?.("label")?.querySelector(".node-slider-readout")?.classList.remove("is-gradient-edit");
+    touched.add(nodeId);
+  }
+  for (const mapKey of next) {
+    if (nodeGraphGradientEditMarked.has(mapKey)) continue;
+    const [nodeId, key] = mapKey.split("\u0000");
+    const input = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, key) : null;
+    if (input) input.dataset.gradientEdit = "1";
+    input?.closest?.("label")?.querySelector(".node-slider-readout")?.classList.add("is-gradient-edit");
+    touched.add(nodeId);
+  }
+  nodeGraphGradientEditMarked = next;
+  if (typeof nodeGraphGlGraphNoteValueChrome === "function") for (const id of touched) nodeGraphGlGraphNoteValueChrome(id);
+  if (touched.size && typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
+}
+
+function nodeGraphGradientEditBegin(gradientId, stopId) {
+  const gradient = nodeGraphGradientPageGradients().find((g) => g.id === gradientId);
+  const stop = gradient?.stops?.find((s) => s.id === stopId);
+  if (!gradient || !stop) return;
+  nodeGraphGradientPageState.selectedStop.set(gradientId, stopId);
+  nodeGraphGradientPageState.editing = { gradientId, stopId };
+  // The playhead snaps to the stop: the sound and every display show the stop being edited. Navigation, not an edit: no undo step.
+  if (gradient.position !== stop.pos) {
+    gradient.position = stop.pos;
+    nodeGraphGradientsNotifyChanged(`${gradient.name} editing stop`);
+  }
+  nodeGraphGradientEditSyncOutlines();
+  renderNodeGraphGradientPage();
+}
+
+function nodeGraphGradientEditEnd() {
+  if (!nodeGraphGradientPageState.editing) return;
+  nodeGraphGradientPageState.editing = null;
+  nodeGraphGradientEditSyncOutlines();
+  renderNodeGraphGradientPage();
+}
+
+/**
+ * Slider intercept (node-graph-slider-dragging.js, ahead of the Pitch Mutator): while a stop is edited, a move of one of its sliders sets
+ * that stop's offset so the sounding value lands where the slider was moved; the base param is not written. Returns true when taken.
+ * options.commit: the release (one undo step).
+ */
+function nodeGraphGradientMaybeInterceptSlider(slider, domainValue, options = {}) {
+  const active = nodeGraphGradientEditActive();
+  if (!active || !slider) return false;
+  const nodeId = slider.closest?.(".dsp-node")?.dataset?.node || "";
+  const key = String(slider.dataset?.param || "");
+  if (!nodeId || !key || !active.gradient.params.some((p) => p.nodeId === nodeId && p.key === key)) return false;
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  const meta = node ? NodeGraphGradients.metaFor(node, key) : null;
+  const value = Number(domainValue);
+  if (!node || !meta || !Number.isFinite(value)) return false;
+  const { gradient, stop } = active;
+  const current = Number(stop.offsets?.[nodeId]?.[key]) || 0;
+  const target = NodeGraphGradients.toSlider(meta, value);
+  let offset;
+  if (NodeGraphGradients.isDiscrete(meta)) {
+    // Discrete params take the stop's value outright: origin + offset.
+    const origin = Number(gradient.origin?.[nodeId]?.[key]);
+    offset = target - (Number.isFinite(origin) ? origin : NodeGraphGradients.toSlider(meta, Number(node.params[key])));
+  } else {
+    // Continuous: move this stop's offset by what is still missing, so other gradients and providers keep their share.
+    const base = Number(node.params[key]);
+    const sounding = typeof applyNodeGraphParamOffsetsToBase === "function"
+      ? applyNodeGraphParamOffsetsToBase(node, key, base, meta)
+      : base;
+    offset = current + (target - NodeGraphGradients.toSlider(meta, sounding));
+  }
+  if (Number.isFinite(offset)) {
+    stop.offsets = { ...(stop.offsets || {}) };
+    stop.offsets[nodeId] = { ...(stop.offsets[nodeId] || {}), [key]: offset };
+  }
+  // The thumb follows the hand (the sounding value); the base stays in node.params.
+  slider.dataset.domainValue = String(value);
+  nodeGraphGradientsNotifyChanged(`${gradient.name} stop value`);
+  nodeGraphGradientPageUpdateLive(gradient);
+  if (options.commit) nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), `${gradient.name} stop value`);
+  return true;
+}
+
+function nodeGraphGradientEditKeydown(event) {
+  if (event.key !== "Escape" || !nodeGraphGradientPageState.editing) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  nodeGraphGradientEditEnd();
 }
 
 // ------------------------------------------------------------------------------------------------ wiring
@@ -439,12 +589,15 @@ function bindNodeGraphGradientPage() {
   host.addEventListener("pointermove", nodeGraphGradientPagePointerMove);
   host.addEventListener("pointerup", nodeGraphGradientPagePointerUp);
   host.addEventListener("pointercancel", nodeGraphGradientPagePointerUp);
-  // Undo / redo / load replace the patch: re-render from the committed patch.
+  // Undo / redo / load replace the patch: re-render from the committed patch (an edited stop that is gone ends the editing).
   if (typeof addNodeGraphPatchCommitListener === "function") {
     addNodeGraphPatchCommitListener(() => {
+      if (nodeGraphGradientPageState.editing && !nodeGraphGradientEditActive()) nodeGraphGradientPageState.editing = null;
+      nodeGraphGradientEditSyncOutlines();
       if (!nodeGraphGradientPageState.drag) renderNodeGraphGradientPage();
     });
   }
+  document.addEventListener("keydown", nodeGraphGradientEditKeydown, true);
 }
 
 // ------------------------------------------------------------------------------------------------ the 🌈 page window
@@ -463,6 +616,8 @@ function applyNodeGraphGradientsPageSize(size = {}, panelArg = null) {
 function setNodeGraphGradientsPageOpen(open) {
   const panel = document.getElementById("nodeGradientsPage");
   if (!panel) return;
+  // Closing the page ends stop editing: outlines never outlive the page that explains them.
+  if (!open) nodeGraphGradientEditEnd();
   const switching = Boolean(nodeGraphMvp?._unifiedWindowSwitching);
   if (open && !switching && typeof openNodeGraphUnifiedWindowPage === "function") {
     openNodeGraphUnifiedWindowPage("gradients");

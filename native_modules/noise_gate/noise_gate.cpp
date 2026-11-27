@@ -10,6 +10,7 @@
 // Env jack is the detect peak clamped 0…1.
 
 #include <soemdsp/soemdsp.hpp>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -188,8 +189,7 @@ extern "C" double soemdsp_noise_gate_sample(
   if (!(st.gain * 0.0 == 0.0) || st.gain < 0.0) st.gain = 0.0;
   if (st.gain > 1.0) st.gain = 1.0;
 
-  double amp = safe(amplitude);
-  if (!(amp * 0.0 == 0.0) || amp < 0.0) amp = 1.0;
+  const double amp = soemdsp_signed_gain(amplitude, 1.0);
   double dL = lIn * st.gain * amp;
   double dR = rIn * st.gain * amp;
   if (!(dL * 0.0 == 0.0)) dL = 0.0;

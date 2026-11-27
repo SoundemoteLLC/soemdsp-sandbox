@@ -60,6 +60,7 @@ function normalizeNodeGraphPatchParameter(type, key, value, metadata = null) {
         constraint: metadata.constraint,
         hardClamp: metadata.hardClamp,
         hardMax: metadata.hardMax ?? parameter?.hardMax,
+        hardMin: metadata.hardMin ?? parameter?.hardMin,
       });
     }
     return candidate;
@@ -113,6 +114,7 @@ function normalizeNodeGraphPatchParameter(type, key, value, metadata = null) {
       constraint: parameter?.constraint,
       hardClamp: parameter?.hardClamp,
       hardMax: parameter?.hardMax,
+      hardMin: parameter?.hardMin,
     };
   if (typeof nodeGraphParamApplyDomainBounds === "function") {
     return nodeGraphParamApplyDomainBounds(candidate, {
@@ -122,6 +124,7 @@ function normalizeNodeGraphPatchParameter(type, key, value, metadata = null) {
       constraint: meta.constraint ?? parameter?.constraint,
       hardClamp: meta.hardClamp ?? parameter?.hardClamp,
       hardMax: meta.hardMax ?? parameter?.hardMax,
+      hardMin: meta.hardMin ?? parameter?.hardMin,
     });
   }
   const min = Number(meta.min ?? parameter?.min);

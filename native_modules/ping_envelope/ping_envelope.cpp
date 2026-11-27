@@ -13,6 +13,7 @@
 // no snap-reset on rising trig.
 
 #include <soemdsp/soemdsp.hpp>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -121,7 +122,7 @@ extern "C" double soemdsp_ping_envelope_sample(
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
   const double liveAtk = maxd(0.0, safe(attackSec));
   const double liveDecay = clamp01_param(decay, 0.5);
-  const double liveAmp = (amplitude * 0.0 == 0.0) ? amplitude : 1.0;
+  const double liveAmp = soemdsp_signed_gain(amplitude, 1.0);
   const bool latch = safe(recalculateOnTrigger) >= 0.5;
   const bool isShort = model_is_short(model);
 
@@ -142,8 +143,11 @@ extern "C" double soemdsp_ping_envelope_sample(
     s.hasShot = true;
   }
 
-  // Long: amp scales inertial target. Short: amp scales output after the one-pole.
-  const double target = isShort ? in : (in * s.shotAmp);
+  // Long: amp scales inertial target. Short: amp scales output after the one-pole. The envelope runs on the magnitude (its attack /
+  // release pick the direction of travel), and the sign is applied at the output, so -a is +a inverted.
+  const double ampMag = s.shotAmp < 0.0 ? -s.shotAmp : s.shotAmp;
+  const double ampSign = soemdsp_signed_gain_sign(s.shotAmp);
+  const double target = isShort ? in : (in * ampMag);
 
   double relHz = 0.0;
   if (isShort) {
@@ -171,7 +175,7 @@ extern "C" double soemdsp_ping_envelope_sample(
     const double out = envOut * s.shotAmp;
     return (out * 0.0 == 0.0) ? out : 0.0;
   }
-  return envOut;
+  return envOut * ampSign;
 }
 
 extern "C" int soemdsp_ping_envelope_is_idle(int handle) {

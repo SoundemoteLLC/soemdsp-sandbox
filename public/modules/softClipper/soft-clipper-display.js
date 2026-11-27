@@ -60,8 +60,8 @@ function nodeGraphSoftClipperTransferY(x, drive, threshold, knee, amplitude) {
   thr = thr < 0 ? 0 : thr > 1 ? 1 : thr;
   let kn = Number.isFinite(knee) ? knee : 1;
   kn = kn < 0 ? 0 : kn > 1 ? 1 : kn;
-  let amp = Number.isFinite(amplitude) ? amplitude : 1;
-  amp = amp < 0 ? 0 : amp > 1 ? 1 : amp;
+  // Signed gain, unclamped (HP-24): the same as soft_clipper.cpp.
+  const amp = Number.isFinite(amplitude) ? amplitude : 1;
   const xin = x * d;
   const ax = Math.abs(xin);
   const sign = xin < 0 ? -1 : 1;

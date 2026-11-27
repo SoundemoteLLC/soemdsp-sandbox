@@ -15,6 +15,7 @@
 // Gate = 1 while the live dB is at or above Threshold (dBFS).
 
 #include <soemdsp/soemdsp.hpp>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -122,10 +123,9 @@ extern "C" double soemdsp_rms_meter_sample(
   s.rms = s.ms > 0.0 ? sqrt_newton(s.ms) : 0.0;
   s.db = s.rms > 1e-6 ? (20.0 / kLn10) * dsp_ln(s.rms) : kDbFloor;
   if (s.db < kDbFloor) s.db = kDbFloor;
-  double amp = safe(amplitude);
-  if (!(amp * 0.0 == 0.0)) amp = 1.0;
-  const double inv = 1.0 - s.rms * amp;
-  s.inv = inv < 0.0 ? 0.0 : (inv > 1.0 ? 1.0 : inv);
+  const double amp = soemdsp_signed_gain(safe(amplitude), 1.0);
+  // Inverted = 1 - RMS x Amplitude, unclamped (a negative Amplitude lifts it above 1, a large one takes it below 0).
+  s.inv = 1.0 - s.rms * amp;
   // Peak hold on the dB out.
   double hold = safe(holdSec);
   if (!(hold * 0.0 == 0.0) || hold < 0.0) hold = 0.0;

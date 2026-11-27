@@ -67,6 +67,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -609,10 +610,7 @@ extern "C" double soemdsp_spectral_osc_sample(
     y = y + (yo - y) * k;
     st.fadeLeft -= 1;
   }
-  double amp = amplitude == amplitude ? amplitude : 0.0;
-  if (amp < 0.0) amp = 0.0;
-  if (amp > 1.0) amp = 1.0;
-  y *= amp;
+  y *= soemdsp_signed_gain(amplitude, 0.0);
   st.lastOut = y;
   st.lastPhase = t;
   st.phase = wrap01(st.phase + freq / sr);

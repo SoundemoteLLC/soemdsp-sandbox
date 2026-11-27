@@ -9,6 +9,7 @@
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/math/rect_sine.h>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -183,9 +184,7 @@ extern "C" double soemdsp_sine_warp_sample(
 
   s.lastY = y;
 
-  double gain = (amplitude == amplitude) ? amplitude : 1.0;
-  if (gain < 0.0) gain = 0.0;
-  return y * gain;
+  return y * soemdsp_signed_gain(amplitude, 1.0);
 }
 
 extern "C" double soemdsp_sine_warp_out(int handle) {

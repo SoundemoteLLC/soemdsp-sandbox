@@ -8,6 +8,7 @@
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/utility/memory_pool.h>
+#include "../shared/signed_gain.h"
 
 namespace {
 
@@ -149,7 +150,9 @@ extern "C" void soemdsp_ensemble_amp_edge(int handle, double amp) {
   if (handle < 1 || handle > kMaxInstances) return;
   EnsembleState& s = gPool[handle - 1];
   if (!s.active) return;
-  const double a = safe(amp);
+  // Waking from silence clears the delays: silence is |Amplitude| near 0 (a negative Amplitude is inverted output, not silence).
+  const double signedAmp = soemdsp_signed_gain(safe(amp), 0.0);
+  const double a = signedAmp < 0.0 ? -signedAmp : signedAmp;
   if (a > 1.0e-4 && s.lastAmp <= 1.0e-4) {
     for (int v = 0; v < kMaxVoices; v += 1) {
       for (int i = 0; i < kMaxDelaySamples; i += 1) s.voices[v].buffer[i] = 0.0f;

@@ -1193,16 +1193,21 @@ function nodeGraphFloatingWindowPosition(element, x, y, options = {}) {
  *
  * Default is ALWAYS off — debug and release builds alike. Session-only via
  * Visibility → Debug; never restored from UI settings / Clear Startup / Save.
- * G is the one debug switch: the CPU / RAM / GPU guide plus the collapsed
- * Engine status row. Hiding debug also collapses Engine status again.
+ * G is the one debug switch: it shows / hides the CPU / RAM / GPU guide (the
+ * debug window). Engine status is a collapsed chip inside that guide; hiding
+ * debug collapses it again.
  */
 function renderNodeGraphKeyboardDebugToggle() {
   const button = document.getElementById("nodeKeyboardDebugToggleButton");
   const visible = nodeGraphMvp?.keyboardDebugInfoVisible === true;
   document.body.classList.toggle("keyboard-debug-hidden", !visible);
   if (!visible) {
-    const engine = document.getElementById("nodeDebugEngineDetails");
-    if (engine) engine.open = false;
+    // Engine status is a collapsed row of the guide: hiding debug collapses it again.
+    const engine = document.getElementById("nodeEngineStatusToggle");
+    if (engine?.checked) {
+      engine.checked = false;
+      engine.dispatchEvent(new Event("change"));
+    }
   }
   setNodeGraphVisibilityToggleLabel(button, visible, "Debug", {
     onMark: nodeGraphVisibilityOnMarks.debug,

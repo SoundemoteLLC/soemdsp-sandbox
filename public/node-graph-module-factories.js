@@ -818,11 +818,13 @@ function createNodeGraphParameter(node, type, parameter) {
   if (metadata?.hardClamp || parameter.hardClamp) {
     input.dataset.hardClamp = "true";
   }
-  // hardMax: the absolute limit of a resource-constrained param when its slider
-  // (spawn) max is lower; typed values clamp there instead of at the slider max.
+  // hardMax / hardMin: the absolute limits of a resource-constrained param when its slider
+  // (spawn) range is narrower; typed values clamp there instead of at the slider ends.
   {
     const hardMax = Number(parameter.hardMax ?? metadata?.hardMax);
     if (Number.isFinite(hardMax)) input.dataset.hardMax = String(hardMax);
+    const hardMin = Number(parameter.hardMin ?? metadata?.hardMin);
+    if (Number.isFinite(hardMin)) input.dataset.hardMin = String(hardMin);
   }
   input.dataset.domainValue = String(seedValue);
   applyNodeGraphInputUnboundedValue(input, seedValue);
