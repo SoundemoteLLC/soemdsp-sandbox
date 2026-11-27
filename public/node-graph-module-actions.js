@@ -2215,10 +2215,11 @@ function nodeGraphModuleTitleFieldBeginEdit(el) {
   el.dataset.titleEditing = "1";
   el.setAttribute("role", "textbox");
   el.setAttribute("aria-multiline", "false");
+  if (typeof nodeGraphGlGraphNoteValueChrome === "function") nodeGraphGlGraphNoteValueChrome(el);
   if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
 }
 
-function nodeGraphModuleTitleFieldEndEdit(el) {
+function nodeGraphModuleTitleFieldEndEdit(el, { present = true } = {}) {
   if (!(el instanceof HTMLElement)) {
     return;
   }
@@ -2226,7 +2227,10 @@ function nodeGraphModuleTitleFieldEndEdit(el) {
   el.tabIndex = -1;
   delete el.dataset.titleEditing;
   el.setAttribute("role", "text");
-  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  if (present) {
+    if (typeof nodeGraphGlGraphNoteValueChrome === "function") nodeGraphGlGraphNoteValueChrome(el);
+    if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  }
 }
 
 /** End any open header-title rename sessions (commit or revert). */
@@ -2247,10 +2251,15 @@ function endAllNodeGraphModuleTitleEdits({ commit = true, revert = false } = {})
         ? nodeGraphPatchNodeTitle(patchNode || { id: input.dataset.node })
         : nodeGraphModuleTitleFieldText(input);
     }
-    nodeGraphModuleTitleFieldEndEdit(input);
+    nodeGraphModuleTitleFieldEndEdit(input, { present: false });
   }
   if (commit && !revert && ids.length) {
     commitNodeGraphModuleTitleFromHeaderInput(ids[0], value, { multiIds: ids });
+  } else if (ids.length) {
+    for (const id of ids) {
+      if (typeof nodeGraphGlGraphNoteValueChrome === "function") nodeGraphGlGraphNoteValueChrome(id);
+    }
+    if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
   }
 }
 
@@ -2462,6 +2471,12 @@ function commitNodeGraphModuleTitleFromHeaderInput(nodeId, value, { multiIds = n
         }
       });
     }
+  }
+  if (!portalTitle) {
+    for (const id of ids) {
+      if (typeof nodeGraphGlGraphNoteValueChrome === "function") nodeGraphGlGraphNoteValueChrome(id);
+    }
+    if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
   }
   if (portalBusSeeds.length && typeof nodeGraphNamedPortalRefreshModules === "function") {
     const refreshIds = [];

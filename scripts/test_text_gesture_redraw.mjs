@@ -61,8 +61,11 @@ try {
   await page.waitForTimeout(3500);
   await page.evaluate(() => {
     const original = nodeGraphGlLinesText;
-    window.__gesture = { text: 0, frames: [], run: false };
-    nodeGraphGlLinesText = function (...args) { if(args[0]?.canvas?.id === 'nodeGlGraphCanvas') window.__gesture.text++; return original(...args); };
+    window.__gesture = { text: 0, texts: [], frames: [], run: false };
+    nodeGraphGlLinesText = function (...args) {
+      if(args[0]?.canvas?.id === 'nodeGlGraphCanvas') { window.__gesture.text++; window.__gesture.texts.push(String(args[1] || '')); }
+      return original(...args);
+    };
   });
   const begin = () => page.evaluate(() => {
     const g = window.__gesture;
@@ -86,6 +89,24 @@ try {
   await targetNode.evaluate(node => node.classList.add('buttons-forced-visible'));
   const title = targetNode.locator('.node-header-title-row');
   const dragId = await targetNode.getAttribute('data-node');
+  const titleEdit = await page.evaluate((id) => {
+    const field = nodeGraphNodeElement(id)?.querySelector('.node-header-title');
+    if (!field) throw new Error('Missing DOM title field');
+    const original = field.textContent.trim();
+    window.__gesture.texts = [];
+    startNodeGraphModuleTitleEdit(field);
+    const hiddenDuringEdit = !window.__gesture.texts.includes(original);
+    field.textContent = 'Title Edit Committed';
+    endAllNodeGraphModuleTitleEdits({ commit: true });
+    const committedShown = window.__gesture.texts.includes('Title Edit Committed');
+    startNodeGraphModuleTitleEdit(field);
+    field.textContent = 'Title Edit Canceled';
+    endAllNodeGraphModuleTitleEdits({ commit: false, revert: true });
+    const canceledShowsCommittedTitle = window.__gesture.texts.includes('Title Edit Committed');
+    return { hiddenDuringEdit, committedShown, canceledShowsCommittedTitle };
+  }, dragId);
+  console.log(`title edit GL: ${JSON.stringify(titleEdit)}`);
+  if (!report && !baseline && Object.values(titleEdit).some((ok) => !ok)) failures++;
   const bounds = await title.boundingBox();
   if (!bounds) throw new Error("No visible title");
   if (!baseline) await page.evaluate(id => {

@@ -14,8 +14,15 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 ### Right double-click on a module title acts like left double-click
 
 - **Reported:** 2026-11-26, by Argi
+- **Fixed:** 2026-11-27, `167b8490`. Both DOM and GL title-action paths now require the left button.
 - **Symptoms:** Double-clicking a module title with the right mouse button triggers the same action as a left double-click.
 - **Notes:** The title double-click handler probably doesn't check which button was pressed (`event.button === 0`). Right-click should keep its own behavior (context menu or selection).
+
+### Module title text remains visible while editing — FIXED
+
+- **Reported:** 2026-11-27, by Argi
+- **Fixed:** 2026-11-27, targeted browser probe confirms the old GL title is hidden during edit, committed text appears, and cancel restores the committed title.
+- **Notes:** Title edit/commit/cancel now dirties only the owning module's GL value chrome and presents once per completed action.
 
 ### Output Mono shows no IO by default — RECLASSIFIED
 
