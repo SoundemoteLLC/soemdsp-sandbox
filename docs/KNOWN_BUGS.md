@@ -8,9 +8,10 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 These reports probably share a root cause: text in the GL text and label rendering rebuilds or re-renders when it shouldn't. MasterBot owns the viewport, text, and culling rendering code and is partway through a module display rewrite (`docs/MODULE_DISPLAY_REWRITE_PLAN.md`).
 
-#### Module drag redraws text on every pixel
+#### Module drag redraws text on every pixel - FIXED
 
 - **Reported:** 2026-11-25, by Argi
+- **Fixed:** 2026-11-26, `82380fa0`. Retained module GL records move and reorder without rebuilding text; gesture test verifies zero text calls and atlas bakes.
 - **Symptoms:** Clicking a module's title to drag it makes the text redraw before the module has even moved. After that, the text redraws on every pixel the mouse moves.
 - **Notes:** Grouped with the other text-redraw reports above.
 
@@ -26,15 +27,17 @@ These reports probably share a root cause: text in the GL text and label renderi
 - **Symptoms:** After zooming, simply pressing the middle mouse button down triggers another text redraw it doesn't need. The redraw after the zoom may not have finished, and the mouse-down completes it — or something else is going on.
 - **Notes:** Grouped with the other text-redraw reports above.
 
-#### Wire drag from Flower Child re-renders text
+#### Wire drag from Flower Child re-renders text - FIXED
 
 - **Reported:** 2026-11-25, by Argi
+- **Fixed:** 2026-11-26, `82380fa0`. Gesture-only cable updates retain module ink; real Clock and Flower Child wire-pull tests verify zero text calls and atlas bakes.
 - **Symptoms:** Dragging a wire out of the Flower Child filter makes text re-render. This is probably not limited to that one module.
 - **Notes:** Grouped with the other text-redraw reports above.
 
-#### Wire drag is slow, with a low framerate
+#### Wire drag is slow, with a low framerate - FIXED
 
 - **Reported:** 2026-11-26, by Argi
+- **Fixed:** 2026-11-26, `82380fa0`. Removed duplicate pointer-move paints and full plate/plan refreshes. Measured mean frame time improved from 25.47-30.90 ms to 16.67 ms on the focused fixture. Broader camera-performance limits remain documented in `TEXT_KEYBOARD_BUGFIX_REPORT.md`.
 - **Symptoms:** Dragging a wire is slow, with a low framerate. This may be caused by the constant text redraws in this group.
 - **Notes:** Grouped with the other text-redraw reports above. Measure frame time while dragging a wire, before and after a text-redraw fix.
 
@@ -44,9 +47,10 @@ These reports probably share a root cause: text in the GL text and label renderi
 - **Symptoms:** Deleting the Viewport Out module makes the circuit builder grid lines dim until they seem to disappear, as if Viewport Out has to exist for the workspace background to render correctly.
 - **Notes:** MasterBot owns viewport and workspace rendering. See also the module display rewrite in `docs/MODULE_DISPLAY_REWRITE_PLAN.md`.
 
-### Keyboard key color highlighting is missing or intermittent
+### Keyboard key color highlighting is missing or intermittent - FIXED
 
 - **Reported:** 2026-11-25, by Argi
+- **Fixed:** 2026-11-26, `82380fa0`. State changes dirty owning module chrome; Grid also uses the shared GL painter/hit route. Real stopped-transport pointer/pixel tests cover plain, Shift, Ctrl and chord-slot colors without starting DSP.
 - **Symptoms:** Keyboard key color highlighting (blue, gold, and the other highlight colors) doesn't work, or works only sometimes, on any click, including Shift-click and Ctrl-click.
 - **Notes:** Argi suspects this regressed when timer polling (`setInterval`) was converted to event-driven updates, so the keyboard likely lost a refresh a timer used to drive. Check MasterBot's conversion commits `958808b4`, `9eb8b7ca`, `cb686247`, and `9ab21898` first. In Argi's words, the keyboard "doesn't really update properly" and isn't highlighting at the moment.
 
