@@ -28,6 +28,7 @@ try {
   browser = await chromium.launch({ headless: true, channel: "chrome" });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   await page.addInitScript(() => localStorage.setItem('soemdsp-sandbox.ioView.v1','B'));
+  await page.addInitScript(narrow => { window.__narrowTitleProbe = narrow; }, process.env.NARROW_TITLE === '1');
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   if (baseline) {
@@ -46,6 +47,10 @@ try {
   const patch = JSON.parse(fs.readFileSync(path.join(root, "tests/fixtures/view-real-guitar-pluck.json"), "utf8"));
   await page.evaluate(p => {
     p.nodes.push(createNodeGraphPatchNode('flowerChildFilter', {id:'flower-probe',gx:100,gy:5}));
+    if (window.__narrowTitleProbe) {
+      p.nodes.at(-1).widthGu = 2;
+      p.nodes.at(-1).alias = 'Flower Child Filter - deliberately fitted title';
+    }
     commitNodeGraphPatch(loadNodeGraphPatchFromObject(p), { status: "gesture test" });
     setNodeGraphZoom(1);
     flushNodeGraphViewportImmediate({ persist: false });
