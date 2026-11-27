@@ -38,3 +38,13 @@ Two regressions reported by Argi on current master. Both are release blockers.
 2. **No module can be dragged in.** That covers the module store (MIDI modules and every other kind) and probably the 🌈 and Mutator drag grips too. Suspects: PASTE-8 (`fe0da7dc` store change, `3151be00` grips, `89bda771`) or the same pointer and button change as item 1. Fix it so every store module, gradient and mutator drag-in works again.
 
 For both: add a browser regression test (middle-drag pans, middle-drag plus wheel or the usual zoom gesture zooms, and dragging a module from the store places it, including a MIDI module and a gradient from 🌈). Commit them separately. The final smoke check must cover both.
+
+## STEP 0: input blockers (Argi, newest, do these FIRST; release blockers)
+
+Argi reports these on current master after PASTE-9. They probably come from one shared regression in the pointer and gesture path, from the text-gesture work (`82380fa0`, `fdfda54f`, `7b79bcda`) or `167b8490` (titles left-button only). Find the cause with `git bisect` or by reading those diffs; don't guess.
+
+1. **Middle mouse no longer pans or zooms the workspace.** WASDQE still works.
+2. **No module can be dragged in** from the store, the 🌈 Gradients page or the Mutator page (MIDI modules included).
+3. **Snake select can't select a wire.**
+
+For each one: fix it, add a browser test that does the real gesture (middle-drag pans, middle plus wheel or zoom gesture zooms, drag-in spawns a module where it's dropped, snake select selects a crossed wire), and confirm the PASTE-9 text fixes still hold (zero text rebuilds during drag and pan). Commit each one separately. Then do the rest of this paste.
