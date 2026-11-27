@@ -277,7 +277,7 @@ try {
     }
   }
 
-  // 5b. Per-segment shape and skew controls accompany the SVG curve plot.
+  // 5b. The selected segment's shape and skew controls accompany the shared SVG curve plot.
   step = "HTML curve controls";
   await page.evaluate(({ kb, pm }) => {
     nodeGraphMvp.patch.connections = nodeGraphMvp.patch.connections.filter((c) => !(c.sourceNode === kb && c.destinationNode === pm));
@@ -293,8 +293,8 @@ try {
   const laneId = (await mut()).lanes[0].id;
   const shapeChoice = page.locator(`#pitchMutatorOverlay [data-pm="curve-shape"][data-lane="${laneId}"][data-x="48"][data-shape="smoothstep"]`);
   assert.equal(await shapeChoice.count(), 1, "the segment has an HTML shape choice");
-  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=curve-skew]").count(), 3, "each of the three segments has an HTML skew slider");
-  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot] path").count(), 1, "the Mutator page draws lane curves in SVG");
+  assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=curve-skew]").count(), 1, "the selected segment has one HTML skew slider");
+  assert.equal(await page.locator('#pitchMutatorOverlay [data-pm=plot] path[data-curve-series]').count(), 1, "the Mutator page draws its selected lane curve in the shared SVG");
   assert.equal(await page.locator("#pitchMutatorOverlay [data-pm=plot] .pm-pin").count(), 4, "the Mutator page shows each lane point");
   const hitTarget = await page.evaluate(() => {
     const dot = document.querySelector('#pitchMutatorOverlay [data-pm="pin-dot"]');

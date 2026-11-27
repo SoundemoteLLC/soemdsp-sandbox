@@ -15,6 +15,7 @@
   const ui = {
     open: false,
     selectedId: "",
+    selectedPoint: null,
     navHooked: false,
     raf: 0,
     notice: "",
@@ -809,7 +810,7 @@
       const node = selectedNode();
       if (!E || !node) return;
       const state = ensureState(node);
-      const lane = state.lanes[0];
+      const lane = state.lanes.find((item) => item.id === state.activeLane) || state.lanes[0];
       if (!lane) { ui.notice = NO_LANE_NOTICE; return renderOverlay(); }
       const to = plotPointToPin(event, lane, state);
       if (!to) return;
@@ -817,6 +818,7 @@
       lane.keys = E.pinKey(lane.keys, to.x, "offset", to.offset, state.snap);
       lane.discrete = isDiscreteMeta(paramMeta(lane.target));
       state.activeLane = lane.id;
+      ui.selectedPoint = { laneId: lane.id, x: lane.keys.reduce((best, key) => Math.abs(key.x - to.x) < Math.abs(best.x - to.x) ? key : best).x };
       ui.pending = null;
       ui.pinMsg = "Added a point at " + midiName(Math.round(to.x)) + ".";
       ui.notice = "";
@@ -880,9 +882,9 @@
     const rect = svg.getBoundingClientRect();
     const range = midiRange();
     const count = range.max - range.min + 1;
-    const note = range.min + ((event.clientX - rect.left) / Math.max(1, rect.width)) * count - 0.5;
+    const note = range.min + ((event.clientX - rect.left - 8) / Math.max(1, rect.width - 16)) * Math.max(1, count - 1);
     const x = Math.min(range.max, Math.max(range.min, state.snap ? Math.round(note) : note));
-    const slider = Math.min(1, Math.max(0, 1 - ((event.clientY - rect.top) - 3) / Math.max(1, rect.height - 6)));
+    const slider = Math.min(1, Math.max(0, 1 - ((event.clientY - rect.top) - 6) / Math.max(1, rect.height - 12)));
     const meta = paramMeta(lane.target);
     return { x, offset: slider - E.sliderFromDomain(meta, baseDomain(lane.target)) };
   }
@@ -890,6 +892,8 @@
   function startPinDrag(event, dot) {
     const { node, lane, x } = pinLaneAndKey(dot);
     if (!node || !lane) return;
+    ensureState(node).activeLane = lane.id;
+    ui.selectedPoint = { laneId: lane.id, x };
     ui.pan = null;
     const axis = event.target.closest("[data-pm=axis]");
     try { axis?.setPointerCapture(event.pointerId); } catch (err) {}
@@ -1037,7 +1041,8 @@
       const drag = ui.pinDrag;
       ui.pinDrag = null;
       if (drag.timer) root.clearTimeout(drag.timer);
-      if (drag.moved) { recordChange("Pin moved"); renderOverlay(); }
+      if (drag.moved) { ui.selectedPoint = { laneId: drag.laneId, x: drag.x }; recordChange("Pin moved"); renderOverlay(); }
+      else renderOverlay();
       return;
     }
     if (ui.keyDrag && ui.keyDrag.pointerId === event.pointerId) {
@@ -1089,8 +1094,9 @@
     if (state) {
       for (const lane of state.lanes) {
         const label = laneLabel(lane);
+        const laneIndex = state.lanes.indexOf(lane);
         lanes.push(
-          '<button type="button" class="pm-chip' + (state.activeLane === lane.id ? " active" : "") + '" data-pm="lane" data-lane="' + lane.id + '">' +
+          '<button type="button" class="pm-chip' + (state.activeLane === lane.id ? " active" : "") + '" style="--lane-color:' + curveColor(laneIndex) + '" data-pm="lane" data-lane="' + lane.id + '">' +
           '<span class="pm-chip-dot"></span>' + escapeHtml(label) + ' <span data-pm="chip-value" data-lane="' + lane.id + '">' +
           escapeHtml(laneValueText(node, lane)) + "</span></button>"
         );
@@ -1134,7 +1140,7 @@
       '<div class="pm-status" data-pm="status">' + escapeHtml(statusText(node)) + "</div>",
       '<div class="pm-body">',
         '<div class="pm-lanes">',
-          lanes.join(""),
+          lanes.join("") + '<button type="button" class="pm-add-param" data-pm="add-param">+ Param</button>',
         "</div>",
         '<div class="pm-axis-scroll" data-pm="axis">',
           '<div class="pm-axis-inner">',
@@ -1150,7 +1156,7 @@
           "<div>Pin Keyframe adds a point at the current note.</div>",
         "</div>",
       "</div>",
-      activeLane ? '<section class="pm-curve-controls"><h3>Segment curves · ' + escapeHtml(laneLabel(activeLane)) + '</h3>' + laneCurveControlsHtml(activeLane) + '</section>' : "",
+      activeLane ? '<section class="pm-curve-controls">' + laneCurveControlsHtml(activeLane, ui.selectedPoint?.laneId === activeLane.id ? ui.selectedPoint.x : null) + '</section>' : "",
     ].join("");
     el.style.setProperty("--pm-visible", String(view.visible));
     el.style.setProperty("--pm-key-count", String(range.max - range.min + 1));
@@ -1175,60 +1181,66 @@
     const x = (note) => ((note - range.min + 0.5) / count) * width;
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("preserveAspectRatio", "none");
-    const parts = [];
-    for (let n = range.min; n <= range.max; n += 1) {
-      if (isBlack(n)) parts.push(`<rect x="${((n - range.min) / count * width).toFixed(2)}" y="0" width="${(width / count + 0.5).toFixed(2)}" height="${height}" fill="#fff" opacity=".045"/>`);
-      if (n % 12 === 0) parts.push(`<line x1="${((n - range.min) / count * width).toFixed(2)}" x2="${((n - range.min) / count * width).toFixed(2)}" y1="0" y2="${height}" stroke="#fff" opacity=".12"/>`);
-    }
-    for (const lane of state?.lanes || []) {
+    const lanes = state?.lanes || [];
+    const series = lanes.map((lane, laneIndex) => {
       const meta = paramMeta(lane.target);
       const base = E.sliderFromDomain(meta, baseDomain(lane.target));
-      const y = (offset) => (1 - Math.max(0, Math.min(1, base + offset))) * (height - 8) + 4;
       const keys = (lane.keys || []).slice().sort((a, b) => a.x - b.x);
-      if (keys.length) {
-        let d = `M ${x(keys[0].x).toFixed(2)} ${y(keys[0].offset).toFixed(2)}`;
-        for (let i = 0; i + 1 < keys.length; i += 1) {
-          const a = keys[i], b = keys[i + 1];
-          const steps = Math.max(4, Math.ceil((b.x - a.x) * 2));
-          for (let j = 1; j <= steps; j += 1) {
-            const t = j / steps;
-            const shape = root.nodeGraphSegmentCurve01 ? root.nodeGraphSegmentCurve01(t, a.shape || "rational", a.skew || 0) : t;
-            d += ` L ${x(a.x + (b.x - a.x) * t).toFixed(2)} ${y(a.offset + (b.offset - a.offset) * shape).toFixed(2)}`;
-          }
-        }
-        parts.push(`<path d="${d}" fill="none" stroke="${escapeAttr(node?.color || "#c45a7a")}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`);
-      }
-      for (const key of keys) {
-        const cx = x(key.x).toFixed(2), cy = y(key.offset).toFixed(2), color = escapeAttr(node?.color || "#c45a7a");
-        parts.push(`<circle class="pm-pin" cx="${cx}" cy="${cy}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1" pointer-events="none" vector-effect="non-scaling-stroke"/>`);
-        parts.push(`<circle class="node-adjust-cursor pm-pin-hit" data-pm="pin-dot" data-lane="${escapeAttr(lane.id)}" data-x="${key.x}" cx="${cx}" cy="${cy}" r="22" fill="transparent" pointer-events="all"/>`);
-      }
+      return { id: lane.id, color: curveColor(laneIndex), selected: lane.id === state?.activeLane, points: keys.map((key) => ({ x: key.x / 127, y: Math.max(0, Math.min(1, base + key.offset)), shape: key.shape, skew: key.skew })) };
+    });
+    const guideNotes = []; for (let n = Math.ceil(range.min / 12) * 12; n <= range.max; n += 12) guideNotes.push({ x: n / 127 });
+    const play = Math.max(0, Math.min(1, soundingNote(node) / 127));
+    root.NodeGraphCurveGraph?.render(svg, { series, guides: guideNotes, playhead: play });
+    for (const [laneIndex, lane] of lanes.entries()) {
+      if (lane.id !== state?.activeLane) continue;
+      const keys = (lane.keys || []).slice().sort((a, b) => a.x - b.x);
+      const rects = svg.querySelectorAll(`[data-curve-series="${encodeURIComponent(lane.id)}"][data-curve-point]`);
+      rects.forEach((point, index) => {
+        const box = point.getBBox();
+        const hit = document.createElementNS(svg.namespaceURI, "circle");
+        hit.setAttribute("class", "node-adjust-cursor pm-pin-hit"); hit.setAttribute("data-pm", "pin-dot"); hit.setAttribute("data-lane", lane.id); hit.setAttribute("data-x", keys[index]?.x ?? 0);
+        hit.setAttribute("cx", String(box.x + box.width / 2)); hit.setAttribute("cy", String(box.y + box.height / 2)); hit.setAttribute("r", "18"); hit.setAttribute("fill", "transparent"); hit.setAttribute("pointer-events", "all");
+        svg.append(hit);
+      });
     }
-    const playX = x(soundingNote(node));
-    parts.push(`<line data-pm="playhead-line" x1="${playX.toFixed(2)}" x2="${playX.toFixed(2)}" y1="0" y2="${height}" stroke="#fff" opacity=".7" vector-effect="non-scaling-stroke"/>`);
-    svg.innerHTML = parts.join("");
   }
+
+  function curveColor(index) { return ["#62bce5", "#d99b58", "#67c477", "#c678d2", "#e16c7e", "#c4bd69"][index % 6]; }
 
   function escapeHtml(s) {
     return String(s || "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
   }
   function escapeAttr(s) { return escapeHtml(s); }
 
-  function laneCurveControlsHtml(lane) {
+  function laneCurveControlsHtml(lane, selectedX) {
     const keys = (lane?.keys || []).slice().sort((a, b) => a.x - b.x);
-    if (keys.length < 2) return '<div class="pm-curve-empty">Pin at least two keyframes to set a segment curve.</div>';
+    const selected = keys.find((key) => Math.abs(key.x - selectedX) < 1e-7) || keys[0];
+    const index = selected ? keys.indexOf(selected) : -1;
+    if (!selected) return '<div class="pm-curve-empty">Double-click the graph to add a point.</div>';
+    const next = keys[index + 1];
+    if (!next) return '<div class="pm-curve-selected">Key ' + selected.x + ' · ' + escapeHtml(midiName(selected.x)) + ' · Value ' + Number(selected.offset || 0).toFixed(3) + '</div>';
     const shapes = root.NODE_GRAPH_SEGMENT_SHAPES || ["rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
-    return keys.slice(0, -1).map((key, index) => {
-      const buttons = shapes.map((shape) => '<button type="button" class="pm-btn pm-curve-shape" data-pm="curve-shape" data-lane="'
-        + escapeAttr(lane.id) + '" data-x="' + key.x + '" data-shape="' + shape + '" aria-pressed="'
-        + (key.shape === shape ? 'true' : 'false') + '">' + shape + '</button>').join("");
-      return '<div class="pm-curve-segment"><span>' + escapeHtml(midiName(key.x)) + ' → ' + escapeHtml(midiName(keys[index + 1].x))
-        + '</span><div class="pm-curve-shapes">' + buttons + '</div><label>Skew <input type="range" min="-1" max="1" step="0.01" value="'
-        + Number(key.skew || 0) + '" data-pm="curve-skew" data-lane="' + escapeAttr(lane.id) + '" data-x="' + key.x + '"></label></div>';
-    }).join("");
+    const buttons = shapes.map((shape) => '<button type="button" class="pm-btn pm-curve-shape" data-pm="curve-shape" data-lane="'
+      + escapeAttr(lane.id) + '" data-x="' + selected.x + '" data-shape="' + shape + '" aria-pressed="'
+      + ((selected.shape || "rational") === shape ? 'true' : 'false') + '">' + shape + '</button>').join("");
+    return '<div class="pm-curve-segment"><div class="pm-curve-label">Shape · ' + escapeHtml(midiName(selected.x)) + ' → ' + escapeHtml(midiName(next.x)) + '</div><div class="pm-curve-shapes">' + buttons + '</div><label>Skew <input type="range" min="-1" max="1" step="0.01" value="'
+      + Number(selected.skew || 0) + '" data-pm="curve-skew" data-lane="' + escapeAttr(lane.id) + '" data-x="' + selected.x + '"></label><span>Key ' + selected.x + ' · ' + escapeHtml(midiName(selected.x)) + ' · Value ' + Number(selected.offset || 0).toFixed(3) + '</span></div>';
   }
 
   function onOverlayClick(event) {
+    const curve = event.target.closest?.("[data-curve-series], [data-curve-series-hit]");
+    if (curve) {
+      const node = selectedNode(), state = node && ensureState(node);
+      const id = decodeURIComponent(curve.dataset.curveSeries || curve.dataset.curveSeriesHit || "");
+      const lane = state?.lanes.find((item) => item.id === id);
+      if (lane) {
+        state.activeLane = lane.id;
+        const point = event.target.closest("[data-curve-point]");
+        const keys = (lane.keys || []).slice().sort((a, b) => a.x - b.x);
+        ui.selectedPoint = point && keys[Number(point.dataset.curvePoint)] ? { laneId: lane.id, x: keys[Number(point.dataset.curvePoint)].x } : null;
+        return renderOverlay();
+      }
+    }
     const btn = event.target.closest("[data-pm]");
     if (!btn) return;
     const act = btn.getAttribute("data-pm");
@@ -1243,7 +1255,7 @@
       recordChange("Mutator color");
       return renderOverlay();
     }
-    if (act === "arm" && node) {
+    if ((act === "arm" || act === "add-param") && node) {
       node._mutatorArmed = !node._mutatorArmed;
       ui.notice = "";
       refreshNav();
