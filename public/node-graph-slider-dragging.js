@@ -420,6 +420,18 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
 
   // Domain may leave slider min/max; HTML range thumb stays in-range for display.
   const domain = normalizeNodeSliderValue(slider, value);
+  // A typed value goes where a drag would (PASTE-7): an edited gradient stop's outlined slider writes the stop, a Gradient module's
+  // Playhead moves the gradient. One undo step, recorded by the intercept; the base param is not written.
+  if ((typeof nodeGraphGradientModuleInterceptSlider === "function"
+    && nodeGraphGradientModuleInterceptSlider(slider, domain, { commit: true, interaction: "typed" }))
+    || (typeof nodeGraphGradientMaybeInterceptSlider === "function"
+    && nodeGraphGradientMaybeInterceptSlider(slider, domain, { commit: true, interaction: "typed" }))) {
+    slider.value = String(typeof nodeSliderThumbDisplayValue === "function" ? nodeSliderThumbDisplayValue(slider, domain) : domain);
+    syncNodeSliderReadout(slider);
+    markNodeGraphRenderPending();
+    scheduleNodeGraphLiveParameterSync();
+    return;
+  }
   slider.dataset.domainValue = String(domain);
   const thumb = typeof nodeSliderThumbDisplayValue === "function"
     ? nodeSliderThumbDisplayValue(slider, domain)

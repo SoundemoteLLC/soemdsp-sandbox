@@ -93,6 +93,14 @@ try {
     out.offsetWritten = Math.abs(g().stops.find((s) => s.id === "s2").offsets[a].frequency - 0.1) > 1e-6;
 
     out.stage = "phase";
+    // PASTE-7: a typed value while editing writes the stop too (one undo step, base kept).
+    const h1 = nodeGraphMvp.historyIndex;
+    const typed = Math.round(base * 2);
+    updateNodeSliderCurrentValue(slider(), String(typed));
+    out.typedSteps = nodeGraphMvp.historyIndex - h1;
+    out.typedBaseKept = node().params.frequency === base;
+    out.typedSounds = Math.abs(eff() - typed) / typed < 1e-6;
+
     // An unmarked slider writes its base as before.
     const phase = nodeGraphSliderForParameter(a, "phase");
     out.phaseUnmarked = phase?.dataset.gradientEdit !== "1";
@@ -129,17 +137,22 @@ try {
     nodeGraphGradientEditSyncOutlines();
     out.betweenStopsUnmarked = !marked();
     nodeGraphGradientEditEnd();
+    const baseBefore = node().params.frequency;
+    updateNodeSliderCurrentValue(slider(), String(Math.round(baseBefore + 7)));
+    out.typedOutsideWritesBase = node().params.frequency === Math.round(baseBefore + 7);
     return out; } catch (e) { return { error: String(e), stage: window.__seOut?.stage, out: window.__seOut }; }
   });
   const ok = (cond, msg) => assert.ok(cond, `${msg} ${JSON.stringify(r)}`);
   ok(r.snapped && r.handleOutlined && r.sliderMarked && r.note, "tapping a stop edits it: playhead snaps, stop and its sliders outlined");
   ok(r.stepsDuringMove === 0 && r.stepsOnRelease === 1, "a slider move is one undo step, on release");
   ok(r.baseKept && r.soundsAtTarget && r.offsetWritten, "the move writes the stop's offset; the base stays");
+  ok(r.typedSteps === 1 && r.typedBaseKept && r.typedSounds, "a typed value while editing writes the stop, one undo step");
   ok(r.phaseUnmarked && r.phaseBase, "an unoutlined slider still writes its base");
   ok(r.offAfterRetap, "tapping the edited stop again ends editing");
   ok(r.escEnds, "Esc ends editing");
   ok(r.emptyTapEnds, "tapping empty strip ends editing and adds no stop");
   ok(r.betweenStopsUnmarked, "between stops nothing is outlined");
+  ok(r.typedOutsideWritesBase, "outside stop editing a typed value writes the base");
   assert.deepEqual(errors, [], "no page errors");
   console.log("test_gradient_stop_edit: ok");
 } finally {
