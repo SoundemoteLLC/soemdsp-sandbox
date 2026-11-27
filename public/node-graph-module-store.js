@@ -1365,15 +1365,20 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Pitch ↔ Hz",
     notes: ["pitch", "hz", "frequency", "midi", "a4", "tuning", "p2f", "f2p", "convert", "musical", "pitch to hz", "hz to pitch"],
   },
+  // PASTE-8: not in the store or its search. A Gradient module comes only from dragging a gradient's grip on the 🌈 page (one per
+  // gradient). Patches that already hold one load and play as before.
   gradient: {
     category: "modulator",
     description: "Plays one gradient from the Gradients page at audio rate. Playhead = knob + In; Out passes In through.",
+    hidden: true,
     label: "Gradient",
     notes: ["gradient", "playhead", "morph", "preset", "blend", "snapshot", "modulator", "thru"],
   },
+  // PASTE-8: not in the store or its search. A Pitch Mutator comes only from dragging the grip on the Mutator page.
   pitchMutator: {
     category: "musical",
     description: "Named Pitch Mutator. Freq Out looks up a log-Hz lane; one bound knob is a slider-space offset lane.",
+    hidden: true,
     label: "Pitch Mutator",
     notes: ["pitch", "mutator", "frequency", "hz", "gate", "velocity", "lane", "keyframe", "musical"],
   },
