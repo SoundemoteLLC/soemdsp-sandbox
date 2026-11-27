@@ -21,6 +21,9 @@
 //
 // Screen Shader is intentionally NOT in this set.
 
+// The 📄 Presets page is empty until the Preset Explorer (PASTE-2) lands: its nav icon stays hidden. Set true to bring it back.
+const NODE_GRAPH_PRESETS_PAGE_IN_NAV = false;
+
 const nodeGraphUnifiedWindowPages = Object.freeze({
   commandCenter: Object.freeze({
     key: "commandCenter",
@@ -60,7 +63,7 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     workspaceKey: "presets",
     label: "Presets",
     icon: "📄",
-    showInNav: true,
+    showInNav: NODE_GRAPH_PRESETS_PAGE_IN_NAV,
   }),
   gradients: Object.freeze({
     key: "gradients",

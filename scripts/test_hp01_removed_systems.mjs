@@ -63,6 +63,9 @@ try {
       const presets = document.getElementById("nodePresetsPage");
       out.presetsOpen = Boolean(presets && !presets.hidden);
       out.pagesPanel = Boolean(document.getElementById("nodePagesPage"));
+      // PASTE-7: until the Preset Explorer lands, the empty page has no 📄 in the Command Center row.
+      out.presetsInNav = Boolean(document.querySelector('.node-unified-window-nav-button[data-unified-page="presets"]'));
+      out.navShown = document.querySelectorAll(".node-unified-window-nav-button").length > 0;
       return out;
     });
     const where = file || "index.html";
@@ -73,6 +76,7 @@ try {
     assert.deepEqual(r.savedKeys, [], `${where}: circuitPatches data is dropped on the next save`);
     assert.ok(r.broomOpen && !r.broomHasCircuit && r.bankField, `${where}: broom page opens without circuit presets, bank fields kept`);
     assert.ok(r.presetsOpen && !r.pagesPanel, `${where}: the 📄 page opens as the empty Presets page`);
+    assert.ok(r.navShown && !r.presetsInNav, `${where}: the 📄 icon is hidden from the Command Center row`);
     assert.deepEqual(errors, [], `${where}: no page errors`);
     console.log(`ok   ${where}: ${JSON.stringify(r)}`);
     await page.close();
