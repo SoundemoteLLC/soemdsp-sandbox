@@ -29,3 +29,12 @@ Rules: no setInterval or polling, no hover text or tooltips, no arrow cursors (`
 ## Report back
 
 For each item, the commit and what changed (fixed code or updated test), plus the final suite result and anything still open. Give Argi a short Ctrl+F5 checklist that includes the WASD-pan and zoom-plus-middle-button visual checks.
+
+## Step 0, TOP PRIORITY (Argi, newest; do this before everything above)
+
+Two regressions reported by Argi on current master. Both are release blockers.
+
+1. **Middle mouse no longer pans or zooms the workspace.** WASDQE still works. Suspects: `167b8490` (title actions now require the left button), the PASTE-9 A3 change (zoom then middle-press text redraw), or the PASTE-9 merge of `bugfix/text-keyboard`. Bisect if it isn't obvious. Fix it without undoing the title right-click fix or the A2/A3 text fixes.
+2. **No module can be dragged in.** That covers the module store (MIDI modules and every other kind) and probably the 🌈 and Mutator drag grips too. Suspects: PASTE-8 (`fe0da7dc` store change, `3151be00` grips, `89bda771`) or the same pointer and button change as item 1. Fix it so every store module, gradient and mutator drag-in works again.
+
+For both: add a browser regression test (middle-drag pans, middle-drag plus wheel or the usual zoom gesture zooms, and dragging a module from the store places it, including a MIDI module and a gradient from 🌈). Commit them separately. The final smoke check must cover both.
