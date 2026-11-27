@@ -3,7 +3,7 @@ async function bindNodeGraphMvpEventGroup(label, binder) {
     await binder();
     return true;
   } catch (error) {
-    console.error(`Node graph event binding failed: ${label}`, error);
+    console.error(`Node graph event binding failed: ${label}`, error?.message || String(error), error?.stack || "");
     document.documentElement.dataset.nodeGraphEventBindingError = label;
     document.documentElement.dataset.nodeGraphEventBindingErrorMessage = error?.message || String(error);
     return false;
