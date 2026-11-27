@@ -33,6 +33,8 @@ const NODE_GRAPH_LIVE_CONTROLLER_ALWAYS_REACHABLE_TYPES = Object.freeze([
   "keyboardController",
   "gridKeyboard",
   "pitchModWheel",
+  // HP-23: a Gradient module drives params through its lanes, not cables: it plays whenever Live runs.
+  "gradient",
   // Cheap host/project tempo dump — must run even when only feeding a readout.
   "hostBpm",
 ]);

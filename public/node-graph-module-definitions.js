@@ -185,6 +185,7 @@ const nodeGraphNodeLabels = Object.freeze({
   fm: "Freq Manager",
   pitchHz: "Pitch ↔ Hz",
   pitchMutator: "Pitch Mutator",
+  gradient: "Gradient",
   pitchManager: "Pitch Manager",
   ampDb: "Amp ↔ dB",
   passiveFilter: "Passive Filter",
@@ -11808,6 +11809,43 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         unit: "key" }
+    ] },
+  gradient: {
+    // HP-23: plays one patch gradient (node.gradientId) at audio rate. Playhead = the Playhead knob + In (cables sum), read every sample
+    // by the gradient's lanes in the engine; Out passes In straight through (a thru: chain it or feed it back). The knob and the 🌈 page
+    // playhead are one value. Drag a gradient in from the page to get one; tap the display to play the next gradient.
+    planRole: "processor",
+    planFreeRun: true,
+    defaultWidthGu: 5,
+    layout: "sinCos",
+    chrome: "LayoutA",
+    customDisplayArea: true,
+    displayType: "gradientFace",
+    displayHeightGu: 2,
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "gradientFace" },
+    ],
+    defaultDisplayMode: "face",
+    defaultUi: {
+      buttonsHidden: true },
+    inputLabels: { In: "→" },
+    outputLabels: { Out: "←" },
+    inputs: ["In"],
+    outputs: ["Out"],
+    face: [
+      { kind: "cells", params: [["playhead", "Playhead"]], h: 40 },
+    ],
+    parameters: [
+      {
+        defaultValue: "0",
+        key: "playhead",
+        label: "Playhead",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        step: "any",
+        tooltip: "Where the gradient plays, 0 to 1 across its stops. Playhead = this + In. The same value as the playhead on the Gradients page." }
     ] },
   pitchManager: {
     planRole: "processor",

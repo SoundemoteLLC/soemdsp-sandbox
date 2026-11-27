@@ -119,12 +119,24 @@
     return patch && Array.isArray(patch.gradients) ? patch.gradients : null;
   }
 
+  // HP-23: where a Gradient module's signal has the playhead right now (knob + In, read back from the engine), per gradient id. Signal
+  // motion, not patch data: never saved or undone. Without an entry the playhead is the gradient's own position (the knob / the page).
+  const livePlayhead = new Map();
+
+  function positionOf(gradient) {
+    const live = livePlayhead.get(gradient.id);
+    return Number.isFinite(live) ? live : finite(gradient.position, 0);
+  }
+
   /**
    * Apply every enabled gradient to one node's live params (edited in place). Continuous params get the summed slider offset, discrete ones
    * the snapped stop value. Params that are not on the node, or have no usable metadata, are skipped.
    */
   function applyParams(node, params) {
-    const gradients = currentGradients();
+    applyWith(currentGradients(), node, params);
+  }
+
+  function applyWith(gradients, node, params) {
     if (!gradients || !gradients.length || !node || !params) return;
     const sums = new Map();
     const metas = new Map();
@@ -133,7 +145,7 @@
       const mine = gradient.params.filter((entry) => plain(entry) && entry.nodeId === node.id && typeof params[entry.key] === "number");
       if (!mine.length) continue;
       const stops = sortedStops(gradient);
-      const segment = segmentAt(stops, clamp01(finite(gradient.position, 0)));
+      const segment = segmentAt(stops, clamp01(positionOf(gradient)));
       if (!segment) continue;
       for (const { key } of mine) {
         let meta = metas.get(key);
@@ -173,6 +185,30 @@
       applyParams(node, holder);
     }
     return holder[key];
+  }
+
+  /**
+   * HP-23 lane LUT: the domain offset this one gradient adds to (node, key) at n evenly spaced playheads 0..1, from the param's current
+   * base (the engine adds it after the base's smoother). Same maths as applyParams (slider curve, clamp, discrete snap). null if the
+   * param cannot be moved.
+   */
+  function laneLut(node, key, gradient, n = 257) {
+    const base = node && node.params ? Number(node.params[key]) : NaN;
+    if (!Number.isFinite(base) || !metaFor(node, key)) return null;
+    const lut = new Float32Array(n);
+    const probe = { ...gradient, enabled: true };
+    for (let i = 0; i < n; i += 1) {
+      const holder = { [key]: base };
+      probe.position = i / (n - 1);
+      applyWith([probe], node, holder);
+      lut[i] = Number.isFinite(holder[key]) ? holder[key] - base : 0;
+    }
+    return lut;
+  }
+
+  function setLivePlayhead(gradientId, value) {
+    if (Number.isFinite(value)) livePlayhead.set(String(gradientId), value);
+    else livePlayhead.delete(String(gradientId));
   }
 
   // ------------------------------------------------------------------------------------------------ normalize
@@ -369,8 +405,8 @@
     return out;
   }
 
-  /** Tell the engine and the autosave that a gradient changed (a position or stop edit). Events only. */
-  function notifyChanged(status) {
+  /** The UI half of a gradient change: ghosts, slider numbers, parameter visuals and displays of every gradient's nodes. Events only. */
+  function notifyVisuals() {
     if (typeof root.markNodeGraphRenderPending === "function") root.markNodeGraphRenderPending();
     // The moved values show at once where a modulated value shows: ghost, slider number and every display reading the param.
     if (typeof root.syncNodeGraphGhostSliders === "function") root.syncNodeGraphGhostSliders();
@@ -385,6 +421,12 @@
       if (el && typeof root.syncNodeGraphParameterVisualsForNodeElement === "function") root.syncNodeGraphParameterVisualsForNodeElement(el);
     }
     if (ids.size && typeof root.scheduleNodeGraphModuleScopeDrawIfNeeded === "function") root.scheduleNodeGraphModuleScopeDrawIfNeeded();
+  }
+
+  /** Tell the engine and the autosave that a gradient changed (a position or stop edit). Events only. */
+  function notifyChanged(status) {
+    notifyVisuals();
+    // The param sync carries the lanes too (node-graph-gradient-lanes.js); the worklet re-installs them when the lane shape changed.
     if (typeof root.scheduleNodeGraphLiveParameterSync === "function") root.scheduleNodeGraphLiveParameterSync();
     if (typeof root.scheduleNodeGraphWorkspaceAutosave === "function") root.scheduleNodeGraphWorkspaceAutosave(status || "Gradient changed");
   }
@@ -394,6 +436,9 @@
     metaFor,
     toSlider,
     fromSlider,
+    laneLut,
+    positionOf,
+    setLivePlayhead,
     createGradientFromSnapshot,
     snapshotIntoGradient,
     setStart,
@@ -404,6 +449,7 @@
   };
   root.nodeGraphNormalizeGradients = normalizeGradients;
   root.nodeGraphGradientsNotifyChanged = notifyChanged;
+  root.nodeGraphGradientsNotifyVisuals = notifyVisuals;
 
   if (typeof root.registerNodeGraphParamOffsetProvider === "function") {
     // Gradients first, the Pitch Mutator (order 20) after them: docs/MODULE_GRADIENTS_AND_PRESETS_PLAN.md section 4.4.

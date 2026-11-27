@@ -2700,6 +2700,8 @@ async function sendNodeGraphLivePlan() {
   try {
     nodeGraphReportModuleSpawns();
     const plan = nodeGraphBuildLivePlan();
+    // HP-23: the gradients' audio-rate lanes (undefined where the engine has none).
+    if (typeof nodeGraphGradientLanesForLive === "function") plan.gradientLanes = nodeGraphGradientLanesForLive();
     nodeGraphMvp.live.planSendGen = (nodeGraphFiniteNumber(nodeGraphMvp.live.planSendGen)) + 1;
     const planSendGen = nodeGraphMvp.live.planSendGen;
     if (typeof nodeGraphEnsureLiveSamplesForPlan === "function") {
@@ -3012,6 +3014,7 @@ function sendNodeGraphLiveParameterUpdate() {
         sessionId: nodeGraphMvp.live.sessionId,
         type: "setParams",
         sharedOutputVolumeDb: getNodeGraphOutputModuleVolumeDb(),
+        gradientLanes: typeof nodeGraphGradientLanesForLive === "function" ? nodeGraphGradientLanesForLive() : undefined,
       });
     } else if (nodeGraphMvp.live.runtime) {
       nodeGraphMvp.live.runtime.autoSmoothingSeconds = autoSmoothingSeconds;
@@ -3631,13 +3634,13 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-visual.js?v=perf-20261015",
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1-modmean1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
-  "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1-limits-print-2-budget-specosc1",
-  "./public/node-live-audio-worklet-native-graph.js?v=merge-prism-spectral-20261126-1",
+  "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1-limits-print-2-budget-specosc1-hp23",
+  "./public/node-live-audio-worklet-native-graph.js?v=merge-prism-spectral-20261126-1-hp23",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=step-register-1-limits-1-specosc1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
-  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.16.3-levels",
-  "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015-lvl-beats-1-vtaps1-hp09e2c-sw4-stack1",
+  "./public/node-live-audio-worklet-handle-message.js?v=2026.11.16.3-levels-hp23",
+  "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015-lvl-beats-1-vtaps1-hp09e2c-sw4-stack1-hp23",
   "./public/lib/spectral-analysis.js?v=spectral-core-1-fcurve1",
   "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-db-1-spectral-core1-specvis2",
   "./public/modules/spectralDisplay/spectral-display-worklet.js?v=merge-prism-spectral-20261126-1",
@@ -3970,6 +3973,7 @@ async function startNodeGraphLiveAudio(outputSerial = nodeGraphMvp.live.outputTo
     }
 
     const plan = nodeGraphBuildLivePlan();
+    if (typeof nodeGraphGradientLanesForLive === "function") plan.gradientLanes = nodeGraphGradientLanesForLive();
     const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextConstructor) {
       throw new Error("Web Audio API unavailable");

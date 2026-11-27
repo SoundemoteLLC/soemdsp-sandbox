@@ -147,7 +147,13 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
     if (typeof this.syncNativeMutatorPlayheadPublish === "function") {
       try { this.syncNativeMutatorPlayheadPublish(); } catch (_e) { /* keep prior publish */ }
     }
+    if (typeof this.syncNativeGradientPlayheadPublish === "function") {
+      try { this.syncNativeGradientPlayheadPublish(); } catch (_e) { /* keep prior publish */ }
+    }
     const dataPorts = [];
+    if (this.gradientPlayheadPublish) {
+      for (const [nodeId, p] of this.gradientPlayheadPublish) dataPorts.push([nodeId, "Playhead", new Float32Array([p.value])]);
+    }
     if (this.mutatorPlayheadPublish) {
       for (const [nodeId, hz] of this.mutatorPlayheadPublish) dataPorts.push([nodeId, "PlayheadHz", hz]);
     }

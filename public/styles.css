@@ -5726,6 +5726,10 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   font-size: 12px;
 }
 
+#nodeGradientsBody .node-gradient-name[data-gradient-drag] {
+  touch-action: none;
+}
+
 .node-gradient-holds {
   margin: 4px 2px 0;
   color: rgba(200, 205, 212, 0.72);

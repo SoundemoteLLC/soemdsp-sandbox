@@ -36,6 +36,8 @@ try {
     page.on("pageerror", (e) => errors.push(String(e)));
     await page.goto(baseUrl + file + "?mode=circuitbuilder&v=" + Date.now(), { waitUntil: "domcontentloaded", timeout: 120000 });
     await page.waitForFunction(() => document.body.dataset.nodeBootFinished === "interface-ready", null, { timeout: 180000 });
+    // Boot can still restore the working patch just after interface-ready; let it land first.
+    await page.waitForTimeout(1500);
     const r = await page.evaluate(async () => {
       const wait = (ms) => new Promise((res) => setTimeout(res, ms));
       const out = {};

@@ -907,6 +907,10 @@ function validateNodeGraphPatch(patch) {
     ) {
       normalizedNode.ui = ui;
     }
+    // Gradient module (HP-23): the gradient it plays.
+    if (type === "gradient" && typeof node.gradientId === "string" && node.gradientId) {
+      normalizedNode.gradientId = node.gradientId;
+    }
     // Keyboard / Grid Chord Memory slots (MIDI 0..127 → note lists).
     if (
       (type === "keyboard" || type === "gridKeyboard")

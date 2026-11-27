@@ -167,6 +167,8 @@ function nodeGraphGradientPageCard(gradient) {
     const name = document.createElement("span");
     name.className = "node-gradient-name";
     name.textContent = gradient.name;
+    // HP-23: drag the name into the circuit to place a Gradient module playing this gradient.
+    name.dataset.gradientDrag = gradient.id;
     head.append(name);
   }
   const enabled = nodeGraphGradientPageButton(gradient.enabled === false ? "Off" : "On", "toggle", gradient.id, { pressed: gradient.enabled !== false });
@@ -284,7 +286,8 @@ function nodeGraphGradientPageUpdateLive(gradient) {
   if (!card) return;
   const strip = card.querySelector(".node-gradient-strip");
   const playhead = card.querySelector(".node-gradient-playhead");
-  if (playhead) playhead.style.left = `${(gradient.position * 100).toFixed(3)}%`;
+  const shown = Math.max(0, Math.min(1, NodeGraphGradients.positionOf(gradient)));
+  if (playhead) playhead.style.left = `${(shown * 100).toFixed(3)}%`;
   strip?.setAttribute("aria-valuenow", String(gradient.position));
   for (const stop of gradient.stops) {
     const handle = strip?.querySelector(`[data-stop-id="${CSS.escape(stop.id)}"]`);
@@ -368,7 +371,34 @@ function nodeGraphGradientPageStripPos(strip, clientX) {
   return rect.width > 0 ? Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) : 0;
 }
 
+/** Drag a gradient's name out of its card: past the slop, a Gradient module bound to it follows the pointer (the store's placement). */
+function nodeGraphGradientPageDragOutDown(event) {
+  const name = event.target?.closest?.("[data-gradient-drag]");
+  if (!name || event.button > 0) return false;
+  nodeGraphGradientPageState.dragOut = { gradientId: name.dataset.gradientDrag, pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+  return true;
+}
+
+function nodeGraphGradientPageDragOutMove(event) {
+  const out = nodeGraphGradientPageState.dragOut;
+  if (!out || out.pointerId !== event.pointerId) return;
+  if (Math.hypot(event.clientX - out.x, event.clientY - out.y) < 6) return;
+  nodeGraphGradientPageState.dragOut = null;
+  if (typeof beginNodeGraphModulePlacement !== "function") return;
+  const id = beginNodeGraphModulePlacement("gradient", nodeGraphClientPoint(event), {
+    overWorkspace: typeof nodeGraphClientPointInsideWorkspace === "function" ? nodeGraphClientPointInsideWorkspace(event) : true,
+  });
+  const node = id ? nodeGraphPatchNode(id) : null;
+  const gradient = nodeGraphGradientPageGradients().find((g) => g.id === out.gradientId);
+  if (!node || !gradient) return;
+  // Bound before the drop commits, so the placement's one undo step holds the binding.
+  node.gradientId = gradient.id;
+  node.params = { ...(node.params || {}), playhead: Number(gradient.position) || 0 };
+  if (nodeGraphMvp.modulePlacement) nodeGraphMvp.modulePlacement.pointerId = event.pointerId;
+}
+
 function nodeGraphGradientPagePointerDown(event) {
+  if (nodeGraphGradientPageDragOutDown(event)) return;
   const strip = event.target?.closest?.(".node-gradient-strip");
   if (!strip || event.button > 0) return;
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === strip.dataset.gradientId);
@@ -408,7 +438,10 @@ function nodeGraphGradientPagePointerMove(event) {
     gradient.position = pos;
   }
   nodeGraphGradientPageRepaintSliders([gradient]);
-  nodeGraphGradientsNotifyChanged(drag.stopId ? `${gradient.name} stop moved` : `${gradient.name} position`);
+  // A playhead drag moves one engine knob (audio-rate lanes, HP-23); a stop drag changes the lanes' tables.
+  if (drag.stopId) nodeGraphGradientsNotifyChanged(`${gradient.name} stop moved`);
+  else if (typeof nodeGraphGradientsNotifyPlayhead === "function") nodeGraphGradientsNotifyPlayhead(gradient, `${gradient.name} position`);
+  else nodeGraphGradientsNotifyChanged(`${gradient.name} position`);
   nodeGraphGradientPageUpdateLive(gradient);
 }
 
@@ -601,6 +634,8 @@ function bindNodeGraphGradientPage() {
   });
   host.addEventListener("pointerdown", nodeGraphGradientPagePointerDown);
   host.addEventListener("pointermove", nodeGraphGradientPagePointerMove);
+  document.addEventListener("pointermove", nodeGraphGradientPageDragOutMove);
+  document.addEventListener("pointerup", () => { nodeGraphGradientPageState.dragOut = null; });
   host.addEventListener("pointerup", nodeGraphGradientPagePointerUp);
   host.addEventListener("pointercancel", nodeGraphGradientPagePointerUp);
   // Undo / redo / load replace the patch: re-render from the committed patch (an edited stop that is gone ends the editing).

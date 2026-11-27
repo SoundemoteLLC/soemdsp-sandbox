@@ -37,6 +37,7 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
         return;
       }
       this.setPlan(message.plan, message);
+      this.syncNativeGradientLanes?.(message.plan?.gradientLanes);
       return;
     }
     if (message.type === "setConnections") {
@@ -45,6 +46,7 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
         return;
       }
       this.setConnections(message.plan || message, message);
+      this.syncNativeGradientLanes?.((message.plan || message)?.gradientLanes);
       return;
     }
     if (message.type === "setNativeModuleWasm") {
@@ -53,6 +55,11 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
     }
     if (message.type === "setParams") {
       this.setParams(message.nodes, message);
+      this.syncNativeGradientLanes?.(message.gradientLanes);
+      return;
+    }
+    if (message.type === "gradientPlayhead") {
+      this.setNativeGradientPlayhead?.(message);
       return;
     }
     if (message.type === "setGraphData") {

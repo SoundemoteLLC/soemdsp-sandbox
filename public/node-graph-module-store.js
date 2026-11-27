@@ -1365,6 +1365,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Pitch ↔ Hz",
     notes: ["pitch", "hz", "frequency", "midi", "a4", "tuning", "p2f", "f2p", "convert", "musical", "pitch to hz", "hz to pitch"],
   },
+  gradient: {
+    category: "modulator",
+    description: "Plays one gradient from the Gradients page at audio rate. Playhead = knob + In; Out passes In through.",
+    label: "Gradient",
+    notes: ["gradient", "playhead", "morph", "preset", "blend", "snapshot", "modulator", "thru"],
+  },
   pitchMutator: {
     category: "musical",
     description: "Named Pitch Mutator. Freq Out looks up a log-Hz lane; one bound knob is a slider-space offset lane.",
@@ -3550,6 +3556,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },
   pitchHz: {
+    source: "native_modules/graph_engine/graph_engine.cpp",
+    sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
+  },
+  gradient: {
     source: "native_modules/graph_engine/graph_engine.cpp",
     sourceUrl: "https://github.com/SoundemoteLLC/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },

@@ -2695,6 +2695,7 @@ static const int kTypeSpectralCrossSynthesis = 278;
 static const int kTypeSpectralWarp = 279;
 static const int kTypeSpectralPrism = 283;
 static const int kTypePitchMutator = 280; // Pitch Mutator: log2(Hz) LUT -> Freq Out
+static const int kTypeGradient = 286; // Gradient (HP-23): playhead (knob + In) on Phase01 for gradient lanes; Out = In (thru)
 static const int kTypeSpectralFreeze = 273;
 static const int kTypeEarlyReflectionConvolution = 274;
 static const int kTypeSpectralDelay = 275;
@@ -3124,6 +3125,7 @@ struct ParamModEdge {
   unsigned int dstHash;
   int paramId;
   bool used;
+  int lut; // HP-23 gradient lane: index into Circuit::gradLuts (the source is a playhead, the LUT gives the domain offset), -1 = plain MOD
 };
 
 // Compiled form of a ParamModEdge: everything the per-sample stamp needs,
@@ -3134,7 +3136,14 @@ struct ModEntry {
   Node* src;      // nullptr = source missing (stamps 0, like the old lookup miss)
   int srcPort;
   bool self;      // source is the destination node (reads its previous sample)
+  const float* lut; // gradient lane: playhead 0..1 -> domain offset (kGradLutSize points), nullptr = plain MOD
 };
+
+// Gradient lanes (HP-23): one LUT per (gradient, target param). The source signal is the gradient's playhead (0..1, held at the ends);
+// the LUT holds the target's domain offset at kGradLutSize evenly spaced playhead positions (the host bakes it from the gradient's stops
+// and the target's slider curve), read with linear interpolation every sample and added after the target's smoother.
+static const int kGradLutSize = 257;
+static const int kMaxGradLuts = 64;
 
 // One-shot live-port poke (double-click jack / wire-break impulse).
 static const int kMaxPortPokes = 64;
@@ -3186,6 +3195,8 @@ struct Circuit {
   Conn conns[kMaxConnections];
   PortPoke portPokes[kMaxPortPokes];
   ParamModEdge paramModEdges[kMaxParamModEdges];
+  float gradLuts[kMaxGradLuts][kGradLutSize]; // gradient lane LUTs (ParamModEdge::lut)
+  int gradLutCount;
   int overflow; // kOverflow* bits: a hard limit was hit since the last clear
   ModEntry modEntries[kMaxParamModEdges]; // grouped by destination node (Node::modStart / modCount)
   bool modListsValid;                     // false after any edge / node change; rebuilt in compile
@@ -5486,6 +5497,7 @@ static void rebuild_mod_lists(Circuit& g) {
       m.src = si >= 0 ? &g.nodes[si] : nullptr;
       m.srcPort = e.srcPort;
       m.self = e.srcHash == node.idHash;
+      m.lut = (e.lut >= 0 && e.lut < g.gradLutCount) ? g.gradLuts[e.lut] : nullptr;
       node.modCount += 1;
     }
   }
@@ -5510,6 +5522,19 @@ static void stamp_live_param_mods(Circuit& g, Node& node, int frame) {
     Control* c = m[k].ctrl;
     const double v = m[k].src ? edge_read_node(g, *m[k].src, m[k].srcPort, frame, m[k].self) : 0.0;
     c->liveModActive = 1; // even when v==0 (rest must stay at the offset)
+    if (m[k].lut) {
+      // Gradient lane: v is the playhead. Held at the ends (0 and 1), linear between the LUT points; the offset is in real units.
+      double x = (v == v) ? v : 0.0;
+      if (x < 0.0) x = 0.0;
+      if (x > 1.0) x = 1.0;
+      const double pos = x * (double)(kGradLutSize - 1);
+      int i0 = (int)pos;
+      if (i0 >= kGradLutSize - 1) i0 = kGradLutSize - 2;
+      const double t = pos - (double)i0;
+      const float* L = m[k].lut;
+      c->liveModDomain += (double)L[i0] + ((double)L[i0 + 1] - (double)L[i0]) * t;
+      continue;
+    }
     // Real values (bit4): domain ADD. Else unit 0…1 ADD. Never replace.
     if ((c->modFlags & 16u) != 0) {
       c->liveModDomain += v;
@@ -7444,6 +7469,22 @@ static inline double mutator_lane_offset(const Node& node, double note) {
   const int i1 = (i < 127) ? (i + 1) : 127;
   const double frac = x - (double)i;
   return (double)node.mutatorLaneLut[i] + ((double)node.mutatorLaneLut[i1] - (double)node.mutatorLaneLut[i]) * frac;
+}
+
+// Gradient (type 286, HP-23): plays one patch gradient at audio rate. Playhead = the Playhead knob (offset Control, smoothed by its own
+// smoother) + the summed In cables, every sample, on port Phase01; the gradient's lanes (ParamModEdge with a LUT) read it there, so the
+// engine orders this node before every target. Out passes In straight through (a thru: chain it or feed it back). No clamp here: the
+// lanes hold the gradient's ends.
+static void process_gradient(Circuit& g, Node& node, int frames) {
+  mix_node_inputs(g, node, frames);
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double in = g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
+    node.buf[kPortMono][f] = in;
+    double playhead = in + control_audio(g, node.offset, f);
+    if (!(playhead == playhead)) playhead = 0.0;
+    node.buf[kPortPhase01][f] = playhead;
+  }
 }
 
 static void process_pitch_mutator(Circuit& g, Node& node, int frames) {
@@ -18847,6 +18888,7 @@ extern "C" int soemdsp_graph_clear_param_mod_edges(int handle) {
   Circuit* g = get(handle);
   if (!g) return -1;
   g->paramModEdgeCount = 0;
+  g->gradLutCount = 0;
   g->modListsValid = false;
   for (int i = 0; i < kMaxParamModEdges; i++) {
     g->paramModEdges[i].used = false;
@@ -18884,6 +18926,7 @@ extern "C" int soemdsp_graph_add_param_mod_edge(
   e.dstHash = dstHash;
   e.paramId = paramId;
   e.used = true;
+  e.lut = -1;
   if (g->edgeCount >= kMaxEdges) g->overflow |= kOverflowEdges;
   if (g->edgeCount < kMaxEdges) {
     Edge& ue = g->edges[g->edgeCount++];
@@ -18895,6 +18938,59 @@ extern "C" int soemdsp_graph_add_param_mod_edge(
     ue.sinkKind = kSinkControl;
   }
   return 0;
+}
+
+// Gradient lane (HP-23): a ParamModEdge from a playhead source (a Gradient node's Phase01) to one target param, carrying a LUT the host
+// fills through soemdsp_graph_param_lut_ptr. Returns the LUT index (>= 0) or a negative error; the pool is cleared with the MOD edges.
+extern "C" int soemdsp_graph_add_param_lut_edge(
+  int handle,
+  unsigned int srcHash,
+  int srcPort,
+  unsigned int dstHash,
+  int paramId
+) {
+  Circuit* g = get(handle);
+  if (!g) return -1;
+  if (g->gradLutCount >= kMaxGradLuts) {
+    g->overflow |= kOverflowModEdges;
+    return -5;
+  }
+  const int rc = soemdsp_graph_add_param_mod_edge(handle, srcHash, srcPort, dstHash, paramId);
+  if (rc != 0) return rc;
+  const int lut = g->gradLutCount++;
+  for (int i = 0; i < kGradLutSize; i++) g->gradLuts[lut][i] = 0.0f;
+  g->paramModEdges[g->paramModEdgeCount - 1].lut = lut;
+  g->modListsValid = false;
+  return lut;
+}
+
+// Remove every gradient lane (LUT edge) and empty the LUT pool; plain MOD edges stay. The host re-adds the lanes after a change of
+// which params a gradient moves (a LUT value change only rewrites the LUT). Recompile afterwards.
+extern "C" int soemdsp_graph_clear_lut_edges(int handle) {
+  Circuit* g = get(handle);
+  if (!g) return -1;
+  for (;;) {
+    int k = -1;
+    for (int i = 0; i < g->paramModEdgeCount; i++) {
+      if (g->paramModEdges[i].used && g->paramModEdges[i].lut >= 0) { k = i; break; }
+    }
+    if (k < 0) break;
+    const ParamModEdge e = g->paramModEdges[k];
+    if (soemdsp_graph_disconnect_param_mod(handle, e.srcHash, e.srcPort, e.dstHash, e.paramId) != 0) {
+      g->paramModEdges[k].used = false; // not found by the matcher: drop it here so the loop ends
+      g->paramModEdges[k].lut = -1;
+    }
+  }
+  g->gradLutCount = 0;
+  g->modListsValid = false;
+  return 0;
+}
+
+// Pointer to one gradient lane LUT (kGradLutSize floats) for the host to write; 0 if out of range. Rewriting it needs no recompile.
+extern "C" float* soemdsp_graph_param_lut_ptr(int handle, int lut) {
+  Circuit* g = get(handle);
+  if (!g || lut < 0 || lut >= g->gradLutCount) return nullptr;
+  return g->gradLuts[lut];
 }
 
 // Domain guides + post-MOD bound flags for control_effective unit-band map.
@@ -20583,6 +20679,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypePitchMutator) {
       process_pitch_mutator(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeGradient) {
+      process_gradient(g, node, frames);
       return;
     }
     if (node.typeId == kTypePitchHz) {

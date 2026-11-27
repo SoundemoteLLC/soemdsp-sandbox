@@ -26,6 +26,7 @@ NodeLiveAudioProcessor.prototype.applyNativeModuleExports = function applyNative
           this._pendingSetPlan = null;
           try {
             this.setPlan?.(pending.plan, pending.message);
+            this.syncNativeGradientLanes?.(pending.plan?.gradientLanes);
           } catch (_e) { /* planRejected posted by setPlan wrapper */ }
         } else if (this.nativeGraphReady && this.efficientProduct && this.nodes?.size) {
           this.compileNativeGraphFromPlan?.();

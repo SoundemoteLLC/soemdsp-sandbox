@@ -307,6 +307,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   spectralWarp: 279,
   spectralPrism: 283,
   pitchMutator: 280,
+  gradient: 286,
   stftContrast: 270,
   stftGate: 271,
 });
@@ -537,6 +538,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   const k = String(key || "");
   const t = String(type || "");
   if (t === "script") return undefined;
+  if (t === "gradient") return { playhead: P.NATIVE_GRAPH_PARAM_ATT_OFFSET }[k];
   if (t === "dividerSequencer") {
     const divide = /^divide([1-4])$/.exec(k);
     if (divide) return P.NATIVE_GRAPH_PARAM_LANE_VOL1 + Number(divide[1]) - 1;
@@ -3510,6 +3512,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
       if (typeof native.soemdsp_graph_clear_param_mod_edges === "function") {
         try {
           native.soemdsp_graph_clear_param_mod_edges(this.nativeGraphHandle);
+          this._gradientLaneSig = null; // lanes went with the MOD edges
         } catch (_e) { /* older wasm */ }
       }
       const liveParamModKeys = new Set();
@@ -5738,7 +5741,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     return Math.round(Number.isFinite(v) ? v : fallback);
   };
   const pushChanged = (hash, cache, key, paramId, value, node) => {
-    const v = Number(value);
+    // A gradient lane adds its offset in the engine: push the param's base, not the UI-rate offset value.
+    const laneBase = this._gradientLaneBase?.get?.(`${node?.id}\0${key}`);
+    const v = Number(laneBase !== undefined ? laneBase : value);
     if (!Number.isFinite(v)) return;
     const modKey = `${key}__mod`;
     const domainKey = `${key}__domain`;
@@ -8812,6 +8817,125 @@ NodeLiveAudioProcessor.prototype.syncNativeMutatorFreqLuts = function syncNative
   }
 };
 
+// Gradient lanes (HP-23): every enabled gradient plays at audio rate in the native graph. Its source is a Gradient node (type 286): the
+// Gradient module bound to it, or a hidden one this host adds (id "__gradient:<gradientId>", its Playhead knob = the page's playhead).
+// Each target param gets a lane (ParamModEdge with a LUT the main thread baked from the stops and the param's slider curve); the engine
+// reads the source's playhead every sample and adds the LUT offset after the target's smoother. Laned params are pushed at their BASE
+// (the main thread's params carry the UI-rate offset for engines without lanes). A change of WHICH params are laned re-installs the
+// lanes and recompiles; a value change only rewrites the LUTs.
+NodeLiveAudioProcessor.GRADIENT_TYPE_ID = 286;
+NodeLiveAudioProcessor.GRADIENT_LUT_SIZE = 257;
+
+NodeLiveAudioProcessor.prototype.syncNativeGradientLanes = function syncNativeGradientLanes(lanes) {
+  if (Array.isArray(lanes)) this._gradientLanes = lanes;
+  const native = this.nativeGraph;
+  if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) return;
+  if (!native?.soemdsp_graph_add_param_lut_edge || !native?.soemdsp_graph_param_lut_ptr || !native?.soemdsp_graph_clear_lut_edges
+    || !native?.soemdsp_graph_add_node || !native?.soemdsp_graph_compile || !native.memory?.buffer) return;
+  const handle = this.nativeGraphHandle;
+  const P = NodeLiveAudioProcessor;
+  const list = Array.isArray(this._gradientLanes) ? this._gradientLanes : [];
+  const resolved = [];
+  const hidden = new Set();
+  for (const lane of list) {
+    const sourceId = String(lane?.sourceId || "");
+    if (!sourceId) continue;
+    const sourceHash = this.fnv1aHash32(sourceId);
+    if (lane.hidden) {
+      const rc = native.soemdsp_graph_add_node(handle, sourceHash, P.GRADIENT_TYPE_ID) | 0;
+      if (rc !== 0 && rc !== -3) continue; // -3: already there
+      hidden.add(sourceId);
+      this.pushNativeGraphParam(native, sourceHash, P.NATIVE_GRAPH_PARAM_ATT_OFFSET, Number(lane.playhead) || 0);
+    } else if (!this.nodes?.get?.(sourceId)) {
+      continue;
+    }
+    for (const t of Array.isArray(lane.targets) ? lane.targets : []) {
+      const node = this.nodes?.get?.(String(t?.nodeId || ""));
+      if (!node || !t.lut || t.lut.length !== P.GRADIENT_LUT_SIZE) continue;
+      const paramId = this.lookupNativeParamId(String(node.type || ""), String(t.key || ""));
+      if (!Number.isFinite(paramId)) {
+        // No native Control: that param keeps the UI-rate offset in its pushed value. Said once, loudly.
+        const k = `${node.id}:${t.key}`;
+        if (!this._gradientLaneMissing) this._gradientLaneMissing = new Set();
+        if (!this._gradientLaneMissing.has(k)) {
+          this._gradientLaneMissing.add(k);
+          try { this.port?.postMessage?.({ type: "nativeGraphError", message: `Gradient lane: ${node.id} / ${t.key} has no native Control (UI-rate only)` }); } catch (_e) { /* no port */ }
+        }
+        continue;
+      }
+      resolved.push({ sourceHash, nodeId: String(node.id), key: String(t.key), hash: this.fnv1aHash32(String(node.id)), paramId: paramId | 0, lut: t.lut, base: Number(t.base) });
+    }
+  }
+  const sig = resolved.map((r) => `${r.sourceHash}>${r.hash}:${r.paramId}`).join(",");
+  if (sig !== this._gradientLaneSig || !Array.isArray(this._gradientLaneIndex)) {
+    try { native.soemdsp_graph_clear_lut_edges(handle); } catch (_e) { return; }
+    this._gradientLaneIndex = [];
+    for (const r of resolved) {
+      let index = -1;
+      try { index = native.soemdsp_graph_add_param_lut_edge(handle, r.sourceHash, P.NATIVE_GRAPH_PORT_PHASE01, r.hash, r.paramId) | 0; } catch (_e) { index = -1; }
+      if (index < 0) {
+        try { this.port?.postMessage?.({ type: "nativeGraphError", message: `Gradient lane: ${r.nodeId} / ${r.key} not added (${index})` }); } catch (_e) { /* no port */ }
+      }
+      this._gradientLaneIndex.push(index);
+    }
+    // Hidden sources no gradient uses any more go.
+    for (const id of this._gradientHiddenIds || []) {
+      if (!hidden.has(id)) {
+        try { native.soemdsp_graph_remove_node(handle, this.fnv1aHash32(id)); } catch (_e) { /* gone */ }
+      }
+    }
+    try { native.soemdsp_graph_compile(handle); } catch (_e) { /* keep running */ }
+    this._gradientLaneSig = sig;
+  }
+  this._gradientHiddenIds = hidden;
+  const base = new Map();
+  resolved.forEach((r, i) => {
+    const index = this._gradientLaneIndex[i];
+    if (!(index >= 0)) return;
+    let ptr = 0;
+    try { ptr = native.soemdsp_graph_param_lut_ptr(handle, index) | 0; } catch (_e) { ptr = 0; }
+    if (ptr > 0) {
+      try { new Float32Array(native.memory.buffer, ptr, P.GRADIENT_LUT_SIZE).set(r.lut); } catch (_e) { /* keep the previous LUT */ }
+    }
+    if (Number.isFinite(r.base)) {
+      base.set(`${r.nodeId}\0${r.key}`, r.base);
+      this.pushNativeGraphParam(native, r.hash, r.paramId, r.base);
+      const cache = this._nativeGraphParamCache?.get?.(r.nodeId);
+      if (cache) cache[r.key] = r.base;
+    }
+  });
+  this._gradientLaneBase = base;
+};
+
+/** The page's playhead (or a page drag on a bound module): one knob write, smoothed by the engine. No param resync. */
+NodeLiveAudioProcessor.prototype.setNativeGradientPlayhead = function setNativeGradientPlayhead(message) {
+  const native = this.nativeGraph;
+  const sourceId = String(message?.sourceId || "");
+  const value = Number(message?.value);
+  if (!sourceId || !Number.isFinite(value) || !native || !this.nativeGraphHandle) return;
+  for (const lane of this._gradientLanes || []) if (String(lane?.sourceId) === sourceId) lane.playhead = value;
+  this.pushNativeGraphParam(native, this.fnv1aHash32(sourceId), NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_ATT_OFFSET, value);
+};
+
+/** Each lane source's playhead (last sample of its Phase01), relayed on the data bus as Playhead: the page follows a module. */
+NodeLiveAudioProcessor.prototype.syncNativeGradientPlayheadPublish = function syncNativeGradientPlayheadPublish() {
+  const native = this.nativeGraph;
+  const ptrOf = native?.soemdsp_graph_node_port_ptr;
+  if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle || typeof ptrOf !== "function") return;
+  if (!this.gradientPlayheadPublish) this.gradientPlayheadPublish = new Map();
+  this.gradientPlayheadPublish.clear();
+  for (const lane of this._gradientLanes || []) {
+    const id = String(lane?.sourceId || "");
+    if (!id || this.gradientPlayheadPublish.has(id)) continue;
+    let ptr = 0;
+    try { ptr = ptrOf(this.nativeGraphHandle, this.fnv1aHash32(id), NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01) | 0; } catch (_e) { ptr = 0; }
+    if (!(ptr > 0)) continue;
+    const frames = Math.max(1, (this.lastNativeBlockFrames | 0) || 128);
+    const v = new Float64Array(native.memory.buffer, ptr, frames)[frames - 1];
+    if (Number.isFinite(v)) this.gradientPlayheadPublish.set(id, { gradientId: String(lane.gradientId || ""), value: v });
+  }
+};
+
 // Pitch Mutator knob lane: hand each Mutator's lane table and target to the native graph. The engine evaluates it every block from the
 // Mutator's smoothed playhead and adds it to the target Control AFTER the target's own smoother (graph_engine.cpp Control.laneUnit), so the
 // target moves with the playhead's final value and never chases the offset. Host only: no lane math here.
@@ -10890,6 +11014,7 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
     if (typeof native.soemdsp_graph_clear_param_mod_edges === "function") {
       try {
         native.soemdsp_graph_clear_param_mod_edges(this.nativeGraphHandle);
+          this._gradientLaneSig = null; // lanes went with the MOD edges
       } catch (_e) { /* older wasm */ }
     }
     const liveParamModKeys = new Set();

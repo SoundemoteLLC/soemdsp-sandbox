@@ -532,8 +532,10 @@ function commitNodeSliderDragValue(slider, status = "parameter changed") {
     }
     return;
   }
-  if (typeof nodeGraphGradientMaybeInterceptSlider === "function"
-    && nodeGraphGradientMaybeInterceptSlider(slider, Number(slider?.dataset?.domainValue), { commit: true, interaction: "commit" })) {
+  if ((typeof nodeGraphGradientModuleInterceptSlider === "function"
+    && nodeGraphGradientModuleInterceptSlider(slider, Number(slider?.dataset?.domainValue), { commit: true, interaction: "commit" }))
+    || (typeof nodeGraphGradientMaybeInterceptSlider === "function"
+    && nodeGraphGradientMaybeInterceptSlider(slider, Number(slider?.dataset?.domainValue), { commit: true, interaction: "commit" }))) {
     markNodeGraphRenderPending();
     scheduleNodeGraphLiveParameterSync();
     return;
@@ -605,7 +607,9 @@ function setNodeSliderValue(slider, value, options = {}) {
     }
   }
   // An edited gradient stop (HP-24) takes moves of its outlined sliders first, then a Pitch Mutator lane.
-  const intercepted = (typeof nodeGraphGradientMaybeInterceptSlider === "function"
+  const intercepted = (typeof nodeGraphGradientModuleInterceptSlider === "function"
+    && nodeGraphGradientModuleInterceptSlider(slider, value, { ...options, commit: false }))
+    || (typeof nodeGraphGradientMaybeInterceptSlider === "function"
     && nodeGraphGradientMaybeInterceptSlider(slider, value, { ...options, commit: false }))
     || (typeof pitchMutatorMaybeInterceptSlider === "function"
     && pitchMutatorMaybeInterceptSlider(slider, value, { ...options, commit: false }));

@@ -166,6 +166,7 @@ $modules = @(
     "soemdsp_graph_set_emo_counts",
     "soemdsp_graph_set_param_mod", "soemdsp_graph_set_param_domain",
     "soemdsp_graph_clear_param_mod_edges", "soemdsp_graph_add_param_mod_edge",
+    "soemdsp_graph_add_param_lut_edge", "soemdsp_graph_param_lut_ptr", "soemdsp_graph_clear_lut_edges",
     "soemdsp_graph_set_smooth_time", "soemdsp_graph_set_smooth_mode",
     "soemdsp_graph_set_smooth_type",
     "soemdsp_graph_set_global_smooth_time",
