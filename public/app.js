@@ -66,24 +66,23 @@ async function markNodeSandboxInterfaceReady() {
 
 async function nodeSandboxStartupTask(label, task, timeoutMs = 8000) {
   let settled = false;
-  const timeout = new Promise((resolve) => {
-    window.setTimeout(() => {
-      if (!settled) {
-        console.warn(`Startup step timed out: ${label}`);
-        window.dispatchEvent(new CustomEvent("nodeSandboxStartupProgress", {
-          detail: { label: `${label} is taking longer than expected…` },
-        }));
-      }
-      resolve();
-    }, timeoutMs);
-  });
-  await Promise.race([
-    Promise.resolve()
-      .then(task)
-      .catch((error) => console.error(`Startup step failed: ${label}`, error))
-      .finally(() => { settled = true; }),
-    timeout,
-  ]);
+  const warning = window.setTimeout(() => {
+    if (!settled) {
+      console.warn(`Startup step is taking longer than expected: ${label}`);
+      window.dispatchEvent(new CustomEvent("nodeSandboxStartupProgress", {
+        detail: { label: `${label} is taking longer than expected…` },
+      }));
+    }
+  }, timeoutMs);
+  try {
+    await task();
+  } catch (error) {
+    console.error(`Startup step failed: ${label}`, error);
+    throw error;
+  } finally {
+    settled = true;
+    window.clearTimeout(warning);
+  }
 }
 
 async function initSandboxApp() {
@@ -97,7 +96,7 @@ initSandboxApp().catch((error) => {
   console.error("Sandbox startup failed", error);
   document.documentElement.dataset.nodeSandboxInterfaceError = message;
   document.documentElement.dataset.nodeSandboxInterfaceReady = "error";
-  globalThis.nodeSandboxInterfaceReady = true;
+  globalThis.nodeSandboxInterfaceReady = false;
   window.dispatchEvent(new CustomEvent("nodeSandboxInterfaceReady", {
     detail: { error: message },
   }));

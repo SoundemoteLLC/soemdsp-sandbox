@@ -312,19 +312,31 @@ function setNodeBootLoadingProgress(value, label = "") {
 /** Activate deferred <script data-boot-defer> tags (type=text/plain until start). */
 function nodeGraphBootActivateDeferredScripts() {
   const deferred = Array.from(document.querySelectorAll("script[data-boot-defer][src]"));
+  const loadedScripts = [];
   for (const old of deferred) {
     const src = old.getAttribute("src");
     if (!src) continue;
     const next = document.createElement("script");
-    next.src = src;
+    const loaded = new Promise((resolve, reject) => {
+      next.addEventListener("load", resolve, { once: true });
+      next.addEventListener("error", () => reject(new Error(`Deferred script failed to load: ${src}`)), { once: true });
+    });
     if (old.getAttribute("data-boot-module") === "1") {
       next.type = "module";
     } else {
       // Preserve classic execution order across dynamically inserted scripts.
       next.async = false;
     }
+    // Set the ordered-script flag before the URL starts fetching.
+    next.src = src;
+    loadedScripts.push(loaded);
     old.replaceWith(next);
   }
+  globalThis.nodeGraphDeferredScriptsReady = Promise.all(loadedScripts).then(() => {
+    window.dispatchEvent(new CustomEvent("nodeGraphDeferredScriptsReady"));
+    return true;
+  });
+  return globalThis.nodeGraphDeferredScriptsReady;
 }
 
 function beginNodeBootLoadSequence() {
@@ -352,14 +364,14 @@ function beginNodeBootLoadSequence() {
   setNodeBootLoadingProgress(2, "starting");
   nodeGraphBootActivateDeferredScripts();
 
-  // Failsafe if interface-ready never fires after the user starts load.
+  // A slow startup must not be announced as ready. Keep the loading screen
+  // visible; nodeSandboxInterfaceReady will finish it when initialization ends.
   window.setTimeout(() => {
     if (!document.body.classList.contains("node-boot-loading")) {
       return;
     }
-    setNodeBootLoadingProgress(100, "ready");
-    document.body.dataset.nodeBootFinished = "watchdog";
-    finishNodeBootLoading();
+    setNodeBootLoadingProgress(94, "still loading");
+    document.body.dataset.nodeBootFinished = "loading-slow";
   }, 10000);
 }
 
@@ -535,7 +547,14 @@ function recoverNodeGraphAfterBoot() {
 window.addEventListener("nodeSandboxStartupProgress", (event) => {
   setNodeBootLoadingProgress(event.detail?.progress, event.detail?.label);
 });
-window.addEventListener("nodeSandboxInterfaceReady", finishNodeBootLoading, { once: true });
+window.addEventListener("nodeSandboxInterfaceReady", (event) => {
+  if (event.detail?.error) {
+    document.body.dataset.nodeBootFinished = "error";
+    setNodeBootLoadingProgress(100, "startup failed");
+    return;
+  }
+  finishNodeBootLoading();
+}, { once: true });
 
 document.getElementById("nodeBootStartButton")?.addEventListener("click", () => {
   ensureNodeBootSecureContextBanner();
@@ -555,7 +574,7 @@ if (!nodeGraphBootIsRelease()) {
   }
 }
 
-if (window.nodeSandboxInterfaceReady && document.body.dataset.nodeBootStarted === "1") {
+if (window.nodeSandboxInterfaceReady === true && document.body.dataset.nodeBootStarted === "1") {
   finishNodeBootLoading();
 }
 

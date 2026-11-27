@@ -60,6 +60,9 @@ function nodeSandboxNextPaint() {
 }
 
 async function initNodeGraphMvp() {
+  if (globalThis.nodeGraphDeferredScriptsReady) {
+    await globalThis.nodeGraphDeferredScriptsReady;
+  }
   setNodeSandboxStartupProgress(10, "loading tooltips");
   const tooltipLoad = typeof loadNodeGraphTooltips === "function"
     ? loadNodeGraphTooltips()
