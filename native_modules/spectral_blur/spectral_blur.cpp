@@ -15,8 +15,8 @@ const char metadata[] = R"json({"module":"spectral_blur","targetType":"spectralB
 {"key":"stereoSpread","label":"Stereo Spread","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"\u00d7","step":"any","tooltip":"How differently the cloud moves in each ear. 0 = the same in both (mono in stays mono); 1 = fully independent fur left and right, a wide stereo wash. Changes phase only, never level, and does not cross-feed. In mono, a high Spread can sound up to about 3 dB quieter."},
 {"key":"monoBassHz","label":"Mono Bass","kind":"frequency","defaultValue":"0","min":"0","mid":"120","max":"1000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"Keeps the cloud identical in both ears below this frequency, so the low end stays solid in mono. Smooth one-octave transition. 0 = off."},
 {"key":"voices","label":"Voices","defaultValue":"3","min":"1","mid":"2","max":"4","step":"1","linearSmoothing":false,"tooltip":"Independent cloud layers summed together. More voices make the low, still-tonal harmonics denser and smoother. Costs CPU per voice."},
-{"key":"seed","label":"Seed","kind":"seed","defaultValue":"0","min":"0","mid":"0","max":"16777215","maxDigits":0,"step":"1","nonlinearSlider":false,"linearSmoothing":false,"smoothingType":"none","tooltip":"Random pattern of the cloud. The same Seed, input and settings always give the same output."},
-{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay."}]})json";
+{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay."},
+{"key":"seed","label":"Seed","kind":"seed","defaultValue":"0","min":"0","mid":"0","max":"16777215","maxDigits":0,"step":"1","nonlinearSlider":false,"linearSmoothing":false,"smoothingType":"none","tooltip":"Random pattern of the cloud. The same Seed, input and settings always give the same output."}]})json";
 }
 
 extern "C" int soemdsp_spectral_blur_create() {

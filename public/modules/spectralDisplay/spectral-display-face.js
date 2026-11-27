@@ -2,9 +2,9 @@
 // STFT Contrast, Spectral Blur, Freeze, Delay, Warp, Cross Synthesis.
 // Data: spectral-display-worklet.js (SpectralHz / SpectralA / ... / SpectralMeta).
 // Drawing: the shared style renderer (public/lib/spectral-display-styles.js).
-// Display Settings own the look (style, Floor / Ceiling, bars, peaks,
-// particles, history, gain span, gradient); the module's Curve parameter owns
-// the frequency spacing. Moves only when new data arrives. WebGL only.
+// Display Settings own the look (Curve = frequency spacing, style, Floor /
+// Ceiling, bars, peaks, particles, history, gain span, gradient). Moves only
+// when new data arrives. WebGL only.
 
 // Per module: allowed styles (first is the spawn default) and display defaults.
 const NODE_GRAPH_SPECTRAL_FACE_MODULES = Object.freeze({
@@ -45,6 +45,7 @@ function normalizeNodeGraphSpectralStyleSettings(settings = {}, node = null) {
     ? normalizeNodeGraphSharedGradientStops(source.gradientStops, (typeof SPECTRAL_COLD_FIRE_GRADIENT_STOPS !== "undefined" && SPECTRAL_COLD_FIRE_GRADIENT_STOPS) || nodeGraphSpectrogramSettingsDefaults.gradientStops)
     : source.gradientStops;
   return {
+    spectralFrequencyCurve: num(source.spectralFrequencyCurve, 1, 0, 1),
     spectralStyle: style,
     spectralFloorDb: floor,
     spectralCeilingDb: ceiling,
@@ -111,12 +112,12 @@ function drawNodeGraphSpectralStyleItem(renderer, item, pixelRatio) {
   };
   // A finished Bands crossfade must not keep drawing the old incoming bank.
   if (!(data.weight > 0)) { data.hz2 = null; data.a2 = null; }
-  const curve = Math.max(0, Math.min(1, nodeGraphFiniteNumber(node?.params?.frequencyCurve, 1)));
+  const curve = settings.spectralFrequencyCurve;
   const sampleRate = nodeGraphFiniteNumber(nodeGraphModuleScopeState?.sampleRate, 48000);
   const lo = 20;
   const hi = Math.max(lo + 1, Math.min(20000, sampleRate / 2));
   // Nothing new and nothing changed: the face keeps its pixels.
-  const sig = `${data.serial}|${W}x${H}|${curve}|${JSON.stringify(settings)}`;
+  const sig = `${data.serial}|${W}x${H}|${JSON.stringify(settings)}`;
   if (canvas._spectralSig === sig) return;
   canvas._spectralSig = sig;
 

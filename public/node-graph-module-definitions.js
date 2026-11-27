@@ -7621,7 +7621,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["centreDb", "Centre"], ["spread", "Spread"], ["fold", "Fold"]], h: 52 },
       { kind: "cells", params: [["monoBassHz", "Mono Bass"], ["tilt", "Tilt"], ["smoothCents", "Smooth"]], h: 52 },
-      { kind: "cells", params: [["phase", "Phase"], ["frequencyCurve", "Curve"]], h: 52 },
+      { kind: "cells", params: [["phase", "Phase", "horizontal"]], h: 26 },
       { kind: "cells", params: [["shimmerSpeedHz", "Shimmer Speed", "bipolar"], ["shimmerDepth", "Shimmer Depth"], ["shimmerQuantize", "Quantize"]], h: 52 },
       { kind: "cells", params: [["evolveRateHz", "Evolve Rate"], ["evolveDepth", "Evolve Depth"], ["evolveTransition", "Transition"]], h: 52 },
       { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amp"]], h: 52 },
@@ -7642,10 +7642,9 @@ const nodeGraphModuleDefinitions = (
       {"key":"evolveDepth","label":"Evolve Depth","defaultValue":"0","min":"0","mid":"0.5","max":"1","step":"any","tooltip":"Blend from the original pattern at zero to continuously evolving seeded patterns at one. Works with or without Shimmer, and before Fold. Seed makes the evolution deterministic. Fast rates intentionally create noisy stereo motion and sidebands."},
       {"key":"evolveTransition","label":"Evolve Transition","defaultValue":"1","min":"0","mid":"0.5","max":"1","step":"any","tooltip":"Fraction of each Evolve period spent morphing to the next pattern. One morphs throughout; lower values hold longer then change faster. Zero is hard seeded steps. Transition time = this value / Evolve Rate seconds; quintic transitions, evaluated at STFT hops."},
       {"key":"shimmerQuantize","label":"Quantize","defaultValue":"0","min":"0","mid":"0.5","max":"1","step":"any","tooltip":"Shimmer transition sharpness: zero is continuous travel, one holds then snaps. Intermediate values shorten the transition between fixed steps of one Smooth region. STFT overlap still softens the sound. Does not quantize input pitch."},
-      {"key":"seed","kind":"seed","label":"Seed","defaultValue":"0","min":"0","mid":"0","max":"16777215","maxDigits":0,"step":"1","linearSmoothing":false,"nonlinearSlider":false,"smoothingType":"none","tooltip":"Prism pattern seed. Same Seed = same pattern; new modules get their own."},
       {"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","step":"any","tooltip":"Aligned delayed dry to prism wet. Delay follows the active FFT size through its warmed crossfade."},
       {"key":"amplitude","label":"Amp","defaultValue":"1","min":"0","mid":"1","max":"2","step":"any","tooltip":"Final amplitude multiplier after dry/wet Mix. Zero silences both outputs. Independent of Centre, Spread and Fold."},
-      {"key":"frequencyCurve","label":"Curve","defaultValue":"1","min":"0","mid":".5","max":"1","step":"any","displayOnly":true,"tooltip":"Display frequency spacing: zero is linear Hz, one logarithmic. No effect on audio."},
+      {"key":"seed","kind":"seed","label":"Seed","defaultValue":"0","min":"0","mid":"0","max":"16777215","maxDigits":0,"step":"1","linearSmoothing":false,"nonlinearSlider":false,"smoothingType":"none","tooltip":"Prism pattern seed. Same Seed = same pattern; new modules get their own."},
     ],
   },
   spectralWarp: {
@@ -7664,7 +7663,6 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["warp", "Warp"], ["pivotHz", "Pivot"]], h: 40 },
       { kind: "cells", params: [["pitchSemitones", "Pitch"], ["shiftHz", "Shift"], ["stereoShiftHz", "Stereo"]], h: 40 },
       { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Gain"]], h: 40 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -7783,21 +7781,6 @@ const nodeGraphModuleDefinitions = (
         "unit": "dB",
         "tooltip": "Explicit final gain in dB. No hidden amplitude normalization, limiter or clipping. Mapped spectral regions can overlap and add in level."
       },
-      {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
-      },
     ],
   },
   spectralCrossSynthesis: {
@@ -7817,7 +7800,6 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["formantShift", "Formant Shift"]], h: 40 },
       { kind: "cells", params: [["attackMs", "Attack"], ["releaseMs", "Release"]], h: 40 },
       { kind: "cells", params: [["mix", "Mix"], ["gainDb", "Output Gain"]], h: 40 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -7959,21 +7941,6 @@ const nodeGraphModuleDefinitions = (
         "modulation": false,
         "parameterOutput": false,
         "tooltip": "Under construction. Reserved for retaining Synth attacks alongside the transferred envelope. Currently inactive: changing this value does nothing."
-      },
-      {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
       },
     ],
   },
@@ -8440,13 +8407,12 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["fftSize", "FFT Size", "horizontal"]], h: 26 },
       { kind: "cells", params: [["smearSeconds", "Time Smear", "horizontal"]], h: 26 },
       { kind: "cells", params: [["blurHz", "Frequency Blur"], ["blurCents", "Pitch Blur"]], h: 40 },
-      { kind: "cells", params: [["diffusion", "Diffusion"], ["diffusionSpeedHz", "Diffusion Speed"]], h: 40 },
+      { kind: "cells", params: [["diffusion", "Diffusion"], ["diffusionSpeedHz", "Diffusion Speed"], ["phaseSmoothMs", "Phase Smooth"]], h: 40 },
       { kind: "choices", param: "hopMode", labels: ["Normal", "Smooth"], h: 26 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
-      { kind: "cells", params: [["phaseSmoothMs", "Phase Smooth"], ["amplitudeSmoothMs", "Amplitude Smooth"]], h: 40 },
-      { kind: "seed", param: "seed", h: 28 },
+      { kind: "cells", params: [["amplitudeSmoothMs", "Amplitude Smooth", "horizontal"]], h: 26 },
       { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amp"]], h: 40 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
     ],
     parameters: [
       {
@@ -8628,21 +8594,6 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "Additional symmetric per-bin magnitude smoothing after frequency spreading. Zero preserves the sharp amplitude texture. Increase gently to soften chatter; this is not compression, saturation or limiting. Updates at the STFT hop rate."
       },
       {
-        "key": "seed",
-        "label": "Seed",
-        "kind": "seed",
-        "defaultValue": "0",
-        "min": "0",
-        "mid": "0",
-        "max": "16777215",
-        "maxDigits": 0,
-        "step": "1",
-        "nonlinearSlider": false,
-        "linearSmoothing": false,
-        "smoothingType": "none",
-        "tooltip": "The random pattern of the diffusion. The same Seed, input and settings always give the same output; each new module gets its own."
-      },
-      {
         "key": "mix",
         "label": "Mix",
         "defaultValue": "1",
@@ -8658,19 +8609,19 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Output level after Mix, a signed gain (negative inverts). No automatic leveling, limiter or clipping: overs past 0 dB are possible.",
       },
       {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+        "key": "seed",
+        "label": "Seed",
+        "kind": "seed",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0",
+        "max": "16777215",
+        "maxDigits": 0,
+        "step": "1",
+        "nonlinearSlider": false,
+        "linearSmoothing": false,
+        "smoothingType": "none",
+        "tooltip": "The random pattern of the diffusion. The same Seed, input and settings always give the same output; each new module gets its own."
       },
     ],
   },
@@ -8691,7 +8642,6 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["pivotHz", "Frequency Pivot"], ["curve", "Delay Curve"]], h: 40 },
       { kind: "cells", params: [["feedbackTiltDb", "Feedback Tilt"], ["crossfeed", "Stereo Crossfeed"]], h: 40 },
       { kind: "cells", params: [["feedback", "Feedback"], ["mix", "Mix"]], h: 40 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters:
     [
@@ -8826,21 +8776,6 @@ const nodeGraphModuleDefinitions = (
         "unit": "%",
         "tooltip": "Dry/wet mix. Dry is aligned to FFT Size latency, not to the additional band delays. Left and Right spectral histories remain independent; no mono downmix or stereo crossfeed."
       },
-      {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
-      },
     ],
   },
   spectralFreeze: {
@@ -8860,7 +8795,6 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["captureBlendMs", "Capture Blend"], ["refreshHz", "Refresh Rate"]], h: 40 },
       { kind: "cells", params: [["decaySeconds", "Decay"], ["diffusion", "Diffusion"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["mix", "Mix"]], h: 40 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -9014,21 +8948,6 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "tooltip": "Live/held blend aligned to the selected FFT Size. Capture/release has a separate 20 ms handoff; Capture Blend controls replacement of held states. Held reports an active ready capture."
       },
-      {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
-      },
     ],
   },
   spectralBlur: {
@@ -9047,9 +8966,8 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["fuzz", "Fuzz"], ["grain", "Grain"]], h: 40 },
       { kind: "cells", params: [["voices", "Voices", "horizontal"]], h: 26 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
-      { kind: "seed", param: "seed", h: 28 },
       { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amp"]], h: 40 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
     ],
     parameters: [
       {
@@ -9150,21 +9068,6 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "Independent cloud layers summed together. More voices make the low, still-tonal harmonics denser and smoother. Costs CPU per voice."
       },
       {
-        "key": "seed",
-        "label": "Seed",
-        "kind": "seed",
-        "defaultValue": "0",
-        "min": "0",
-        "mid": "0",
-        "max": "16777215",
-        "maxDigits": 0,
-        "step": "1",
-        "nonlinearSlider": false,
-        "linearSmoothing": false,
-        "smoothingType": "none",
-        "tooltip": "Random pattern of the cloud. The same Seed, input and settings always give the same output."
-      },
-      {
         "key": "mix",
         "label": "Mix",
         "defaultValue": "1",
@@ -9180,19 +9083,19 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Output level after Mix, a signed gain (negative inverts). No automatic leveling, limiter or clipping: overs past 0 dB are possible.",
       },
       {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+        "key": "seed",
+        "label": "Seed",
+        "kind": "seed",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0",
+        "max": "16777215",
+        "maxDigits": 0,
+        "step": "1",
+        "nonlinearSlider": false,
+        "linearSmoothing": false,
+        "smoothingType": "none",
+        "tooltip": "Random pattern of the cloud. The same Seed, input and settings always give the same output."
       },
     ],
   },
@@ -9212,9 +9115,8 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["depth", "Depth"], ["rate", "Rate"]], h: 40 },
       { kind: "cells", params: [["drunk", "Drunk"], ["voices", "Voices"]], h: 40 },
       { kind: "cells", params: [["stereoSpread", "Stereo Spread"], ["monoBassHz", "Mono Bass"]], h: 40 },
-      { kind: "seed", param: "seed", h: 28 },
       { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amp"]], h: 40 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
     ],
     parameters: [
       {
@@ -9328,21 +9230,6 @@ const nodeGraphModuleDefinitions = (
         "tooltip": "Below this frequency both ears wobble identically and the voices stay centred, so the bass stays solid in mono. One-octave smooth transition. 0 = off."
       },
       {
-        "key": "seed",
-        "label": "Seed",
-        "kind": "seed",
-        "defaultValue": "0",
-        "min": "0",
-        "mid": "0",
-        "max": "16777215",
-        "maxDigits": 0,
-        "step": "1",
-        "nonlinearSlider": false,
-        "linearSmoothing": false,
-        "smoothingType": "none",
-        "tooltip": "The random pattern of the wobble. The same Seed, input and settings always give the same output."
-      },
-      {
         "key": "mix",
         "label": "Mix",
         "defaultValue": "1",
@@ -9358,19 +9245,19 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Output level after Mix, a signed gain (negative inverts). No automatic leveling, limiter or clipping: overs past 0 dB are possible.",
       },
       {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
+        "key": "seed",
+        "label": "Seed",
+        "kind": "seed",
+        "defaultValue": "0",
+        "min": "0",
+        "mid": "0",
+        "max": "16777215",
+        "maxDigits": 0,
+        "step": "1",
+        "nonlinearSlider": false,
+        "linearSmoothing": false,
+        "smoothingType": "none",
+        "tooltip": "The random pattern of the wobble. The same Seed, input and settings always give the same output."
       },
     ],
   },
@@ -9387,7 +9274,6 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["attackMs","Attack"],["releaseMs","Release"]], h: 40 },
       { kind: "cells", params: [["maxBoostDb","Max Boost"],["gainDb","Output Gain"]], h: 40 },
       { kind: "cells", params: [["mix","Mix","horizontal"]], h: 26 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -9488,21 +9374,6 @@ const nodeGraphModuleDefinitions = (
         "step": "any",
         "tooltip": "Dry/wet blend with both paths aligned to the fixed 1024-sample delay. Contrast 0, Ratio 1 and Output Gain 0 are neutral."
       },
-      {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
-      },
     ],
   },
   stftGate: {
@@ -9519,7 +9390,6 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["depthDb","Depth"],["kneeDb","Knee"]], h: 40 },
       { kind: "cells", params: [["attackMs","Attack"],["holdMs","Hold"],["releaseMs","Release"]], h: 40 },
       { kind: "cells", params: [["smooth","Smooth"],["mix","Mix"]], h: 40 },
-      { kind: "cells", params: [["frequencyCurve", "Curve"]], h: 40 },
     ],
     parameters: [
       {
@@ -9650,21 +9520,6 @@ const nodeGraphModuleDefinitions = (
         "max": "1",
         "step": "any",
         "tooltip": "Dry/wet blend aligned to the fixed 1024-sample delay. Stereo channels share gain decisions to preserve their image."
-      },
-      {
-        key: "frequencyCurve",
-        label: "Curve",
-        defaultValue: "1",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        nonlinearSlider: false,
-        modulation: false,
-        parameterOutput: false,
-        // Face-only: never sent to native, not part of the C++ metadata.
-        displayOnly: true,
-        step: "any",
-        tooltip: "Display frequency spacing: 0 = linear Hz, 1 = logarithmic. Display only; the audio is unchanged."
       },
     ],
   },

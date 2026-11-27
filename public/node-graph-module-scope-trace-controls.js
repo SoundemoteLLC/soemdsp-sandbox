@@ -252,6 +252,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "spectralHistory",
     "spectralGainRangeDb",
     "spectralGainBoostDb",
+    "spectralFrequencyCurve",
     "pill",
     "squircle",
     "lightThickness",
@@ -885,13 +886,13 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   // Spectral processor faces (shared style renderer). Styles offered per
   // module (nodeGraphSpectralStyleOptionsForNode); gradient via the shared editor.
   spectralStyle: Object.freeze({
-    fields: Object.freeze(["spectralFloorDb", "spectralCeilingDb", "spectralBarCount", "spectralPeakDecay", "spectralParticles", "spectralHistory", "spectralGainRangeDb", "spectralGainBoostDb"]),
+    fields: Object.freeze(["spectralFrequencyCurve", "spectralFloorDb", "spectralCeilingDb", "spectralBarCount", "spectralPeakDecay", "spectralParticles", "spectralHistory", "spectralGainRangeDb", "spectralGainBoostDb"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze(["spectralStyle", "spectralPeakHold"]),
   }),
   spectralPrism: Object.freeze({
-    fields: Object.freeze([]),
+    fields: Object.freeze(["spectralFrequencyCurve"]),
     colors: Object.freeze([]), toggles: Object.freeze([]), choices: Object.freeze([]),
   }),
   // 1D Spectrum: same FFT analysis choices as Spectrogram (shared keys) + its
@@ -1313,6 +1314,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "spectrumMinBarPx",
       "spectrumMinGapPx",
       "spectrumPeakDecay",
+      "spectralFrequencyCurve",
       "spectralFloorDb",
       "spectralCeilingDb",
       "spectralBarCount",
@@ -1663,6 +1665,10 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
   spectralGainRangeDb: Object.freeze({
     label: "Cut span (dB)", inputmode: "decimal",
     title: "Band gain style: how much cut reaches the bottom of the display.",
+  }),
+  spectralFrequencyCurve: Object.freeze({
+    label: "Curve", inputmode: "decimal",
+    title: "Frequency spacing across the display: 0 is linear Hz, 1 logarithmic. Display only: it never changes the audio.",
   }),
   spectralGainBoostDb: Object.freeze({
     label: "Boost span (dB)", inputmode: "decimal",

@@ -9,7 +9,10 @@ const NODE_GRAPH_PRISM_GRADIENT = Object.freeze([
 ]);
 
 function normalizeNodeGraphSpectralPrismSettings(settings = {}) {
+  const curve = Number(settings?.spectralFrequencyCurve);
   return {
+    // Curve (frequency spacing) is a display setting: 0 linear Hz, 1 logarithmic.
+    spectralFrequencyCurve: Number.isFinite(curve) ? Math.max(0, Math.min(1, curve)) : 1,
     gradientStops: normalizeNodeGraphSharedGradientStops(settings?.gradientStops, NODE_GRAPH_PRISM_GRADIENT),
     backgroundHue: Number.isFinite(Number(settings?.backgroundHue)) ? Number(settings.backgroundHue) : 0,
   };
@@ -34,6 +37,7 @@ function drawNodeGraphSpectralPrismItem(renderer, item, pixelRatio) {
     p[spec.key] = Number.isFinite(value) ? value : Number(spec.defaultValue);
   }
   const look = normalizeNodeGraphSpectralPrismSettings(node.traceDisplaySettings);
+  p.frequencyCurve = look.spectralFrequencyCurve;
   const meta = nodeGraphSpectralFaceBus(nodeId, "PrismMeta");
   const rate = meta?.[3] || nodeGraphModuleScopeState?.sampleRate || 48000;
   const shimmerOffset = (meta?.[2] || 0) + (meta?.[4] || 0);

@@ -16,8 +16,8 @@ const char metadata[] = R"json({"module":"spectral_warble","targetType":"spectra
 {"key":"voices","label":"Voices","defaultValue":"3","min":"1","mid":"2","max":"4","step":"1","linearSmoothing":false,"tooltip":"How many independently wobbling copies sing each partial. More voices make a thicker chorus that gently beats; the beating is heard as is (no leveling). Costs CPU per voice."},
 {"key":"stereoSpread","label":"Stereo Spread","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"\u00d7","step":"any","tooltip":"How differently the two ears wobble, and how wide the voices are spread. 0 = identical channels; 1 = each ear has its own motion and the voices fan out left to right. The voices' pan gains average to 1 per ear."},
 {"key":"monoBassHz","label":"Mono Bass","kind":"frequency","defaultValue":"120","min":"0","mid":"120","max":"1000","unit":"Hz","step":"any","nonlinearSlider":true,"tooltip":"Below this frequency both ears wobble identically and the voices stay centred, so the bass stays solid in mono. One-octave smooth transition. 0 = off."},
-{"key":"seed","label":"Seed","kind":"seed","defaultValue":"0","min":"0","mid":"0","max":"16777215","maxDigits":0,"step":"1","nonlinearSlider":false,"linearSmoothing":false,"smoothingType":"none","tooltip":"The random pattern of the wobble. The same Seed, input and settings always give the same output."},
-{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay."}]})json";
+{"key":"mix","label":"Mix","defaultValue":"1","min":"0","mid":"0.5","max":"1","unit":"%","step":"any","tooltip":"Dry/wet blend aligned to the selected FFT Size. Both paths have that many samples of delay."},
+{"key":"seed","label":"Seed","kind":"seed","defaultValue":"0","min":"0","mid":"0","max":"16777215","maxDigits":0,"step":"1","nonlinearSlider":false,"linearSmoothing":false,"smoothingType":"none","tooltip":"The random pattern of the wobble. The same Seed, input and settings always give the same output."}]})json";
 }
 
 extern "C" int soemdsp_spectral_warble_create() {

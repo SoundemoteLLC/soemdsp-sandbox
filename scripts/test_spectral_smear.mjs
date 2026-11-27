@@ -9,7 +9,7 @@ const f = (name, ...args) => x[P + name](...args);
 const sr = 48000;
 assert.equal(f('latency'), 4096);
 const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer, f('metadata_json'), f('metadata_json_size'))));
-assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'blurCents', 'diffusion', 'diffusionSpeedHz', 'hopMode', 'stereoSpread', 'monoBassHz', 'phaseSmoothMs', 'amplitudeSmoothMs', 'seed', 'mix']);
+assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'smearSeconds', 'blurHz', 'blurCents', 'diffusion', 'diffusionSpeedHz', 'hopMode', 'stereoSpread', 'monoBassHz', 'phaseSmoothMs', 'amplitudeSmoothMs', 'mix', 'seed']);
 assert.equal(meta.targetType, 'spectralSmear');
 const param = k => meta.parameters.find(p => p.key === k);
 assert.equal(param('blurCents').unit, '¢'); assert.equal(param('diffusionSpeedHz').unit, 'Hz'); assert.equal(param('seed').kind, 'seed');

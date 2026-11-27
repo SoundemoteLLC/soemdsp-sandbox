@@ -8,7 +8,7 @@ const f = (name, ...args) => x[P + name](...args);
 const sr = 48000;
 assert.equal(f('latency'), 4096);
 const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(x.memory.buffer, f('metadata_json'), f('metadata_json_size'))));
-assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'fuzz', 'grain', 'stereoSpread', 'monoBassHz', 'voices', 'seed', 'mix']);
+assert.deepEqual(meta.parameters.map(p => p.key), ['fftSize', 'fuzz', 'grain', 'stereoSpread', 'monoBassHz', 'voices', 'mix', 'seed']);
 assert.equal(meta.targetType, 'spectralBlur'); assert.equal(meta.label, 'Spectral Cloud');
 const param = k => meta.parameters.find(p => p.key === k);
 assert.equal(param('fuzz').unit, '¢'); assert.equal(param('grain').unit, 'dB'); assert.equal(param('monoBassHz').unit, 'Hz'); assert.equal(param('seed').kind, 'seed');
