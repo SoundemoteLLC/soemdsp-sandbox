@@ -187,6 +187,19 @@ try {
         res[key] = check(document.getElementById(id));
       }
       closeNodeGraphUnifiedWindowPage?.("moduleBrowser");
+      // The Mutator page is a separate full-width overlay, not a unified page.
+      const mutatorId = showNodeGraphModule("pitchMutator", { x: 300, y: 300 }, { record: false, autosaveWorkingPatch: false });
+      togglePitchMutatorOverlay(true);
+      await wait(250);
+      res.mutator = check(document.getElementById("pitchMutatorOverlay"));
+      togglePitchMutatorOverlay(false);
+      if (mutatorId) {
+        const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
+        patch.nodes = patch.nodes.filter((n) => n.id !== mutatorId);
+        patch.connections = (patch.connections || []).filter((c) => c.sourceNode !== mutatorId && c.destinationNode !== mutatorId);
+        patch.modulations = (patch.modulations || []).filter((m) => m.sourceNode !== mutatorId && m.destinationNode !== mutatorId);
+        commitNodeGraphPatch(patch, { status: "smoke", record: false });
+      }
       // G window: the debug guide with the Engine rows open.
       nodeGraphMvp.keyboardDebugInfoVisible = true;
       renderNodeGraphKeyboardDebugToggle();
