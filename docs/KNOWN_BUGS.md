@@ -4,6 +4,12 @@ This is the shared list of bugs Argi has reported, kept here for every bot and h
 
 ## Open
 
+### Dangling wire end dot renders pixelated and opaque while dragging (regression)
+
+- **Reported:** 2026-11-27, by Argi
+- **Symptoms:** While dragging a wire, the dot at the loose (unconnected) end has no antialiasing and no alpha. It looks pixelated, with hard edges, fully opaque.
+- **Notes:** Regression, probably from the recent wire-drag gesture and perf changes (`82380fa0` / `fdfda54f`, `node-graph-wires.js`, gesture-only cable updates). The dot may now be drawn through a different path (a hard-edged quad, or with blending off) instead of the usual smooth, alpha-blended dot shader.
+
 ### Output module Waterfall draws the zero line during silence (regression)
 
 - **Reported:** 2026-11-27, by Argi
