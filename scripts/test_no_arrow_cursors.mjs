@@ -158,6 +158,17 @@ for (const full of walk(PUBLIC)) {
       const value = m[2] || m[1];
       const found = bannedIn(value);
       if (!found.length) continue;
+      // PASTE-10 explicitly preserves Elan's one module-move cursor on the
+      // patch-view label. Keep this exception tied to that exact selector and
+      // its adjacent handoff comment; all other banned values remain failures.
+      const before = src.slice(0, m.index);
+      const ruleStart = before.lastIndexOf("}") + 1;
+      const rule = src.slice(ruleStart, m.index);
+      const preservedElanMove = rel === "public/styles.css"
+        && value.trim() === "move"
+        && rule.includes(".node-patch-view-label")
+        && rule.includes("PASTE-10 exception: Elan asked to keep this label's module-move cursor.");
+      if (preservedElanMove) continue;
       hits.push(`${rel}:${lineAt(src, m.index)} cursor value uses ${found.join(", ")}: ${value.trim()}`);
     }
   }

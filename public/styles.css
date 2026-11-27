@@ -5743,7 +5743,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   background: rgba(255, 255, 255, 0.07);
   color: rgba(235, 238, 242, 0.92);
   fill: currentColor;
-  cursor: move;
+  cursor: var(--node-adjust-cursor);
   touch-action: none;
   user-select: none;
 }
@@ -12753,6 +12753,7 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   font-size: 12px;
   line-height: 18px;
   pointer-events: auto;
+  /* PASTE-10 exception: Elan asked to keep this label's module-move cursor. */
   cursor: move;
   touch-action: none;
   user-select: none;
@@ -12779,14 +12780,14 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   transform: translate(-50%, -50%);
 }
 
-.node-patch-view-handle[data-patch-view-handle="nw"] { left: -22px; top: -22px; cursor: nwse-resize; }
-.node-patch-view-handle[data-patch-view-handle="n"] { left: calc(50% - 22px); top: -22px; cursor: ns-resize; }
-.node-patch-view-handle[data-patch-view-handle="ne"] { right: -22px; top: -22px; cursor: nesw-resize; }
-.node-patch-view-handle[data-patch-view-handle="e"] { right: -22px; top: calc(50% - 22px); cursor: ew-resize; }
-.node-patch-view-handle[data-patch-view-handle="se"] { right: -22px; bottom: -22px; cursor: nwse-resize; }
-.node-patch-view-handle[data-patch-view-handle="s"] { left: calc(50% - 22px); bottom: -22px; cursor: ns-resize; }
-.node-patch-view-handle[data-patch-view-handle="sw"] { left: -22px; bottom: -22px; cursor: nesw-resize; }
-.node-patch-view-handle[data-patch-view-handle="w"] { left: -22px; top: calc(50% - 22px); cursor: ew-resize; }
+.node-patch-view-handle[data-patch-view-handle="nw"] { left: -22px; top: -22px; cursor: var(--node-adjust-cursor); }
+.node-patch-view-handle[data-patch-view-handle="n"] { left: calc(50% - 22px); top: -22px; cursor: var(--node-adjust-cursor); }
+.node-patch-view-handle[data-patch-view-handle="ne"] { right: -22px; top: -22px; cursor: var(--node-adjust-cursor); }
+.node-patch-view-handle[data-patch-view-handle="e"] { right: -22px; top: calc(50% - 22px); cursor: var(--node-adjust-cursor); }
+.node-patch-view-handle[data-patch-view-handle="se"] { right: -22px; bottom: -22px; cursor: var(--node-adjust-cursor); }
+.node-patch-view-handle[data-patch-view-handle="s"] { left: calc(50% - 22px); bottom: -22px; cursor: var(--node-adjust-cursor); }
+.node-patch-view-handle[data-patch-view-handle="sw"] { left: -22px; bottom: -22px; cursor: var(--node-adjust-cursor); }
+.node-patch-view-handle[data-patch-view-handle="w"] { left: -22px; top: calc(50% - 22px); cursor: var(--node-adjust-cursor); }
 
 .node-graph-workspace.grid-visible {
   background-color: color-mix(
