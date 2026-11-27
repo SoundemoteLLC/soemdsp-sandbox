@@ -25,7 +25,8 @@ assert(
 
 assert(
   /nodeGraphModuleScopeCustomRenderers\[displayType\]/.test(gate)
-  && /nodeGraphGlGraphRebuildPlates\(\)/.test(gate),
+  && /draw\(null,\s*\{\s*slot,\s*screenElement:\s*slot\.scopeElement\s*\},\s*ratio\)/.test(gate)
+  && /nodeGraphGlGraphRebuildPlates\(\{\s*ids:\s*\[nodeId\]\s*\}\)/.test(gate),
   "cold plate must paint the face drawer and rebuild the GL graph so the plate is visible",
 );
 
