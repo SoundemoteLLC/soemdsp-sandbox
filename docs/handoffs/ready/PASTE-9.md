@@ -127,3 +127,9 @@ Date: 2026-11-27. Argi's decision: gradients and mutators stay **separate system
 - The gradient display ignores point and curve-edit gestures, and dragging it moves the playhead.
 - The three playhead options change the drawn playhead and survive save, load and clone.
 - A stop color set on 🌈 shows on the module display and survives save, load and clone.
+
+### Bug fix: module title editing (do with the other bug fixes, before the curves work)
+
+- While a module title is being edited, hide that module's WebGL title text so only the text being typed shows. Nothing should be drawn under or on top of the edit field.
+- When the edit is committed or canceled, the WebGL title comes back once, showing the new text (or the old text on cancel). No flicker and no extra text rebuilds for other modules.
+- Test it: a browser test starts a title edit and checks the module's GL title isn't drawn. It then commits and checks the new title is drawn, and does the same for cancel.
