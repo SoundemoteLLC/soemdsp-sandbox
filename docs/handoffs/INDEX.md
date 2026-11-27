@@ -85,6 +85,8 @@ These landed after the main table was last updated, or are the paste bundles tha
 | PASTE-10 | stable release pass (bugs only, no new features) | done | `docs/handoffs/ready/PASTE-10.md` | 2026-11-27: handed over and reported; remaining spawn issues and the Mutator/Gradient editor go to PASTE-11. |
 | PASTE-11 | restore Mutator/Gradient points-and-curves editor; spawn-error fixes (bugs only) | ready | `docs/handoffs/ready/PASTE-11.md` | 2026-11-27: added. Next stable-release bug paste. |
 | HP-29 | Metamodule GL ghost plates | ready, HELD: do not serve until Argi confirms the symptom and asks for it; after release-readiness (Argi: metamodule last) | `docs/handoffs/HP-29.md` | 2026-11-27: filed from MasterBot's reading of `e0d742dd`. Symptom still needs Argi's confirm. |
+| HP-30 | Metamodule display: pick one module | ready, HELD: depends on HP-29; do not serve until Argi asks; after release-readiness | `docs/handoffs/HP-30.md` | 2026-11-27: filed. Depends on HP-29. Follow-up is HP-31 (mini canvas). |
+| HP-31 | Metamodule mini canvas | idea, not queued; depends on HP-30 | `docs/handoffs/HP-31.md` | 2026-11-27: filed as stage 2 of HP-30. |
 
 ## Later / notes
 
