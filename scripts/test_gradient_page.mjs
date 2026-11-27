@@ -114,6 +114,13 @@ try {
       out.unsnappedMoveCreatesAllParamsStop = Boolean(halfStop) && Math.abs(Number(halfStop.offsets?.[b]?.floorDb) - bBefore) < 1e-6
         && Math.abs(Number(halfStop.offsets?.[a]?.frequency) - (bent.targetSlider - Number(g().origin?.[a]?.frequency))) < 1e-6;
       out.allJoinedControlsGold = g().params.every(({ nodeId, key }) => nodeGraphSliderForParameter(nodeId, key)?.closest("label")?.querySelector(".node-slider-readout")?.classList.contains("is-gradient-edit"));
+      out.paramColorsMatch = g().params.every(({ nodeId, key }) => {
+        const readout = nodeGraphSliderForParameter(nodeId, key)?.closest("label")?.querySelector(".node-slider-readout");
+        const chip = [...card.querySelectorAll(".node-gradient-param-chips button")].find((item) => item.dataset.nodeId === nodeId && item.dataset.paramKey === key);
+        const series = [...card.querySelectorAll("[data-curve-series]")].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${nodeId}\u0000${key}`);
+        const color = readout?.style.getPropertyValue("--gradient-edit-color").trim();
+        return Boolean(color) && color === chip?.style.getPropertyValue("--curve-color").trim() && color === series?.getAttribute("stroke");
+      });
       nodeGraphGradientPageSetPlayhead(g(), 0.5 + 1 / 127);
       const snappedStop = g().stops.find((stop) => Math.abs(stop.pos - 0.5) < 1e-9);
       const beforeSnapEdit = Number(snappedStop.offsets?.[a]?.frequency) || 0;
@@ -307,7 +314,7 @@ try {
     ok(r.migratedPositions, "legacy 0..127 positions migrate to normalized 0..1 values");
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(r.firstMoveCreatesEndStop && r.newParamsJoinLive, "first move creates stop 1 and later untracked parameters join live with their start values preserved");
-    ok(r.editHeld && r.allJoinedControlsGold, "Edit keeps base params and slider thumbs held while every joined parameter gets its curve color outline");
+    ok(r.editHeld && r.allJoinedControlsGold && r.paramColorsMatch, "Edit keeps slider thumbs held and uses each parameter's same color for its outline, chip and curve");
     ok(r.unsnappedMoveCreatesAllParamsStop, "an unsnapped move creates a stop for all params without moving untouched curves");
     ok(r.editOffDiscards, "turning Edit off clears edit state without changing base values");
     ok(r.playheadSnapAndLiveEdit && r.playheadSnapReleases, "playhead snaps within two steps, live edits the snapped stop, and releases beyond the threshold");

@@ -5791,7 +5791,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 }
 
 .node-slider-readout.is-gradient-edit {
-  box-shadow: 0 0 0 1px #f0c56f;
+  box-shadow: 0 0 0 1px var(--gradient-edit-color, #62bce5);
 }
 
 /* PASTE-8: the drag grip (🌈 page cards, Mutator page): the visible handle for dragging a module into the circuit. Static: no hover, no

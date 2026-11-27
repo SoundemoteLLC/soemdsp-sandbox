@@ -374,10 +374,10 @@ function nodeGraphGradientPageCard(gradient) {
   const selectedParam = nodeGraphGradientSelectedParam(gradient);
   const chips = document.createElement("div");
   chips.className = "node-gradient-param-chips";
-  gradient.params.forEach(({ nodeId, key }, index) => {
+  gradient.params.forEach(({ nodeId, key }) => {
     const id = `${nodeId}\u0000${key}`;
     const chip = nodeGraphGradientPageButton(`${nodeGraphGradientPageModuleLabel(nodeId)} · ${nodeGraphGradientPageParamLabel(nodeId, key)}`, "selectCurveParam", gradient.id, { pressed: selectedParam && `${selectedParam.nodeId}\u0000${selectedParam.key}` === id });
-    chip.dataset.nodeId = nodeId; chip.dataset.paramKey = key; chip.style.setProperty("--curve-color", nodeGraphCurveColor(index));
+    chip.dataset.nodeId = nodeId; chip.dataset.paramKey = key; chip.style.setProperty("--curve-color", nodeGraphGradientPageParamColor(nodeId, key));
     chips.append(chip);
   });
   card.append(chips);
@@ -426,7 +426,13 @@ function nodeGraphGradientPageCard(gradient) {
   return card;
 }
 
-function nodeGraphCurveColor(index) { return ["#62bce5", "#d99b58", "#67c477", "#c678d2", "#e16c7e", "#c4bd69"][index % 6]; }
+function nodeGraphGradientPageParamColor(nodeId, key) {
+  const palette = ["#62bce5", "#d99b58", "#67c477", "#c678d2", "#e16c7e", "#c4bd69"];
+  const identity = `${nodeId}\u0000${key}`;
+  let hash = 2166136261;
+  for (let i = 0; i < identity.length; i += 1) hash = Math.imul(hash ^ identity.charCodeAt(i), 16777619);
+  return palette[(hash >>> 0) % palette.length];
+}
 
 function nodeGraphGradientPageDrawGraph(card, gradient) {
   const svg = card.querySelector("[data-gradient-graph]");
@@ -437,7 +443,7 @@ function nodeGraphGradientPageDrawGraph(card, gradient) {
     if (!params.some((param) => param.nodeId === nodeId && param.key === key)) params.push({ nodeId, key });
   }
   const selected = nodeGraphGradientSelectedParam(gradient);
-  const series = params.map((param, index) => {
+  const series = params.map((param) => {
     const id = `${param.nodeId}\u0000${param.key}`;
     const node = nodeGraphPatchNode(param.nodeId);
     const meta = node && nodeGraphReadPatchParameterMetadata(node, param.key);
@@ -447,7 +453,7 @@ function nodeGraphGradientPageDrawGraph(card, gradient) {
     const pendingSlider = pending && meta ? NodeGraphGradients.toSlider(meta, Number(pending.value)) : NaN;
     return {
       id,
-      color: nodeGraphCurveColor(index),
+      color: nodeGraphGradientPageParamColor(param.nodeId, param.key),
       selected: selected && id === `${selected.nodeId}\u0000${selected.key}`,
       points: stops.map((stop) => ({ x: stop.pos, y: Math.max(0, Math.min(1, base + nodeGraphGradientPageOffset(stop, param.nodeId, param.key))), shape: NodeGraphGradients.curveOf(stop, param.nodeId, param.key).shape, skew: NodeGraphGradients.curveOf(stop, param.nodeId, param.key).skew })),
       ...(Number.isFinite(pendingSlider) ? { pendingPoint: { x: gradient.position, y: pendingSlider } } : {}),
@@ -1010,7 +1016,9 @@ function nodeGraphGradientEditSyncOutlines() {
     const [nodeId, key] = mapKey.split("\u0000");
     const input = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, key) : null;
     if (input) delete input.dataset.gradientEdit;
-    input?.closest?.("label")?.querySelector(".node-slider-readout")?.classList.remove("is-gradient-edit");
+    const readout = input?.closest?.("label")?.querySelector(".node-slider-readout");
+    readout?.classList.remove("is-gradient-edit");
+    readout?.style.removeProperty("--gradient-edit-color");
     touched.add(nodeId);
   }
   for (const mapKey of next) {
@@ -1018,7 +1026,9 @@ function nodeGraphGradientEditSyncOutlines() {
     const [nodeId, key] = mapKey.split("\u0000");
     const input = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, key) : null;
     if (input) input.dataset.gradientEdit = "1";
-    input?.closest?.("label")?.querySelector(".node-slider-readout")?.classList.add("is-gradient-edit");
+    const readout = input?.closest?.("label")?.querySelector(".node-slider-readout");
+    readout?.style.setProperty("--gradient-edit-color", nodeGraphGradientPageParamColor(nodeId, key));
+    readout?.classList.add("is-gradient-edit");
     touched.add(nodeId);
   }
   nodeGraphGradientEditMarked = next;
