@@ -495,6 +495,9 @@ const nodeGraphFilePickerWellKnown = Object.freeze(["desktop", "documents", "dow
 // independently, while Documents is the first-run fallback for this repo.
 const nodeGraphFilePickerId = "soemdsp-sandbox-patches";
 const nodeGraphFilePickerDefaultStartIn = "documents";
+// In-memory startIn for the next picker call. Must be readable synchronously
+// so showSaveFilePicker / showOpenFilePicker keep the user gesture.
+let nodeGraphFilePickerCachedStartIn = null;
 
 function normalizeNodeGraphFilePickerState(raw = null) {
   const source = raw && typeof raw === "object" ? raw : {};
@@ -731,7 +734,38 @@ async function nodeGraphFilePickerRememberLocation(handle) {
       // Keep file handle only if parent is unavailable.
     }
   }
+  nodeGraphFilePickerCachedStartIn = toStore;
   await nodeGraphFilePickerPutHandle(toStore);
+}
+
+function nodeGraphFilePickerSyncStartIn() {
+  if (nodeGraphFilePickerCachedStartIn) {
+    return nodeGraphFilePickerCachedStartIn;
+  }
+  if (typeof nodeGraphFilePickerState === "function") {
+    const startIn = nodeGraphFilePickerState().startIn;
+    if (startIn) return startIn;
+  }
+  return nodeGraphFilePickerDefaultStartIn;
+}
+
+function nodeGraphFilePickerWarmCachedStartIn() {
+  if (typeof nodeGraphFilePickerStartIn !== "function") return;
+  void nodeGraphFilePickerStartIn({ allowHandle: true }).then((startIn) => {
+    if (startIn && typeof startIn === "object") {
+      nodeGraphFilePickerCachedStartIn = startIn;
+    }
+  }).catch(() => {
+    // Warm is best-effort; the well-known startIn still works.
+  });
+}
+
+if (typeof window !== "undefined") {
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => { nodeGraphFilePickerWarmCachedStartIn(); }, { timeout: 2000 });
+  } else {
+    window.setTimeout(nodeGraphFilePickerWarmCachedStartIn, 0);
+  }
 }
 
 function nodeGraphDownloadTextFile(filename, text, type = "application/json;charset=utf-8") {
@@ -759,7 +793,7 @@ async function nodeGraphSaveTextFileWithNativeDialog({
       const handle = await window.showSaveFilePicker({
         id: nodeGraphFilePickerId,
         suggestedName: name,
-        startIn: await nodeGraphFilePickerStartIn({ allowHandle: true }),
+        startIn: nodeGraphFilePickerSyncStartIn(),
         types: [{ description, accept }],
         excludeAcceptAllOption: false,
       });
@@ -769,10 +803,13 @@ async function nodeGraphSaveTextFileWithNativeDialog({
       await nodeGraphFilePickerRememberLocation(handle);
       return { ok: true, name: handle.name || name, cancelled: false, handle };
     } catch (error) {
-      if (error && (error.name === "AbortError" || error.name === "NotAllowedError")) {
+      if (error && error.name === "AbortError") {
         return { ok: false, cancelled: true };
       }
-      throw error;
+      if (!(error && (error.name === "SecurityError" || error.name === "NotAllowedError"))) {
+        throw error;
+      }
+      // Lost user gesture or permission: fall back to a download.
     }
   }
   nodeGraphDownloadTextFile(name, text);
@@ -789,7 +826,7 @@ async function nodeGraphOpenTextFileWithNativeDialog({
       const [handle] = await window.showOpenFilePicker({
         id: nodeGraphFilePickerId,
         multiple: false,
-        startIn: await nodeGraphFilePickerStartIn(),
+        startIn: nodeGraphFilePickerSyncStartIn(),
         types: [{ description, accept }],
         excludeAcceptAllOption: false,
       });
@@ -798,10 +835,13 @@ async function nodeGraphOpenTextFileWithNativeDialog({
       await nodeGraphFilePickerRememberLocation(handle);
       return { ok: true, name: handle.name || file.name, text, cancelled: false, handle };
     } catch (error) {
-      if (error && (error.name === "AbortError" || error.name === "NotAllowedError")) {
+      if (error && error.name === "AbortError") {
         return { ok: false, cancelled: true };
       }
-      throw error;
+      if (!(error && (error.name === "SecurityError" || error.name === "NotAllowedError"))) {
+        throw error;
+      }
+      // Lost user gesture or permission: fall back to the hidden file input.
     }
   }
   const input = fallbackInputId ? document.getElementById(fallbackInputId) : null;
