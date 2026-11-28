@@ -23,7 +23,7 @@ function nodeGraphGradientDisplaySettingsForNode(node) {
 
 function buildNodeGraphGradientDisplaySettingsBodyHtml() {
   const row = (key, label, min, max, step) => `<label class="metadata-field-row" data-trace-display-control-row><span class="metadata-field-label">${label}</span><input type="range" min="${min}" max="${max}" step="${step}" data-gradient-display-setting="${key}"></label>`;
-  return `<div data-gradient-display-settings-panel>${row("playheadAlpha", "Playhead Alpha", 0, 1, 0.01)}<label class="metadata-field-row" data-trace-display-control-row><span class="metadata-field-label">Playhead Color</span><input type="color" data-gradient-display-setting="playheadColor"></label>${row("playheadThickness", "Playhead Thickness", 0, 8, 0.1)}</div>`;
+  return `<div data-gradient-display-settings-panel>${row("playheadAlpha", "Blend Alpha", 0, 1, 0.01)}<label class="metadata-field-row" data-trace-display-control-row><span class="metadata-field-label">Blend Color</span><input type="color" data-gradient-display-setting="playheadColor"></label>${row("playheadThickness", "Blend Thickness", 0, 8, 0.1)}</div>`;
 }
 
 function syncNodeGraphGradientDisplaySettingsControls(root, settings) {

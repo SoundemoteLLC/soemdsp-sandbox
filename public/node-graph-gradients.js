@@ -271,6 +271,15 @@
         seenParam.add(tag);
         params.push({ nodeId: entry.nodeId, key: entry.key });
       }
+      const paramColors = {};
+      if (plain(raw.paramColors)) {
+        for (const [nodeId, byKey] of Object.entries(raw.paramColors)) {
+          if (!plain(byKey)) continue;
+          const row = {};
+          for (const [key, color] of Object.entries(byKey)) if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) row[key] = color.toLowerCase();
+          if (Object.keys(row).length) paramColors[nodeId] = row;
+        }
+      }
       const usedStopIds = new Set();
       const stops = [];
       for (const rawStop of rawStops) {
@@ -311,6 +320,7 @@
         position: normalizePosition(rawPosition),
         origin,
         params,
+        ...(Object.keys(paramColors).length ? { paramColors } : {}),
         stops,
       });
     }

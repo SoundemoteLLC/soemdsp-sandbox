@@ -4422,7 +4422,12 @@ const nodeGraphModuleDefinitions = (
     defaultDisplayMode: "face",
     customDisplayArea: true,
     defaultWidthGu: 10,
-    displayHeightGu: 5,
+    displayHeightGu: 3,
+    defaultUi: { buttonsHidden: true },
+    defaultDisplaySettings: {
+      enabledColor: "#3dffd0", playingColor: "#ffcf6b", naturalColor: "#20252a", sharpColor: "#f7f2e8",
+      blackKeyWidth: 12.945455, blackKeyHeight: 57.336364, keyLabels: "name", keyLabelSize: 315,
+    },
     digitalInputs: ["Scale"],
     digitalOutputs: ["Scale"],
     inputChannels: { Scale: "red" },
@@ -11720,18 +11725,18 @@ const nodeGraphModuleDefinitions = (
     inputs: ["In"],
     outputs: ["Out"],
     face: [
-      { kind: "cells", params: [["playhead", "Playhead"]], h: 40 },
+      { kind: "cells", params: [["playhead", "Blend"]], h: 40 },
     ],
     parameters: [
       {
         defaultValue: "0",
         key: "playhead",
-        label: "Playhead",
+        label: "Blend",
         max: "1",
         mid: "0.5",
         min: "0",
         step: "any",
-        tooltip: "Where the gradient plays, 0 to 1 across its stops. Playhead = this + In. The same value as the playhead on the Gradients page." }
+        tooltip: "Where the gradient plays, 0 to 1 across its stops. Blend = this + In. The same value as Blend on the Gradients page." }
     ] },
   pitchManager: {
     planRole: "processor",

@@ -278,8 +278,8 @@ try {
       out.ghostValue = Math.abs(Number(gs?.dataset.sentDomainValue) - eff()) < 1e-6;
       out.displayValue = Math.abs(nodeGraphFilterCurveLiveParam(nodeGraphPatchNode(a), "frequency", base) - eff()) < 1e-6;
       // Buttons, each one step.
-      btn("On", card).click(); out.toggleSteps = steps(); out.disabledEffIsBase = eff() === base;
-      btn("Off", card).click(); steps();
+      btn("✔️", card).click(); out.toggleSteps = steps(); out.disabledEffIsBase = eff() === base;
+      btn("❌", card).click(); steps();
       btn("Rename", card).click();
       const input = document.querySelector("[data-gradient-rename-input]");
       input.value = "Bright sweep";
@@ -296,7 +296,7 @@ try {
         nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), "test bar click");
       }
       out.stopsAfterTap = g().stops.length; out.positionAfterTap = Math.round(g().position * 100) / 100; out.tapSteps = steps();
-      btn("Delete stop", card).click(); out.stopsAfterDelete = g().stops.length; out.deleteStopSteps = steps();
+      btn("➖", card).click(); out.stopsAfterDelete = g().stops.length; out.deleteStopSteps = steps();
       // D-G1: delete a module, its params leave the gradient in the same commit.
       setNodeGraphSelection({ type: "node", id: b });
       performNodeGraphDeleteSelection(nodeGraphMvp.selected);

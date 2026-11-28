@@ -68,6 +68,22 @@ function nodeGraphGradientPageColorInputDefault(index) {
   return `#${[r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("")}`;
 }
 
+function nodeGraphGradientPageRandomHueColor(color) {
+  const source = String(color || "#62bce5");
+  const match = /^#([0-9a-f]{6})$/i.exec(source);
+  if (!match) return nodeGraphGradientPageColorInputDefault(Math.random() * 360);
+  const n = Number.parseInt(match[1], 16);
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  const h = Math.random() * 360 / 60;
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(h % 2 - 1));
+  const rgb = h < 1 ? [c, x, 0] : h < 2 ? [x, c, 0] : h < 3 ? [0, c, x] : h < 4 ? [0, x, c] : h < 5 ? [x, 0, c] : [c, 0, x];
+  const m = l - c / 2;
+  return `#${rgb.map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
 function nodeGraphGradientPageStripBackground(gradient) {
   const stops = [...(gradient.stops || [])].sort((a, b) => a.pos - b.pos);
   const hue = (index) => `hsl(${(index * 137.5) % 360}, 55%, 50%)`;
@@ -344,6 +360,27 @@ function nodeGraphGradientPageStrip(gradient) {
 }
 
 function nodeGraphGradientPageCard(gradient) {
+  let colorsChanged = false;
+  for (let i = 0; i < (gradient.stops || []).length; i += 1) {
+    const stop = gradient.stops[i];
+    if (!/^#[0-9a-f]{6}$/i.test(String(stop.color || ""))) {
+      stop.color = nodeGraphGradientPageRandomHueColor(nodeGraphGradientPageColorInputDefault(i));
+      colorsChanged = true;
+    }
+  }
+  gradient.paramColors ||= {};
+  for (const { nodeId, key } of gradient.params || []) {
+    gradient.paramColors[nodeId] ||= {};
+    if (!/^#[0-9a-f]{6}$/i.test(String(gradient.paramColors[nodeId][key] || ""))) {
+      const palette = ["#62bce5", "#d99b58", "#67c477", "#c678d2", "#e16c7e", "#c4bd69"];
+      const identity = `${nodeId}\u0000${key}`;
+      let hash = 2166136261;
+      for (let i = 0; i < identity.length; i += 1) hash = Math.imul(hash ^ identity.charCodeAt(i), 16777619);
+      gradient.paramColors[nodeId][key] = nodeGraphGradientPageRandomHueColor(palette[(hash >>> 0) % palette.length]);
+      colorsChanged = true;
+    }
+  }
+  if (colorsChanged && typeof scheduleNodeGraphWorkspaceAutosave === "function") scheduleNodeGraphWorkspaceAutosave("gradient colors");
   const card = document.createElement("section");
   card.className = "node-gradient-card";
   if (gradient.enabled === false) card.classList.add("is-disabled");
@@ -370,7 +407,7 @@ function nodeGraphGradientPageCard(gradient) {
     name.textContent = gradient.name;
     head.append(name);
   }
-  const enabled = nodeGraphGradientPageButton(gradient.enabled === false ? "Off" : "On", "toggle", gradient.id, { pressed: gradient.enabled !== false });
+  const enabled = nodeGraphGradientPageButton(gradient.enabled === false ? "❌" : "✔️", "toggle", gradient.id, { pressed: gradient.enabled !== false });
   enabled.classList.add("node-gradient-enabled");
   enabled.setAttribute("aria-label", `${gradient.name} enabled`);
   head.append(enabled);
@@ -391,7 +428,7 @@ function nodeGraphGradientPageCard(gradient) {
   gradient.params.forEach(({ nodeId, key }) => {
     const id = `${nodeId}\u0000${key}`;
     const chip = nodeGraphGradientPageButton(`${nodeGraphGradientPageModuleLabel(nodeId)} · ${nodeGraphGradientPageParamLabel(nodeId, key)}`, "selectCurveParam", gradient.id, { pressed: selectedParam && `${selectedParam.nodeId}\u0000${selectedParam.key}` === id });
-    chip.dataset.nodeId = nodeId; chip.dataset.paramKey = key; chip.style.setProperty("--curve-color", nodeGraphGradientPageParamColor(nodeId, key));
+    chip.dataset.nodeId = nodeId; chip.dataset.paramKey = key; chip.style.setProperty("--curve-color", nodeGraphGradientPageParamColor(nodeId, key, gradient));
     chips.append(chip);
   });
   card.append(chips);
@@ -405,7 +442,7 @@ function nodeGraphGradientPageCard(gradient) {
   const playheadControl = document.createElement("div");
   playheadControl.className = "node-gradient-playhead-control";
   const playheadSlider = document.createElement("input"); playheadSlider.type = "range"; playheadSlider.min = "0"; playheadSlider.max = "1"; playheadSlider.step = "0.001"; playheadSlider.value = String(gradient.position); playheadSlider.dataset.gradientPlayhead = gradient.id;
-  playheadSlider.setAttribute("aria-label", `${gradient.name} playhead`);
+  playheadSlider.setAttribute("aria-label", `${gradient.name} Blend`);
   playheadSlider.style.setProperty("--gradient-playhead-progress", `${(gradient.position * 100).toFixed(3)}%`);
   playheadControl.append(playheadSlider); card.append(playheadControl);
   if (selectedParam) card.append(nodeGraphGradientPageCurveControls(gradient, selectedParam.nodeId, selectedParam.key));
@@ -435,7 +472,7 @@ function nodeGraphGradientPageCard(gradient) {
   rename.classList.add("node-gradient-rename");
   buttons.append(
     nodeGraphGradientPageButton("Duplicate", "duplicateStop", gradient.id, { disabled: true }),
-    nodeGraphGradientPageButton("Delete stop", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 }),
+    nodeGraphGradientPageButton("➖", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 }),
     rename,
     deleteGradient,
   );
@@ -444,12 +481,14 @@ function nodeGraphGradientPageCard(gradient) {
   return card;
 }
 
-function nodeGraphGradientPageParamColor(nodeId, key) {
+function nodeGraphGradientPageParamColor(nodeId, key, gradient = null) {
   const palette = ["#62bce5", "#d99b58", "#67c477", "#c678d2", "#e16c7e", "#c4bd69"];
+  const stored = gradient?.paramColors?.[nodeId]?.[key];
+  if (stored && /^#[0-9a-f]{6}$/i.test(stored)) return stored;
   const identity = `${nodeId}\u0000${key}`;
   let hash = 2166136261;
   for (let i = 0; i < identity.length; i += 1) hash = Math.imul(hash ^ identity.charCodeAt(i), 16777619);
-  return palette[(hash >>> 0) % palette.length];
+  return nodeGraphGradientPageRandomHueColor(palette[(hash >>> 0) % palette.length]);
 }
 
 function nodeGraphGradientPageDrawGraph(card, gradient) {
@@ -471,7 +510,7 @@ function nodeGraphGradientPageDrawGraph(card, gradient) {
     const pendingSlider = pending && meta ? NodeGraphGradients.toSlider(meta, Number(pending.value)) : NaN;
     return {
       id,
-      color: nodeGraphGradientPageParamColor(param.nodeId, param.key),
+      color: nodeGraphGradientPageParamColor(param.nodeId, param.key, gradient),
       selected: selected && id === `${selected.nodeId}\u0000${selected.key}`,
       points: stops.map((stop) => ({ x: stop.pos, y: Math.max(0, Math.min(1, base + nodeGraphGradientPageOffset(stop, param.nodeId, param.key))), shape: NodeGraphGradients.curveOf(stop, param.nodeId, param.key).shape, skew: NodeGraphGradients.curveOf(stop, param.nodeId, param.key).skew })),
       ...(Number.isFinite(pendingSlider) ? { pendingPoint: { x: gradient.position, y: pendingSlider } } : {}),
@@ -507,7 +546,7 @@ function renderNodeGraphGradientPage() {
   filter.className = "node-gradient-filter";
   filter.setAttribute("role", "group");
   filter.setAttribute("aria-label", "Show gradients");
-  for (const [value, text] of [["all", "All"], ["touching", "Touching selected"]]) {
+  for (const [value, text] of [["all", "All"], ["touching", "Touching"]]) {
     const b = nodeGraphGradientPageButton(text, "filter", "", { pressed: nodeGraphGradientPageState.filter === value });
     b.dataset.filter = value;
     filter.append(b);
@@ -661,6 +700,7 @@ function nodeGraphGradientPageAction(action, gradientId, button) {
     nodeGraphGradientPageState.selectedStop.delete(gradient.id);
     const next = NodeGraphGradients.dropAllZeroParams({ ...gradient, stops: gradient.stops.filter((s) => s.id !== stopId) });
     nodeGraphGradientPageCommit(nodeGraphGradientPageReplace(gradient.id, () => next), `${gradient.name} stop deleted`);
+    nodeGraphGradientEditSyncOutlines();
   } else if (action === "rename") {
     if (nodeGraphGradientPageState.renaming === gradient.id) {
       nodeGraphGradientPageFinishRename(gradient.id);
@@ -670,7 +710,12 @@ function nodeGraphGradientPageAction(action, gradientId, button) {
     }
   } else if (action === "deleteGradient") {
     nodeGraphGradientPageState.selectedStop.delete(gradient.id);
+    nodeGraphGradientPageState.editGradientId = nodeGraphGradientPageState.editGradientId === gradient.id ? "" : nodeGraphGradientPageState.editGradientId;
+    nodeGraphGradientPageState.editing = nodeGraphGradientPageState.editing?.gradientId === gradient.id ? null : nodeGraphGradientPageState.editing;
+    nodeGraphGradientPageState.snappedStops.delete(gradient.id);
+    nodeGraphGradientPageState.selectedParam.delete(gradient.id);
     nodeGraphGradientPageCommit(nodeGraphGradientPageGradients().filter((g) => g.id !== gradient.id), `${gradient.name} deleted`);
+    nodeGraphGradientEditSyncOutlines();
   } else if (action === "snapshot") {
     if (nodeGraphGradientPageIsEditing(gradient.id)) return;
     const next = NodeGraphGradients.snapshotIntoGradient(patch, gradient, gradient.position);
@@ -1043,7 +1088,8 @@ function nodeGraphGradientEditSyncOutlines() {
     const input = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, key) : null;
     if (input) input.dataset.gradientEdit = "1";
     const readout = input?.closest?.("label")?.querySelector(".node-slider-readout");
-    readout?.style.setProperty("--gradient-edit-color", nodeGraphGradientPageParamColor(nodeId, key));
+    const gradient = nodeGraphGradientPageActiveGradient(nodeGraphGradientPageState.editGradientId);
+    readout?.style.setProperty("--gradient-edit-color", nodeGraphGradientPageParamColor(nodeId, key, gradient));
     readout?.classList.add("is-gradient-edit");
     touched.add(nodeId);
   }
@@ -1066,7 +1112,7 @@ function nodeGraphGradientPageEnsureLiveEditStop(gradient, node, key, meta, valu
     const ids = new Set(gradient.stops.map((item) => item.id));
     let n = gradient.stops.length;
     while (ids.has(`s${n + 1}`)) n += 1;
-    stop = { id: `s${n + 1}`, pos: gradient.position, offsets };
+    stop = { id: `s${n + 1}`, pos: gradient.position, offsets, color: nodeGraphGradientPageRandomHueColor(nodeGraphGradientPageColorInputDefault(gradient.stops.length)) };
     gradient.stops.push(stop);
     gradient.stops.sort((a, b) => a.pos - b.pos);
   }
@@ -1075,7 +1121,11 @@ function nodeGraphGradientPageEnsureLiveEditStop(gradient, node, key, meta, valu
     if (!Number.isFinite(baseSlider)) return null;
     (gradient.origin[nodeId] || (gradient.origin[nodeId] = {}))[key] = baseSlider;
     gradient.params.push({ nodeId, key });
+    gradient.paramColors ||= {};
+    gradient.paramColors[nodeId] ||= {};
+    gradient.paramColors[nodeId][key] = nodeGraphGradientPageParamColor(nodeId, key, null);
     for (const item of gradient.stops) (item.offsets[nodeId] || (item.offsets[nodeId] = {}))[key] = 0;
+    nodeGraphGradientEditSyncOutlines();
   }
   const current = Number(stop.offsets?.[nodeId]?.[key]) || beforeOffset;
   const target = NodeGraphGradients.toSlider(meta, value);
@@ -1206,7 +1256,7 @@ function nodeGraphGradientEditKeydown(event) {
 
 // ------------------------------------------------------------------------------------------------ wiring
 
-/** Selection changed (node-graph-selection.js): the "Touching selected" filter follows it. */
+/** Selection changed (node-graph-selection.js): the "Touching" filter follows it. */
 function nodeGraphGradientPageSelectionChanged() {
   if (nodeGraphGradientPageState.filter === "touching") renderNodeGraphGradientPage();
 }
@@ -1223,6 +1273,7 @@ function bindNodeGraphGradientPage() {
   host.addEventListener("contextmenu", (event) => {
     const pageSlider = event.target?.closest?.("[data-gradient-playhead]");
     if (!pageSlider || typeof openNodeMetadataPopover !== "function") return;
+    event.preventDefault();
     const gradientId = pageSlider.dataset.gradientPlayhead;
     const moduleNode = nodeGraphMvp?.patch?.nodes?.find((node) => node.type === "gradient" && node.gradientId === gradientId);
     if (!moduleNode) return;

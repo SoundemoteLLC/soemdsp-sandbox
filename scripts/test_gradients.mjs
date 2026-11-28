@@ -208,8 +208,8 @@ function gradient(id, offsets, extra = {}) {
     const api = c.NodeGraphGradients;
     const out = api.normalize([{ id: "a", position: 4, stops: [{ pos: 2, offsets: { n1: { cutoff: "0.2", bad: "x" } } }, { id: "s1", pos: "nope" }], params: [{ nodeId: "ghost", key: "k" }, { nodeId: "ghost", key: "k" }, { bad: 1 }] }, { id: "a" }, "junk", null]);
     assert.equal(out.length, 2); assert.notEqual(out[0].id, out[1].id, "ids are unique");
-    assert.equal(out[0].position, 1, "position is held to 0..1");
-    assert.equal(out[0].stops.length, 1); assert.equal(out[0].stops[0].pos, 1);
+    assert.equal(out[0].position, 4 / 127, "legacy position above 1 migrates from 0..127");
+    assert.equal(out[0].stops.length, 1); assert.equal(out[0].stops[0].pos, 2 / 127);
     deq(out[0].stops[0].offsets, { n1: { cutoff: 0.2 } });
     deq(out[0].params, [{ nodeId: "ghost", key: "k" }], "a dangling reference is kept (it is skipped when applying)");
     deq(api.normalize(undefined), []);
