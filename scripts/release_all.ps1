@@ -143,10 +143,10 @@ $($notesBody.Trim())
 "@
 Write-Utf8NoBom $msgPath ($squashMessage.TrimEnd() + "`n")
 
-$trackedPatchPaths = @(Get-GitLines $sandbox ls-files -- patches)
 $add = @(
     "VERSION",
     "server.py",
+    "patches",
     "scripts/README.md",
     "scripts/soundemote_io.ps1",
     "scripts/release_all.ps1",
@@ -158,7 +158,6 @@ $add = @(
     "public/native-modules-catalog.json",
     "native_modules"
 )
-$add += $trackedPatchPaths
 
 Write-Host ""
 Write-Host "== Squashing and pushing soemdsp-sandbox" -ForegroundColor Cyan
