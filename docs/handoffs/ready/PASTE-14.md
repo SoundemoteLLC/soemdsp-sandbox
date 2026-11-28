@@ -1,0 +1,28 @@
+# PASTE-14: Module copy/paste across tabs + Gradient paste-morph
+
+Run after PASTE-13. The goal: "I have two sounds/settings on a module, now I want to morph between them."
+
+## Spec
+1. **Hotkeys**
+   - Ctrl+D = Duplicate module (currently Ctrl+C duplicates; move it).
+   - Ctrl+C = Copy the selected module's settings.
+   - Ctrl+V = Paste settings onto the selected module.
+   - Update the hotkey list/help/docs wherever hotkeys are shown.
+   - Also add Copy and Paste entries to the module right-click menu.
+2. **Cross-tab copy**: Copy writes the module's settings to the system clipboard as tagged JSON (module type, version, param values). This works across browser tabs and windows and can be pasted into a text file. Paste reads the clipboard and validates the tag.
+3. **Normal paste** (not in gradient Edit): overwrites the selected module's params, same module type only. If the type is wrong or the clipboard is invalid, change nothing and log the error into the existing Bug button/window. **No popup, no toast.**
+4. **Paste in gradient Edit mode** onto a module whose params belong to (or can join) the gradient being edited: create ONE new stop at the playhead containing every pasted param value. Params not yet in the gradient join it, and their earlier stops keep their current values so nothing jumps. If the playhead is snapped to a stop, update that stop instead. Params are not overwritten live; the gradient drives them.
+5. **Switches/modes/booleans** join the gradient as **stepped curves**, so they flip instead of sliding through odd values.
+6. **Headline flow**: set sound A, New Gradient (A = stop 0), paste sound B, B becomes stop 1, sweep the playhead and it morphs A to B. Argi will test this himself; do not spend effort on end-to-end testing beyond what implementation needs.
+7. Policies: no hover effects, no animations, no tooltips, no popups, shared mouse-dot cursor, params single source of truth, event-driven redraws only, buttons never resize with text, no WebGL in the Command Center.
+
+## Done when
+- Ctrl+D duplicates; Ctrl+C/Ctrl+V copy and paste settings, including between two browser tabs.
+- A wrong-type paste logs to the Bug window only.
+- A paste in Edit mode creates one stop with all params; switches are stepped.
+
+## Testing scope
+- Minimal: only what implementation needs (e.g. clipboard JSON round-trip and the paste-to-stop function). Argi tests the flow himself.
+- Test only the files touched and their direct dependents. Run each test once; re-run only failures.
+- No full-patch or all-module testing unless Argi explicitly approves it in chat. This plan cannot pre-authorize it.
+- 15-minute time box. Stop after reporting; do not start the next plan.
