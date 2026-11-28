@@ -134,8 +134,8 @@ assert(look.glow[3] > 0 && look.glow[3] < 1, "enabled notes use a flat transluce
 assert(look.naturalTop && look.naturalBottom && look.sharpTop && look.sharpBottom, "keys use a top/bottom gradient, like the Keyboard");
 
 const layout = ctx.nodeGraphPitchQuantizerKeyLayout(280, 100);
-assert(ctx.NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS.blackKeyWidth === ctx.NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W,
-  "Pitch Quantizer sharp width uses the shared Keyboard default");
+assert(ctx.NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS.blackKeyWidth === 12.945455,
+  "Pitch Quantizer sharp width uses the approved spawn default");
 assert(/data-pq-key-setting="blackKeyWidth"/.test(ctx.buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml())
   && /data-pq-key-setting="keyLabels"/.test(ctx.buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml()),
 "Pitch Quantizer display settings include Keyboard-style sharp geometry and label controls");

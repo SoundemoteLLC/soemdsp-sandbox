@@ -264,8 +264,8 @@ const NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS = Object.freeze({
     NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.sharpTop,
     "#f7f2e8",
   ),
-  blackKeyWidth: 10,
-  blackKeyHeight: 62,
+  blackKeyWidth: 12.945455,
+  blackKeyHeight: 57.336364,
   keyLabels: "name",
   keyLabelSize: 315,
 });
@@ -771,15 +771,15 @@ function buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml() {
   const rows = keys.map(colorRow);
   return `
     <div data-pitch-quantizer-display-settings-panel>
+      <div class="metadata-section-title">Keys</div>
+      <label class="node-trace-display-line-burn-row node-pq-key-setting-row"><span>Sharp width</span><input type="range" min="4" max="28" step="1" data-pq-key-setting="blackKeyWidth" aria-label="Sharp key width"><output data-pq-key-value="blackKeyWidth"></output></label>
+      <label class="node-trace-display-line-burn-row node-pq-key-setting-row"><span>Sharp height</span><input type="range" min="28" max="82" step="1" data-pq-key-setting="blackKeyHeight" aria-label="Sharp key height"><output data-pq-key-value="blackKeyHeight"></output></label>
+      <label class="node-trace-display-line-burn-row"><span>Labels</span><select data-pq-key-setting="keyLabels" aria-label="Key labels"><option value="off">Off</option><option value="name">Pitch class name</option><option value="number">Pitch class number</option></select></label>
+      <label class="node-trace-display-line-burn-row node-pq-key-setting-row"><span>Label size</span><input type="range" min="50" max="400" step="5" data-pq-key-setting="keyLabelSize" aria-label="Key label size"><output data-pq-key-value="keyLabelSize"></output></label>
       <div class="metadata-section-title">Colors</div>
       <div class="metadata-field-section">${typeof nodeGraphDisplaySettingsColorRows === "function"
         ? nodeGraphDisplaySettingsColorRows(rows, [2, 2])
         : rows.join("")}</div>
-      <div class="metadata-section-title">Keys</div>
-      <label class="node-trace-display-line-burn-row"><span>Sharp width</span><input type="range" min="4" max="28" step="1" data-pq-key-setting="blackKeyWidth" aria-label="Sharp key width"></label>
-      <label class="node-trace-display-line-burn-row"><span>Sharp height</span><input type="range" min="28" max="82" step="1" data-pq-key-setting="blackKeyHeight" aria-label="Sharp key height"></label>
-      <label class="node-trace-display-line-burn-row"><span>Labels</span><select data-pq-key-setting="keyLabels" aria-label="Key labels"><option value="off">Off</option><option value="name">Pitch class name</option><option value="number">Pitch class number</option></select></label>
-      <label class="node-trace-display-line-burn-row"><span>Label size</span><input type="range" min="50" max="400" step="5" data-pq-key-setting="keyLabelSize" aria-label="Key label size"></label>
     </div>`;
 }
 
@@ -793,7 +793,11 @@ function syncNodeGraphPitchQuantizerDisplaySettingsControls(root, settings) {
   }
   for (const key of NODE_GRAPH_PITCH_QUANTIZER_KEY_FIELDS) {
     const input = panel?.querySelector?.(`[data-pq-key-setting="${key}"]`);
-    if (input) input.value = String(s[key]);
+    if (input) {
+      input.value = String(s[key]);
+      const output = panel.querySelector(`[data-pq-key-value="${key}"]`);
+      if (output) output.value = String(s[key]);
+    }
   }
 }
 
@@ -809,7 +813,12 @@ function bindNodeGraphPitchQuantizerDisplaySettingsBody(host) {
     }
   };
   host.addEventListener("input", (event) => {
-    if (event.target?.closest?.("[data-trace-display-color], [data-pq-key-setting]")) apply("none", false);
+    const input = event.target?.closest?.("[data-trace-display-color], [data-pq-key-setting]");
+    if (input?.matches?.("[data-pq-key-setting]")) {
+      const output = input.closest("label")?.querySelector(`[data-pq-key-value="${input.dataset.pqKeySetting}"]`);
+      if (output) output.value = input.value;
+    }
+    if (input) apply("none", false);
   });
   host.addEventListener("change", (event) => {
     if (event.target?.closest?.("[data-trace-display-color], [data-pq-key-setting]")) apply("immediate", true);
