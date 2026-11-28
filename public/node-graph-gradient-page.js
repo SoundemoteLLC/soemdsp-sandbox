@@ -865,7 +865,8 @@ function nodeGraphGradientPageSetPlayhead(gradient, position, options = {}) {
   nodeGraphGradientPageState.activeGradientId = gradient.id;
   const raw = Math.max(0, Math.min(1, Number(position)));
   const snapped = options.bypassSnap ? null : nodeGraphGradientPageSnapTarget(gradient, raw);
-  gradient.position = snapped ? snapped.pos : raw;
+  // Nearby stops may highlight, but Blend must stay continuous for playback.
+  gradient.position = raw;
   if (snapped) nodeGraphGradientPageState.snappedStops.set(gradient.id, snapped.id);
   else nodeGraphGradientPageState.snappedStops.delete(gradient.id);
   if (options.slider) {
@@ -1128,18 +1129,20 @@ function nodeGraphGradientPagePointerUp(event) {
     else nodeGraphGradientEditBegin(gradient.id, drag.stopId);
     return;
   }
+  const position = nodeGraphGradientPageStripPos(drag.strip, event.clientX);
   if (nodeGraphGradientPageState.editing) {
-    // An empty bar click moves the playhead; it never creates a stop.
+    // Cache before ending edit mode: that rerenders and detaches this strip.
     nodeGraphGradientEditEnd();
   }
   nodeGraphGradientPageState.selectedStop.delete(gradient.id);
-  nodeGraphGradientPageSetPlayhead(gradient, nodeGraphGradientPageStripPos(drag.strip, event.clientX), { card: drag.strip.closest(".node-gradient-card") });
+  const card = document.querySelector(`.node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"]`);
+  nodeGraphGradientPageSetPlayhead(gradient, position, { card });
   nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), `${gradient.name} position`);
 }
 
 // ------------------------------------------------------------------------------------------------ editing a stop (HP-24)
 //
-// Tap a stop: the playhead snaps to it and every slider of that gradient gets an outline (face sliders draw it; a slider input carries
+// Tap a stop: the playhead moves to it and every slider of that gradient gets an outline (face sliders draw it; a slider input carries
 // data-gradient-edit="1" for any other paint site). Moving an outlined slider writes into that stop's offset, one undo step per release;
 // other sliders act as usual. Tap the stop again, tap empty strip or press Esc to stop. Between stops nothing is outlined or written.
 
@@ -1149,25 +1152,28 @@ function nodeGraphGradientEditActive() {
   if (editing) {
     const gradient = nodeGraphGradientPageGradients().find((g) => g.id === editing.gradientId);
     const stop = gradient?.stops?.find((s) => s.id === editing.stopId);
-    if (gradient && stop && gradient.enabled !== false && Math.abs((Number(gradient.position) || 0) - stop.pos) <= 1e-9) return { gradient, stop };
+    if (gradient && stop && gradient.enabled !== false
+      && nodeGraphGradientPageState.snappedStops.get(gradient.id) === stop.id) return { gradient, stop };
   }
   if (!nodeGraphGradientPageState.editGradientId) return null;
   const gradient = nodeGraphGradientPageActiveGradient(nodeGraphGradientPageState.editGradientId);
   const stopId = gradient && nodeGraphGradientPageState.snappedStops.get(gradient.id);
   const stop = gradient?.stops.find((item) => item.id === stopId);
-  return gradient && stop && gradient.enabled !== false && Math.abs((Number(gradient.position) || 0) - stop.pos) <= 1e-9
+  return gradient && stop && gradient.enabled !== false
+    && nodeGraphGradientPageState.snappedStops.get(gradient.id) === stop.id
     ? { gradient, stop } : null;
 }
 
 /** "nodeId\u0000key" of every slider the edited stop writes (the outlined ones). */
 function nodeGraphGradientEditTargetKeys() {
-  const active = nodeGraphGradientEditActive();
   const out = new Set();
-  if (active) for (const { nodeId, key } of active.gradient.params) out.add(`${nodeId}\u0000${key}`);
-  else if (nodeGraphGradientPageState.editGradientId) {
-    const gradient = nodeGraphGradientPageActiveGradient(nodeGraphGradientPageState.editGradientId);
-    for (const { nodeId, key } of gradient?.params || []) out.add(`${nodeId}\u0000${key}`);
-  }
+  const editGradientId = nodeGraphGradientPageState.editGradientId;
+  if (!editGradientId) return out;
+  const active = nodeGraphGradientEditActive();
+  const gradient = active?.gradient.id === editGradientId
+    ? active.gradient
+    : nodeGraphGradientPageActiveGradient(editGradientId);
+  for (const { nodeId, key } of gradient?.params || []) out.add(`${nodeId}\u0000${key}`);
   return out;
 }
 
@@ -1208,6 +1214,7 @@ function nodeGraphGradientEditSyncOutlines() {
   nodeGraphGradientEditMarked = next;
   if (typeof nodeGraphGlGraphNoteValueChrome === "function") for (const id of touched) nodeGraphGlGraphNoteValueChrome(id);
   if (touched.size && typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
+  if (touched.size && typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 
 function nodeGraphGradientPageEnsureLiveEditStop(gradient, node, key, meta, value) {
