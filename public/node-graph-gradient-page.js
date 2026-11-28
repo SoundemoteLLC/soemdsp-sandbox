@@ -522,11 +522,14 @@ function nodeGraphGradientPageCard(gradient) {
   const deleteGradient = nodeGraphGradientPageButton("🗑️", "deleteGradient", gradient.id);
   deleteGradient.classList.add("node-gradient-delete-gradient");
   deleteGradient.setAttribute("aria-label", `${gradient.name} delete gradient`);
+  const deleteStop = nodeGraphGradientPageButton("➖", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 });
+  deleteStop.classList.add("node-gradient-delete-stop");
+  deleteStop.setAttribute("aria-label", `${gradient.name} delete stop`);
   const rename = nodeGraphGradientPageButton(nodeGraphGradientPageState.renaming === gradient.id ? "Done" : "Rename", "rename", gradient.id);
   rename.classList.add("node-gradient-rename");
   buttons.append(
     nodeGraphGradientPageButton("Duplicate", "duplicateStop", gradient.id, { disabled: true }),
-    nodeGraphGradientPageButton("➖", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 }),
+    deleteStop,
     rename,
     deleteGradient,
   );

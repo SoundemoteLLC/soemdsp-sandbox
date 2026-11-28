@@ -5640,7 +5640,9 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 /* Gradient state controls reserve their labels' full width. */
 #nodeGradientsBody .node-gradient-enabled,
 #nodeGradientsBody .node-gradient-drag-target,
-#nodeGradientsBody .node-gradient-snapshot {
+#nodeGradientsBody .node-gradient-snapshot,
+#nodeGradientsBody .node-gradient-delete-stop,
+#nodeGradientsBody .node-gradient-delete-gradient {
   box-sizing: border-box;
   flex: 0 0 30px;
   width: 30px;
@@ -5651,7 +5653,9 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 }
 #nodeGradientsBody .node-gradient-edit-toggle { flex: 0 0 48px; width: 48px; }
 #nodeGradientsBody .node-gradient-snapshot { flex: 0 0 30px; width: 30px; }
-#nodeGradientsBody .node-gradient-delete-gradient { flex: 0 0 44px; width: 44px; padding: 0; }
+#nodeGradientsBody .node-gradient-delete-stop,
+#nodeGradientsBody .node-gradient-delete-gradient { flex: 0 0 30px; width: 30px; padding: 0; }
+#nodeGradientsBody .node-gradient-delete-gradient { margin-left: auto; }
 #nodeGradientsBody .node-gradient-rename { flex: 0 0 76px; width: 76px; }
 #nodeGradientsBody .node-gradient-graphs-toggle { flex: 0 0 104px; width: 104px; }
 
@@ -5696,7 +5700,9 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 #nodeGradientsBody .node-gradient-button { min-height:30px; border-radius:3px; font:11px ui-monospace,monospace; }
 #nodeGradientsBody .node-gradient-enabled,
 #nodeGradientsBody .node-gradient-drag-target,
-#nodeGradientsBody .node-gradient-snapshot { font:20px/1 sans-serif; }
+#nodeGradientsBody .node-gradient-snapshot,
+#nodeGradientsBody .node-gradient-delete-stop,
+#nodeGradientsBody .node-gradient-delete-gradient { font:20px/1 sans-serif; }
 #nodeGradientsBody .node-gradient-stop-colors { grid-template-columns:minmax(100px,220px); padding:0; }
 #nodeGradientsBody .node-gradient-stop-color-row { grid-template-columns:auto minmax(64px,1fr); }
 #nodeGradientsBody .node-gradient-stop-color-widget { height:34px; }
