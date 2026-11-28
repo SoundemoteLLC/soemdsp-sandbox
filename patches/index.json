@@ -22,6 +22,24 @@
       "folder": "filter_breadboards"
     },
     {
+      "slug": "acoustic/bass",
+      "label": "bass",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/acoustic/bass.json",
+      "author": "",
+      "emoji": "",
+      "folder": "acoustic"
+    },
+    {
+      "slug": "acoustic/bass2",
+      "label": "bass2",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/acoustic/bass2.json",
+      "author": "",
+      "emoji": "",
+      "folder": "acoustic"
+    },
+    {
       "slug": "Alarm/Analog_Computer",
       "label": "Analog_Computer",
       "name": "",
@@ -53,6 +71,15 @@
       "label": "keyboard not controling step register pitch",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/keyboard%20not%20controling%20step%20register%20pitch.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
+      "slug": "bugs/mutator playhead not moving",
+      "label": "mutator playhead not moving",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/mutator%20playhead%20not%20moving.json",
       "author": "",
       "emoji": "",
       "folder": "bugs"
@@ -301,6 +328,33 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/spectral_cloud",
+      "label": "spectral_cloud",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/spectral_cloud.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/spectral_smear",
+      "label": "spectral_smear",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/spectral_smear.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/spectral_warble",
+      "label": "spectral_warble",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/spectral_warble.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/stepregister",
       "label": "stepregister",
       "name": "",
@@ -344,6 +398,15 @@
       "author": "",
       "emoji": "",
       "folder": "demonstration"
+    },
+    {
+      "slug": "drums/extreme snare",
+      "label": "extreme snare",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/extreme%20snare.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
     },
     {
       "slug": "drums/kick_drum_attempt",
@@ -425,6 +488,24 @@
       "author": "",
       "emoji": "",
       "folder": "foley"
+    },
+    {
+      "slug": "game/guitar pluck",
+      "label": "guitar pluck",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/game/guitar%20pluck.json",
+      "author": "",
+      "emoji": "",
+      "folder": "game"
+    },
+    {
+      "slug": "game/solve the aliasing",
+      "label": "solve the aliasing",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/game/solve%20the%20aliasing.json",
+      "author": "",
+      "emoji": "",
+      "folder": "game"
     },
     {
       "slug": "guitar_pedals/chorus_vs_ensemble",
@@ -684,6 +765,30 @@
       "emoji": ""
     },
     {
+      "slug": "bass",
+      "label": "bass",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/acoustic/bass.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "bass2",
+      "label": "bass2",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/acoustic/bass2.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "black_and_white_shader",
+      "label": "black_and_white_shader",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/black_and_white_shader.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "blaster",
       "label": "blaster",
       "name": "",
@@ -712,6 +817,14 @@
       "label": "chaosfly_high_freq",
       "name": "",
       "url": "/soemdsp-sandbox/patches/chaosfly_high_freq.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "chaosfly_high_freq2",
+      "label": "chaosfly_high_freq2",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/chaosfly_high_freq2.json",
       "author": "",
       "emoji": ""
     },
@@ -852,6 +965,14 @@
       "emoji": ""
     },
     {
+      "slug": "extreme snare",
+      "label": "extreme snare",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/extreme%20snare.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "feedbackdetector",
       "label": "feedbackdetector",
       "name": "",
@@ -912,6 +1033,14 @@
       "label": "gotsound",
       "name": "",
       "url": "/soemdsp-sandbox/patches/foley/gotsound.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "guitar pluck",
+      "label": "guitar pluck",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/game/guitar%20pluck.json",
       "author": "",
       "emoji": ""
     },
@@ -1136,6 +1265,14 @@
       "label": "musicplayer",
       "name": "",
       "url": "/soemdsp-sandbox/patches/musicplayer.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "mutator playhead not moving",
+      "label": "mutator playhead not moving",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/mutator%20playhead%20not%20moving.json",
       "author": "",
       "emoji": ""
     },
@@ -1500,10 +1637,42 @@
       "emoji": ""
     },
     {
+      "slug": "solve the aliasing",
+      "label": "solve the aliasing",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/game/solve%20the%20aliasing.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "soundemotecommusicplayer",
       "label": "soundemotecommusicplayer",
       "name": "",
       "url": "/soemdsp-sandbox/patches/soundemotecommusicplayer.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "spectral_cloud",
+      "label": "spectral_cloud",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/spectral_cloud.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "spectral_smear",
+      "label": "spectral_smear",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/spectral_smear.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "spectral_warble",
+      "label": "spectral_warble",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/spectral_warble.json",
       "author": "",
       "emoji": ""
     },

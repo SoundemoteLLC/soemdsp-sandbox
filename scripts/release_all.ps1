@@ -73,17 +73,11 @@ if ($sandboxDirty.Count -gt 0) {
 $notesBody = @"
 Sandbox Alpha $Version
 
-- Shader chain modules, kaleidoscope, camera hotkeys, and ghost ranges
-- Cable auto-routing, smoother phosphor trails, and controls-page row fixes
-- LayoutB modules show their jacks again
-- Picture modules keep drawing while the project is paused
-- Video Feedback and Image Ghost keep running in a viewport chain when the engine is stopped
-- Screen Space In / Out renamed Viewport In / Out
-- Cable stagger is off; cables from one port share a layer; modulation cables sit on top
-- Click a collapsed IO pill to wire in View B; jack hitboxes match the expanded jacks
-- Hotkeys page grouping and spacing; Shift+Space to stop; Ctrl+Space to play when unfocused; Home/End for transport
-- Lighting: module heatmap and glow, grid brightness around the module and the mouse, under-construction stripes that stay stable at every zoom
-- New default Init patch and the screen_shader_test demo patch
+- Gradient Command Center: per-gradient Edit and Snapshot controls, stop selection and duplication, and continuous Blend playback
+- Gradient parameters: clear Edit-mode indication, parameter-colored curves and outlines, and direct parameter settings
+- Pitch Quantizer: clickable keyboard keys, display settings, and a continuous Fretting control
+- Module clipboard: whole-module duplication with Ctrl+D alongside copy and paste
+- Updated soundemote-io release copy and refreshed Sandbox download links for Windows, macOS, and Linux
 "@
 
 if ($DryRun) {
@@ -149,10 +143,10 @@ $($notesBody.Trim())
 "@
 Write-Utf8NoBom $msgPath ($squashMessage.TrimEnd() + "`n")
 
+$trackedPatchPaths = @(Get-GitLines $sandbox ls-files -- patches)
 $add = @(
     "VERSION",
     "server.py",
-    "patches",
     "scripts/README.md",
     "scripts/soundemote_io.ps1",
     "scripts/release_all.ps1",
@@ -164,6 +158,7 @@ $add = @(
     "public/native-modules-catalog.json",
     "native_modules"
 )
+$add += $trackedPatchPaths
 
 Write-Host ""
 Write-Host "== Squashing and pushing soemdsp-sandbox" -ForegroundColor Cyan
