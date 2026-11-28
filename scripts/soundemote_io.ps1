@@ -6,7 +6,7 @@
 #
 # Publishing pushes soundemote-io/main, which Lovable deploys.
 # Rules it enforces:
-#   - sandbox patches are always committed and pushed first (the site only ships committed patches)
+#   - sandbox patches are committed and pushed first unless -SkipSandboxCommit is set for an already-released build
 #   - publish refuses if soemdsp-sandbox has uncommitted code (live must equal what is committed)
 #   - both repos are fast-forwarded from origin before anything is committed
 #   - the site patch catalog is written by the site's own generator (npm run catalog)
@@ -15,7 +15,7 @@
 #   -SkipNativeBuild    reuse the last WASM build (faster)
 #   -SkipSmoke          skip the sandbox smoke test (it only reports, never blocks)
 #   -SkipBuildBump      keep the current server.py BUILD_NUMBER (release_bump_version.ps1 already set it)
-#   -SkipSandboxCommit  do not bump, rebuild the catalog, or commit/push the sandbox repo (already released)
+#   -SkipSandboxCommit  do not bump, rebuild the catalog, or commit/push sandbox changes (already released)
 #   -NoBrowser          preview: do not open the browser
 #   -Port 8080          preview: dev server port
 #   -Message "..."      custom soundemote-io commit message
@@ -175,7 +175,11 @@ if ($Mode -ne "preview") {
   }
   Sync-FromOrigin $sandbox "master"
   Sync-FromOrigin $site "main"
-  Commit-SandboxPatches
+  if ($SkipSandboxCommit) {
+    Step "Skipping sandbox patch commit (release commit is already pushed)"
+  } else {
+    Commit-SandboxPatches
+  }
 }
 
 # ---------------------------------------------------------------- patches only
