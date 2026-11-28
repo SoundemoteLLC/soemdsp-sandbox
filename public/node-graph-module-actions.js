@@ -1965,7 +1965,7 @@ async function pasteNodeGraphModuleSettingsFromContext() {
     return;
   }
   if (clipboard.kind !== "settings") {
-    reportNodeGraphModuleClipboardError("Clipboard contains a whole module; use Ctrl+V to paste it as a new module.");
+    reportNodeGraphModuleClipboardError("Clipboard contains a whole module; use Ctrl+V to paste it as a new module or Ctrl+D to duplicate.");
     return;
   }
   if (clipboard.type !== sourceNode.type) {
