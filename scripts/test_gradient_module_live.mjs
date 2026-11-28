@@ -140,7 +140,14 @@ try {
   await page.mouse.up();
   const draggedPos = await page.evaluate(() => nodeGraphMvp.patch.gradients.find((g) => g.id === "g1").position);
   assert.ok(faceDragStarted.drag && Math.abs(draggedPos - startPos) > 1e-4, `dragging the WebGL face uses the existing Playhead slider path ${JSON.stringify({ faceDragStarted, startPos, draggedPos, faceVisual })}`);
-  await page.mouse.dblclick(faceVisual.box.x + faceVisual.box.width / 2, faceVisual.box.y + faceVisual.box.height / 2);
+  const resetTarget = await page.evaluate((id) => {
+    const face = document.querySelector(`.node-gradient-module-face[data-node="${CSS.escape(id)}"]`);
+    const rect = face.getBoundingClientRect();
+    const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+    return { x, y, hit: document.elementFromPoint(x, y)?.closest?.(".node-gradient-module-face") === face };
+  }, placed.id);
+  assert.ok(resetTarget.hit, `the reset double-click targets the current Gradient face after dragging ${JSON.stringify(resetTarget)}`);
+  await page.mouse.dblclick(resetTarget.x, resetTarget.y);
   const faceReset = await page.evaluate(() => ({ position: nodeGraphMvp.patch.gradients.find((g) => g.id === "g1").position, dblclicks: window.__gradientFaceDblClick }));
   assert.ok(Math.abs(faceReset.position - faceVisual.reset) < 1e-4, `the shared slider double-press gesture resets the Playhead ${JSON.stringify({ faceReset, faceVisual })}`);
 
@@ -151,9 +158,10 @@ try {
     commitNodeSliderDragValue(slider);
     const g = nodeGraphMvp.patch.gradients.find((x) => x.id === "g1");
     const ph = document.querySelector('#nodeGradientsBody .node-gradient-card[data-gradient-id="g1"] .node-gradient-playhead');
-    return { position: g.position, pageLeft: ph?.style.left, param: nodeGraphPatchNode(id).params.playhead };
+    const strip = ph?.closest(".node-gradient-strip");
+    return { position: g.position, pageLeft: ph?.style.left, stripWidth: strip?.clientWidth || 0, param: nodeGraphPatchNode(id).params.playhead };
   }, placed.id);
-  assert.ok(knob.position === 0.6 && knob.param === 0.6 && Math.abs(parseFloat(knob.pageLeft) - 60) < 1e-6, `knob = page playhead ${JSON.stringify(knob)}`);
+  assert.ok(knob.position === 0.6 && knob.param === 0.6 && Math.abs(parseFloat(knob.pageLeft) / knob.stripWidth - 0.6) < 0.005, `knob = page playhead ${JSON.stringify(knob)}`);
 
   // The binding is saved and loaded with the patch.
   const saved = await page.evaluate((id) => {
