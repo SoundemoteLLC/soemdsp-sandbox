@@ -446,7 +446,10 @@ function nodeGraphGradientPageCard(gradient) {
   grip.textContent = "🎛️";
   grip.setAttribute("aria-label", `Drag ${gradient.name} into the circuit`);
   grip.dataset.gradientDrag = gradient.id;
-  head.append(grip);
+  const enabled = nodeGraphGradientPageButton(gradient.enabled === false ? "❌" : "✔️", "toggle", gradient.id, { pressed: gradient.enabled !== false });
+  enabled.classList.add("node-gradient-enabled");
+  enabled.setAttribute("aria-label", `${gradient.name} enabled`);
+  head.append(enabled);
   if (nodeGraphGradientPageState.renaming === gradient.id) {
     const input = document.createElement("input");
     input.type = "text";
@@ -461,10 +464,7 @@ function nodeGraphGradientPageCard(gradient) {
     name.textContent = gradient.name;
     head.append(name);
   }
-  const enabled = nodeGraphGradientPageButton(gradient.enabled === false ? "❌" : "✔️", "toggle", gradient.id, { pressed: gradient.enabled !== false });
-  enabled.classList.add("node-gradient-enabled");
-  enabled.setAttribute("aria-label", `${gradient.name} enabled`);
-  head.append(enabled);
+  head.append(grip);
   const editing = nodeGraphGradientPageIsEditing(gradient.id);
   const edit = nodeGraphGradientPageButton("Edit", "toggleEdit", gradient.id, { pressed: editing });
   edit.classList.add("node-gradient-edit-toggle");
