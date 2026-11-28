@@ -1432,9 +1432,6 @@ const NODE_GRAPH_FACE_INACTIVE_PARAMS = Object.freeze({
   }),
 });
 
-// The edited gradient stop's outline (matches .node-gradient-handle.is-editing).
-const NODE_GRAPH_GRADIENT_EDIT_OUTLINE = "#ffd24a";
-
 function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
   const spec = nodeGraphModuleFaceSpecForElement(el);
   if (!spec) return;
@@ -1810,12 +1807,14 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
   // HP-24: every slider an edited gradient stop writes carries a solid outline, drawn over the widget (static, no animation).
   for (const wd of widgets) {
     if (!wd.param || wd.type === "choice" || wd.type === "lfoStyle" || wd.type === "subChoice") continue;
-    if (nodeGraphModuleFaceInput(el, wd.param)?.dataset?.gradientEdit !== "1") continue;
+    const gradientInput = nodeGraphModuleFaceInput(el, wd.param);
+    if (gradientInput?.dataset?.gradientEdit !== "1") continue;
+    const outline = gradientInput.dataset.gradientEditColor || "#62bce5";
     const t = 2;
-    rect(wd.x, wd.y, wd.w, t, NODE_GRAPH_GRADIENT_EDIT_OUTLINE);
-    rect(wd.x, wd.y + wd.h - t, wd.w, t, NODE_GRAPH_GRADIENT_EDIT_OUTLINE);
-    rect(wd.x, wd.y, t, wd.h, NODE_GRAPH_GRADIENT_EDIT_OUTLINE);
-    rect(wd.x + wd.w - t, wd.y, t, wd.h, NODE_GRAPH_GRADIENT_EDIT_OUTLINE);
+    rect(wd.x, wd.y, wd.w, t, outline);
+    rect(wd.x, wd.y + wd.h - t, wd.w, t, outline);
+    rect(wd.x, wd.y, t, wd.h, outline);
+    rect(wd.x + wd.w - t, wd.y, t, wd.h, outline);
   }
   // Debug overlay (D): a "cpu" tag in the corner of every cell whose parameter
   // costs more CPU as it rises (definition `constraint: "cpu"`). Drawn here in

@@ -1076,7 +1076,10 @@ function nodeGraphGradientEditSyncOutlines() {
     if (next.has(mapKey)) continue;
     const [nodeId, key] = mapKey.split("\u0000");
     const input = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, key) : null;
-    if (input) delete input.dataset.gradientEdit;
+    if (input) {
+      delete input.dataset.gradientEdit;
+      delete input.dataset.gradientEditColor;
+    }
     const readout = input?.closest?.("label")?.querySelector(".node-slider-readout");
     readout?.classList.remove("is-gradient-edit");
     readout?.style.removeProperty("--gradient-edit-color");
@@ -1086,10 +1089,14 @@ function nodeGraphGradientEditSyncOutlines() {
     if (nodeGraphGradientEditMarked.has(mapKey)) continue;
     const [nodeId, key] = mapKey.split("\u0000");
     const input = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(nodeId, key) : null;
-    if (input) input.dataset.gradientEdit = "1";
-    const readout = input?.closest?.("label")?.querySelector(".node-slider-readout");
     const gradient = nodeGraphGradientPageActiveGradient(nodeGraphGradientPageState.editGradientId);
-    readout?.style.setProperty("--gradient-edit-color", nodeGraphGradientPageParamColor(nodeId, key, gradient));
+    const color = nodeGraphGradientPageParamColor(nodeId, key, gradient);
+    if (input) {
+      input.dataset.gradientEdit = "1";
+      input.dataset.gradientEditColor = color;
+    }
+    const readout = input?.closest?.("label")?.querySelector(".node-slider-readout");
+    readout?.style.setProperty("--gradient-edit-color", color);
     readout?.classList.add("is-gradient-edit");
     touched.add(nodeId);
   }
