@@ -597,6 +597,9 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
     }
   }
 
+  // The GL graph canvas can be the native pointer target even when the face is visible.
+  // Its existing hit router calls this same face handler for key presses.
+  section._pqPointerDown = onPointerDown;
   section.addEventListener("pointerdown", onPointerDown);
 
   function paint() {

@@ -6221,6 +6221,14 @@ function nodeGraphGlHitPointerDown(event) {
   if (hit.kind === "plate" && typeof beginNodeGraphNodeDrag === "function") {
     const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(hit.id) : null;
     const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(hit.id) : null;
+    const quantizerFace = moduleEl?.querySelector(".node-pitch-quantizer-face");
+    const quantizerBox = quantizerFace ? nodeGraphGlGraphWorldBox(quantizerFace) : null;
+    if (event.button === 0 && quantizerFace && nodeGraphGlHitInside(point.x, point.y, quantizerBox)) {
+      event.preventDefault();
+      event.stopPropagation();
+      quantizerFace._pqPointerDown?.(nodeGraphGlHitRetarget(event, quantizerFace));
+      return;
+    }
     // Overlay pointerdown preventDefault kills native dblclick. Same 400ms
     // repeat as title-edit: second plate hit on a Metamodule/Group enters it.
     if (typeof nodeGraphIsContainerShellType === "function" && nodeGraphIsContainerShellType(patchNode?.type)) {
