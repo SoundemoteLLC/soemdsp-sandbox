@@ -136,7 +136,7 @@ try {
       editButton().click();
       out.editOffDiscards = !nodeGraphGradientPageHasPendingValues();
       nodeGraphGradientPageSetPlayhead(g(), 0.5);
-      out.rows = [...document.querySelectorAll(".node-gradient-param-chips .node-gradient-button:not(.node-gradient-button:last-child)")].map((x) => x.textContent);
+      out.rows = [...document.querySelectorAll(".node-gradient-param-chips .node-gradient-button")].map((x) => x.textContent);
       out.graphsHiddenByDefault = Boolean(document.querySelector(".node-gradient-card")?.classList.contains("graphs-hidden"));
       if (out.visible) btn("Show graphs").click();
       else nodeGraphGradientPageState.showGraphs = true;
