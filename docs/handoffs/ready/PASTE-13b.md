@@ -26,6 +26,10 @@ Nothing on the Gradient page opens param settings on right-click. Right-clicking
 - Clicking a key on the display must toggle that key on/off for quantization (currently impossible). Event-driven redraw.
 - Keyboard display settings page: color controls go at the BOTTOM of the page, below the slider settings (standing rule: colors always last).
 
+## 6. More fixes
+- Joined-param boxes stay visible after deleting the gradient until the module is moved. Deleting a gradient (or a param leaving it) must clear its boxes immediately (event-driven redraw).
+- **Pitch Quantizer default spawn settings**: scaleMask 2741, octave 0, semitones 0, fretting 0 (Fretting default stays 0).
+
 ## Policies
 No HTML/SVG in the circuit builder, no hover effects, no animations, no tooltips, no popups, shared mouse-dot cursor, params single source of truth, event-driven redraws only, buttons never resize with text, no WebGL in the Command Center.
 
