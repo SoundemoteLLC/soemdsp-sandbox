@@ -5905,28 +5905,6 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   pointer-events: auto;
 }
 
-.dsp-node .node-gradient-module-face { position:relative; }
-.node-gradient-module-actions {
-  position:absolute;
-  right:4px;
-  top:4px;
-  display:flex;
-  gap:4px;
-  z-index:2;
-}
-.node-gradient-module-actions button {
-  width:56px;
-  min-width:56px;
-  height:24px;
-  padding:0 4px;
-  border:1px solid rgba(255,255,255,.35);
-  border-radius:3px;
-  background:#17191d;
-  color:#eee;
-  font:11px ui-monospace,monospace;
-}
-.node-gradient-module-actions button[aria-pressed="true"] { border-color:#62bce5; background:#243647; }
-
 .node-gradient-curve-row {
   display: grid;
   grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
