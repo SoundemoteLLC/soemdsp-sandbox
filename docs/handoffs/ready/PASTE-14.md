@@ -7,7 +7,7 @@ Run after PASTE-13. The goal: "I have two sounds/settings on a module, now I wan
    - Ctrl+D = Duplicate module (currently Ctrl+C duplicates; move it).
    - Ctrl+C = Copy the selected module's settings.
    - Ctrl+V = Paste settings onto the selected module.
-   - Update the hotkey list/help/docs wherever hotkeys are shown.
+   - Update the app's **Hotkeys page** so it lists Ctrl+D Duplicate, Ctrl+C Copy settings, Ctrl+V Paste settings.
    - Also add Copy and Paste entries to the module right-click menu.
 2. **Cross-tab copy**: Copy writes the module's settings to the system clipboard as tagged JSON (module type, version, param values). This works across browser tabs and windows and can be pasted into a text file. Paste reads the clipboard and validates the tag.
 3. **Normal paste** (not in gradient Edit): overwrites the selected module's params, same module type only. If the type is wrong or the clipboard is invalid, change nothing and log the error into the existing Bug button/window. **No popup, no toast.**
