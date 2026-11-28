@@ -1,7 +1,7 @@
 // HP-04 / Stage A3, HP-22: the Gradients page (its own 🌈 page; the 🧹 page keeps only the Ready controls). Real page on its own server.py port (never 8765 / 8766 / 8080) unless
 // SANDBOX_URL is set; runs on index.html and perform.html.
 // Create a gradient, move sliders on two modules: both register. Dragging the playhead glides the effective value while
-// the saved base never changes, and the release is exactly one undo step. Rename, Delete stop, Set start, On / Off and tap-to-add each
+// the saved base never changes, and the release is exactly one undo step. Rename, Delete stop, Snapshot, On / Off and tap-to-add each
 // record one step. Deleting a module drops its params from the gradient in the same step (D-G1). Save / load round trips the gradient.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
