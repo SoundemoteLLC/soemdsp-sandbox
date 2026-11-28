@@ -528,8 +528,9 @@ function nodeGraphGradientPageCard(gradient) {
   const deleteStop = nodeGraphGradientPageButton("➖", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 });
   deleteStop.classList.add("node-gradient-delete-stop");
   deleteStop.setAttribute("aria-label", `${gradient.name} delete stop`);
-  const rename = nodeGraphGradientPageButton(nodeGraphGradientPageState.renaming === gradient.id ? "Done" : "Rename", "rename", gradient.id);
+  const rename = nodeGraphGradientPageButton(nodeGraphGradientPageState.renaming === gradient.id ? "✓" : "⌶", "rename", gradient.id);
   rename.classList.add("node-gradient-rename");
+  rename.setAttribute("aria-label", nodeGraphGradientPageState.renaming === gradient.id ? `${gradient.name} finish renaming` : `${gradient.name} rename`);
   buttons.append(
     duplicateStop,
     deleteStop,
