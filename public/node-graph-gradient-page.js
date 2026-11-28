@@ -615,7 +615,7 @@ function renderNodeGraphGradientPage() {
   filter.className = "node-gradient-filter";
   filter.setAttribute("role", "group");
   filter.setAttribute("aria-label", "Show gradients");
-  for (const [value, text] of [["all", "All"], ["touching", "Touching"]]) {
+  for (const [value, text] of [["all", "All"], ["touching", "Selected"]]) {
     const b = nodeGraphGradientPageButton(text, "filter", "", { pressed: nodeGraphGradientPageState.filter === value });
     b.dataset.filter = value;
     filter.append(b);
