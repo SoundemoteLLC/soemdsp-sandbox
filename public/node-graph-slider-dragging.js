@@ -1344,6 +1344,13 @@ function bindNodeSliderDragSurface(surface) {
   surface.dataset.sliderDragBound = "true";
   surface.addEventListener("pointerdown", beginNodeSliderDrag);
   surface.addEventListener("mousedown", beginNodeSliderDrag);
+  surface.addEventListener("dblclick", (event) => {
+    if (surface.dataset?.sliderTypeIn !== "reset") return;
+    event.preventDefault();
+    event.stopPropagation();
+    nodeGraphMvp.sliderLastPointerDown = null;
+    nodeGraphResetSliderSurface(surface);
+  });
   surface.addEventListener("lostpointercapture", endNodeSliderDrag);
   surface.addEventListener("keydown", stepNodeSliderFromKeyboard);
   return true;
@@ -1648,7 +1655,6 @@ function beginNodeSliderDrag(event) {
     event.preventDefault();
     event.stopPropagation();
     if (surface.dataset?.sliderTypeIn === "reset") {
-      nodeGraphResetSliderSurface(surface);
       return;
     }
     beginNodeSliderSurfaceEdit(surface);
