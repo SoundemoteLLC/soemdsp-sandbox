@@ -353,19 +353,14 @@
     return parts.join(" ");
   }
 
-  // The Mutators nav button, like the other pages: the DNA emoji. While armed it says so in words beside the emoji; no title / hover text.
+  // The Mutators nav button uses the DNA emoji; arming is shown with the red highlight.
   function paintNavButton(button) {
     const node = selectedNode();
     const armed = !!(node && node._mutatorArmed);
     button.setAttribute("aria-label", armed ? "Mutators, armed" : "Mutators");
     button.textContent = "\u{1F9EC}";
     button.classList.toggle("pm-nav-pitched", anyPitchSet());
-    if (armed) {
-      const word = document.createElement("span");
-      word.className = "pm-nav-armed";
-      word.textContent = "armed";
-      button.append(word);
-    }
+    button.classList.toggle("pm-nav-armed", armed);
   }
 
   // The bound knob shows what the lane says at the playhead, so it moves with the note. Display only: the stored base value is never written.

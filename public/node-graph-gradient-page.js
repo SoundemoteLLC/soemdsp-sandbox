@@ -584,7 +584,16 @@ function nodeGraphGradientPageDrawGraph(card, gradient) {
   }
 }
 
+function nodeGraphGradientPageSyncNavHighlight() {
+  const editingGradient = nodeGraphGradientPageGradients().some((gradient) => gradient.id === nodeGraphGradientPageState.editGradientId);
+  document.querySelectorAll('[data-unified-page="gradients"]').forEach((button) => {
+    button.classList.toggle("ng-nav-editing", editingGradient);
+    button.setAttribute("aria-label", editingGradient ? "Gradients, edit on" : "Gradients");
+  });
+}
+
 function renderNodeGraphGradientPage() {
+  nodeGraphGradientPageSyncNavHighlight();
   const host = document.getElementById("nodeGradientsBody");
   if (!host) return;
   const panel = document.getElementById("nodeGradientsPage");
@@ -1331,10 +1340,10 @@ function bindNodeGraphGradientPage() {
     nodeGraphGradientPageAction(button.dataset.gradientAction, button.dataset.gradientId || "", button);
   });
   host.addEventListener("contextmenu", (event) => {
-    const pageSlider = event.target?.closest?.("[data-gradient-playhead]");
-    if (!pageSlider || typeof openNodeMetadataPopover !== "function") return;
+    const target = event.target?.closest?.("[data-gradient-playhead], .node-gradient-strip");
+    if (!target || typeof openNodeMetadataPopover !== "function") return;
     event.preventDefault();
-    const gradientId = pageSlider.dataset.gradientPlayhead;
+    const gradientId = target.dataset.gradientPlayhead || target.dataset.gradientId;
     const moduleNode = nodeGraphMvp?.patch?.nodes?.find((node) => node.type === "gradient" && node.gradientId === gradientId);
     if (!moduleNode) return;
     const slider = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(moduleNode.id, "playhead") : null;
@@ -1397,6 +1406,7 @@ function bindNodeGraphGradientPage() {
     addNodeGraphPatchCommitListener(() => {
       if (nodeGraphGradientPageState.editing && !nodeGraphGradientEditActive()) nodeGraphGradientPageState.editing = null;
       nodeGraphGradientEditSyncOutlines();
+      nodeGraphGradientPageSyncNavHighlight();
       if (!nodeGraphGradientPageState.drag) renderNodeGraphGradientPage();
     });
   }
