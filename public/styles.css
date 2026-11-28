@@ -5799,7 +5799,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   background:#ddd; line-height:0; box-shadow:0 0 0 1px rgba(221,221,221,.48);
 }
 #nodeGradientsBody .node-gradient-handle.is-selected { box-shadow:0 0 0 2px #fff; }
-#nodeGradientsBody .node-gradient-handle.is-snapped { box-shadow:0 0 0 2px #fff; }
+#nodeGradientsBody .node-gradient-handle.is-snapped { box-shadow:0 0 0 2px #62bce5; }
 #nodeGradientsBody .node-gradient-handle:active { transform:none; }
 #nodeGradientsBody .node-gradient-card { gap:2px; }
 #nodeGradientsBody .node-gradient-strip { margin:4px 7px 8px; }

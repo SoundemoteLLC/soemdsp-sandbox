@@ -516,7 +516,7 @@ function nodeGraphGradientPageCard(gradient) {
   playheadSlider.style.setProperty("--gradient-playhead-progress", `${(gradient.position * 100).toFixed(3)}%`);
   playheadControl.append(playheadSlider); card.append(playheadControl);
   if (selectedParam) card.append(nodeGraphGradientPageCurveControls(gradient, selectedParam.nodeId, selectedParam.key));
-  const selectedStop = gradient.stops.find((s) => s.id === nodeGraphGradientPageState.selectedStop.get(gradient.id)) || gradient.stops[0];
+  const selectedStop = gradient.stops.find((s) => s.id === nodeGraphGradientPageState.selectedStop.get(gradient.id));
   if (selectedStop) card.append(nodeGraphGradientPageColorControls(gradient, selectedStop.id));
   // HP-05: one plain line naming the gradient's modules whose non-slider data (graph points, steps, chords) holds still.
   const holds = [];
@@ -1132,6 +1132,7 @@ function nodeGraphGradientPagePointerUp(event) {
     // An empty bar click moves the playhead; it never creates a stop.
     nodeGraphGradientEditEnd();
   }
+  nodeGraphGradientPageState.selectedStop.delete(gradient.id);
   nodeGraphGradientPageSetPlayhead(gradient, nodeGraphGradientPageStripPos(drag.strip, event.clientX), { card: drag.strip.closest(".node-gradient-card") });
   nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), `${gradient.name} position`);
 }
