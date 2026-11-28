@@ -236,7 +236,9 @@ function nodeGraphPianoKeysDraw(batch, geom, opts) {
     if (!r) continue;
     const paint = paintKey(key);
     rr(r.x, r.y, r.w, r.h, {
-      radius: 0,
+      radius: key.roundNaturalCorners
+        ? Math.min(4 * Math.min(sx, sy), 0.2 * r.w * sx, 0.2 * r.h * sy)
+        : 0,
       fill: paint.top,
       fillBottom: paint.bottom,
       stroke: paint.stroke * Math.min(sx, sy),

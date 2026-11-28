@@ -134,6 +134,15 @@ assert(look.glow[3] > 0 && look.glow[3] < 1, "enabled notes use a flat transluce
 assert(look.naturalTop && look.naturalBottom && look.sharpTop && look.sharpBottom, "keys use a top/bottom gradient, like the Keyboard");
 
 const layout = ctx.nodeGraphPitchQuantizerKeyLayout(280, 100);
+assert(ctx.NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS.blackKeyWidth === ctx.NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W,
+  "Pitch Quantizer sharp width uses the shared Keyboard default");
+assert(/data-pq-key-setting="blackKeyWidth"/.test(ctx.buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml())
+  && /data-pq-key-setting="keyLabels"/.test(ctx.buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml()),
+"Pitch Quantizer display settings include Keyboard-style sharp geometry and label controls");
+const widerLayout = ctx.nodeGraphPitchQuantizerKeyLayout(280, 100, { blackKeyWidth: 20, blackKeyHeight: 62, keyLabels: "number", keyLabelSize: 315 });
+assert(widerLayout.keys.filter((key) => key.black)[0].w > layout.keys.filter((key) => key.black)[0].w,
+  "Sharp width setting changes the key thickness");
+assert(widerLayout.keys.find((key) => key.pc === 1).label === "1", "number labels use pitch class numbers");
 assert(layout.keys.length === 12, "layout has 12 pitch-class keys");
 assert(layout.keys.filter((k) => !k.black).length === 7, "7 natural keys");
 assert(layout.keys.filter((k) => k.black).length === 5, "5 sharp keys");
@@ -221,6 +230,8 @@ const keyFills = ops.filter((o) => o.op === "roundRect" && o.spec && o.spec.fill
 assert(keyFills.length >= 12, "each key is a vertical gradient (fill + fillBottom), like the Keyboard");
 const sharpFills = ops.filter((o) => o.black);
 assert(sharpFills.length === 5, "five sharps with rounded bottoms (radiusTop 0)");
+const naturalFills = ops.filter((o) => o.op === "roundRect" && o.spec?.feather === 0.75 && !o.black);
+assert(naturalFills.length >= 7 && naturalFills.every((o) => o.spec.radius > 0), "Pitch Quantizer natural keys retain rounded corners");
 for (const o of sharpFills) {
   assert((o.spec.fill[3] ?? 1) === 1, "sharp fills are fully opaque so seams cannot show through");
 }

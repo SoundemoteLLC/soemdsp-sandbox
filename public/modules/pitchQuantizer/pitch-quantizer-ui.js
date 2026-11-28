@@ -84,7 +84,7 @@ function nodeGraphPitchQuantizerGlNames() {
  * centering, 62% sharp height, 10/16 sharp-to-natural width). Used by
  * both the GL draw and the pointer hit test.
  */
-function nodeGraphPitchQuantizerKeyLayout(width, height) {
+function nodeGraphPitchQuantizerKeyLayout(width, height, settings = {}) {
   const W = Math.max(1, Number(width) || 1);
   const H = Math.max(1, Number(height) || 1);
   const whitesSrc = nodeGraphPitchQuantizerGlWhites();
@@ -99,11 +99,9 @@ function nodeGraphPitchQuantizerKeyLayout(width, height) {
       height: H,
       inModuleFace: true,
       whiteW: typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_WHITE_W === "number" ? NODE_GRAPH_PIANO_KEYS_DEFAULT_WHITE_W : 16,
-      blackW: typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W === "number" ? NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W : 10,
+      blackW: Number(settings.blackKeyWidth) || NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_W || 10,
       blackH: 0,
-      blackKeyHeight: typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT === "number"
-        ? NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT
-        : 62,
+      blackKeyHeight: Number(settings.blackKeyHeight) || NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT || 62,
       totalUnits: Math.max(1, whitesSrc.length),
       leadPad: 0,
       whites: whitesSrc,
@@ -117,7 +115,7 @@ function nodeGraphPitchQuantizerKeyLayout(width, height) {
     keys.push({
       pc,
       black: false,
-      label: names[pc] || String(pc),
+      label: settings.keyLabels === "number" ? String(pc) : (names[pc] || String(pc)),
       x: r.x,
       y: r.y,
       w: r.w,
@@ -132,7 +130,7 @@ function nodeGraphPitchQuantizerKeyLayout(width, height) {
     keys.push({
       pc,
       black: true,
-      label: names[pc] || String(pc),
+      label: settings.keyLabels === "number" ? String(pc) : (names[pc] || String(pc)),
       x: r.x,
       y: r.y,
       w: r.w,
@@ -245,6 +243,9 @@ const NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS = Object.freeze([
   "naturalColor",
   "sharpColor",
 ]);
+const NODE_GRAPH_PITCH_QUANTIZER_KEY_FIELDS = Object.freeze([
+  "blackKeyWidth", "blackKeyHeight", "keyLabels", "keyLabelSize",
+]);
 
 const NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS = Object.freeze({
   enabledColor: nodeGraphPitchQuantizerHexFromRgba(
@@ -263,6 +264,10 @@ const NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS = Object.freeze({
     NODE_GRAPH_PITCH_QUANTIZER_GL_LOOK.sharpTop,
     "#f7f2e8",
   ),
+  blackKeyWidth: 10,
+  blackKeyHeight: 62,
+  keyLabels: "name",
+  keyLabelSize: 315,
 });
 
 function normalizeNodeGraphPitchQuantizerFaceSettings(settings) {
@@ -273,6 +278,10 @@ function normalizeNodeGraphPitchQuantizerFaceSettings(settings) {
     playingColor: nodeGraphPitchQuantizerNormalizeHex(src.playingColor, d.playingColor),
     naturalColor: nodeGraphPitchQuantizerNormalizeHex(src.naturalColor, d.naturalColor),
     sharpColor: nodeGraphPitchQuantizerNormalizeHex(src.sharpColor, d.sharpColor),
+    blackKeyWidth: Math.max(4, Math.min(28, Number.isFinite(Number(src.blackKeyWidth)) ? Number(src.blackKeyWidth) : d.blackKeyWidth)),
+    blackKeyHeight: Math.max(28, Math.min(82, Number.isFinite(Number(src.blackKeyHeight)) ? Number(src.blackKeyHeight) : d.blackKeyHeight)),
+    keyLabels: ["off", "name", "number"].includes(src.keyLabels) ? src.keyLabels : d.keyLabels,
+    keyLabelSize: Math.max(50, Math.min(400, Number.isFinite(Number(src.keyLabelSize)) ? Number(src.keyLabelSize) : d.keyLabelSize)),
   };
 }
 
@@ -283,7 +292,8 @@ function nodeGraphPitchQuantizerDisplaySettingsForNode(node) {
 function nodeGraphPitchQuantizerSettingsAreDefault(settings) {
   const s = normalizeNodeGraphPitchQuantizerFaceSettings(settings);
   const d = NODE_GRAPH_PITCH_QUANTIZER_DISPLAY_DEFAULTS;
-  return NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS.every((key) => s[key] === d[key]);
+  return NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS.every((key) => s[key] === d[key])
+    && NODE_GRAPH_PITCH_QUANTIZER_KEY_FIELDS.every((key) => s[key] === d[key]);
 }
 
 /**
@@ -427,7 +437,7 @@ function nodeGraphPitchQuantizerLivePitchClass(nodeId) {
 function nodeGraphPitchQuantizerFacePaintSig(bw, bh, strokeDev, mask, jacked, livePc, settings) {
   const liveSig = livePc == null ? "-" : String(livePc);
   const s = normalizeNodeGraphPitchQuantizerFaceSettings(settings);
-  const colorSig = `${s.enabledColor}:${s.playingColor}:${s.naturalColor}:${s.sharpColor}`;
+  const colorSig = `${s.enabledColor}:${s.playingColor}:${s.naturalColor}:${s.sharpColor}:${s.blackKeyWidth}:${s.blackKeyHeight}:${s.keyLabels}:${s.keyLabelSize}`;
   return `${Math.max(1, bw | 0)}x${Math.max(1, bh | 0)}:s${Math.max(1, strokeDev | 0)}:m${mask}:j${jacked ? 1 : 0}:p${liveSig}:c${colorSig}`;
 }
 
@@ -482,6 +492,7 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
   }
   const whites = layout.keys.filter((k) => !k.black);
   const blacks = layout.keys.filter((k) => k.black);
+  for (const key of whites) key.roundNaturalCorners = true;
   const rects = new Map();
   for (const key of layout.keys) {
     rects.set(key, { x: key.x, y: key.y, w: key.w, h: key.h, last: key.last });
@@ -510,9 +521,9 @@ function nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDe
     whites,
     blacks,
     keys: layout.keys,
-    labels: "name",
+    labels: settings?.keyLabels || "name",
     totalUnits: Math.max(1, whites.length),
-    labelSizeK: 1,
+    labelSizeK: (Number(settings?.keyLabelSize) || 315) / 315,
     labelFit: "width",
     labelMargin: 1,
     sharpHeightFrac: typeof NODE_GRAPH_PIANO_KEYS_DEFAULT_BLACK_HEIGHT === "number"
@@ -609,7 +620,7 @@ function createNodeGraphPitchQuantizerFace(nodeIdOrEl, _type) {
       if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
       return;
     }
-    const layout = nodeGraphPitchQuantizerKeyLayout(bw, bh);
+    const layout = nodeGraphPitchQuantizerKeyLayout(bw, bh, display);
     hitLayout = layout;
     nodeGraphPitchQuantizerGlDrawKeys(batch, layout, mask, jacked, strokeDev, livePc, display);
     if (typeof nodeGraphGlLinesEnd === "function" && !nodeGraphGlLinesEnd(batch)) {
@@ -764,6 +775,11 @@ function buildNodeGraphPitchQuantizerDisplaySettingsBodyHtml() {
       <div class="metadata-field-section">${typeof nodeGraphDisplaySettingsColorRows === "function"
         ? nodeGraphDisplaySettingsColorRows(rows, [2, 2])
         : rows.join("")}</div>
+      <div class="metadata-section-title">Keys</div>
+      <label class="node-trace-display-line-burn-row"><span>Sharp width</span><input type="range" min="4" max="28" step="1" data-pq-key-setting="blackKeyWidth" aria-label="Sharp key width"></label>
+      <label class="node-trace-display-line-burn-row"><span>Sharp height</span><input type="range" min="28" max="82" step="1" data-pq-key-setting="blackKeyHeight" aria-label="Sharp key height"></label>
+      <label class="node-trace-display-line-burn-row"><span>Labels</span><select data-pq-key-setting="keyLabels" aria-label="Key labels"><option value="off">Off</option><option value="name">Pitch class name</option><option value="number">Pitch class number</option></select></label>
+      <label class="node-trace-display-line-burn-row"><span>Label size</span><input type="range" min="50" max="400" step="5" data-pq-key-setting="keyLabelSize" aria-label="Key label size"></label>
     </div>`;
 }
 
@@ -774,6 +790,10 @@ function syncNodeGraphPitchQuantizerDisplaySettingsControls(root, settings) {
   for (const key of NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS) {
     const input = panel?.querySelector?.(`[data-trace-display-color="${key}"]`);
     if (input) input.value = s[key];
+  }
+  for (const key of NODE_GRAPH_PITCH_QUANTIZER_KEY_FIELDS) {
+    const input = panel?.querySelector?.(`[data-pq-key-setting="${key}"]`);
+    if (input) input.value = String(s[key]);
   }
 }
 
@@ -789,10 +809,10 @@ function bindNodeGraphPitchQuantizerDisplaySettingsBody(host) {
     }
   };
   host.addEventListener("input", (event) => {
-    if (event.target?.closest?.("[data-trace-display-color]")) apply("none", false);
+    if (event.target?.closest?.("[data-trace-display-color], [data-pq-key-setting]")) apply("none", false);
   });
   host.addEventListener("change", (event) => {
-    if (event.target?.closest?.("[data-trace-display-color]")) apply("immediate", true);
+    if (event.target?.closest?.("[data-trace-display-color], [data-pq-key-setting]")) apply("immediate", true);
   });
 }
 
@@ -802,6 +822,10 @@ function readNodeGraphPitchQuantizerDisplaySettingsForm(root, current) {
   for (const key of NODE_GRAPH_PITCH_QUANTIZER_COLOR_FIELDS) {
     const input = panel?.querySelector?.(`[data-trace-display-color="${key}"]`);
     if (input && input.value) next[key] = input.value;
+  }
+  for (const key of NODE_GRAPH_PITCH_QUANTIZER_KEY_FIELDS) {
+    const input = panel?.querySelector?.(`[data-pq-key-setting="${key}"]`);
+    if (input) next[key] = key === "keyLabels" ? input.value : Number(input.value);
   }
   return normalizeNodeGraphPitchQuantizerFaceSettings(next);
 }
