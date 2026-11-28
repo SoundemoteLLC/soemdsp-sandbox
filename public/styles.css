@@ -5718,7 +5718,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 #nodeGradientsBody .node-gradient-edit-toggle[aria-pressed="false"] {
   border-color: #4a4a50;
   background: rgba(255, 255, 255, 0.025);
-  color: #85858c;
+  color: inherit;
 }
 
 .node-gradient-name {
