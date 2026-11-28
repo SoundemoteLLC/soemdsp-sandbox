@@ -339,6 +339,22 @@ function nodeGraphGradientPageTouchingSelection(gradient) {
   return (gradient.params || []).some((p) => ids.has(p.nodeId));
 }
 
+function nodeGraphGradientPageSelectedStop(gradient) {
+  const stopId = nodeGraphGradientPageState.selectedStop.get(gradient?.id);
+  return (gradient?.stops || []).find((stop) => stop.id === stopId) || null;
+}
+
+function nodeGraphGradientPageCanDuplicateStop(gradient) {
+  const selected = nodeGraphGradientPageSelectedStop(gradient);
+  return Boolean(selected && Number(gradient.position) !== Number(selected.pos));
+}
+
+function nodeGraphGradientPageSyncStopActionButtons(gradient, card = null) {
+  const host = card || document.querySelector(`.node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"]`);
+  const duplicate = host?.querySelector('[data-gradient-action="duplicateStop"]');
+  if (duplicate) duplicate.disabled = !nodeGraphGradientPageCanDuplicateStop(gradient);
+}
+
 // ------------------------------------------------------------------------------------------------ render
 
 function nodeGraphGradientPageButton(text, action, gradientId, extra = {}) {
@@ -519,7 +535,7 @@ function nodeGraphGradientPageCard(gradient) {
   const buttons = document.createElement("div");
   buttons.className = "node-gradient-buttons";
   const selected = nodeGraphGradientPageState.selectedStop.get(gradient.id);
-  const duplicateStop = nodeGraphGradientPageButton("⧉", "duplicateStop", gradient.id, { disabled: true });
+  const duplicateStop = nodeGraphGradientPageButton("⧉", "duplicateStop", gradient.id, { disabled: !nodeGraphGradientPageCanDuplicateStop(gradient) });
   duplicateStop.classList.add("node-gradient-duplicate-stop");
   duplicateStop.setAttribute("aria-label", `${gradient.name} duplicate stop`);
   const deleteGradient = nodeGraphGradientPageButton("🗑️", "deleteGradient", gradient.id);
@@ -756,6 +772,23 @@ function nodeGraphGradientPageAction(action, gradientId, button) {
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === gradientId);
   if (!gradient) return;
   nodeGraphGradientPageState.activeGradientId = gradient.id;
+  if (action === "duplicateStop") {
+    const source = nodeGraphGradientPageSelectedStop(gradient);
+    const position = Number(gradient.position);
+    if (!source || !Number.isFinite(position) || position === Number(source.pos)) return;
+    const used = new Set(gradient.stops.map((stop) => stop.id));
+    let suffix = 1;
+    while (used.has(`s${suffix}`)) suffix += 1;
+    const duplicate = JSON.parse(JSON.stringify(source));
+    duplicate.id = `s${suffix}`;
+    duplicate.pos = position;
+    const next = { ...gradient, stops: [...gradient.stops, duplicate].sort((a, b) => Number(a.pos) - Number(b.pos)) };
+    nodeGraphGradientPageState.selectedStop.set(gradient.id, duplicate.id);
+    nodeGraphGradientPageState.snappedStops.set(gradient.id, duplicate.id);
+    nodeGraphGradientPageCommit(nodeGraphGradientPageReplace(gradient.id, () => next), `${gradient.name} stop duplicated`);
+    nodeGraphGradientEditSyncOutlines();
+    return;
+  }
   if (action === "curveShape") {
     const next = nodeGraphGradientPageReplace(gradient.id, (g) => ({ ...g, stops: g.stops.map((stop) => stop.id !== button.dataset.stopId ? stop : ({
       ...stop,
@@ -847,6 +880,7 @@ function nodeGraphGradientPageSetPlayhead(gradient, position, options = {}) {
   const card = options.card || document.querySelector(`.node-gradient-card[data-gradient-id="${CSS.escape(gradient.id)}"]`);
   if (card) nodeGraphGradientPageDrawGraph(card, gradient);
   if (typeof nodeGraphGradientModuleNoteMoved === "function") nodeGraphGradientModuleNoteMoved();
+  nodeGraphGradientPageSyncStopActionButtons(gradient, card);
   return gradient.position;
 }
 
