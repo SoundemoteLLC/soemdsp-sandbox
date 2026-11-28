@@ -5429,8 +5429,7 @@ const nodeGraphModuleDefinitions = (
         label: "Bright",
         defaultValue: "1",
         min: "0",
-        // Mid low so half the slider is the useful near-0 harmonic range.
-        mid: "0.12",
+        mid: "0.5",
         max: "1",
         nonlinearSlider: true,
         step: "0.001",
