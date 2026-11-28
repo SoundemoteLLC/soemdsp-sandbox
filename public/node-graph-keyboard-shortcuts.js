@@ -552,7 +552,7 @@ function handleNodeGraphKeydown(event) {
   if (
     (event.ctrlKey || event.metaKey)
     && !event.altKey
-    && ["c", "x", "v"].includes(event.key.toLowerCase())
+    && ["c", "d", "x", "v"].includes(event.key.toLowerCase())
     && nodeGraphEventTargetIsTextEditable(event.target)
   ) {
     return;
@@ -563,10 +563,14 @@ function handleNodeGraphKeydown(event) {
     }
     return;
   }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+    event.preventDefault();
+    void pasteNodeGraphModuleClipboardFromKeyboard();
+    return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
-    if (duplicateFocusedNodeGraphGraphNode()) {
-      event.preventDefault();
-    }
+    event.preventDefault();
+    duplicateSelectedNodeGraphModule();
     return;
   }
   if (event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "a") {

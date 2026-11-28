@@ -245,7 +245,7 @@
     "deleteSelection": "click to delete selected item",
     "deleteNothing": "delete unavailable: nothing selected",
     "deleteTitle": "delete unavailable: select a module",
-    "copyModule": "copy selected module (Ctrl+C)",
+    "copyModule": "copy this module to the system clipboard",
     "copyPatch": "copy the whole patch as script text to the clipboard",
     "pastePatch": "replace the current patch with script text from the clipboard",
     "sharePatch": "copy a shareable link to this patch to the clipboard",

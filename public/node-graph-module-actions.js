@@ -1638,13 +1638,10 @@ function copyNodeGraphModule(sourceNode) {
 
 function copyNodeGraphModuleFromContext() {
   const sourceNode = nodeGraphPatchNode(nodeGraphModuleActionTargetNodeId());
-  if (sourceNode && sourceNode.type !== "output") {
-    const copiedNodeId = copyNodeGraphModule(sourceNode);
-    if (copiedNodeId) {
-      nodeGraphMvp.sceneContextTargetNode = copiedNodeId;
-      setNodeGraphNodeSelection([copiedNodeId]);
-    }
+  if (!sourceNode || sourceNode.type === "output") {
+    return;
   }
+  writeNodeGraphSystemClipboard(soundemoteModuleJson(sourceNode), `${nodeGraphNodeDisplayName(sourceNode.id)} module`);
   configureNodeSceneContextMenu("module");
 }
 
@@ -1876,6 +1873,24 @@ function soundemoteModuleSettingsJson(type, params) {
   }, null, 2)}\n`;
 }
 
+function soundemoteModuleJson(node) {
+  const module = nodeGraphModuleSettingsSnapshot(node);
+  if (typeof cloneNodeGraphTypedDisplaySettings === "function") {
+    Object.assign(module, cloneNodeGraphTypedDisplaySettings(node));
+  }
+  module.widthGu = typeof nodeGraphPatchNodeGridWidthUnits === "function"
+    ? nodeGraphPatchNodeGridWidthUnits(node)
+    : Number(node.widthGu) || 7;
+  return `${JSON.stringify({
+    soundemote: "module",
+    type: node.type,
+    version: 1,
+    gx: Number(node.gx) || 0,
+    gy: Number(node.gy) || 0,
+    module,
+  }, null, 2)}\n`;
+}
+
 function parseSoundemoteModuleSettings(text) {
   try {
     const obj = JSON.parse(String(text || ""));
@@ -1891,20 +1906,45 @@ function parseSoundemoteModuleSettings(text) {
   }
 }
 
+function parseSoundemoteModuleClipboard(text) {
+  try {
+    const obj = JSON.parse(String(text || ""));
+    if (!obj || typeof obj.type !== "string" || obj.version !== 1) return null;
+    if (obj.soundemote === "module-settings" && obj.params && typeof obj.params === "object" && !Array.isArray(obj.params)) {
+      return { kind: "settings", type: obj.type, params: obj.params };
+    }
+    if (obj.soundemote === "module" && obj.module && typeof obj.module === "object" && !Array.isArray(obj.module)) {
+      return { kind: "module", type: obj.type, gx: Number(obj.gx) || 0, gy: Number(obj.gy) || 0, module: obj.module };
+    }
+  } catch {}
+  return null;
+}
+
+function reportNodeGraphModuleClipboardError(message) {
+  if (typeof window !== "undefined" && typeof window.SE?.ERROR === "function") {
+    window.SE.ERROR(message, "module-clipboard");
+  } else {
+    console.error(`[module-clipboard] ${message}`);
+  }
+}
+
+function writeNodeGraphSystemClipboard(text, label) {
+  if (typeof navigator === "undefined" || typeof navigator.clipboard?.writeText !== "function") {
+    reportNodeGraphModuleClipboardError("System clipboard write is unavailable.");
+    return;
+  }
+  navigator.clipboard.writeText(text).then(
+    () => { if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp(`${label} copied to clipboard.`); },
+    (error) => reportNodeGraphModuleClipboardError(`Clipboard write failed: ${error?.message || error}`),
+  );
+}
+
 function copyNodeGraphModuleSettingsFromContext() {
   const sourceNode = nodeGraphPatchNode(nodeGraphModuleActionTargetNodeId());
   if (!sourceNode) {
     return;
   }
-  nodeGraphMvp.moduleSettingsClipboard = {
-    type: sourceNode.type,
-    settings: nodeGraphModuleSettingsSnapshot(sourceNode),
-  };
-  const json = soundemoteModuleSettingsJson(sourceNode.type, sourceNode.params);
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(json).catch(() => {});
-  }
-  setNodeInteractionHelp(`${nodeGraphNodeDisplayName(sourceNode.id)} settings copied.`);
+  writeNodeGraphSystemClipboard(soundemoteModuleSettingsJson(sourceNode.type, sourceNode.params), `${nodeGraphNodeDisplayName(sourceNode.id)} settings`);
   configureNodeSceneContextMenu("module");
 }
 
@@ -1913,39 +1953,92 @@ async function pasteNodeGraphModuleSettingsFromContext() {
   if (!sourceNode) {
     return;
   }
-  let portable = null;
+  let clipboard = null;
   try {
-    const text = await navigator.clipboard?.readText?.();
-    portable = parseSoundemoteModuleSettings(text);
-  } catch {
-    portable = null;
+    clipboard = parseSoundemoteModuleClipboard(await navigator.clipboard?.readText?.());
+  } catch (error) {
+    reportNodeGraphModuleClipboardError(`Clipboard read failed: ${error?.message || error}`);
+    return;
+  }
+  if (!clipboard) {
+    reportNodeGraphModuleClipboardError("Clipboard does not contain tagged module settings.");
+    return;
+  }
+  if (clipboard.kind !== "settings") {
+    reportNodeGraphModuleClipboardError("Clipboard contains a whole module; use Ctrl+V to paste it as a new module.");
+    return;
+  }
+  if (clipboard.type !== sourceNode.type) {
+    reportNodeGraphModuleClipboardError(`Can't paste ${clipboard.type} settings onto ${sourceNode.type}.`);
+    return;
   }
   const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
   const targetNode = patch.nodes.find((node) => node.id === sourceNode.id);
   if (!targetNode) {
     return;
   }
-  if (portable) {
-    if (portable.type !== sourceNode.type) {
-      setNodeInteractionHelp(`Can't paste: clipboard holds ${portable.type} settings, not ${sourceNode.type}.`);
+  targetNode.params = { ...(targetNode.params || {}), ...nodeGraphDeepCloneModuleField(clipboard.params) };
+  commitNodeGraphPatch(patch, { status: "module settings pasted" });
+  configureNodeSceneContextMenu("module");
+}
+
+async function pasteNodeGraphModuleClipboardFromKeyboard() {
+  let clipboard = null;
+  try {
+    clipboard = parseSoundemoteModuleClipboard(await navigator.clipboard?.readText?.());
+  } catch (error) {
+    reportNodeGraphModuleClipboardError(`Clipboard read failed: ${error?.message || error}`);
+    return;
+  }
+  if (!clipboard) {
+    reportNodeGraphModuleClipboardError("Clipboard does not contain tagged module settings or a module.");
+    return;
+  }
+  if (clipboard.kind === "settings") {
+    const selected = nodeGraphModuleActionTargetNodeIds();
+    if (selected.length !== 1) return;
+    const target = nodeGraphPatchNode(selected[0]);
+    if (!target) return;
+    if (clipboard.type !== target.type) {
+      reportNodeGraphModuleClipboardError(`Can't paste ${clipboard.type} settings onto ${target.type}.`);
       return;
     }
-    targetNode.params = { ...(targetNode.params || {}), ...portable.params };
+    const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
+    const targetNode = patch.nodes.find((node) => node.id === target.id);
+    if (!targetNode) return;
+    targetNode.params = { ...(targetNode.params || {}), ...nodeGraphDeepCloneModuleField(clipboard.params) };
     commitNodeGraphPatch(patch, { status: "module settings pasted" });
-    configureNodeSceneContextMenu("module");
     return;
   }
-  const clipboard = nodeGraphMvp.moduleSettingsClipboard;
-  if (!clipboard) {
-    setNodeInteractionHelp("Copy a module's settings first.");
+
+  if (!Object.hasOwn(nodeGraphModuleDefinitions || {}, clipboard.type)) {
+    reportNodeGraphModuleClipboardError(`Unknown module type in clipboard: ${clipboard.type}.`);
     return;
   }
-  if (clipboard.type !== sourceNode.type) {
-    setNodeInteractionHelp(`Can't paste: clipboard holds ${clipboard.type} settings, not ${sourceNode.type}.`);
+  if (typeof nodeGraphModuleTypeIsUniqueInPatch === "function" && nodeGraphModuleTypeIsUniqueInPatch(clipboard.type)) {
+    reportNodeGraphModuleClipboardError(`Cannot paste a second ${clipboard.type} module.`);
     return;
   }
-  applyNodeGraphModuleSettingsSnapshot(targetNode, clipboard.settings);
-  commitNodeGraphPatch(patch, { status: "module settings pasted" });
+  const selected = nodeGraphModuleActionTargetNodeIds();
+  const anchor = selected.length === 1 ? nodeGraphPatchNode(selected[0]) : null;
+  const preferred = anchor
+    ? { gx: anchor.gx, gy: nodeGraphPatchNodeGridRect(anchor).bottom }
+    : { gx: clipboard.gx, gy: clipboard.gy };
+  const seed = createNodeGraphPatchNode(clipboard.type, { id: `${clipboard.type}-clipboard`, ...preferred });
+  const typedDisplayFields = typeof cloneNodeGraphTypedDisplaySettings === "function"
+    ? Object.keys(cloneNodeGraphTypedDisplaySettings(seed))
+    : [];
+  const allowedFields = new Set([...nodeGraphModuleSettingsFields, ...typedDisplayFields]);
+  for (const [key, value] of Object.entries(clipboard.module)) {
+    if (allowedFields.has(key)) seed[key] = nodeGraphDeepCloneModuleField(value);
+  }
+  seed.type = clipboard.type;
+  const copiedNodeId = copyNodeGraphModule(seed);
+  if (!copiedNodeId || copiedNodeId === seed.id) {
+    reportNodeGraphModuleClipboardError(`Could not paste ${clipboard.type} module.`);
+    return;
+  }
+  setNodeGraphNodeSelection([copiedNodeId]);
   configureNodeSceneContextMenu("module");
 }
 
@@ -3872,7 +3965,20 @@ function copySelectedNodeGraphModule() {
   if (!sourceNode || sourceNode.type === "output") {
     return false;
   }
-  return Boolean(copyNodeGraphModule(sourceNode));
+  writeNodeGraphSystemClipboard(soundemoteModuleSettingsJson(sourceNode.type, sourceNode.params), `${nodeGraphNodeDisplayName(sourceNode.id)} settings`);
+  return true;
+}
+
+function duplicateSelectedNodeGraphModule() {
+  const selectedNodeIds = [...nodeGraphSelectedNodeIds()];
+  if (selectedNodeIds.length !== 1) return false;
+  const sourceNode = nodeGraphPatchNode(selectedNodeIds[0]);
+  if (!sourceNode || sourceNode.type === "output") return false;
+  const copiedNodeId = copyNodeGraphModule(sourceNode);
+  if (!copiedNodeId || copiedNodeId === sourceNode.id) return false;
+  setNodeGraphNodeSelection([copiedNodeId]);
+  configureNodeSceneContextMenu("module");
+  return true;
 }
 
 function nodeGraphNativeModuleCodeEntryForNode(node) {
