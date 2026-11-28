@@ -5,6 +5,9 @@ Run BEFORE PASTE-14. Fix item 1 first.
 ## 1. POLICY BREAK (fix first)
 PASTE-13 added HTML/JS buttons on top of the Gradient display module in the circuit builder. App policy: NO HTML/SVG rendering in the circuit builder. Remove every HTML/SVG/JS button or overlay added to the Gradient module face. Module-face controls must be drawn in the module's own canvas render path like other modules, or live only on the Command Center Gradient page. Also remove any scrollbars PASTE-13 introduced.
 
+## 1b. Gradient display drag conflict
+Clicking/dragging on the Gradient module's display moves the Blend AND drags the module at the same time. A press on the display must only move the Blend: consume the pointer event (stop propagation to the module-drag handler) the same way other interactive module displays do. The module is still draggable from its title/frame.
+
 ## 2. Joined-param boxes
 - Boxes must appear immediately when Edit turns on / a param joins (currently they only appear after an extra click in the circuit builder forces a redraw). Trigger the redraw from the Edit/join event.
 - Box color = that param's gradient color (not gold).
