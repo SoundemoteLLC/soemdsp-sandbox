@@ -163,6 +163,20 @@ try {
   }, placed.id);
   assert.ok(knob.position === 0.6 && knob.param === 0.6 && Math.abs(parseFloat(knob.pageLeft) / knob.stripWidth - 0.6) < 0.005, `knob = page playhead ${JSON.stringify(knob)}`);
 
+  const pagePlayheadSettings = await page.evaluate((id) => {
+    const moduleSlider = nodeGraphSliderForParameter(id, "playhead");
+    const pageSlider = document.querySelector('#nodeGradientsBody [data-gradient-playhead="g1"]');
+    pageSlider.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
+    return {
+      target: nodeGraphMvp.metadataEditorTarget,
+      expected: moduleSlider?.id,
+      open: !document.getElementById("nodeParameterMetadataPopover")?.hidden,
+      smoothing: Boolean(document.getElementById("metadataSmoothingModeGroup")),
+    };
+  }, placed.id);
+  assert.ok(pagePlayheadSettings.open && pagePlayheadSettings.smoothing && pagePlayheadSettings.target === pagePlayheadSettings.expected,
+    `right-clicking the Gradient page playhead opens its Gradient-module parameter settings ${JSON.stringify(pagePlayheadSettings)}`);
+
   // The binding is saved and loaded with the patch.
   const saved = await page.evaluate((id) => {
     const loaded = loadNodeGraphPatchFromScript(serializeNodeGraphPatch(nodeGraphMvp.patch));

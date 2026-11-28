@@ -304,16 +304,6 @@ try {
       out.roundTrip = JSON.stringify(loaded.gradients) === JSON.stringify(nodeGraphMvp.patch.gradients);
       out.minRow = Math.min(...[...document.querySelectorAll("#nodeGradientsBody .node-gradient-button, .node-gradient-param")].map((e) => e.getBoundingClientRect().height));
       out.titles = document.querySelectorAll("#nodeGradientsBody [title]").length;
-      const slider = nodeGraphSliderForParameter(a, "frequency");
-      const curveSeries = [...document.querySelectorAll(`${card} [data-curve-series]`)].find((item) => decodeURIComponent(item.dataset.curveSeries) === `${a}\u0000frequency`);
-      curveSeries?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
-      const popover = document.getElementById("nodeParameterMetadataPopover");
-      out.curveContextSettings = nodeGraphMvp.metadataEditorTarget === slider?.id && !popover?.hidden
-        && Boolean(document.getElementById("metadataSmoothingModeGroup"));
-      const readout = document.querySelector(`.node-slider-readout[data-slider-target="${CSS.escape(slider?.id || "")}"]`);
-      readout?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
-      out.sliderContextSettings = nodeGraphMvp.metadataEditorTarget === slider?.id && !popover?.hidden
-        && Boolean(document.getElementById("metadataSmoothingModeGroup"));
       return out;
     });
     const where = file || "index.html";
@@ -326,7 +316,6 @@ try {
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(r.firstMoveCreatesEndStop && r.newParamsJoinLive, "first move creates stop 1 and later untracked parameters join live with their start values preserved");
     ok(r.editHeld && r.allJoinedControlsGold && r.paramColorsMatch, "Edit keeps slider thumbs held and uses each parameter's same color for its outline, chip and curve");
-    ok(r.curveContextSettings && r.sliderContextSettings, "right-click on a parameter curve or control opens that parameter's settings, including smoothing");
     ok(r.unsnappedMoveCreatesAllParamsStop, "an unsnapped move creates a stop for all params without moving untouched curves");
     ok(r.editOffDiscards, "turning Edit off clears edit state without changing base values");
     ok(r.playheadSnapAndLiveEdit && r.playheadSnapReleases, "playhead snaps within two steps, live edits the snapped stop, and releases beyond the threshold");
