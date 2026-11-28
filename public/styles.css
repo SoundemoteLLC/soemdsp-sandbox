@@ -5638,8 +5638,16 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 }
 
 /* Gradient state controls reserve their labels' full width. */
-#nodeGradientsBody .node-gradient-enabled { flex: 0 0 52px; width: 52px; }
-#nodeGradientsBody .node-gradient-edit-toggle { flex: 0 0 76px; width: 76px; }
+#nodeGradientsBody .node-gradient-enabled,
+#nodeGradientsBody .node-gradient-drag-target {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  font: 20px/1 sans-serif;
+}
+#nodeGradientsBody .node-gradient-edit-toggle { flex: 0 0 48px; width: 48px; }
 #nodeGradientsBody .node-gradient-snapshot { flex: 0 0 82px; width: 82px; }
 #nodeGradientsBody .node-gradient-delete-gradient { flex: 0 0 44px; width: 44px; padding: 0; }
 #nodeGradientsBody .node-gradient-rename { flex: 0 0 76px; width: 76px; }
@@ -5684,6 +5692,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 #nodeGradientsBody .node-gradient-curve-shapes { gap:4px; }
 #nodeGradientsBody .node-gradient-curve-shapes .node-gradient-button,
 #nodeGradientsBody .node-gradient-button { min-height:30px; border-radius:3px; font:11px ui-monospace,monospace; }
+#nodeGradientsBody .node-gradient-enabled,
+#nodeGradientsBody .node-gradient-drag-target { font:20px/1 sans-serif; }
 #nodeGradientsBody .node-gradient-stop-colors { grid-template-columns:minmax(100px,220px); padding:0; }
 #nodeGradientsBody .node-gradient-stop-color-row { grid-template-columns:auto minmax(64px,1fr); }
 #nodeGradientsBody .node-gradient-stop-color-widget { height:34px; }
@@ -5695,8 +5705,20 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 .node-gradient-card-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   min-height: 44px;
+}
+
+#nodeGradientsBody .node-gradient-edit-toggle[aria-pressed="true"] {
+  border-color: #c45a7a;
+  background: rgba(196, 90, 122, 0.4);
+  color: #fff;
+}
+
+#nodeGradientsBody .node-gradient-edit-toggle[aria-pressed="false"] {
+  border-color: #4a4a50;
+  background: rgba(255, 255, 255, 0.025);
+  color: #85858c;
 }
 
 .node-gradient-name {

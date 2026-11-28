@@ -439,8 +439,12 @@ function nodeGraphGradientPageCard(gradient) {
 
   const head = document.createElement("div");
   head.className = "node-gradient-card-head";
-  // PASTE-8: the grip is the drag handle for the Gradient module (the name is only a label).
-  const grip = nodeGraphDragGripButton(`Drag ${gradient.name} into the circuit`);
+  // The compact mixer control is the drag handle for a Gradient module.
+  const grip = document.createElement("button");
+  grip.type = "button";
+  grip.className = "node-gradient-button node-gradient-drag-target";
+  grip.textContent = "🎛️";
+  grip.setAttribute("aria-label", `Drag ${gradient.name} into the circuit`);
   grip.dataset.gradientDrag = gradient.id;
   head.append(grip);
   if (nodeGraphGradientPageState.renaming === gradient.id) {
@@ -462,7 +466,7 @@ function nodeGraphGradientPageCard(gradient) {
   enabled.setAttribute("aria-label", `${gradient.name} enabled`);
   head.append(enabled);
   const editing = nodeGraphGradientPageIsEditing(gradient.id);
-  const edit = nodeGraphGradientPageButton(editing ? "Edit On" : "Edit Off", "toggleEdit", gradient.id, { pressed: editing });
+  const edit = nodeGraphGradientPageButton("Edit", "toggleEdit", gradient.id, { pressed: editing });
   edit.classList.add("node-gradient-edit-toggle");
   edit.setAttribute("aria-label", `${gradient.name} edit mode`);
   const snapshot = nodeGraphGradientPageButton("Snapshot", "snapshot", gradient.id);
