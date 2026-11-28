@@ -199,6 +199,7 @@ function nodeGraphPitchQuantizerChoiceForMask(mask) {
 // quantized output (hardware quantizer behavior).
 function nodeGraphPitchQuantizerSample(state, options = {}) {
   const pitch = nodeGraphFiniteNumber(options.pitch);
+  const fretting = Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.fretting)));
   const keyboard = options.scaleMask != null
     ? nodeGraphPitchQuantizerNormalizeMask(options.scaleMask)
     : nodeGraphPitchQuantizerMaskFromChoice(options.scaleChoice);
@@ -207,8 +208,40 @@ function nodeGraphPitchQuantizerSample(state, options = {}) {
     : (Math.round(nodeGraphFiniteNumber(options.scaleInput)) & 0xFFF);
   const mask = options.hasScaleInput ? jack : keyboard;
 
+  if (fretting >= 1) {
+    state.hasOutput = true;
+    state.lastOutput = pitch;
+    return pitch;
+  }
   if (mask === 0) {
     return state.hasOutput ? state.lastOutput : pitch;
+  }
+
+  if (fretting > 0) {
+    let lower = NaN;
+    let upper = NaN;
+    for (let n = Math.floor(pitch) - 12; n <= Math.ceil(pitch) + 12; n += 1) {
+      if (!((mask >> (((n % 12) + 12) % 12)) & 1)) continue;
+      if (n <= pitch && (!Number.isFinite(lower) || n > lower)) lower = n;
+      if (n >= pitch && (!Number.isFinite(upper) || n < upper)) upper = n;
+    }
+    if (!Number.isFinite(lower)) lower = upper - 12;
+    if (!Number.isFinite(upper)) upper = lower + 12;
+    if (lower === upper) {
+      state.hasOutput = true;
+      state.lastOutput = pitch;
+      return pitch;
+    }
+    const gap = upper - lower;
+    const t = (pitch - lower) / gap;
+    const edge = (1 - fretting) * 0.5;
+    const u = Math.max(0, Math.min(1, (t - edge) / Math.max(1e-12, fretting)));
+    const smooth = u * u * (3 - 2 * u);
+    const blend = (1 - fretting) * smooth + fretting * u;
+    const output = t <= edge ? lower : t >= 1 - edge ? upper : lower + gap * blend;
+    state.hasOutput = true;
+    state.lastOutput = output;
+    return output;
   }
 
   const semitoneFloat = pitch;

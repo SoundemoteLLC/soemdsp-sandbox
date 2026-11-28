@@ -20,10 +20,53 @@ static PitchQuantizerState gPool[kMaxInstances];
 // member of the current scale. mask == 0 means "no notes held" -- holds the
 // last quantized output rather than snapping to anything, matching how
 // hardware quantizers behave when their scale input goes empty.
-double quantizePitch(PitchQuantizerState& state, double pitch, int scaleMask) {
+double quantizePitch(PitchQuantizerState& state, double pitch, int scaleMask, double fretting) {
   const int mask = scaleMask & 0xFFF;
+  const double amount = fretting < 0.0 ? 0.0 : (fretting > 1.0 ? 1.0 : fretting);
+  if (amount >= 1.0) {
+    state.hasOutput = true;
+    state.lastOutput = pitch;
+    return pitch;
+  }
   if (mask == 0) {
     return state.hasOutput ? state.lastOutput : pitch;
+  }
+
+  if (amount > 0.0) {
+    int lower = 0;
+    int upper = 0;
+    bool hasLower = false;
+    bool hasUpper = false;
+    const int first = (int)pitch - 13;
+    const int last = (int)pitch + 13;
+    for (int note = first; note <= last; note++) {
+      const int pitchClass = ((note % 12) + 12) % 12;
+      if (((mask >> pitchClass) & 1) == 0) continue;
+      if ((double)note <= pitch && (!hasLower || note > lower)) { lower = note; hasLower = true; }
+      if ((double)note >= pitch && (!hasUpper || note < upper)) { upper = note; hasUpper = true; }
+    }
+    if (!hasLower && hasUpper) lower = upper - 12;
+    if (!hasUpper && hasLower) upper = lower + 12;
+    if (hasLower && hasUpper && lower == upper) {
+      state.hasOutput = true;
+      state.lastOutput = pitch;
+      return pitch;
+    }
+    if (hasLower && hasUpper) {
+      const double gap = (double)(upper - lower);
+      const double t = (pitch - lower) / gap;
+      const double edge = (1.0 - amount) * 0.5;
+      double u = (t - edge) / amount;
+      if (u < 0.0) u = 0.0;
+      if (u > 1.0) u = 1.0;
+      const double smooth = u * u * (3.0 - 2.0 * u);
+      const double blend = (1.0 - amount) * smooth + amount * u;
+      const double output = t <= edge ? (double)lower
+        : (t >= 1.0 - edge ? (double)upper : (double)lower + gap * blend);
+      state.hasOutput = true;
+      state.lastOutput = output;
+      return output;
+    }
   }
 
   const double semitoneFloat = pitch;
@@ -82,9 +125,9 @@ extern "C" void soemdsp_pitch_quantizer_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-extern "C" double soemdsp_pitch_quantizer_sample(int handle, double pitch, int scaleMask) {
+extern "C" double soemdsp_pitch_quantizer_sample(int handle, double pitch, int scaleMask, double fretting) {
   if (handle < 1 || handle > kMaxInstances) return pitch;
-  return quantizePitch(gPool[handle - 1], pitch, scaleMask);
+  return quantizePitch(gPool[handle - 1], pitch, scaleMask, fretting);
 }
 
 extern "C" int soemdsp_pitch_quantizer_version() {

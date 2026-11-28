@@ -7816,6 +7816,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("scaleMask", P.NATIVE_GRAPH_PARAM_SEED, disc("scaleMask", 2741));
       push("octave", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, disc("octave", disc("octaveOffset", 0)));
       push("semitones", P.NATIVE_GRAPH_PARAM_CENTER, disc("semitones", disc("semitoneOffset", 0)));
+      push("fretting", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("fretting", 0));
       continue;
     }
     if (type === "turingMachine") {

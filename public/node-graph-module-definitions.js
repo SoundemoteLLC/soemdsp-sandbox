@@ -4483,6 +4483,16 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         unit: "st",
         tooltip: "Transpose quantized pitch and ƒ by integer semitones." },
+      {
+        key: "fretting",
+        label: "Fretting",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        step: "0.01",
+        tooltip: "0 = strict scale steps; higher values smooth each step edge; 1 = pass pitch through." },
     ]
   },
   // Degree Turing / Gravity Walker / Degree Phrase: musical shelf (pitch CV generators).

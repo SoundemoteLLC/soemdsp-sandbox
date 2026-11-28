@@ -1961,7 +1961,7 @@ extern "C" int soemdsp_chord_sequencer_step(int handle);
 
 extern "C" int soemdsp_pitch_quantizer_create();
 extern "C" void soemdsp_pitch_quantizer_destroy(int handle);
-extern "C" double soemdsp_pitch_quantizer_sample(int handle, double pitch, int scaleMask);
+extern "C" double soemdsp_pitch_quantizer_sample(int handle, double pitch, int scaleMask, double fretting);
 
 extern "C" int soemdsp_turing_machine_create();
 extern "C" void soemdsp_turing_machine_destroy(int handle);
@@ -13980,7 +13980,7 @@ static void process_pitch_quantizer(Circuit& g, Node& node, int frames) {
     if (hasScale) {
       mask = (int)(g.mixMono[f] + (g.mixMono[f] >= 0.0 ? 0.5 : -0.5)) & 0xFFF;
     }
-    const double q = soemdsp_pitch_quantizer_sample(node.nativeHandle, pitch, mask);
+    const double q = soemdsp_pitch_quantizer_sample(node.nativeHandle, pitch, mask, control_effective(node.amplitude));
     const double octOff = control_effective(node.offset);
     const double semi = control_effective(node.center);
     double midi = q + 12.0 * octOff + semi;
