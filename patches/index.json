@@ -821,6 +821,14 @@
       "emoji": ""
     },
     {
+      "slug": "chaosfly_high_freq2",
+      "label": "chaosfly_high_freq2",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/chaosfly_high_freq2.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "chaosfly_lowfreq",
       "label": "chaosfly_lowfreq",
       "name": "",
