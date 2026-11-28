@@ -469,7 +469,7 @@ function nodeGraphGradientPageCard(gradient) {
   const edit = nodeGraphGradientPageButton("Edit", "toggleEdit", gradient.id, { pressed: editing });
   edit.classList.add("node-gradient-edit-toggle");
   edit.setAttribute("aria-label", `${gradient.name} edit mode`);
-  const snapshot = nodeGraphGradientPageButton("Snapshot", "snapshot", gradient.id);
+  const snapshot = nodeGraphGradientPageButton("📷", "snapshot", gradient.id);
   snapshot.classList.add("node-gradient-snapshot");
   snapshot.disabled = editing;
   snapshot.setAttribute("aria-label", `${gradient.name} snapshot`);
