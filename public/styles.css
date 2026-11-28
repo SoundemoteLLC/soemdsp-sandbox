@@ -5791,7 +5791,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 #nodeGradientsBody .node-gradient-handle.is-snapped { box-shadow:0 0 0 2px #fff; }
 #nodeGradientsBody .node-gradient-handle:active { transform:none; }
 #nodeGradientsBody .node-gradient-card { gap:2px; }
-#nodeGradientsBody .node-gradient-strip { margin:0 7px 14px; }
+#nodeGradientsBody .node-gradient-strip { margin:4px 7px 8px; }
 #nodeGradientsBody .node-gradient-handle-label.is-high,
 #nodeGradientsBody .node-gradient-handle-label.is-low { top:calc(100% + 7px); }
 #nodeGradientsBody .node-gradient-playhead-control { display:flex; width:100%; margin:0; padding:0; }
