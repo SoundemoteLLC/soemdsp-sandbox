@@ -1340,10 +1340,10 @@ function bindNodeGraphGradientPage() {
     nodeGraphGradientPageAction(button.dataset.gradientAction, button.dataset.gradientId || "", button);
   });
   host.addEventListener("contextmenu", (event) => {
-    const target = event.target?.closest?.("[data-gradient-playhead], .node-gradient-strip");
-    if (!target || typeof openNodeMetadataPopover !== "function") return;
+    const pageSlider = event.target?.closest?.("[data-gradient-playhead]");
+    if (!pageSlider || typeof openNodeMetadataPopover !== "function") return;
     event.preventDefault();
-    const gradientId = target.dataset.gradientPlayhead || target.dataset.gradientId;
+    const gradientId = pageSlider.dataset.gradientPlayhead;
     const moduleNode = nodeGraphMvp?.patch?.nodes?.find((node) => node.type === "gradient" && node.gradientId === gradientId);
     if (!moduleNode) return;
     const slider = typeof nodeGraphSliderForParameter === "function" ? nodeGraphSliderForParameter(moduleNode.id, "playhead") : null;
