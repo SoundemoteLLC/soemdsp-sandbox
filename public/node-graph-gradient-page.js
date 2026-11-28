@@ -431,10 +431,12 @@ function nodeGraphGradientPageCard(gradient) {
   const deleteGradient = nodeGraphGradientPageButton("🗑️", "deleteGradient", gradient.id);
   deleteGradient.classList.add("node-gradient-delete-gradient");
   deleteGradient.setAttribute("aria-label", `${gradient.name} delete gradient`);
+  const rename = nodeGraphGradientPageButton(nodeGraphGradientPageState.renaming === gradient.id ? "Done" : "Rename", "rename", gradient.id);
+  rename.classList.add("node-gradient-rename");
   buttons.append(
     nodeGraphGradientPageButton("Duplicate", "duplicateStop", gradient.id, { disabled: true }),
     nodeGraphGradientPageButton("Delete stop", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 }),
-    nodeGraphGradientPageButton(nodeGraphGradientPageState.renaming === gradient.id ? "Done" : "Rename", "rename", gradient.id),
+    rename,
     deleteGradient,
   );
   card.append(buttons);
@@ -512,7 +514,9 @@ function renderNodeGraphGradientPage() {
   }
   top.append(filter,
     nodeGraphGradientPageButton("New Gradient", "newGradient", ""));
-  top.append(nodeGraphGradientPageButton(nodeGraphGradientPageState.showGraphs ? "Hide graphs" : "Show graphs", "toggleGraphs", "", { pressed: nodeGraphGradientPageState.showGraphs }));
+  const graphs = nodeGraphGradientPageButton(nodeGraphGradientPageState.showGraphs ? "Hide graphs" : "Show graphs", "toggleGraphs", "", { pressed: nodeGraphGradientPageState.showGraphs });
+  graphs.classList.add("node-gradient-graphs-toggle");
+  top.append(graphs);
   fragment.append(top);
   const gradients = nodeGraphGradientPageGradients();
   const shown = nodeGraphGradientPageState.filter === "touching"
