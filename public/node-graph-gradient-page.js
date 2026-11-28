@@ -68,7 +68,7 @@ function nodeGraphGradientPageColorInputDefault(index) {
   return `#${[r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("")}`;
 }
 
-function nodeGraphGradientPageRandomHueColor(color) {
+function nodeGraphGradientPageRandomHueColor(color, hueDegrees = Math.random() * 360) {
   const source = String(color || "#62bce5");
   const match = /^#([0-9a-f]{6})$/i.exec(source);
   if (!match) return nodeGraphGradientPageColorInputDefault(Math.random() * 360);
@@ -77,11 +77,47 @@ function nodeGraphGradientPageRandomHueColor(color) {
   const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
   const l = (max + min) / 2;
   const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
-  const h = Math.random() * 360 / 60;
+  const h = (((Number(hueDegrees) % 360) + 360) % 360) / 60;
   const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(h % 2 - 1));
   const rgb = h < 1 ? [c, x, 0] : h < 2 ? [x, c, 0] : h < 3 ? [0, c, x] : h < 4 ? [0, x, c] : h < 5 ? [x, 0, c] : [c, 0, x];
   const m = l - c / 2;
   return `#${rgb.map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function nodeGraphGradientPageHueDegrees(color) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(color || ""));
+  if (!match) return NaN;
+  const n = Number.parseInt(match[1], 16);
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+  if (!delta) return NaN;
+  const hue = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+  return (hue * 60 + 360) % 360;
+}
+
+function nodeGraphGradientPageRandomDistinctHueColor(color, avoidColors = []) {
+  const occupied = avoidColors.map(nodeGraphGradientPageHueDegrees).filter(Number.isFinite);
+  const minDistance = Math.min(24, 360 / (occupied.length + 1) - 0.25);
+  const farEnough = (candidate) => {
+    const hue = nodeGraphGradientPageHueDegrees(candidate);
+    return Number.isFinite(hue) && occupied.every((other) => {
+      const distance = Math.abs(hue - other);
+      return Math.min(distance, 360 - distance) >= minDistance;
+    });
+  };
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    const candidate = nodeGraphGradientPageRandomHueColor(color);
+    if (farEnough(candidate)) return candidate;
+  }
+  if (!occupied.length) return nodeGraphGradientPageRandomHueColor(color);
+  const sorted = occupied.sort((a, b) => a - b);
+  let bestStart = sorted[0], bestGap = -1;
+  for (let i = 0; i < sorted.length; i += 1) {
+    const start = sorted[i];
+    const end = i + 1 < sorted.length ? sorted[i + 1] : sorted[0] + 360;
+    if (end - start > bestGap) { bestStart = start; bestGap = end - start; }
+  }
+  return nodeGraphGradientPageRandomHueColor(color, bestStart + bestGap / 2);
 }
 
 function nodeGraphGradientPageStripBackground(gradient) {
@@ -361,24 +397,38 @@ function nodeGraphGradientPageStrip(gradient) {
 
 function nodeGraphGradientPageCard(gradient) {
   let colorsChanged = false;
+  const stopColors = [];
   for (let i = 0; i < (gradient.stops || []).length; i += 1) {
     const stop = gradient.stops[i];
     if (!/^#[0-9a-f]{6}$/i.test(String(stop.color || ""))) {
-      stop.color = nodeGraphGradientPageRandomHueColor(nodeGraphGradientPageColorInputDefault(i));
+      stop.color = nodeGraphGradientPageRandomDistinctHueColor(nodeGraphGradientPageColorInputDefault(i), stopColors);
       colorsChanged = true;
     }
+    stopColors.push(stop.color);
   }
   gradient.paramColors ||= {};
+  const paramColors = [];
   for (const { nodeId, key } of gradient.params || []) {
     gradient.paramColors[nodeId] ||= {};
-    if (!/^#[0-9a-f]{6}$/i.test(String(gradient.paramColors[nodeId][key] || ""))) {
+    let color = gradient.paramColors[nodeId][key];
+    const currentHue = nodeGraphGradientPageHueDegrees(color);
+    const minHueDistance = Math.min(24, 360 / Math.max(1, gradient.params.length) - 0.25);
+    const duplicateHue = Number.isFinite(currentHue) && paramColors.some((otherColor) => {
+      const otherHue = nodeGraphGradientPageHueDegrees(otherColor);
+      if (!Number.isFinite(otherHue)) return false;
+      const distance = Math.abs(currentHue - otherHue);
+      return Math.min(distance, 360 - distance) < minHueDistance;
+    });
+    if (!/^#[0-9a-f]{6}$/i.test(String(color || "")) || duplicateHue) {
       const palette = ["#62bce5", "#d99b58", "#67c477", "#c678d2", "#e16c7e", "#c4bd69"];
       const identity = `${nodeId}\u0000${key}`;
       let hash = 2166136261;
       for (let i = 0; i < identity.length; i += 1) hash = Math.imul(hash ^ identity.charCodeAt(i), 16777619);
-      gradient.paramColors[nodeId][key] = nodeGraphGradientPageRandomHueColor(palette[(hash >>> 0) % palette.length]);
+      color = nodeGraphGradientPageRandomDistinctHueColor(palette[(hash >>> 0) % palette.length], paramColors);
+      gradient.paramColors[nodeId][key] = color;
       colorsChanged = true;
     }
+    paramColors.push(color);
   }
   if (colorsChanged && typeof scheduleNodeGraphWorkspaceAutosave === "function") scheduleNodeGraphWorkspaceAutosave("gradient colors");
   const card = document.createElement("section");
@@ -1119,7 +1169,7 @@ function nodeGraphGradientPageEnsureLiveEditStop(gradient, node, key, meta, valu
     const ids = new Set(gradient.stops.map((item) => item.id));
     let n = gradient.stops.length;
     while (ids.has(`s${n + 1}`)) n += 1;
-    stop = { id: `s${n + 1}`, pos: gradient.position, offsets, color: nodeGraphGradientPageRandomHueColor(nodeGraphGradientPageColorInputDefault(gradient.stops.length)) };
+    stop = { id: `s${n + 1}`, pos: gradient.position, offsets, color: nodeGraphGradientPageRandomDistinctHueColor(nodeGraphGradientPageColorInputDefault(gradient.stops.length), gradient.stops.map((item) => item.color)) };
     gradient.stops.push(stop);
     gradient.stops.sort((a, b) => a.pos - b.pos);
   }
@@ -1130,7 +1180,10 @@ function nodeGraphGradientPageEnsureLiveEditStop(gradient, node, key, meta, valu
     gradient.params.push({ nodeId, key });
     gradient.paramColors ||= {};
     gradient.paramColors[nodeId] ||= {};
-    gradient.paramColors[nodeId][key] = nodeGraphGradientPageParamColor(nodeId, key, null);
+    const existingColors = Object.values(gradient.paramColors).flatMap((row) => Object.values(row || {}));
+    gradient.paramColors[nodeId][key] = nodeGraphGradientPageRandomDistinctHueColor(
+      nodeGraphGradientPageParamColor(nodeId, key, null), existingColors,
+    );
     for (const item of gradient.stops) (item.offsets[nodeId] || (item.offsets[nodeId] = {}))[key] = 0;
     nodeGraphGradientEditSyncOutlines();
   }
