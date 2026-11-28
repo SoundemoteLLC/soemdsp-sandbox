@@ -1,3 +1,15 @@
+## SCOPE TONIGHT (overrides the rest of this plan)
+
+Do ONLY basic module copy/paste between browser tabs:
+
+1. Ctrl+C copies the selected module's settings to the system clipboard as tagged JSON (see the clipboard format below). Ctrl+D is Duplicate. Ctrl+V pastes.
+2. Fix the bug where Paste is greyed out in a different tab. Paste must read the system clipboard, not in-tab state.
+3. Copy Settings copies params only. Copy Module copies the whole module (params, display settings, ui, widthGu) and pastes a new copy.
+4. A wrong-type paste logs to the Bug window. No popup.
+5. Update the Hotkeys page.
+
+SKIP for now: everything about Gradient Edit-mode paste, paste-morph and stepped switch curves. Leave those sections for a later pass.
+
 # PASTE-14: Module copy/paste across tabs + Gradient paste-morph
 
 Run after PASTE-13. The goal: "I have two sounds/settings on a module, now I want to morph between them."
