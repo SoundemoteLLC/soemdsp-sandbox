@@ -406,11 +406,6 @@
     return dropAllZeroParams({ ...gradient, params, stops });
   }
 
-  /** Set start: re-record the origin from the current base sliders. Stored offsets keep their numbers. */
-  function setStart(patch, gradient) {
-    return { ...gradient, origin: baseSliders(patch) };
-  }
-
   /**
    * D-G1 (Argi t449u): deleting modules drops their params from every gradient (origin, params and stop offsets), in the same commit as
    * the delete, so no dangling refs are saved. Gradients themselves stay, even when nothing is left in them. Pure: returns a new list.
@@ -478,7 +473,6 @@
     setLivePlayhead,
     createGradientFromSnapshot,
     snapshotIntoGradient,
-    setStart,
     dropAllZeroParams,
     dropNodes,
     isDiscrete,

@@ -200,12 +200,7 @@ function gradient(id, offsets, extra = {}) {
     deq(h.params.map((x) => x.key), ["cutoff"], "a param that is zero at every stop is dropped");
     assert.ok(h.stops.every((s) => !(s.offsets.n1 && "freq" in s.offsets.n1)), "and removed from the stops");
     assert.equal(api.dropAllZeroParams(h).params.length, 1);
-    // set start re-records the origin
-    p.nodes[0].params.cutoff = 0.4;
-    const s = api.setStart(p, h);
-    close(s.origin.n1.cutoff, 0.4, 1e-12, "set start re-records the origin:");
-    assert.equal(s.stops, h.stops, "and keeps the stops");
-    console.log("ok  capture: moved only, all-zero dropped, implicit zeros, replace, set start");
+    console.log("ok  capture: moved only, all-zero dropped, implicit zeros, replace");
   }
 
   // normalize: shape only, dangling refs kept, unique ids

@@ -205,6 +205,48 @@ function bindNodeGraphGradientModulePlayheadSurface(section, nodeId) {
   if (typeof bindNodeSliderDragSurface === "function") bindNodeSliderDragSurface(section);
 }
 
+function nodeGraphGradientModuleActions(section, nodeId) {
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  let actions = section.querySelector(".node-gradient-module-actions");
+  if (!actions) {
+    actions = document.createElement("div");
+    actions.className = "node-gradient-module-actions";
+    for (const action of ["toggleEdit", "snapshot"]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.gradientAction = action;
+      button.addEventListener("click", () => {
+        const id = button.dataset.gradientId;
+        if (id && typeof nodeGraphGradientPageAction === "function") nodeGraphGradientPageAction(action, id, button);
+        nodeGraphGradientModuleActions(section, nodeId);
+      });
+      actions.append(button);
+    }
+    section.append(actions);
+  }
+  const id = String(node?.gradientId || "");
+  const editing = Boolean(id && typeof nodeGraphGradientPageIsEditing === "function" && nodeGraphGradientPageIsEditing(id));
+  for (const button of actions.querySelectorAll("button")) {
+    button.dataset.gradientId = id;
+    if (button.dataset.gradientAction === "toggleEdit") {
+      button.textContent = editing ? "Edit On" : "Edit Off";
+      button.setAttribute("aria-pressed", editing ? "true" : "false");
+      button.setAttribute("aria-label", "Gradient edit mode");
+    } else {
+      button.textContent = "Snapshot";
+      button.disabled = !id || editing;
+      button.setAttribute("aria-label", "Gradient snapshot");
+    }
+    button.disabled = button.dataset.gradientAction === "toggleEdit" ? !id : button.disabled;
+  }
+}
+
+function nodeGraphGradientModuleSyncActions() {
+  for (const section of document.querySelectorAll(".node-gradient-module-face")) {
+    nodeGraphGradientModuleActions(section, section.dataset.node || "");
+  }
+}
+
 function createNodeGraphGradientModuleFace(nodeId, type = NODE_GRAPH_GRADIENT_MODULE_TYPE) {
   const id = nodeId && typeof nodeId === "object" ? String(nodeId.dataset?.node || nodeId.id || "") : String(nodeId || "");
   const section = document.createElement("section");
@@ -226,11 +268,13 @@ function createNodeGraphGradientModuleFace(nodeId, type = NODE_GRAPH_GRADIENT_MO
   });
   // A parameter change (the Playhead knob) repaints through the shared parameter-visual contract.
   section.syncFromParameters = () => {
+    nodeGraphGradientModuleActions(section, id);
     bindNodeGraphGradientModulePlayheadSurface(section, id);
     section._gradientForceDraw = true;
     drawNodeGraphGradientModuleFace(section);
   };
   requestAnimationFrame(() => requestAnimationFrame(() => {
+    nodeGraphGradientModuleActions(section, id);
     bindNodeGraphGradientModulePlayheadSurface(section, id);
     section._gradientForceDraw = true;
     drawNodeGraphGradientModuleFace(section);
@@ -249,6 +293,7 @@ Object.assign(globalThis, {
   buildNodeGraphGradientDisplaySettingsBodyHtml,
   syncNodeGraphGradientDisplaySettingsControls,
   bindNodeGraphGradientDisplaySettingsBody,
+  nodeGraphGradientModuleSyncActions,
   readNodeGraphGradientDisplaySettingsForm,
   applyNodeGraphGradientDisplaySettingsToFace,
 });

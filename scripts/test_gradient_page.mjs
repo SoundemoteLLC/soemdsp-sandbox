@@ -73,7 +73,7 @@ try {
       out.created = (nodeGraphMvp.patch.gradients || []).map((g) => g.name);
       out.createSteps = steps();
       const g = () => nodeGraphMvp.patch.gradients[0];
-      out.newGradientReady = nodeGraphGradientPageState.editMode && g().position === 1 && g().params.length === 0
+      out.newGradientReady = nodeGraphGradientPageState.editGradientId === g().id && g().position === 1 && g().params.length === 0
         && g().stops.length === 1 && g().stops[0].pos === 0;
       out.migratedPositions = (() => {
         const migrated = NodeGraphGradients.normalize([{ id: "legacy", name: "Legacy", position: 64,
@@ -82,18 +82,25 @@ try {
       })();
       out.clonedKeepsGradients = (cloneNodeGraphPatch(nodeGraphMvp.patch).gradients || []).length === 1;
       steps();
-      const editButton = () => [...document.querySelectorAll("#nodeGradientsBody .node-gradient-top button")].find((x) => x.getAttribute("aria-label") === "Gradient edit mode");
-      const moveParam = (nodeId, key) => {
+      const editButton = () => [...document.querySelectorAll(`${card} .node-gradient-edit-toggle`)].find((x) => x.dataset.gradientId === g().id);
+      const moveParam = (nodeId, key, delta = 0.08) => {
         const node = nodeGraphPatchNode(nodeId), slider = nodeGraphSliderForParameter(nodeId, key), meta = NodeGraphGradients.metaFor(node, key);
         const held = Number(slider.dataset.domainValue), base = Number(node.params[key]);
         const before = Number.isFinite(Number(slider.value)) ? Number(slider.value) : NaN;
-        const targetSlider = Math.min(0.95, NodeGraphGradients.toSlider(meta, base) + 0.08);
+        const targetSlider = Math.min(0.95, NodeGraphGradients.toSlider(meta, base) + delta);
         const target = NodeGraphGradients.fromSlider(meta, targetSlider);
         setNodeSliderValue(slider, target, { interaction: "drag" });
         commitNodeSliderDragValue(slider);
         return { nodeId, key, slider, held, before, base, target, targetSlider };
       };
-      const first = moveParam(a, "frequency");
+      const idleSlider = nodeGraphSliderForParameter(a, "frequency");
+      const noMoveValue = Number(idleSlider.dataset.domainValue);
+      const noMoveStops = g().stops.length;
+      commitNodeSliderDragValue(idleSlider);
+      out.editClickNoChange = Number(idleSlider.dataset.domainValue) === noMoveValue
+        && g().stops.length === noMoveStops && g().params.length === 0;
+      const first = moveParam(a, "frequency", 0.001);
+      out.firstPixelBounded = Math.abs(Number(g().stops.find((stop) => stop.pos === 1)?.offsets?.[a]?.frequency) - (first.targetSlider - Number(g().origin?.[a]?.frequency))) <= 0.00101;
       const second = moveParam(b, "floorDb");
       const untracked = nodeGraphPatchNode(a);
       const untrackedKey = Object.keys(untracked.params).find((key) => key !== "frequency" && typeof untracked.params[key] === "number"
@@ -290,7 +297,6 @@ try {
       }
       out.stopsAfterTap = g().stops.length; out.positionAfterTap = Math.round(g().position * 100) / 100; out.tapSteps = steps();
       btn("Delete stop", card).click(); out.stopsAfterDelete = g().stops.length; out.deleteStopSteps = steps();
-      btn("Set start", card).click(); out.setStartSteps = steps();
       // D-G1: delete a module, its params leave the gradient in the same commit.
       setNodeGraphSelection({ type: "node", id: b });
       performNodeGraphDeleteSelection(nodeGraphMvp.selected);
@@ -315,6 +321,7 @@ try {
     ok(r.migratedPositions, "legacy 0..127 positions migrate to normalized 0..1 values");
     ok(r.clonedKeepsGradients, "patch clones keep gradients");
     ok(r.firstMoveCreatesEndStop && r.newParamsJoinLive, "first move creates stop 1 and later untracked parameters join live with their start values preserved");
+    ok(r.editClickNoChange && r.firstPixelBounded, "Edit-mode click without movement is inert and the first small drag change stays bounded");
     ok(r.editHeld && r.allJoinedControlsGold && r.paramColorsMatch, "Edit keeps slider thumbs held and uses each parameter's same color for its outline, chip and curve");
     ok(r.unsnappedMoveCreatesAllParamsStop, "an unsnapped move creates a stop for all params without moving untouched curves");
     ok(r.editOffDiscards, "turning Edit off clears edit state without changing base values");
@@ -337,7 +344,6 @@ try {
     ok(r.toggleSteps === 1 && r.disabledEffIsBase, "Off removes the gradient's effect, one step");
     ok(r.name === "Bright sweep" && r.renameSteps === 1, "Rename");
     ok(r.stopsAfterTap === 3 && r.positionAfterTap === 0.2 && r.tapSteps === 1 && r.stopsAfterDelete === 2 && r.deleteStopSteps === 1, "empty bar click moves the playhead without adding a stop; Delete stop removes a selected stop");
-    ok(r.setStartSteps === 1, "Set start");
     ok(r.deleteDrops, "deleting a module drops its params in the same undo step (D-G1)");
     ok(r.roundTrip, "save / load round trip");
     if (r.visible) ok(r.minRow >= 28, "curve controls have readable hit areas");

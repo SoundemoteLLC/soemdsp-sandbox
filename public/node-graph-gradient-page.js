@@ -10,7 +10,7 @@
 const nodeGraphGradientPageState = {
   filter: "all", // "all" | "touching"
   showGraphs: false,
-  editMode: false,
+  editGradientId: "",
   activeGradientId: "",
   pendingValues: new Map(), // gradientId -> Map(nodeId\0key -> { value, slider, originSlider })
   snappedStops: new Map(), // gradientId -> stopId while the playhead is within two steps
@@ -87,6 +87,11 @@ function nodeGraphGradientPageActiveGradient(gradientId = "") {
     || gradients.find((g) => g.id === nodeGraphGradientPageState.activeGradientId)
     || gradients[0]
     || null;
+}
+
+function nodeGraphGradientPageIsEditing(gradientId = "") {
+  return Boolean(nodeGraphGradientPageState.editGradientId
+    && (!gradientId || nodeGraphGradientPageState.editGradientId === gradientId));
 }
 
 function nodeGraphGradientPagePendingMap(gradientId, create = false) {
@@ -369,6 +374,15 @@ function nodeGraphGradientPageCard(gradient) {
   enabled.classList.add("node-gradient-enabled");
   enabled.setAttribute("aria-label", `${gradient.name} enabled`);
   head.append(enabled);
+  const editing = nodeGraphGradientPageIsEditing(gradient.id);
+  const edit = nodeGraphGradientPageButton(editing ? "Edit On" : "Edit Off", "toggleEdit", gradient.id, { pressed: editing });
+  edit.classList.add("node-gradient-edit-toggle");
+  edit.setAttribute("aria-label", `${gradient.name} edit mode`);
+  const snapshot = nodeGraphGradientPageButton("Snapshot", "snapshot", gradient.id);
+  snapshot.classList.add("node-gradient-snapshot");
+  snapshot.disabled = editing;
+  snapshot.setAttribute("aria-label", `${gradient.name} snapshot`);
+  head.append(edit, snapshot);
   card.append(head);
 
   const selectedParam = nodeGraphGradientSelectedParam(gradient);
@@ -414,12 +428,14 @@ function nodeGraphGradientPageCard(gradient) {
   const buttons = document.createElement("div");
   buttons.className = "node-gradient-buttons";
   const selected = nodeGraphGradientPageState.selectedStop.get(gradient.id);
+  const deleteGradient = nodeGraphGradientPageButton("🗑️", "deleteGradient", gradient.id);
+  deleteGradient.classList.add("node-gradient-delete-gradient");
+  deleteGradient.setAttribute("aria-label", `${gradient.name} delete gradient`);
   buttons.append(
     nodeGraphGradientPageButton("Duplicate", "duplicateStop", gradient.id, { disabled: true }),
     nodeGraphGradientPageButton("Delete stop", "deleteStop", gradient.id, { disabled: !selected || gradient.stops.length < 2 }),
     nodeGraphGradientPageButton(nodeGraphGradientPageState.renaming === gradient.id ? "Done" : "Rename", "rename", gradient.id),
-    nodeGraphGradientPageButton("Delete gradient", "deleteGradient", gradient.id),
-    nodeGraphGradientPageButton("Set start", "setStart", gradient.id),
+    deleteGradient,
   );
   card.append(buttons);
 
@@ -494,11 +510,8 @@ function renderNodeGraphGradientPage() {
     b.dataset.filter = value;
     filter.append(b);
   }
-  const edit = nodeGraphGradientPageButton(nodeGraphGradientPageState.editMode ? "Edit On" : "Edit Off", "toggleEdit", "", { pressed: nodeGraphGradientPageState.editMode });
-  edit.setAttribute("aria-label", "Gradient edit mode");
   top.append(filter,
-    nodeGraphGradientPageButton("New Gradient", "newGradient", ""),
-    edit);
+    nodeGraphGradientPageButton("New Gradient", "newGradient", ""));
   top.append(nodeGraphGradientPageButton(nodeGraphGradientPageState.showGraphs ? "Hide graphs" : "Show graphs", "toggleGraphs", "", { pressed: nodeGraphGradientPageState.showGraphs }));
   fragment.append(top);
   const gradients = nodeGraphGradientPageGradients();
@@ -609,24 +622,22 @@ function nodeGraphGradientPageAction(action, gradientId, button) {
     const created = NodeGraphGradients.createGradientFromSnapshot(patch);
     created.position = 1;
     nodeGraphGradientPageState.activeGradientId = created.id;
-    nodeGraphGradientPageState.editMode = true;
+    nodeGraphGradientPageState.editGradientId = created.id;
     nodeGraphGradientPageState.snappedStops.delete(created.id);
     nodeGraphGradientPageCommit([...nodeGraphGradientPageGradients(), created], `${created.name} started`);
     nodeGraphGradientEditSyncOutlines();
+    if (typeof nodeGraphGradientModuleSyncActions === "function") nodeGraphGradientModuleSyncActions();
     return;
   }
   if (action === "toggleEdit") {
-    nodeGraphGradientPageState.editMode = !nodeGraphGradientPageState.editMode;
-    if (!nodeGraphGradientPageState.editMode) {
-      nodeGraphGradientPageClearPending();
-      nodeGraphGradientPageClearEditHolds();
-    }
-    else {
-      const active = nodeGraphGradientPageActiveGradient();
-      if (active) nodeGraphGradientPageState.activeGradientId = active.id;
-    }
+    const targetId = gradientId || nodeGraphGradientPageState.activeGradientId;
+    nodeGraphGradientPageState.editGradientId = nodeGraphGradientPageState.editGradientId === targetId ? "" : targetId;
+    nodeGraphGradientPageState.activeGradientId = nodeGraphGradientPageState.editGradientId || targetId;
+    nodeGraphGradientPageClearPending();
+    nodeGraphGradientPageClearEditHolds();
     nodeGraphGradientEditSyncOutlines();
     renderNodeGraphGradientPage();
+    if (typeof nodeGraphGradientModuleSyncActions === "function") nodeGraphGradientModuleSyncActions();
     return;
   }
   const gradient = nodeGraphGradientPageGradients().find((g) => g.id === gradientId);
@@ -656,9 +667,10 @@ function nodeGraphGradientPageAction(action, gradientId, button) {
   } else if (action === "deleteGradient") {
     nodeGraphGradientPageState.selectedStop.delete(gradient.id);
     nodeGraphGradientPageCommit(nodeGraphGradientPageGradients().filter((g) => g.id !== gradient.id), `${gradient.name} deleted`);
-  } else if (action === "setStart") {
-    const next = NodeGraphGradients.setStart(patch, gradient);
-    nodeGraphGradientPageCommit(nodeGraphGradientPageReplace(gradient.id, () => next), `${gradient.name} start set`);
+  } else if (action === "snapshot") {
+    if (nodeGraphGradientPageIsEditing(gradient.id)) return;
+    const next = NodeGraphGradients.snapshotIntoGradient(patch, gradient, gradient.position);
+    nodeGraphGradientPageCommit(nodeGraphGradientPageReplace(gradient.id, () => next), `${gradient.name} snapshot`);
   } else if (action === "toggle") {
     nodeGraphGradientPageCommit(
       nodeGraphGradientPageReplace(gradient.id, (g) => ({ ...g, enabled: g.enabled === false })),
@@ -708,7 +720,7 @@ function nodeGraphGradientPageSetPlayhead(gradient, position, options = {}) {
     options.slider.value = String(gradient.position);
     options.slider.style.setProperty("--gradient-playhead-progress", `${(gradient.position * 100).toFixed(3)}%`);
   }
-  if (nodeGraphGradientPageState.editMode) nodeGraphGradientEditSyncOutlines();
+  if (nodeGraphGradientPageState.editGradientId) nodeGraphGradientEditSyncOutlines();
   nodeGraphGradientPageRepaintSliders([gradient]);
   if (typeof nodeGraphGradientsNotifyPlayhead === "function") nodeGraphGradientsNotifyPlayhead(gradient, `${gradient.name} position`);
   else nodeGraphGradientsNotifyChanged(`${gradient.name} position`);
@@ -985,8 +997,8 @@ function nodeGraphGradientEditActive() {
     const stop = gradient?.stops?.find((s) => s.id === editing.stopId);
     if (gradient && stop && gradient.enabled !== false && Math.abs((Number(gradient.position) || 0) - stop.pos) <= 1e-9) return { gradient, stop };
   }
-  if (!nodeGraphGradientPageState.editMode) return null;
-  const gradient = nodeGraphGradientPageActiveGradient();
+  if (!nodeGraphGradientPageState.editGradientId) return null;
+  const gradient = nodeGraphGradientPageActiveGradient(nodeGraphGradientPageState.editGradientId);
   const stopId = gradient && nodeGraphGradientPageState.snappedStops.get(gradient.id);
   const stop = gradient?.stops.find((item) => item.id === stopId);
   return gradient && stop && gradient.enabled !== false && Math.abs((Number(gradient.position) || 0) - stop.pos) <= 1e-9
@@ -998,8 +1010,8 @@ function nodeGraphGradientEditTargetKeys() {
   const active = nodeGraphGradientEditActive();
   const out = new Set();
   if (active) for (const { nodeId, key } of active.gradient.params) out.add(`${nodeId}\u0000${key}`);
-  else if (nodeGraphGradientPageState.editMode) {
-    const gradient = nodeGraphGradientPageActiveGradient();
+  else if (nodeGraphGradientPageState.editGradientId) {
+    const gradient = nodeGraphGradientPageActiveGradient(nodeGraphGradientPageState.editGradientId);
     for (const { nodeId, key } of gradient?.params || []) out.add(`${nodeId}\u0000${key}`);
   }
   return out;
@@ -1117,15 +1129,18 @@ function nodeGraphGradientMaybeInterceptSlider(slider, domainValue, options = {}
   const value = Number(domainValue);
   if (!node || !meta || !Number.isFinite(value)) return false;
   const live = nodeGraphGradientEditActive();
-  const gradient = live?.gradient || nodeGraphGradientPageActiveGradient();
+  const gradient = live?.gradient || nodeGraphGradientPageActiveGradient(nodeGraphGradientPageState.editGradientId);
   const mapKey = `${nodeId}\u0000${key}`;
   const tracked = gradient?.params.some((p) => p.nodeId === nodeId && p.key === key);
-  if (nodeGraphGradientPageState.editMode && gradient) {
+  if (nodeGraphGradientPageIsEditing(gradient?.id) && gradient) {
     if (options.interaction === "commit" && slider.dataset.gradientEditHeld === "1") {
       delete slider.dataset.gradientEditHeld;
       nodeGraphGradientPageCommit(nodeGraphGradientPageGradients(), `${gradient.name} stop value`);
       return true;
     }
+    // The shared slider engine commits on every pointer-up, including a press
+    // with no movement. Do not turn that release into a zero-delta stop edit.
+    if (options.interaction === "commit") return true;
     const held = Number(slider.dataset.domainValue);
     const stop = nodeGraphGradientPageEnsureLiveEditStop(gradient, node, key, meta, value);
     if (!stop) return false;
