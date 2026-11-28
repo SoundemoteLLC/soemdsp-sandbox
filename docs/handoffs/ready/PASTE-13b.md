@@ -28,7 +28,8 @@ Nothing on the Gradient page opens param settings on right-click. Right-clicking
 
 ## 6. More fixes
 - Joined-param boxes stay visible after deleting the gradient until the module is moved. Deleting a gradient (or a param leaving it) must clear its boxes immediately (event-driven redraw).
-- **Pitch Quantizer default spawn settings**: scaleMask 2741, octave 0, semitones 0, fretting 0 (Fretting default stays 0).
+- **Pitch Quantizer default spawn settings** (from Argi's patch): params scaleMask 2741, octave 0, semitones 0, fretting 0 (Fretting default stays 0). widthGu 10. ui.buttonsHidden true, ui.displayHeightGu 3. traceDisplaySettings: enabledColor #3dffd0, playingColor #ffcf6b, naturalColor #20252a, sharpColor #f7f2e8, blackKeyWidth 12.945455, blackKeyHeight 57.336364, keyLabels "name", keyLabelSize 315.
+- **Display settings sliders must show their current value** (e.g. Sharp width/height currently show no number, so Argi can't tell what is selected). Use the same value readout as normal param sliders.
 
 ## Policies
 No HTML/SVG in the circuit builder, no hover effects, no animations, no tooltips, no popups, shared mouse-dot cursor, params single source of truth, event-driven redraws only, buttons never resize with text, no WebGL in the Command Center.
